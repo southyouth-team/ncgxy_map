@@ -25,6 +25,9 @@ export function createCampusEngine(container, callbacks = {}) {
   let indoorBuilding = null
   let currentIndoorFloor = null
   let stairInteractionActive = false
+  let nearIndoorRoom = null
+  let activeIndoorRoom = null
+  let roomReturnPosition = null
   let stairTransition = null
   let outdoorState = null
   let frameId = 0
@@ -404,7 +407,29 @@ export function createCampusEngine(container, callbacks = {}) {
   function onKeyDown(event) {
     if (event.key === 'Escape') input?.exitPointerLock()
     if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
-    if (event.key.toLowerCase() === 'e' && stairInteractionActive && indoorBuilding) {
+    if (event.key.toLowerCase() !== 'e' || !indoorGroup || stairTransition) return
+    if (activeIndoorRoom && roomReturnPosition) {
+      cameraRig.player.set(roomReturnPosition.x, roomReturnPosition.y, roomReturnPosition.z)
+      activeIndoorRoom = null
+      roomReturnPosition = null
+      nearIndoorRoom = null
+      cameraRig.updateThirdPersonDesired()
+      callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: stairInteractionActive, nearRoom: null, activeRoom: null })
+      return
+    }
+    if (nearIndoorRoom) {
+      const interaction = indoorGroup.userData.roomInteractions?.find(item => item.roomId === nearIndoorRoom.roomId)
+      if (!interaction) return
+      roomReturnPosition = { x: cameraRig.player.x, y: cameraRig.player.y, z: cameraRig.player.z }
+      activeIndoorRoom = { id: interaction.roomId, name: interaction.roomName }
+      nearIndoorRoom = null
+      cameraRig.player.x = interaction.inside.x
+      cameraRig.player.z = interaction.inside.z
+      cameraRig.updateThirdPersonDesired()
+      callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: activeIndoorRoom })
+      return
+    }
+    if (stairInteractionActive && indoorBuilding) {
       const levels = indoorBuilding.floors.map(floor => floor.level).sort((a, b) => a - b)
       const index = levels.indexOf(currentIndoorFloor)
       const target = levels[index + 1] ?? levels[index - 1]
@@ -426,12 +451,19 @@ export function createCampusEngine(container, callbacks = {}) {
     previousTime = time
     if (stairTransition) updateStairTransition(delta)
     else input?.update(delta)
-    if (indoorGroup?.userData.stairPoint && cameraRig?.player) {
+    if (indoorGroup && cameraRig?.player && !stairTransition) {
       const point = indoorGroup.userData.stairPoint
-      const near = Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z) <= 2.4
-      if (near !== stairInteractionActive) {
-        stairInteractionActive = near
-        callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: near })
+      const nearStairs = !activeIndoorRoom && point && Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z) <= 2.4
+      const nearestRoom = activeIndoorRoom ? null : (indoorGroup.userData.roomInteractions || [])
+        .map(item => ({ item, distance: Math.hypot(cameraRig.player.x - item.approach.x, cameraRig.player.z - item.approach.z) }))
+        .filter(entry => entry.distance <= 1.7)
+        .sort((a, b) => a.distance - b.distance)[0]?.item || null
+      const nextRoom = nearestRoom ? { roomId: nearestRoom.roomId, roomName: nearestRoom.roomName } : null
+      const roomChanged = nextRoom?.roomId !== nearIndoorRoom?.roomId
+      if (Boolean(nearStairs) !== stairInteractionActive || roomChanged) {
+        stairInteractionActive = Boolean(nearStairs)
+        nearIndoorRoom = nextRoom
+        callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: stairInteractionActive, nearRoom: nearIndoorRoom, activeRoom: activeIndoorRoom })
       }
     }
     const playerSprite = scene?.getObjectByName('CampusPlanPlayerSprite') || scene?.getObjectByName('PixelExplorerSprite')
@@ -491,7 +523,10 @@ export function createCampusEngine(container, callbacks = {}) {
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
     else cameraRig.updateThirdPersonDesired()
     stairInteractionActive = false
-    callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false })
+    nearIndoorRoom = null
+    activeIndoorRoom = null
+    roomReturnPosition = null
+    callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: null })
     return true
   }
 
@@ -563,6 +598,9 @@ export function createCampusEngine(container, callbacks = {}) {
     disposeObjectGroup(indoorGroup)
     indoorGroup = null
     stairInteractionActive = false
+    nearIndoorRoom = null
+    activeIndoorRoom = null
+    roomReturnPosition = null
     stairTransition = null
     input.setMovementEnabled(true)
     indoorBuilding = null

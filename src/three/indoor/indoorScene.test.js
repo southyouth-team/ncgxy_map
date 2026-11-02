@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -52,6 +52,19 @@ describe('indoor floor contract', () => {
     expect(validateIndoorFloor({ ...sample, stairPoint: { x: 20, z: 0 } })).toContain('stairPoint 必须位于楼层范围内并预留楼梯空间')
   })
 
+  it('calculates room door approach and interior interaction points', () => {
+    const points = getRoomInteractionPoints({ rooms: [
+      { id: 'south', name: '南侧房间', x: 0, z: 0, width: 8, depth: 6, doorWall: 'south', doorWidth: 1.4, doorOffset: 0.5 },
+      { id: 'west', name: '西侧房间', x: 10, z: 0, width: 6, depth: 8, doorWall: 'west', doorWidth: 1.2, doorOffset: -1 },
+      { id: 'closed', name: '无门房间', x: 0, z: 10, width: 6, depth: 6 },
+    ] })
+    expect(points).toHaveLength(2)
+    expect(points[0].approach).toEqual({ x: 0.5, z: 4.15 })
+    expect(points[0].inside).toEqual({ x: 0.5, z: 1.85 })
+    expect(points[1].approach).toEqual({ x: 5.85, z: -1 })
+    expect(points[1].inside).toEqual({ x: 8.15, z: -1 })
+  })
+
   it('requires integer floor levels', () => {
     expect(validateIndoorFloor({ ...sample, level: 1.5 })).toContain('楼层 level 必须是整数')
   })
@@ -77,6 +90,8 @@ describe('indoor stair construction', () => {
   it('creates a stair interaction point and visible stair steps', () => {
     const group = createIndoorFloor(THREE, { ...sample, stairPoint: { x: 10.5, z: 0 } })
     expect(group.userData.stairPoint).toEqual({ x: 10.5, z: 0 })
+    expect(group.userData.roomInteractions).toHaveLength(1)
+    expect(group.userData.roomInteractions[0].roomId).toBe('classroom-101')
     expect(group.userData.stairPath.start).toEqual({ x: 10.5, z: -2.1 })
     expect(group.userData.stairPath.end).toEqual({ x: 10.5, z: 2.1 })
     expect(group.userData.stairPath.rise).toBe(4.2)

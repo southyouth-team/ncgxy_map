@@ -79,6 +79,34 @@ function addLabel(THREE, parent, text, x, z) {
   parent.add(sprite)
 }
 
+export function getRoomInteractionPoints(floor) {
+  if (!floor || !Array.isArray(floor.rooms)) return []
+  return floor.rooms.filter(room => Number(room.doorWidth) > 0).map(room => {
+    const wall = room.doorWall || 'south'
+    const offset = Number(room.doorOffset) || 0
+    const distance = 1.15
+    let approach, inside
+    if (wall === 'south') {
+      const z = room.z + room.depth / 2
+      approach = { x: room.x + offset, z: z + distance }
+      inside = { x: room.x + offset, z: z - distance }
+    } else if (wall === 'north') {
+      const z = room.z - room.depth / 2
+      approach = { x: room.x + offset, z: z - distance }
+      inside = { x: room.x + offset, z: z + distance }
+    } else if (wall === 'east') {
+      const x = room.x + room.width / 2
+      approach = { x: x + distance, z: room.z + offset }
+      inside = { x: x - distance, z: room.z + offset }
+    } else {
+      const x = room.x - room.width / 2
+      approach = { x: x - distance, z: room.z + offset }
+      inside = { x: x + distance, z: room.z + offset }
+    }
+    return { roomId: room.id, roomName: room.name, approach, inside }
+  })
+}
+
 /**
  * 构建单层室内空间。doors 是外墙门洞定义：
  * { wall: 'north'|'south'|'east'|'west', offset, width }，offset 从墙体中心沿墙方向计。
@@ -176,6 +204,7 @@ export function createIndoorFloor(THREE, floor) {
     addBox(THREE, group, 'indoor-stair-rail', railX, 0.25, stairPoint.z, 0.12, 4.2, 4.4, railMaterial)
     collision.push({ minX: railX - 0.06, maxX: railX + 0.06, minZ: stairPoint.z - 2.2, maxZ: stairPoint.z + 2.2 })
   }
+  group.userData.roomInteractions = getRoomInteractionPoints(floor)
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
   group.userData.stairPath = { start: { x: stairPoint.x, z: stairPoint.z - 2.1 }, end: { x: stairPoint.x, z: stairPoint.z + 2.1 }, rise: 4.2 }
   group.userData.collisionObstacles = collision

@@ -46,11 +46,43 @@ export class RecognitionService implements OnModuleInit, OnModuleDestroy {
     if (this.busy) return;
     this.busy = true;
     try {
-      const claimed = await this.db.query(`UPDATE campus_recognition_result SET status='processing',started_at=now() WHERE id=(SELECT id FROM campus_recognition_result WHERE status='queued' OR (status='processing' AND started_at < now() - interval '10 minutes') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id AS id,campus_id AS campus_id,map_id AS map_id,asset_id AS asset_id`);
-      if (claimed.length) {
-        const row = claimed[0];
-        const job = { id: String(row.id ?? row.ID ?? ''), campus_id: String(row.campus_id ?? row.CAMPUS_ID ?? ''), map_id: String(row.map_id ?? row.MAP_ID ?? ''), asset_id: String(row.asset_id ?? row.ASSET_ID ?? '') };
-        if (!job.id || !job.asset_id) throw new Error('领取识图任务失败：数据库未返回任务主键或底图资源 ID，返回字段=' + Object.keys(row).join(','));
+      // 使用 CTE 锁定一条待处理任务，再通过 UPDATE ... FROM 原子领取，避免并发 worker 重复领取。
+      const claimed = await this.db.query(`
+        WITH picked AS (
+          SELECT id
+          FROM campus_recognition_result
+          WHERE status = 'queued'
+             OR (status = 'processing' AND started_at < now() - interval '10 minutes')
+          ORDER BY created_at, id
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        UPDATE campus_recognition_result AS job
+        SET status = 'processing', started_at = now()
+        FROM picked
+        WHERE job.id = picked.id
+        RETURNING job.id, job.campus_id, job.map_id, job.asset_id
+      `);
+      if (Array.isArray(claimed) && claimed.length > 0) {
+        // TypeORM PostgreSQL driver 正常返回对象数组；兼容部分驱动包装的 rows 结构。
+        const resultRows = Array.isArray(claimed[0]) ? claimed[0] : claimed;
+        const row = resultRows[0];
+        if (!row || typeof row !== 'object') {
+          this.logger.error('识图任务领取结果结构异常：' + JSON.stringify(claimed).slice(0, 1200));
+          return;
+        }
+        const job = {
+          id: String(row.id ?? row.ID ?? ''),
+          campus_id: String(row.campus_id ?? row.CAMPUS_ID ?? ''),
+          map_id: String(row.map_id ?? row.MAP_ID ?? ''),
+          asset_id: String(row.asset_id ?? row.ASSET_ID ?? ''),
+        };
+        if (!job.id || !job.asset_id) {
+          this.logger.error('识图任务已被领取，但返回字段不完整：' + JSON.stringify(row).slice(0, 1200));
+          // 将异常任务释放回队列，避免一直卡在 processing。
+          if (job.id) await this.db.query(`UPDATE campus_recognition_result SET status='queued', started_at=NULL WHERE id=$1`, [job.id]);
+          return;
+        }
         await this.processJob(job);
       }
     } catch (error) {
@@ -71,7 +103,8 @@ export class RecognitionService implements OnModuleInit, OnModuleDestroy {
       try { image = await readFile(absolutePath); } catch { throw new Error('底图文件在服务器存储目录中不存在：' + absolutePath); }
       const mime = assets[0].mime_type;
       const model = this.config.get<string>('VISION_MODEL')!;
-      const baseUrl = (this.config.get<string>('VISION_API_BASE_URL','https://api.openai.com/v1') || '').replace(/\/$/,'');
+      // 本服务调用 OpenAI 兼容的 /chat/completions；DeepSeek 应配置 https://api.deepseek.com，不要填写 Anthropic 路径。
+      const baseUrl = (this.config.get<string>('VISION_API_BASE_URL','https://api.openai.com/v1') || '').replace(/\/+$/,'');
       const response = await fetch(baseUrl + '/chat/completions', {
         method:'POST', headers:{Authorization:'Bearer '+this.config.get<string>('VISION_API_KEY'), 'Content-Type':'application/json'},
         signal:AbortSignal.timeout(180000),

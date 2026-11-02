@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CreateMapDto } from './dto/create-map.dto';
+import { UpdateMapConfigDto } from './dto/update-map-config.dto';
 @Injectable()
 export class MapsService {
   constructor(private readonly db: DataSource) {}
@@ -20,6 +21,20 @@ export class MapsService {
     return this.db.query(
       `SELECT id,campus_id,slug,name,description,coordinate_system,coordinate_unit,canvas_width,canvas_height,status,revision,published_version_id,created_at,updated_at
        FROM campus_map WHERE campus_id=$1 ORDER BY id`,[campusId]);
+  }
+  async updateConfig(userId:string,campusId:string,mapId:string,dto:UpdateMapConfigDto) {
+    await this.requireRole(userId,campusId,['owner','admin','editor']);
+    const rows=await this.db.query(
+      `UPDATE campus_map SET coordinate_config=$1::jsonb,revision=revision+1,updated_at=now()
+       WHERE id=$2 AND campus_id=$3 AND revision=$4
+       RETURNING id,campus_id,coordinate_config,revision,updated_at`,
+      [JSON.stringify(dto.coordinateConfig??{}),mapId,campusId,dto.revision]);
+    if(!rows.length) {
+      const exists=await this.db.query('SELECT id FROM campus_map WHERE id=$1 AND campus_id=$2',[mapId,campusId]);
+      if(!exists.length) throw new NotFoundException('地图项目不存在');
+      throw new ConflictException('地图配置版本冲突，请刷新后重试');
+    }
+    return rows[0];
   }
   private async requireRole(userId:string,campusId:string,allowed:string[]) {
     const rows=await this.db.query('SELECT role FROM campus_member WHERE campus_id=$1 AND user_id=$2',[campusId,userId]);

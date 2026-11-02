@@ -21,3 +21,4 @@
 "E004","古典雅致的东大门","gate","美丽校园","environment-asset","not-started","","","","","","","","需现场核实当前校门是否与官网照片一致"
 "E005","大草坪","landscape-area","美丽校园","environment-asset","not-started","","","","","","","","环境资产，采集边界"
 "E006","校园道路/街道","road-network","美丽校园","environment-asset","not-started","","","","","","","","以道路网络矢量化，不作为建筑资产"
+"B017","美术大师博物馆","building-or-museum-venue","教学设施","official-mentioned","not-started","","","","","","","","待确认是否独立建筑或位于其他建筑内部；核对入口、外立面与空间边界"

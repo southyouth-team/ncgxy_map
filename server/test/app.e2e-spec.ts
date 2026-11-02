@@ -207,4 +207,61 @@ describe('Campus map API (PostGIS integration)', () => {
       })
       .expect(400);
   });
+
+  it('loads an empty scene and persists a scene document with revision checks', async () => {
+    const sceneUrl = `${base}/campuses/${campusId}/maps/${mapId}/scene`;
+
+    const empty = await request(app.getHttpServer())
+      .get(sceneUrl)
+      .set(auth)
+      .expect(200);
+    expect(Number(empty.body.revision)).toBe(0);
+    expect(empty.body.document).toBeNull();
+
+    const document = {
+      schemaVersion: 2,
+      id: 'campus-scene',
+      name: '测试三维场景',
+      campusId,
+      mapId,
+      coordinateSystem: 'campus-local',
+      coordinateMapping: { groundPlane: 'XZ', verticalAxis: 'Y', unit: 'scene-unit' },
+      revision: 0,
+      objects: [{
+        id: 'scene-building-1',
+        type: 'building',
+        name: '测试建筑',
+        featureId,
+        layerId: 'default',
+        elevation: 0,
+        modelTransform: { rotation: [0, 0, 0], scale: [1, 1, 1] },
+        properties: { floors: 3, floorHeight: 3.3 },
+      }],
+      layers: [{ id: 'default', name: '默认图层', visible: true, locked: false }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const saved = await request(app.getHttpServer())
+      .put(sceneUrl)
+      .set(auth)
+      .send({ revision: 0, document })
+      .expect(200);
+    expect(Number(saved.body.revision)).toBe(1);
+    expect(saved.body.document.mapId).toBe(mapId);
+
+    const loaded = await request(app.getHttpServer())
+      .get(sceneUrl)
+      .set(auth)
+      .expect(200);
+    expect(Number(loaded.body.revision)).toBe(1);
+    expect(loaded.body.document.objects[0].featureId).toBe(featureId);
+
+    await request(app.getHttpServer())
+      .put(sceneUrl)
+      .set(auth)
+      .send({ revision: 0, document })
+      .expect(409);
+  });
+
 });

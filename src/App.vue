@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
+import CampusMapEditor from './editor/CampusMapEditor.vue'
 
 const viewport = ref(null)
 const appShell = ref(null)
@@ -10,6 +11,7 @@ const activeMode = ref('overview')
 const loading = ref(true)
 const errorMessage = ref('')
 const engineReady = ref(false)
+const showEditor = ref(false)
 
 let engine
 
@@ -79,7 +81,8 @@ onBeforeUnmount(() => {
 
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
-    <div ref="viewport" class="scene-viewport"></div>
+    <div ref="viewport" class="scene-viewport" v-show="!showEditor"></div>
+    <CampusMapEditor v-if="showEditor" @close="showEditor = false" />
 
     <header class="topbar">
       <div class="brand-lockup">
@@ -109,6 +112,10 @@ onBeforeUnmount(() => {
       >
         <span class="mode-label">{{ mode.label }}</span>
         <span class="mode-hint">{{ mode.hint }}</span>
+      </button>
+      <button class="mode-button editor-mode-button" :class="{ active: showEditor }" @click="showEditor = true">
+        <span class="mode-label">底图编辑</span>
+        <span class="mode-hint">二维矢量化</span>
       </button>
     </nav>
 

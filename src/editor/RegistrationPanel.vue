@@ -9,14 +9,13 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
 })
 const emit = defineEmits(['apply'])
-const rows = ref([
-  { sx: 0, sy: 0, tx: 0, ty: 0 },
-  { sx: 100, sy: 0, tx: 100, ty: 0 },
-  { sx: 0, sy: 100, tx: 0, ty: 100 },
-])
+const rows = ref([])
 const result = ref(null)
 const localError = ref('')
-watch(() => props.currentRegistration, value => { result.value = value || null }, { immediate: true })
+watch(() => props.currentRegistration, value => {
+  result.value = value || null
+  if (value?.controlPoints?.length) rows.value = value.controlPoints.map(point => ({ sx: point.source[0], sy: point.source[1], tx: point.target[0], ty: point.target[1] }))
+}, { immediate: true })
 function addPoint() { rows.value.push({ sx: 0, sy: 0, tx: 0, ty: 0 }) }
 function removePoint(index) { if (rows.value.length > 3) rows.value.splice(index, 1) }
 function calculate() {

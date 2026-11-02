@@ -22,12 +22,14 @@ export function createCampusEngine(container, callbacks = {}) {
     scene.fog = new THREE.Fog('#aebfbd', 90, 260)
 
     renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false })
-    // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。\n    renderer.setPixelRatio(1)
+    // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。
+    renderer.setPixelRatio(1)
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
-    // 保留像素美术标准色板，避免电影色调映射改变颜色。\n    renderer.toneMapping = THREE.NoToneMapping
+    // 保留像素美术标准色板，避免电影色调映射改变颜色。
+    renderer.toneMapping = THREE.NoToneMapping
     container.appendChild(renderer.domElement)
 
     const campus = createCampusScene(THREE)
@@ -54,6 +56,7 @@ export function createCampusEngine(container, callbacks = {}) {
 
     resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(container)
+    resize()
     window.addEventListener('keydown', onKeyDown)
     initialized = true
     callbacks.onReady?.()
@@ -97,7 +100,8 @@ export function createCampusEngine(container, callbacks = {}) {
     cancelAnimationFrame(frameId)
     resizeObserver?.disconnect()
     window.removeEventListener('keydown', onKeyDown)
-    input?.dispose()\n    cameraRig?.dispose()
+    input?.dispose()
+    cameraRig?.dispose()
     scene?.traverse((object) => {
       object.geometry?.dispose?.()
       if (Array.isArray(object.material)) object.material.forEach((m) => m.dispose())

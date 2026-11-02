@@ -109,8 +109,12 @@ function deleteSelected() {
   if (selected.value.type === 'road') roads.value = roads.value.filter(item => item.id !== selected.value.id)
   selected.value = { type: '', id: '' }
 }
+function buildDocument() {
+  return { schemaVersion: 1, coordinateSystem: 'campus-plan-pixel', source: 'campusLayout.js', areas: CAMPUS_AREAS, buildings: buildings.value, roads: roads.value }
+}
+function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {
-  const payload = { schemaVersion: 1, coordinateSystem: 'campus-plan-pixel', source: 'campusLayout.js', buildings: buildings.value, roads: roads.value }
+  const payload = buildDocument()
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -127,7 +131,7 @@ function exportDocument() {
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button>
         <button @click="scale = Math.max(.65, scale - .1)">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="scale = Math.min(1.8, scale + .1)">＋</button>
-        <button class="primary" @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
+        <button @click="preview3d">三维预览</button><button class="primary" @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
     </header>
     <div class="workspace">

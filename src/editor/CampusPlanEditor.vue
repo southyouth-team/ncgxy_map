@@ -137,6 +137,9 @@ const calibrationPoints = ref([])
 const targetX = ref(0)
 const targetY = ref(0)
 const calibrationError = ref('')
+const recognitionBusy = ref(false)
+const recognitionMessage = ref('')
+const generateSceneAssets = ref(true)
 const calibrationTransform = computed(() => {
   try {
     calibrationError.value = ''
@@ -169,7 +172,8 @@ async function uploadReferenceImage(event) {
       }
       calibrationPoints.value = []
       calibrationError.value = ''
-      persistenceMessage.value = '底图已上传，正在自动保存底图引用；空间要素识别功能尚未接入视觉模型。'
+      persistenceMessage.value = '底图已上传，正在自动保存并启动 AI 识图。'
+      void recognizeReferenceImage(String(asset.id))
     }
     image.onerror = () => { calibrationError.value = '服务端底图读取成功，但图片解码失败' }
     image.src = referenceImagePreview.value
@@ -181,6 +185,66 @@ async function uploadReferenceImage(event) {
     event.target.value = ''
   }
 }
+
+async function recognizeReferenceImage(assetId = savedAssetId.value) {
+  if (!assetId || recognitionBusy.value) return
+  recognitionBusy.value = true
+  recognitionMessage.value = 'AI 正在分析底图，提取建筑、道路、绿地和水体…'
+  try {
+    const result = await apiRequest(`${mapApiPath()}/assets/${assetId}/recognize`, { method: 'POST' })
+    const features = result.features || []
+    if (!features.length) {
+      recognitionMessage.value = '识图已完成，但没有提取到可用空间要素；请检查图片清晰度。'
+      return
+    }
+    snapshot()
+    let added = 0
+    const toEditorPoint = ([x, y]) => [Number(x) * 640 / referenceImage.value.width, Number(y) * 480 / referenceImage.value.height]
+    for (const feature of features) {
+      if (feature.geometry.type === 'Polygon') {
+        const ring = (feature.geometry.coordinates?.[0] || []).map(toEditorPoint)
+        if (ring.length < 4) continue
+        if (feature.type === 'building') {
+          buildings.value.push({
+            id: `ai-building-${Date.now()}-${added}`, label: feature.name || '识别建筑',
+            template: generateSceneAssets.value ? '教学楼' : '识别建筑',
+            rect: polygonBounds(ring), footprint: ring, floors: null,
+            confidence: feature.confidence, source: 'ai-vision', reviewRequired: feature.reviewRequired,
+            materialHint: feature.properties?.materialHint || null,
+          })
+        } else {
+          areas.value.push({
+            id: `ai-area-${Date.now()}-${added}`, name: feature.name || feature.type,
+            type: feature.type === 'green' ? 'vegetation' : feature.type,
+            footprint: ring, confidence: feature.confidence,
+            source: 'ai-vision', reviewRequired: feature.reviewRequired,
+          })
+        }
+        added++
+      } else if (feature.geometry.type === 'LineString' && feature.type === 'road') {
+        const points = feature.geometry.coordinates.map(toEditorPoint)
+        if (points.length >= 2) {
+          roads.value.push({
+            id: `ai-road-${Date.now()}-${added}`, points,
+            width: Math.max(4, Number(feature.properties?.width) || 10),
+            confidence: feature.confidence, source: 'ai-vision', reviewRequired: feature.reviewRequired,
+          })
+          added++
+        }
+      }
+    }
+    recognitionMessage.value = `AI 识别完成：新增 ${added} 个矢量要素，${features.filter(item => item.reviewRequired).length} 个低置信度结果需要人工复核。请检查轮廓后再作为正式地图使用。${generateSceneAssets.value ? ' 已为建筑分配内置像素风建筑模板。' : ' 未启用场景素材模板。'}`
+    if (added) {
+      const first = buildings.value.find(item => item.source === 'ai-vision')
+      if (first) selected.value = { type: 'building', id: first.id }
+    }
+  } catch (error) {
+    recognitionMessage.value = `AI 识图失败：${error.message}`
+  } finally {
+    recognitionBusy.value = false
+  }
+}
+
 function captureCalibrationPoint(event) {
   if (!calibrationMode.value || !referenceImagePreview.value) return
   event.stopPropagation()
@@ -521,7 +585,10 @@ function exportDocument() {
         <label class="upload-control">上传校园底图（PNG/JPG/WebP，≤15MB）<input type="file" accept="image/png,image/jpeg,image/webp" @change="uploadReferenceImage" /></label>
         <template v-if="referenceImage">
           <small class="hint">{{ referenceImage.name }} · {{ referenceImage.width }} × {{ referenceImage.height }}</small>
-          <div class="recognition-notice"><strong>空间要素识别</strong><span>当前版本仅完成底图上传与人工校准，尚未接入视觉识别模型；不会自动生成虚假的建筑轮廓。</span></div>
+          <div class="recognition-notice"><strong>AI 空间要素识别</strong><span>上传后自动分析图片，识别建筑、道路、绿地、水体和运动场。结果先作为待复核矢量图层，不会覆盖正式 GIS 数据。</span></div>
+          <label class="upload-control"><input type="checkbox" v-model="generateSceneAssets" /> 同时生成场景素材（建筑使用内置像素风模板）</label>
+          <button class="add-button" :disabled="recognitionBusy" @click="recognizeReferenceImage()">{{ recognitionBusy ? 'AI 识图中…' : '重新执行 AI 识图' }}</button>
+          <small class="hint">{{ recognitionMessage }}</small>
           <label>底图透明度 <b>{{ Math.round(referenceImageOpacity * 100) }}%</b></label>
           <input v-model.number="referenceImageOpacity" type="range" min="0" max="1" step="0.05" />
           <label class="upload-control"><input type="checkbox" v-model="calibrationMode" /> 开始控制点选取</label>

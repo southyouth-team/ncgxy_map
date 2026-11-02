@@ -62,3 +62,35 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
   .mode-label { font-size: 11px; }
   .bottom-bar { padding: 0 15px; }
 }
+
+
+/* Mobile roaming controls */
+.scene-viewport canvas { touch-action: none; }
+.mobile-controls { display: none; }
+.rotate-device-hint { display: none; }
+@media (pointer: coarse), (max-width: 760px) {
+  .app-shell { height: 100dvh; }
+  .topbar { height: 48px; padding: 0 14px; }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-title { font-size: 12px; letter-spacing: 1px; }
+  .mode-switcher { bottom: max(10px, env(safe-area-inset-bottom)); width: min(420px, calc(100% - 24px)); }
+  .bottom-bar { display: none; }
+  .first-person-hint { display: none; }
+  .mobile-controls { display: block; position: absolute; z-index: 6; inset: 0; pointer-events: none; }
+  .virtual-pad { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: max(82px, calc(env(safe-area-inset-bottom) + 72px)); width: 142px; height: 142px; pointer-events: auto; }
+  .virtual-key { position: absolute; display: grid; place-items: center; width: 46px; height: 46px; padding: 0; border: 1px solid rgba(232,225,204,.42); border-radius: 12px; color: #f2e8ce; background: rgba(14,25,29,.72); backdrop-filter: blur(8px); font-size: 17px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .virtual-key:active { color: #101b20; background: #d7bd82; }
+  .key-up { left: 48px; top: 0; }
+  .key-left { left: 0; top: 48px; }
+  .key-down { left: 48px; top: 96px; }
+  .key-right { left: 96px; top: 48px; }
+  .sprint-key { right: max(20px, env(safe-area-inset-right)); bottom: max(92px, calc(env(safe-area-inset-bottom) + 82px)); pointer-events: auto; width: 54px; height: 54px; border-radius: 50%; font-size: 12px; }
+  .look-hint { position: absolute; right: 18px; top: 58px; color: rgba(255,255,255,.58); font-size: 10px; text-shadow: 0 1px 4px #101b20; }
+  .rotate-device-hint { display: flex; position: absolute; z-index: 20; inset: 0; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #f4f0e5; background: rgba(9,17,20,.84); text-align: center; pointer-events: none; }
+  .rotate-device-hint strong { font-size: 18px; }
+  .rotate-device-hint span { color: rgba(244,240,229,.65); font-size: 12px; }
+  .rotate-icon { font-size: 42px; color: #d7bd82; transform: rotate(-45deg); }
+}
+@media (pointer: coarse) and (orientation: landscape) {
+  .mobile-controls .look-hint { top: auto; bottom: 18px; right: 18px; }
+}

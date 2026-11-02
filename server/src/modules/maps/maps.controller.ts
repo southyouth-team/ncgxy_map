@@ -13,7 +13,7 @@ export class MapsController {
     return this.service.create(req.user.id,campusId,dto);
   }
   @Get() @ApiOperation({summary:'获取学校地图列表'})
-  findAll(@Req() req:Request&{user:{id:string}},@Param('campusId',ParseIntPipe) campusId:number) {
-    return this.service.findAll(req.user.id,String(campusId));
+  findAll(@Req() req:Request&{user:{id:string}},@Param('campusId',ParseBigIntIdPipe) campusId:string) {
+    return this.service.findAll(req.user.id,campusId);
   }
 }

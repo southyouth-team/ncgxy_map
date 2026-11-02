@@ -251,13 +251,13 @@ function exportDocument() {
             <rect width="640" height="480" fill="#91a77b"/><rect x="36" y="92" width="576" height="368" fill="#9db28a"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
             <g v-for="area in areas" :key="area.id" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
-              <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @click.stop="removePolygonVertex(index)"/></g>
+              <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
             <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
             <g v-for="road in roads" :key="road.id">
               <path :d="roadPath(road.points)" fill="none" stroke="#e0d8bd" :stroke-width="(road.width || 13)+5" stroke-linecap="round" stroke-linejoin="round"/>
               <path :d="roadPath(road.points)" fill="none" :stroke="selected.id===road.id ? '#d59a43' : '#777b73'" :stroke-width="road.width || 13" stroke-linecap="round" stroke-linejoin="round" @click.stop="selected={type:'road',id:road.id}"/>
-              <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @click.stop="removeRoadNode(index)"/></g>
+              <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
             <g v-for="item in buildings" :key="item.id" class="building" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="#bca27c" stroke="#665744" stroke-width="2"/>

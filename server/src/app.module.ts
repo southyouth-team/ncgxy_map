@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CampusesModule } from './modules/campuses/campuses.module';
+import { FeaturesModule } from './modules/features/features.module';
 import { HealthModule } from './modules/health/health.module';
+import { LayersModule } from './modules/layers/layers.module';
+import { MapsModule } from './modules/maps/maps.module';
 
 @Module({
   imports: [
@@ -23,9 +27,11 @@ import { HealthModule } from './modules/health/health.module';
         retryDelay: 3000,
       }),
     }),
-    // 当前仓库中的学校、地图、图层和要素 HTTP 模块尚未完整落盘。
-    // 先只注册已具备完整 Controller/Module 的健康检查，避免启动时引用不存在模块。
     HealthModule,
+    CampusesModule,
+    MapsModule,
+    LayersModule,
+    FeaturesModule,
   ],
 })
 export class AppModule {}

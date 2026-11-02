@@ -8,7 +8,7 @@ import {
 } from '../data/campus/campusLayout.js'
 
 const emit = defineEmits(['close', 'preview'])
-const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => normalizeBuilding(item)))
+const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => ({ ...normalizeBuilding(item), template: item.template || item.label || '教学楼' })))
 const areas = ref(CAMPUS_AREAS.map((item) => ({
   ...item,
   footprint: item.polygon?.map((point) => [...point]) || rectToPolygon(item.rect),

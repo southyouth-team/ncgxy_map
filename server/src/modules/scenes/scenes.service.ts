@@ -123,6 +123,18 @@ export class ScenesService {
         [mapId,campusId],
       );
       if (!maps.length) throw new NotFoundException('地图项目不存在');
+
+      // referenceImage 仅允许引用当前 campus/map 下已登记的底图资产，防止跨地图引用或伪造 assetId。
+      const referenceImage = document.referenceImage as Record<string, unknown> | null;
+      if (referenceImage?.assetId) {
+        const assets = await manager.query(
+          `SELECT id FROM campus_asset
+           WHERE id=$1 AND campus_id=$2 AND map_id=$3 AND asset_type='base-map'`,
+          [String(referenceImage.assetId),campusId,mapId],
+        );
+        if (!assets.length) throw new BadRequestException('底图资源不存在或不属于当前地图');
+      }
+
       const current = await manager.query(
         'SELECT id,revision FROM campus_plan_document WHERE campus_id=$1 AND map_id=$2 FOR UPDATE',
         [campusId,mapId],

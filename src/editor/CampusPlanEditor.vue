@@ -73,10 +73,12 @@ async function loadAssetPreview(assetId) {
 }
 async function saveEditorDocument() {
   if (!props.campusId || !props.mapId) { persistenceMessage.value = '缺少校园或地图 ID，无法持久化'; return }
+  if (persistenceBusy.value || revisionConflict.value) return
+  const document = { ...buildDocument(), mapId: String(props.mapId), objects: [] }
+  const requestSnapshot = JSON.stringify(buildDocument())
   persistenceBusy.value = true
   persistenceMessage.value = ''
   try {
-    const document = { ...buildDocument(), mapId: String(props.mapId), objects: [] }
     const saved = await apiRequest(`${mapApiPath()}/scene/plan`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -84,7 +86,7 @@ async function saveEditorDocument() {
     })
     documentRevision.value = Number(saved.revision || documentRevision.value + 1)
     revisionConflict.value = false
-    lastSavedSnapshot = JSON.stringify(buildDocument())
+    lastSavedSnapshot = requestSnapshot
     persistenceMessage.value = `已保存 · 版本 ${documentRevision.value}`
   } catch (error) {
     if (error.status === 409) {
@@ -95,6 +97,10 @@ async function saveEditorDocument() {
     }
   } finally {
     persistenceBusy.value = false
+    if (documentLoaded.value && !revisionConflict.value && JSON.stringify(buildDocument()) !== lastSavedSnapshot) {
+      if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
+      autoSaveTimer = window.setTimeout(() => saveEditorDocument(), 500)
+    }
   }
 }
 const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => ({ ...normalizeBuilding(item), template: item.template || item.label || '教学楼' })))
@@ -315,7 +321,11 @@ watch(() => JSON.stringify(buildDocument()), (snapshot) => {
   if (snapshot === lastSavedSnapshot) return
   if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
   autoSaveTimer = window.setTimeout(() => {
-    if (!persistenceBusy.value) saveEditorDocument()
+    if (persistenceBusy.value) {
+      autoSaveTimer = window.setTimeout(() => saveEditorDocument(), 500)
+      return
+    }
+    saveEditorDocument()
   }, 1500)
 })
 function point(event) {

@@ -47,6 +47,12 @@ export class AssetsController {
     return this.recognition.recognize(req.user.id, campusId, mapId, assetId);
   }
 
+  @Get('recognition/:jobId')
+  @ApiOperation({ summary: '查询校园底图 AI 识图任务状态与结果' })
+  getRecognition(@Req() req: Request & { user: { id: string } }, @Param('campusId', ParseBigIntIdPipe) campusId: string, @Param('mapId', ParseBigIntIdPipe) mapId: string, @Param('jobId') jobId: string) {
+    return this.recognition.getJob(req.user.id, campusId, mapId, jobId);
+  }
+
   @Get(':assetId/content')
   @ApiOperation({ summary: '读取已上传的校园底图文件' })
   async getContent(

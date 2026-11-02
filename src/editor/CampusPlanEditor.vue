@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon } from './campusEditorDocument.js'
+import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon } from './campusEditorDocument.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
@@ -25,12 +25,14 @@ const roadWidth = ref(10)
 const snapEnabled = ref(true)
 const snapTolerance = 7
 const newBuilding = ref('教学楼')
+const roadNetwork = computed(() => roadNetworkToMultiPolygon(roads.value))
 const selectedBuilding = computed(() => buildings.value.find((item) => item.id === selected.value.id))
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
 const selectedArea = computed(() => areas.value.find((item) => item.id === selected.value.id))
 const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || selectedArea.value?.name || '未选择对象')
 const palette = ['教学楼','宿舍楼','办公楼','实验楼','图书馆','体育馆']
 const areaColor = (type) => type === 'water' ? '#6bb8b4' : type === 'sports' ? '#b9b69f' : '#78936d'
+const polygonPath = (multiPolygon) => multiPolygon.flatMap((polygon) => polygon.map((ring) => 'M ' + ring.map((point) => point.join(' ')).join(' L ') + ' Z')).join(' ')
 const roadPath = (points) => {
   if (points.length < 3) return 'M ' + points.map((p) => p.join(' ')).join(' L ')
   let path = 'M ' + points[0][0] + ' ' + points[0][1]
@@ -254,9 +256,10 @@ function exportDocument() {
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
             <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
+            <path :d="polygonPath(roadNetwork)" fill="#777b73" stroke="#5f635d" stroke-width="1" fill-rule="evenodd" stroke-linejoin="round"/>
             <g v-for="road in roads" :key="road.id">
-              <polygon :points="roadToPolygon(road.points, (road.width || 13) + 5).map(p=>p.join(',')).join(' ')" fill="#e0d8bd" stroke="#c9c1a9" stroke-width="1" stroke-linejoin="round"/>
-              <polygon :points="roadToPolygon(road.points, road.width || 13).map(p=>p.join(',')).join(' ')" :fill="selected.id===road.id ? '#d59a43' : '#777b73'" stroke="#5f635d" stroke-width="1" stroke-linejoin="round" @click.stop="selected={type:'road',id:road.id}"/>
+              <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="selected={type:'road',id:road.id}"/>
+              <path v-if="selected.id===road.id" :d="roadPath(road.points)" fill="none" stroke="#d59a43" :stroke-width="Math.max(2,(road.width || 13)*0.18)" stroke-linecap="round" pointer-events="none"/>
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
             <g v-for="item in buildings" :key="item.id" class="building" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">

@@ -19,7 +19,7 @@ export class MapsService {
   async findAll(userId:string,campusId:string) {
     await this.requireRole(userId,campusId,['owner','admin','editor','viewer']);
     return this.db.query(
-      `SELECT id,campus_id,slug,name,description,coordinate_system,coordinate_unit,canvas_width,canvas_height,status,revision,published_version_id,created_at,updated_at
+      `SELECT id,campus_id,slug,name,description,coordinate_system,coordinate_unit,canvas_width,canvas_height,coordinate_config,status,revision,published_version_id,created_at,updated_at
        FROM campus_map WHERE campus_id=$1 ORDER BY id`,[campusId]);
   }
   async updateConfig(userId:string,campusId:string,mapId:string,dto:UpdateMapConfigDto) {

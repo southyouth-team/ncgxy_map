@@ -61,8 +61,8 @@ describe('calculateWorkspaceBounds', () => {
     const footprint = [[12, 18], [42, 18], [42, 48]]
     const before = JSON.stringify(footprint)
     const bounds = calculateWorkspaceBounds({ buildings: [{ footprint }], padding: 50, gridStep: 25 })
-    expect(bounds.minX % 25).toBe(0)
-    expect(bounds.minY % 25).toBe(0)
+    expect(Math.abs(bounds.minX % 25)).toBe(0)
+    expect(Math.abs(bounds.minY % 25)).toBe(0)
     expect(JSON.stringify(footprint)).toBe(before)
   })
 })

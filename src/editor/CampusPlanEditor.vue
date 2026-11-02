@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding } from './campusEditorDocument.js'
+import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon } from './campusEditorDocument.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
@@ -255,8 +255,8 @@ function exportDocument() {
             </g>
             <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
             <g v-for="road in roads" :key="road.id">
-              <path :d="roadPath(road.points)" fill="none" stroke="#e0d8bd" :stroke-width="(road.width || 13)+5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path :d="roadPath(road.points)" fill="none" :stroke="selected.id===road.id ? '#d59a43' : '#777b73'" :stroke-width="road.width || 13" stroke-linecap="round" stroke-linejoin="round" @click.stop="selected={type:'road',id:road.id}"/>
+              <polygon :points="roadToPolygon(road.points, (road.width || 13) + 5).map(p=>p.join(',')).join(' ')" fill="#e0d8bd" stroke="#c9c1a9" stroke-width="1" stroke-linejoin="round"/>
+              <polygon :points="roadToPolygon(road.points, road.width || 13).map(p=>p.join(',')).join(' ')" :fill="selected.id===road.id ? '#d59a43' : '#777b73'" stroke="#5f635d" stroke-width="1" stroke-linejoin="round" @click.stop="selected={type:'road',id:road.id}"/>
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
             <g v-for="item in buildings" :key="item.id" class="building" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">

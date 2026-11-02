@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
-import request from 'supertest';
+import request = require('supertest');
 import { AppModule } from '../src/app.module';
 
 describe('Campus map API (PostGIS integration)', () => {

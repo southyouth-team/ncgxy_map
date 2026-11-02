@@ -247,7 +247,7 @@ function addBuilding(event) {
   const position = event?.clientX != null ? point(event) : { x: 305, y: 232 }
   const id = `placed-building-${Date.now()}`
   const rect = [position.x - 25, position.y - 12, position.x + 25, position.y + 12]
-  buildings.value.push({ id, label: newBuilding.value, rect, footprint: rectToPolygon(rect), floors: null, confidence: 'unverified' })
+  buildings.value.push({ id, label: newBuilding.value, template: newBuilding.value, rect, footprint: rectToPolygon(rect), floors: null, confidence: 'unverified' })
   selected.value = { type: 'building', id }
   tool.value = 'select'
 }
@@ -371,7 +371,7 @@ function exportDocument() {
         <div class="selected-card"><small>当前选中</small><strong>{{ selectedLabel }}</strong><span>{{ selected.type==='road' ? '道路 / LineString' : selected.type==='building' ? '建筑 / Footprint' : '请选择场景对象' }}</span></div>
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input v-model="selectedBuilding.label">
-          <label>空间范围（像素坐标）</label><div class="coordinate-grid"><span>X₁ {{ Math.round(selectedBuilding.rect[0]) }}</span><span>Y₁ {{ Math.round(selectedBuilding.rect[1]) }}</span><span>X₂ {{ Math.round(selectedBuilding.rect[2]) }}</span><span>Y₂ {{ Math.round(selectedBuilding.rect[3]) }}</span></div>
+          <label>建筑模板</label><select v-model="selectedBuilding.template"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>\n          <label>空间范围（像素坐标）</label><div class="coordinate-grid"><span>X₁ {{ Math.round(selectedBuilding.rect[0]) }}</span><span>Y₁ {{ Math.round(selectedBuilding.rect[1]) }}</span><span>X₂ {{ Math.round(selectedBuilding.rect[2]) }}</span><span>Y₂ {{ Math.round(selectedBuilding.rect[3]) }}</span></div>
           <label>数据可信度</label><span class="confidence">{{ selectedBuilding.confidence || 'unverified' }}</span>
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。</p><button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
         </template>

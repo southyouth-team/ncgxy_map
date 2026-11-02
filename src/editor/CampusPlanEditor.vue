@@ -31,6 +31,17 @@ const selectedArea = computed(() => areas.value.find((item) => item.id === selec
 const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || selectedArea.value?.name || '未选择对象')
 const palette = ['教学楼','宿舍楼','办公楼','实验楼','图书馆','体育馆']
 const areaColor = (type) => type === 'water' ? '#6bb8b4' : type === 'sports' ? '#b9b69f' : '#78936d'
+const roadPath = (points) => {
+  if (points.length < 3) return 'M ' + points.map((p) => p.join(' ')).join(' L ')
+  let path = 'M ' + points[0][0] + ' ' + points[0][1]
+  for (let i = 1; i < points.length; i++) {
+    const previous = points[i - 1], current = points[i]
+    const midpoint = [(previous[0] + current[0]) / 2, (previous[1] + current[1]) / 2]
+    path += ' Q ' + previous[0] + ' ' + previous[1] + ' ' + midpoint[0] + ' ' + midpoint[1]
+  }
+  const last = points[points.length - 1]
+  return path + ' L ' + last[0] + ' ' + last[1]
+}
 function snapshot() {
   history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value }))
   if (history.value.length > 40) history.value.shift()
@@ -167,10 +178,26 @@ function rotateBuilding() {
   item.footprint = rotatePolygon(item.footprint, 90)
   item.rect = polygonBounds(item.footprint)
 }
+function addRoadNode() {
+  const road = selectedRoad.value
+  if (!road || road.points.length < 2) return
+  snapshot()
+  let index = 0, longest = -Infinity
+  for (let i = 0; i < road.points.length - 1; i++) { const a = road.points[i], b = road.points[i+1]; const length = Math.hypot(b[0]-a[0], b[1]-a[1]); if (length > longest) { longest = length; index = i } }
+  const a = road.points[index], b = road.points[index+1]
+  road.points.splice(index+1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
+}
+function removeRoadNode(index) {
+  const road = selectedRoad.value
+  if (!road || road.points.length <= 2) return
+  snapshot()
+  road.points.splice(index, 1)
+}
 function deleteSelected() {
   snapshot()
   if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'road') roads.value = roads.value.filter(item => item.id !== selected.value.id)
+  if (selected.value.type === 'area') areas.value = areas.value.filter(item => item.id !== selected.value.id)
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
@@ -228,9 +255,9 @@ function exportDocument() {
             </g>
             <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
             <g v-for="road in roads" :key="road.id">
-              <polyline :points="road.points.map(p=>p.join(',')).join(' ')" fill="none" stroke="#e0d8bd" :stroke-width="(road.width || 13)+5" stroke-linecap="round" stroke-linejoin="round"/>
-              <polyline :points="road.points.map(p=>p.join(',')).join(' ')" fill="none" :stroke="selected.id===road.id ? '#d59a43' : '#777b73'" :stroke-width="road.width || 13" stroke-linecap="round" stroke-linejoin="round" @click.stop="selected={type:'road',id:road.id}"/>
-              <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)"/></g>
+              <path :d="roadPath(road.points)" fill="none" stroke="#e0d8bd" :stroke-width="(road.width || 13)+5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path :d="roadPath(road.points)" fill="none" :stroke="selected.id===road.id ? '#d59a43' : '#777b73'" :stroke-width="road.width || 13" stroke-linecap="round" stroke-linejoin="round" @click.stop="selected={type:'road',id:road.id}"/>
+              <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @click.stop="removeRoadNode(index)"/></g>
             </g>
             <g v-for="item in buildings" :key="item.id" class="building" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="#bca27c" stroke="#665744" stroke-width="2"/>
@@ -263,7 +290,7 @@ function exportDocument() {
         </template>
         <template v-else-if="selectedRoad">
           <label>道路宽度</label><input v-model.number="selectedRoad.width" type="range" min="4" max="24">
-          <p class="hint">拖动地图上的圆形控制点调整道路路径。</p><button class="danger-button" @click="deleteSelected">删除道路</button>
+          <button class="add-button" @click="addRoadNode">＋ 添加道路控制点</button><p class="hint">拖动控制点调整曲线；点击控制点删除（至少保留 2 个）。道路采用平滑曲线显示。</p><button class="danger-button" @click="deleteSelected">删除道路</button>
         </template>
         <div v-else class="empty-inspector">在校园平面图中选择一栋建筑或一条道路。</div>
       </aside>

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
+import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
@@ -29,6 +30,58 @@ const roadWidth = ref(10)
 const snapEnabled = ref(true)
 const snapTolerance = 7
 const newBuilding = ref('教学楼')
+const referenceImage = ref(null)
+const referenceImagePreview = ref('')
+const referenceImageOpacity = ref(0.55)
+const calibrationMode = ref(false)
+const calibrationPoints = ref([])
+const targetX = ref(0)
+const targetY = ref(0)
+const calibrationError = ref('')
+const calibrationTransform = computed(() => {
+  try {
+    calibrationError.value = ''
+    return calibrationPoints.value.length >= 2 ? fitCampusSimilarityTransform(calibrationPoints.value) : null
+  } catch (error) {
+    calibrationError.value = error.message
+    return null
+  }
+})
+function uploadReferenceImage(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) { calibrationError.value = '请选择 PNG、JPG 或 WebP 图片'; return }
+  const reader = new FileReader()
+  reader.onload = () => {
+    const image = new Image()
+    image.onload = () => {
+      referenceImagePreview.value = String(reader.result)
+      referenceImage.value = { name: file.name, width: image.naturalWidth, height: image.naturalHeight, uri: 'local-preview-only', coordinateSpace: 'image-pixel', status: 'unverified' }
+      calibrationPoints.value = []
+      calibrationError.value = ''
+    }
+    image.onerror = () => { calibrationError.value = '图片解码失败' }
+    image.src = String(reader.result)
+  }
+  reader.onerror = () => { calibrationError.value = '读取图片失败' }
+  reader.readAsDataURL(file)
+}
+function captureCalibrationPoint(event) {
+  if (!calibrationMode.value || !referenceImagePreview.value) return
+  event.stopPropagation()
+  const source = point(event)
+  calibrationPoints.value.push({ source: [source.x, source.y], target: [Number(targetX.value), Number(targetY.value)] })
+  targetX.value += 10
+  targetY.value += 10
+}
+function removeCalibrationPoint(index) { calibrationPoints.value.splice(index, 1) }
+function clearReferenceImage() {
+  referenceImage.value = null
+  referenceImagePreview.value = ''
+  calibrationPoints.value = []
+  calibrationMode.value = false
+}
+
 const roadNetwork = computed(() => roadNetworkToMultiPolygon(roads.value))
 const workspaceBounds = computed(() => calculateWorkspaceBounds({ buildings: buildings.value, areas: areas.value, roads: roads.value }))
 const selectedBuilding = computed(() => buildings.value.find((item) => item.id === selected.value.id))
@@ -291,7 +344,7 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
-  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', source: 'campusLayout.js', workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: [] }
+  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: [] }
 }
 function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {
@@ -333,12 +386,12 @@ function exportDocument() {
       <main class="map-stage">
         <div class="stage-label"><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>示意坐标 · 非米制</em></div>
         <div class="map-scroll">
-          <svg class="campus-map" :viewBox="canvasViewBox()" @wheel.prevent="zoomCanvas" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan($event); movePointer($event)" @pointerup="endCanvasPan(); endPointer()" @pointercancel="endCanvasPan(); endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
+          <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan($event); movePointer($event)" @pointerup="endCanvasPan(); endPointer()" @pointercancel="endCanvasPan(); endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
-            <rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="#86a765"/><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
+            <rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="#86a765"/><image v-if="referenceImagePreview" href="" :xlink:href="referenceImagePreview" x="0" y="0" :width="referenceImage.width" :height="referenceImage.height" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
             <g v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
@@ -393,6 +446,6 @@ function exportDocument() {
   </section>
 </template>
 
-<style scoped>
+<style scoped>\n.upload-control{display:block;padding:9px;margin:8px 0;background:#e8eddf;border:1px dashed #87977c;border-radius:6px;cursor:pointer}.upload-control input{display:block;width:100%;margin-top:6px;font-size:11px}.coordinate-grid button{grid-column:span 2}.map-stage svg{user-select:none}
 .campus-editor{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;background:#e6dfc9;color:#3b4c37;font-family:Inter,"Microsoft YaHei",sans-serif}.editor-header{height:64px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#f8f7ef;border-bottom:1px solid #c9cbbb}.brand,.header-actions{display:flex;align-items:center;gap:12px}.brand-mark{display:grid;place-items:center;width:36px;height:36px;background:#315b43;color:#f4e8c9;font-weight:800}.brand strong,.brand small{display:block}.brand strong{font-size:14px}.brand small{font-size:9px;letter-spacing:1.4px;color:#788477;margin-top:4px}.header-actions button,.tool-panel button,.inspector button{border:1px solid #c9cbbb;background:#fffdf5;color:#344b3b;border-radius:3px;padding:8px 11px;font-size:12px;cursor:pointer}.header-actions button:disabled{opacity:.4}.header-actions .primary,.add-button{background:#315b43!important;color:#fff!important;border-color:#315b43!important}.zoom-value{font-size:11px;min-width:36px;text-align:center}.workspace{display:grid;grid-template-columns:190px minmax(0,1fr) 220px;min-height:0;flex:1}.tool-panel,.inspector{background:#f7f6ed;padding:17px 14px;border-right:1px solid #d1d2c5;overflow:auto}.inspector{border-right:0;border-left:1px solid #d1d2c5}.panel-title{font-size:11px;font-weight:800;letter-spacing:1px;color:#607363;margin:2px 0 13px}.tool-panel>button{width:100%;text-align:left;margin-bottom:7px}.tool-panel>button span{display:inline-block;width:23px;font-size:17px}.tool-panel>button.active{background:#e4eadc;border-color:#66866b}.panel-separator{height:1px;background:#d8d9cc;margin:17px 0}.tool-panel select,.inspector input:not([type=range]){width:100%;box-sizing:border-box;border:1px solid #c9cbbb;padding:8px;background:white;margin:7px 0 10px;color:#344b3b}.tool-panel label,.inspector label{display:block;font-size:11px;color:#69766a;margin:14px 0 5px}.tool-panel label b{float:right}.tool-panel input[type=range],.inspector input[type=range]{width:100%;accent-color:#527b58}.road-title{margin-top:22px}.hint{font-size:10px;line-height:1.7;color:#7b867a;margin-top:20px}.map-stage{display:flex;flex-direction:column;min-width:0;background:#d9dfc7}.stage-label{height:38px;display:flex;align-items:center;gap:8px;padding:0 16px;font-size:10px;font-weight:800;letter-spacing:1.1px;color:#4f6653}.stage-label em{font-style:normal;font-weight:400;letter-spacing:0;color:#899184}.live-dot{width:7px;height:7px;border-radius:50%;background:#72965c}.map-scroll{flex:1;min-height:0;overflow:hidden;position:relative;padding:0;background-color:#d9dfc7;background-image:radial-gradient(#87987955 .7px,transparent .7px);background-size:16px 16px}.campus-map{display:block;width:100%;height:100%;background:#86a765;box-shadow:0 12px 35px #384a3528;touch-action:none;cursor:grab}.campus-map:active{cursor:grabbing}.building{cursor:move}.building:hover rect:first-child{stroke:#d69c43}.stage-footer{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:9px;color:#738071;background:#e8e9df}.selected-card{padding:12px;background:#e9eddf;border:1px solid #d1d9c8;margin-bottom:16px}.selected-card small,.selected-card strong,.selected-card span{display:block}.selected-card small{font-size:9px;color:#87917e}.selected-card strong{font-size:13px;margin:6px 0}.selected-card span{font-size:10px;color:#6e7d6e}.coordinate-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.coordinate-grid span{padding:7px;background:#eceee5;font-size:10px}.confidence{font-size:10px;color:#9a7542}.inspector .add-button,.inspector .danger-button{width:100%;margin-top:14px}.danger-button{border-color:#d8b7a9!important;color:#9b4d37!important;background:#fff8f4!important}.empty-inspector{font-size:11px;line-height:1.8;color:#879184;padding:20px 0}@media(max-width:900px){.workspace{grid-template-columns:150px minmax(0,1fr)}.inspector{display:none}.editor-header{padding:0 10px}.header-actions{gap:4px}.header-actions button{padding:7px}.brand small{display:none}}@media(max-width:600px){.workspace{grid-template-columns:112px minmax(0,1fr)}.tool-panel{padding:10px 7px}.tool-panel>button{font-size:10px;padding:7px 5px}.stage-footer span:last-child{display:none}.header-actions button:nth-child(3){display:none}}
 </style>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { roadToPolygon } from './campusEditorDocument.js'
+import { roadToPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 
 describe('roadToPolygon', () => {
   it('creates a surface with two sides for a straight road', () => {
@@ -40,5 +40,29 @@ describe('roadNetworkToMultiPolygon', () => {
       { id: 'east', width: 8, points: [[80, 0], [100, 0]] },
     ])
     expect(result).toHaveLength(2)
+  })
+})
+
+
+describe('calculateWorkspaceBounds', () => {
+  it('keeps the reference map and expands for objects outside its original extent', () => {
+    const bounds = calculateWorkspaceBounds({
+      buildings: [{ footprint: [[-245, 120], [-195, 120], [-195, 160], [-245, 160]] }],
+      roads: [{ points: [[700, 500], [920, 540]] }],
+    })
+    expect(bounds.minX).toBeLessThan(-245)
+    expect(bounds.maxX).toBeGreaterThan(920)
+    expect(bounds.maxY).toBeGreaterThan(540)
+    expect(bounds.width).toBeGreaterThan(640)
+    expect(bounds.height).toBeGreaterThan(480)
+  })
+
+  it('does not mutate geometry while calculating padded, grid-aligned bounds', () => {
+    const footprint = [[12, 18], [42, 18], [42, 48]]
+    const before = JSON.stringify(footprint)
+    const bounds = calculateWorkspaceBounds({ buildings: [{ footprint }], padding: 50, gridStep: 25 })
+    expect(bounds.minX % 25).toBe(0)
+    expect(bounds.minY % 25).toBe(0)
+    expect(JSON.stringify(footprint)).toBe(before)
   })
 })

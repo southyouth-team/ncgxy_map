@@ -78,6 +78,8 @@ export function createCampusEngine(container, callbacks = {}) {
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     input?.update(delta)
+    const playerSprite = scene?.getObjectByName('PixelExplorerSprite')
+    if (playerSprite && cameraRig?.player) playerSprite.position.set(cameraRig.player.x, 2.1, cameraRig.player.z)
     cameraRig?.update(delta)
     renderer.render(scene, cameraRig.camera)
   }

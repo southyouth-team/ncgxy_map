@@ -32,7 +32,10 @@ const selectedRing = computed(() => editingGeometry.value?.type === 'Polygon' ? 
 const drawPoints = computed(() => selectedGeometry.value?.coordinates?.[0]?.slice(0, -1) || points.value)
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API}${path}`, { ...options, headers: { ...headers, ...(options.headers || {}) } })
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+  const requestHeaders = { ...headers, ...(options.headers || {}) }
+  if (isFormData) delete requestHeaders['Content-Type']
+  const response = await fetch(`${API}${path}`, { ...options, headers: requestHeaders })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.message || `请求失败：HTTP ${response.status}`)
   return payload
@@ -53,6 +56,7 @@ async function initialize() {
     canvasWidth.value = Number(map.value.canvas_width || map.value.canvasWidth || 1000)
     canvasHeight.value = Number(map.value.canvas_height || map.value.canvasHeight || 700)
     await loadMapData()
+    await loadLatestBaseMap()
     status.value = '已连接 PostGIS 地图数据服务'
   } catch (e) {
     error.value = e.message
@@ -201,13 +205,35 @@ async function refreshData() {
   finally { busy.value = false }
 }
 
-function chooseBackground(event) {
+async function loadBaseMapAsset(asset) {
+  const response = await fetch(`${API}${asset.contentPath}`, { headers: { 'X-Dev-User-Id': USER_ID } })
+  if (!response.ok) throw new Error('底图文件读取失败：HTTP ' + response.status)
+  const blob = await response.blob()
+  if (backgroundUrl.value) URL.revokeObjectURL(backgroundUrl.value)
+  backgroundUrl.value = URL.createObjectURL(blob)
+  backgroundName.value = asset.original_name
+}
+
+async function loadLatestBaseMap() {
+  const assets = await api(`/campuses/${campus.value.id}/maps/${map.value.id}/assets`)
+  if (assets.length) await loadBaseMapAsset(assets[0])
+}
+
+async function chooseBackground(event) {
   const file = event.target.files?.[0]
   if (!file) return
-  if (!file.type.startsWith('image/')) { error.value = '请选择 PNG、JPG 或 WebP 图片'; return }
-  if (backgroundUrl.value) URL.revokeObjectURL(backgroundUrl.value)
-  backgroundUrl.value = URL.createObjectURL(file)
-  backgroundName.value = file.name
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { error.value = '请选择 PNG、JPG 或 WebP 图片'; return }
+  if (file.size > 15 * 1024 * 1024) { error.value = '底图文件不能超过 15 MB'; return }
+  busy.value = true
+  error.value = ''
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    const asset = await api(`/campuses/${campus.value.id}/maps/${map.value.id}/assets/base-map`, { method: 'POST', body: form })
+    await loadBaseMapAsset(asset)
+    status.value = '底图已上传并持久化'
+  } catch (e) { error.value = e.message }
+  finally { busy.value = false; if (fileInput.value) fileInput.value.value = '' }
 }
 
 function clearDraft() { points.value = []; tool.value = 'select' }
@@ -224,7 +250,7 @@ onMounted(initialize)
     <div class="editor-body">
       <aside class="editor-sidebar">
         <div class="panel-section"><div class="panel-title">项目空间</div><strong>{{ campus?.name || '南昌工学院' }}</strong><small>{{ map?.name || '主校区' }} · {{ canvasWidth }} × {{ canvasHeight }}</small></div>
-        <div class="panel-section"><div class="panel-title">底图管理</div><button class="editor-button full" @click="fileInput?.click()">导入底图图片</button><input ref="fileInput" hidden type="file" accept="image/png,image/jpeg,image/webp" @change="chooseBackground"><small>{{ backgroundName || '尚未导入底图' }}</small><p class="muted">底图当前仅在本次浏览会话中显示，不会上传或持久化。</p></div>
+        <div class="panel-section"><div class="panel-title">底图管理</div><button class="editor-button full" @click="fileInput?.click()">导入底图图片</button><input ref="fileInput" hidden type="file" accept="image/png,image/jpeg,image/webp" @change="chooseBackground"><small>{{ backgroundName || '尚未导入底图' }}</small><p class="muted">底图上传后保存至服务端存储，并关联当前地图项目。</p></div>
         <div class="panel-section"><div class="panel-title">图层</div><div v-for="layer in layers" :key="layer.id" class="layer-entry"><button class="layer-row" :class="{ active: activeLayer?.id === layer.id }" @click="activeLayer = layer; selectedFeature = null; editingGeometry = null"><span class="layer-dot" :class="layer.feature_type"></span><span>{{ layer.name }}</span><small>{{ features.filter(f => String(f.layer_id) === String(layer.id)).length }}</small></button><button class="layer-visibility" :disabled="busy" :title="layer.visible === false ? '显示图层' : '隐藏图层'" @click="toggleLayerVisibility(layer)">{{ layer.visible === false ? '○' : '◉' }}</button></div></div>
         <div class="panel-section"><div class="panel-title">绘制工具</div><button class="tool-row" :class="{ active: tool === 'select' }" @click="tool = 'select'">↖ <span>选择 / 查看要素</span></button><button class="tool-row" :class="{ active: tool === 'polygon' }" :disabled="activeLayer?.locked" @click="startPolygon">⬡ <span>绘制多边形</span></button><div v-if="tool === 'polygon'" class="draft-actions"><small>已采集 {{ points.length }} 个顶点</small><button @click="undoPoint">撤销顶点</button><button @click="clearDraft">取消绘制</button></div></div>
         <div class="panel-section"><div class="panel-title">数据质量</div><p class="quality-note">新绘制要素默认标记为 <b>unverified</b>。未经底图配准和现场核验，不作为真实测绘成果。</p></div>

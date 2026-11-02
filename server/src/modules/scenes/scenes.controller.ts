@@ -4,6 +4,7 @@ import { Request } from 'express';
 import { DevIdentityGuard } from '../../common/dev-identity.guard';
 import { ParseBigIntIdPipe } from '../../common/parse-bigint-id.pipe';
 import { SaveSceneDto } from './dto/save-scene.dto';
+import { SaveRpgMapDto } from './dto/save-rpg-map.dto';
 import { ScenesService } from './scenes.service';
 
 @ApiTags('scenes')
@@ -20,6 +21,28 @@ export class ScenesController {
     @Param('mapId', ParseBigIntIdPipe) mapId: string,
   ) {
     return this.service.findOne(req.user.id, campusId, mapId);
+  }
+
+
+  @Get('rpg')
+  @ApiOperation({ summary: '获取二维 RPG 瓦片地图文档' })
+  findRpgMap(
+    @Req() req: Request & { user: { id: string } },
+    @Param('campusId', ParseBigIntIdPipe) campusId: string,
+    @Param('mapId', ParseBigIntIdPipe) mapId: string,
+  ) {
+    return this.service.findRpgMap(req.user.id, campusId, mapId);
+  }
+
+  @Put('rpg')
+  @ApiOperation({ summary: '保存二维 RPG 瓦片地图文档并执行版本冲突检测' })
+  saveRpgMap(
+    @Req() req: Request & { user: { id: string } },
+    @Param('campusId', ParseBigIntIdPipe) campusId: string,
+    @Param('mapId', ParseBigIntIdPipe) mapId: string,
+    @Body() dto: SaveRpgMapDto,
+  ) {
+    return this.service.saveRpgMap(req.user.id, campusId, mapId, dto.revision, dto.document);
   }
 
   @Put()

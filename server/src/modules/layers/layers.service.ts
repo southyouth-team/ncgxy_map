@@ -27,6 +27,7 @@ export class LayersService {
 
   async findAll(userId: string, campusId: string, mapId: string) {
     await this.requireRole(userId,campusId,['owner','admin','editor','viewer']);
+    await this.requireMap(campusId,mapId);
     return this.dataSource.query(
       `SELECT id,campus_id,map_id,layer_key,name,feature_type,sort_order,visible,locked,style,created_at,updated_at
        FROM campus_layer WHERE campus_id=$1 AND map_id=$2 ORDER BY sort_order,id`,
@@ -49,12 +50,21 @@ export class LayersService {
 
   async remove(userId: string, campusId: string, mapId: string, layerId: string) {
     await this.requireRole(userId,campusId,['owner','admin','editor']);
+    await this.requireMap(campusId,mapId);
     const rows = await this.dataSource.query(
-      'DELETE FROM campus_layer WHERE id=$1 AND campus_id=$2 AND map_id=$3 RETURNING id',
+      `DELETE FROM campus_layer l WHERE l.id=$1 AND l.campus_id=$2 AND l.map_id=$3
+       AND NOT EXISTS (SELECT 1 FROM campus_feature f WHERE f.layer_id=l.id) RETURNING l.id`,
       [layerId,campusId,mapId],
     );
-    if (!rows.length) throw new NotFoundException('图层不存在');
-    return { id: rows[0].id, deleted: true };
+    if (rows.length) return { id: rows[0].id, deleted: true };
+    const existing = await this.dataSource.query('SELECT id FROM campus_layer WHERE id=$1 AND campus_id=$2 AND map_id=$3',[layerId,campusId,mapId]);
+    if (!existing.length) throw new NotFoundException('图层不存在');
+    throw new ConflictException('该图层仍包含地图要素，请先迁移或删除要素后再删除图层');
+  }
+
+  private async requireMap(campusId: string, mapId: string) {
+    const rows = await this.dataSource.query('SELECT id FROM campus_map WHERE id=$1 AND campus_id=$2',[mapId,campusId]);
+    if (!rows.length) throw new NotFoundException('地图项目不存在');
   }
 
   private async requireRole(userId: string, campusId: string, allowed: string[]) {

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
+import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -78,7 +79,23 @@ export function createCampusEngine(container, callbacks = {}) {
         .catch((error) => callbacks.onAssetError?.(error))
     }
     cameraRig = new CameraRig(THREE, renderer.domElement)
-    input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds)
+    // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
+    const playerSprite = campus.getObjectByName('PixelExplorerSprite')
+    if (playerSprite) cameraRig.player.set(playerSprite.position.x, 1.7, playerSprite.position.z)
+    // 从明确标记为建筑的场景对象提取世界包围盒，避免把道路、树木等误判为墙体。
+    campus.updateMatrixWorld(true)
+    const buildingObstacles = []
+    campus.traverse((object) => {
+      if (!(object.userData?.buildingId || object.userData?.objectType === 'building')) return
+      const bounds = new THREE.Box3().setFromObject(object)
+      if (bounds.isEmpty()) return
+      buildingObstacles.push({
+        minX: bounds.min.x, maxX: bounds.max.x,
+        minZ: bounds.min.z, maxZ: bounds.max.z,
+      })
+    })
+    const collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
     input.attach()
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)

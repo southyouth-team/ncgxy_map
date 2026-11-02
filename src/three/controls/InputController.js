@@ -1,9 +1,12 @@
+import { CollisionWorld } from '../physics/CollisionWorld.js'
+
 export class InputController {
-  constructor(THREE, domElement, cameraRig, bounds) {
+  constructor(THREE, domElement, cameraRig, bounds, collisionWorld = null) {
     this.THREE = THREE
     this.domElement = domElement
     this.cameraRig = cameraRig
     this.bounds = bounds || { minX: -75, maxX: 75, minZ: -75, maxZ: 75 }
+    this.collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
     this.mode = 'overview'
     this.keys = new Set()
     this.pointerDown = false
@@ -116,8 +119,9 @@ export class InputController {
     const dx = Math.sin(yaw) * f - Math.cos(yaw) * s
     const dz = Math.cos(yaw) * f + Math.sin(yaw) * s
     const player = this.cameraRig.player
-    player.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, player.x + dx * speed))
-    player.z = Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, player.z + dz * speed))
+    const movement = this.collisionWorld.move(player, dx * speed, dz * speed)
+    player.x = movement.x
+    player.z = movement.z
     if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
     else this.cameraRig.updateFirstPersonDesired()
   }

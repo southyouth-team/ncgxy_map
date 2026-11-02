@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "units": "meters",
+  "coordinateSystem": "local-campus-meter",
+  "status": "survey-pending",
+  "buildings": []
+}

@@ -9,6 +9,10 @@ import {
 
 const emit = defineEmits(['close', 'preview'])
 const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => normalizeBuilding(item)))
+const areas = ref(CAMPUS_AREAS.map((item) => ({
+  ...item,
+  footprint: item.polygon?.map((point) => [...point]) || rectToPolygon(item.rect),
+})))
 const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item.points.map((point) => [...point]) })))
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 const tool = ref('select')
@@ -21,11 +25,12 @@ const roadWidth = ref(10)
 const newBuilding = ref('教学楼')
 const selectedBuilding = computed(() => buildings.value.find((item) => item.id === selected.value.id))
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
-const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || '未选择对象')
+const selectedArea = computed(() => areas.value.find((item) => item.id === selected.value.id))
+const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || selectedArea.value?.name || '未选择对象')
 const palette = ['教学楼','宿舍楼','办公楼','实验楼','图书馆','体育馆']
 const areaColor = (type) => type === 'water' ? '#6bb8b4' : type === 'sports' ? '#b9b69f' : '#78936d'
 function snapshot() {
-  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value }))
+  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value }))
   if (history.value.length > 40) history.value.shift()
   future.value = []
 }
@@ -33,6 +38,7 @@ function restore(raw) {
   const state = JSON.parse(raw)
   buildings.value = state.buildings
   roads.value = state.roads
+  areas.value = state.areas || areas.value
 }
 function undo() {
   if (!history.value.length) return
@@ -60,6 +66,15 @@ function startBuildingDrag(event, item) {
   drag.value = { type: 'building', id: item.id, start: p, footprint: item.footprint.map((point) => [...point]) }
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
+function startAreaDrag(event, area) {
+  if (tool.value !== 'select') return
+  event.stopPropagation()
+  selected.value = { type: 'area', id: area.id }
+  snapshot()
+  const p = point(event)
+  drag.value = { type: 'area', id: area.id, start: p, footprint: area.footprint.map((vertex) => [...vertex]) }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
 function startRoadNodeDrag(event, road, index) {
   event.stopPropagation()
   selected.value = { type: 'road', id: road.id }
@@ -75,6 +90,9 @@ function movePointer(event) {
     const dx = p.x - drag.value.start.x, dy = p.y - drag.value.start.y
     item.footprint = movePolygon(drag.value.footprint, dx, dy)
     item.rect = polygonBounds(item.footprint)
+  } else if (drag.value.type === 'area') {
+    const area = areas.value.find((entry) => entry.id === drag.value.id)
+    if (area) area.footprint = movePolygon(drag.value.footprint, p.x - drag.value.start.x, p.y - drag.value.start.y)
   } else {
     const road = roads.value.find((entry) => entry.id === drag.value.id)
     if (road) road.points[drag.value.index] = [p.x, p.y]
@@ -112,7 +130,7 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
-  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', source: 'campusLayout.js', areas: CAMPUS_AREAS, buildings: buildings.value, roads: roads.value, objects: [] }
+  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', source: 'campusLayout.js', areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: [] }
 }
 function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {
@@ -160,9 +178,8 @@ function exportDocument() {
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="4" cy="5" r="1" fill="#66865b" opacity=".3"/><circle cx="18" cy="17" r="1" fill="#66865b" opacity=".3"/></pattern>
             </defs>
             <rect width="640" height="480" fill="#91a77b"/><rect x="36" y="92" width="576" height="368" fill="#9db28a"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
-            <g v-for="area in CAMPUS_AREAS" :key="area.id">
-              <rect v-if="area.rect" :x="area.rect[0]" :y="area.rect[1]" :width="area.rect[2]-area.rect[0]" :height="area.rect[3]-area.rect[1]" :fill="areaColor(area.type)" opacity=".55" rx="3"/>
-              <polygon v-if="area.polygon" :points="area.polygon.map(p=>p.join(',')).join(' ')" fill="#6bb8b4" stroke="#d7e5d3" stroke-width="3"/>
+            <g v-for="area in areas" :key="area.id" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
+              <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
             </g>
             <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
             <g v-for="road in roads" :key="road.id">
@@ -181,7 +198,7 @@ function exportDocument() {
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>
           </svg>
         </div>
-        <footer class="stage-footer"><span>画布：校园平面示意图 640 × 480</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路</span><span>坐标来源：校园原图标注</span></footer>
+        <footer class="stage-footer"><span>画布：校园平面示意图 640 × 480</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路 · {{ areas.length }} 个区域</span><span>坐标来源：校园原图标注</span></footer>
       </main>
       <aside class="inspector">
         <div class="panel-title">属性检查器</div>
@@ -191,6 +208,12 @@ function exportDocument() {
           <label>空间范围（像素坐标）</label><div class="coordinate-grid"><span>X₁ {{ Math.round(selectedBuilding.rect[0]) }}</span><span>Y₁ {{ Math.round(selectedBuilding.rect[1]) }}</span><span>X₂ {{ Math.round(selectedBuilding.rect[2]) }}</span><span>Y₂ {{ Math.round(selectedBuilding.rect[3]) }}</span></div>
           <label>数据可信度</label><span class="confidence">{{ selectedBuilding.confidence || 'unverified' }}</span>
           <button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
+        </template>
+        <template v-else-if="selectedArea">
+          <label>区域名称</label><input v-model="selectedArea.name">
+          <label>区域类型</label><span class="confidence">{{ selectedArea.type }}</span>
+          <p class="hint">拖动区域轮廓可调整整体位置。区域轮廓以 Polygon 顶点保存。</p>
+          <button class="danger-button" @click="snapshot(); areas = areas.filter(item => item.id !== selectedArea.id); selected = {type:'',id:''}">删除区域</button>
         </template>
         <template v-else-if="selectedRoad">
           <label>道路宽度</label><input v-model.number="selectedRoad.width" type="range" min="4" max="24">

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import {
@@ -19,12 +19,21 @@ const documentRevision = ref(0)
 const persistenceBusy = ref(false)
 const persistenceMessage = ref('')
 const savedAssetId = ref(null)
+const documentLoaded = ref(false)
+const revisionConflict = ref(false)
+let autoSaveTimer = null
+let lastSavedSnapshot = ''
 const authHeaders = () => ({ 'X-Dev-User-Id': props.devUserId })
 const mapApiPath = () => `/campuses/${props.campusId}/maps/${props.mapId}`
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${props.apiBase}${path}`, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } })
   const payload = options.raw ? await response.blob() : await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload?.message || `地图服务请求失败：HTTP ${response.status}`)
+  if (!response.ok) {
+    const error = new Error(typeof payload?.message === 'string' ? payload.message : `地图服务请求失败：HTTP ${response.status}`)
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
   return payload
 }
 async function loadEditorDocument() {
@@ -44,9 +53,17 @@ async function loadEditorDocument() {
         if (document.referenceImage.assetId) await loadAssetPreview(document.referenceImage.assetId)
       }
     }
+    documentLoaded.value = true
+    lastSavedSnapshot = JSON.stringify(buildDocument())
+    persistenceMessage.value = saved.document ? `已加载服务端版本 · ${documentRevision.value}` : '当前地图尚无服务端编辑文档，修改后将自动保存'
   } catch (error) {
     persistenceMessage.value = `读取已保存编辑文档失败：${error.message}`
   }
+}
+async function reloadEditorDocument() {
+  documentLoaded.value = false
+  revisionConflict.value = false
+  await loadEditorDocument()
 }
 async function loadAssetPreview(assetId) {
   const asset = await apiRequest(`${mapApiPath()}/assets/${assetId}/content`, { raw: true })
@@ -66,9 +83,16 @@ async function saveEditorDocument() {
       body: JSON.stringify({ revision: documentRevision.value, document }),
     })
     documentRevision.value = Number(saved.revision || documentRevision.value + 1)
+    revisionConflict.value = false
+    lastSavedSnapshot = JSON.stringify(buildDocument())
     persistenceMessage.value = `已保存 · 版本 ${documentRevision.value}`
   } catch (error) {
-    persistenceMessage.value = error.message
+    if (error.status === 409) {
+      revisionConflict.value = true
+      persistenceMessage.value = '检测到版本冲突：服务端已有其他编辑者的新版本。本地修改已保留，请导出本地版本或重新加载服务端版本。'
+    } else {
+      persistenceMessage.value = error.message
+    }
   } finally {
     persistenceBusy.value = false
   }
@@ -282,8 +306,17 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onWindowKeyDown)
+  if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
   if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
   window.removeEventListener('keyup', onWindowKeyUp)
+})
+watch(() => JSON.stringify(buildDocument()), (snapshot) => {
+  if (!documentLoaded.value || !props.campusId || !props.mapId || revisionConflict.value) return
+  if (snapshot === lastSavedSnapshot) return
+  if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
+  autoSaveTimer = window.setTimeout(() => {
+    if (!persistenceBusy.value) saveEditorDocument()
+  }, 1500)
 })
 function point(event) {
   const svg = event.currentTarget.ownerSVGElement || event.currentTarget
@@ -446,7 +479,7 @@ function exportDocument() {
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
         <button title="缩小（-）" @click="zoomAt(Math.max(.35, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配工作区</button><button title="放大（+）" @click="zoomAt(Math.min(4, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
-        <button @click="preview3d">三维预览</button><button class="primary" :disabled="persistenceBusy" @click="saveEditorDocument">{{ persistenceBusy ? "保存中…" : "保存到服务端" }}</button><button @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
+        <button @click="preview3d">三维预览</button><button class="primary" :disabled="persistenceBusy || revisionConflict" @click="saveEditorDocument">{{ persistenceBusy ? "保存中…" : "立即保存" }}</button><button @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
     </header>
     <div class="workspace">
@@ -467,6 +500,8 @@ function exportDocument() {
         </template>
         <small v-if="calibrationError" class="hint">{{ calibrationError }}</small>
         <small v-if="persistenceMessage" class="hint">{{ persistenceMessage }}</small>
+        <button v-if="revisionConflict" class="danger-button" @click="exportDocument">导出本地版本</button>
+        <button v-if="revisionConflict" class="add-button" @click="reloadEditorDocument">重新加载服务端版本</button>
         <button :class="{active:tool==='select'}" @click="tool='select'"><span>↖</span>选择 / 移动</button>
         <button :class="{active:tool==='building'}" @click="tool='building'"><span>▰</span>建筑摆放</button>
         <button :class="{active:tool==='road'}" @click="tool='road'"><span>⌁</span>道路编辑</button>

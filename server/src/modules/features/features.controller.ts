@@ -14,7 +14,7 @@ export class FeaturesController {
   @Get() @ApiOperation({summary:'获取地图空间要素'})
   findAll(@Req()req:Request&{user:{id:string}},@Param('campusId',ParseBigIntIdPipe)c:string,@Param('mapId',ParseBigIntIdPipe)m:string) { return this.service.findAll(req.user.id,c,m); }
   @Put(':featureId') @ApiOperation({summary:'按 revision 更新空间要素'})
-  update(@Req()req:Request&{user:{id:string}},@Param('campusId',ParseIntPipe)c:number,@Param('mapId',ParseIntPipe)m:number,@Param('featureId',ParseBigIntIdPipe)f:string,@Body()dto:UpdateFeatureDto) { return this.service.update(req.user.id,String(c),String(m),f,dto); }
+  update(@Req()req:Request&{user:{id:string}},@Param('campusId',ParseBigIntIdPipe)c:string,@Param('mapId',ParseBigIntIdPipe)m:string,@Param('featureId',ParseBigIntIdPipe)f:string,@Body()dto:UpdateFeatureDto) { return this.service.update(req.user.id,c,m,f,dto); }
   @Delete(':featureId') @ApiOperation({summary:'按 revision 删除空间要素'})
-  remove(@Req()req:Request&{user:{id:string}},@Param('campusId',ParseIntPipe)c:number,@Param('mapId',ParseIntPipe)m:number,@Param('featureId',ParseBigIntIdPipe)f:string,@Query('revision',ParseIntPipe)revision:number) { return this.service.remove(req.user.id,String(c),String(m),f,revision); }
+  remove(@Req()req:Request&{user:{id:string}},@Param('campusId',ParseBigIntIdPipe)c:string,@Param('mapId',ParseBigIntIdPipe)m:string,@Param('featureId',ParseBigIntIdPipe)f:string,@Query('revision',ParseIntPipe)revision:number) { return this.service.remove(req.user.id,c,m,f,revision); }
 }

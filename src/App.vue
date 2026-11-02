@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
-import CampusMapEditor from './editor/CampusMapEditor.vue'
+import RpgMapEditor from './editor/RpgMapEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 
@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
     <div ref="viewport" class="scene-viewport" v-show="!showEditor"></div>
-    <CampusMapEditor v-if="showEditor" @close="showEditor = false" />
+    <RpgMapEditor v-if="showEditor" @close="showEditor = false" />
 
     <header class="topbar">
       <div class="brand-lockup">

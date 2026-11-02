@@ -9,6 +9,8 @@ export class InputController {
     this.pointerDown = false
     this.lastPointer = { x: 0, y: 0 }
     this.pointerLocked = false
+    this.touchLookPointerId = null
+    this.lastTouchLook = { x: 0, y: 0 }
     this.onKeyDown = (event) => {
       const key = event.key.toLowerCase()
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) {
@@ -44,6 +46,23 @@ export class InputController {
       if (this.mode === 'firstPerson' && !this.pointerLocked) this.domElement.requestPointerLock?.()
     }
     this.onPointerLock = () => { this.pointerLocked = document.pointerLockElement === this.domElement }
+    this.onTouchPointerDown = (event) => {
+      if (event.pointerType !== 'touch' || this.mode === 'overview') return
+      this.touchLookPointerId = event.pointerId
+      this.lastTouchLook = { x: event.clientX, y: event.clientY }
+      this.domElement.setPointerCapture?.(event.pointerId)
+    }
+    this.onTouchPointerMove = (event) => {
+      if (event.pointerType !== 'touch' || event.pointerId !== this.touchLookPointerId) return
+      const dx = event.clientX - this.lastTouchLook.x
+      const dy = event.clientY - this.lastTouchLook.y
+      this.lastTouchLook = { x: event.clientX, y: event.clientY }
+      if (this.mode === 'firstPerson') this.cameraRig.rotateFirst(dx, dy)
+      else if (this.mode === 'thirdPerson') this.cameraRig.rotateThird(dx, dy)
+    }
+    this.onTouchPointerUp = (event) => {
+      if (event.pointerId === this.touchLookPointerId) this.touchLookPointerId = null
+    }
   }
 
   attach() {
@@ -55,6 +74,15 @@ export class InputController {
     this.domElement.addEventListener('wheel', this.onWheel, { passive: false })
     this.domElement.addEventListener('click', this.onClick)
     document.addEventListener('pointerlockchange', this.onPointerLock)
+    this.domElement.addEventListener('pointerdown', this.onTouchPointerDown)
+    this.domElement.addEventListener('pointermove', this.onTouchPointerMove)
+    this.domElement.addEventListener('pointerup', this.onTouchPointerUp)
+    this.domElement.addEventListener('pointercancel', this.onTouchPointerUp)
+  }
+
+  setVirtualKey(key, pressed) {
+    if (pressed) this.keys.add(key)
+    else this.keys.delete(key)
   }
 
   setMode(mode) {
@@ -103,6 +131,10 @@ export class InputController {
     this.domElement.removeEventListener('wheel', this.onWheel)
     this.domElement.removeEventListener('click', this.onClick)
     document.removeEventListener('pointerlockchange', this.onPointerLock)
+    this.domElement.removeEventListener('pointerdown', this.onTouchPointerDown)
+    this.domElement.removeEventListener('pointermove', this.onTouchPointerMove)
+    this.domElement.removeEventListener('pointerup', this.onTouchPointerUp)
+    this.domElement.removeEventListener('pointercancel', this.onTouchPointerUp)
     this.exitPointerLock()
   }
 }

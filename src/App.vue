@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
-import RpgMapEditor from './editor/RpgMapEditor.vue'
+import CampusPlanEditor from './editor/CampusPlanEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 
@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
     <div ref="viewport" class="scene-viewport" v-show="!showEditor || editorViewMode === '3d'"></div>
-    <RpgMapEditor v-if="showEditor" v-show="editorViewMode === '2d'" @switch-view="switchEditorView" @close="closeEditor" />
+    <CampusPlanEditor v-if="showEditor" @close="closeEditor" />
 
     <template v-if="!showEditor || editorViewMode === '3d'">
     <header class="topbar">
@@ -215,8 +215,8 @@ onBeforeUnmount(() => {
         <span class="mode-hint">返回普通浏览</span>
       </button>
       <button v-else class="mode-button editor-mode-button" @click="openEditor">
-        <span class="mode-label">二维搭建</span>
-        <span class="mode-hint">像素地图编辑</span>
+        <span class="mode-label">场景编辑</span>
+        <span class="mode-hint">建筑 · 道路 · 场景</span>
       </button>
     </nav>
 

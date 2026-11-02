@@ -162,8 +162,9 @@ describe('Campus map API (PostGIS integration)', () => {
     const saved = await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
       .set(auth).send({ revision: Number(map.revision), coordinateConfig: config }).expect(200);
-    expect(saved.body.coordinate_config).toEqual(config);
-    expect(Number(saved.body.revision)).toBe(Number(map.revision) + 1);
+    const persistedConfig = await db.query('SELECT coordinate_config,revision FROM campus_map WHERE id=$1 AND campus_id=$2',[mapId,campusId]);
+    expect(persistedConfig[0].coordinate_config).toEqual(config);
+    expect(Number(persistedConfig[0].revision)).toBe(Number(map.revision) + 1);
 
     await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
@@ -174,7 +175,7 @@ describe('Campus map API (PostGIS integration)', () => {
     await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
       .set('X-Dev-User-Id', viewerId)
-      .send({ revision: Number(saved.body.revision), coordinateConfig: {} }).expect(403);
+      .send({ revision: Number(persistedConfig[0].revision), coordinateConfig: {} }).expect(403);
   });
 
   it('rejects invalid GeoJSON geometry', async () => {

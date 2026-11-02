@@ -19,6 +19,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let initialized = false
   let selectedFeatureObject = null
   let loadedSceneData = null
+  let rpgPreviewGroup = null
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
   let pointerStart = null
@@ -98,6 +99,68 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = true
     callbacks.onReady?.()
     animate(0)
+  }
+
+
+  function disposeObjectGroup(group) {
+    group?.traverse((object) => {
+      object.geometry?.dispose?.()
+      if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose())
+      else object.material?.dispose?.()
+    })
+  }
+
+  function clearRpgPreview() {
+    if (!rpgPreviewGroup) return
+    scene?.remove(rpgPreviewGroup)
+    disposeObjectGroup(rpgPreviewGroup)
+    rpgPreviewGroup = null
+    if (campus) campus.visible = true
+  }
+
+  function previewRpgMap(document) {
+    if (!scene || !document?.grid || !Array.isArray(document.layers)) return false
+    clearRpgPreview()
+    const width = Number(document.grid.width), height = Number(document.grid.height)
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) return false
+    const unit = Number(document.worldUnitsPerTile) > 0 ? Number(document.worldUnitsPerTile) : 1
+    const originX = -width * unit / 2, originZ = -height * unit / 2
+    const palette = { grass:'#6eaa55','grass-dark':'#4f8745',dirt:'#b58a55',sand:'#d7c17c',stone:'#a5a69a',road:'#77796f','road-edge':'#aaa58c',water:'#4c9db5','water-deep':'#367c9d' }
+    rpgPreviewGroup = new THREE.Group()
+    rpgPreviewGroup.name = 'RpgMapLivePreview'
+    const geometry = new THREE.BoxGeometry(unit, 0.12, unit), materials = new Map()
+    for (const layer of document.layers) {
+      if (layer.visible === false || layer.type !== 'tile') continue
+      for (let y=0;y<height;y++) for (let x=0;x<width;x++) {
+        const tile=layer.tiles?.[y]?.[x]; if (!tile) continue
+        const color=palette[tile] || '#777777'
+        if (!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({color,roughness:1}))
+        const mesh=new THREE.Mesh(geometry,materials.get(color))
+        mesh.position.set(originX+(x+.5)*unit,0,originZ+(y+.5)*unit); mesh.receiveShadow=true
+        rpgPreviewGroup.add(mesh)
+      }
+    }
+    for (const object of document.objects || []) {
+      const asset=String(object.assetId || ''), w=Math.max(.25,Number(object.width)||1)*unit, d=Math.max(.25,Number(object.height)||1)*unit
+      const group=new THREE.Group(), material=new THREE.MeshStandardMaterial({color:object.color||'#39764a',roughness:.9})
+      if (asset==='tree') {
+        const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.09*unit,.12*unit,1.15*unit,6),new THREE.MeshStandardMaterial({color:'#765238'})); trunk.position.y=.575*unit
+        const crown=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*.42,1.8*unit,7),material); crown.position.y=1.85*unit; group.add(trunk,crown)
+      } else if (asset==='lamp') {
+        const pole=new THREE.Mesh(new THREE.CylinderGeometry(.045*unit,.07*unit,2.3*unit,6),new THREE.MeshStandardMaterial({color:'#4d5148'})); pole.position.y=1.15*unit
+        const lamp=new THREE.Mesh(new THREE.SphereGeometry(.16*unit,7,5),new THREE.MeshStandardMaterial({color:'#f2d98a',emissive:'#80652c'})); lamp.position.y=2.35*unit; group.add(pole,lamp)
+      } else {
+        const h=(asset==='bridge'?.38:.22)*unit, mesh=new THREE.Mesh(new THREE.BoxGeometry(w*.92,h,d*.92),material); mesh.position.y=h/2; group.add(mesh)
+      }
+      group.position.set(originX+(Number(object.x)+w/unit/2)*unit,0,originZ+(Number(object.y)+d/unit/2)*unit)
+      group.rotation.y=-(Number(object.rotation)||0)*Math.PI/180
+      group.userData.rpgObjectId=object.id; rpgPreviewGroup.add(group)
+    }
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(width*unit,height*unit),new THREE.MeshStandardMaterial({color:'#6eaa55',roughness:1}))
+    ground.rotation.x=-Math.PI/2; ground.position.set(0,-.09,0); ground.receiveShadow=true; rpgPreviewGroup.add(ground)
+    scene.add(rpgPreviewGroup); if (campus) campus.visible=false
+    cameraRig?.focusBounds(width*unit,height*unit)
+    return true
   }
 
   function onScenePointerDown(event) {
@@ -236,6 +299,7 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer?.domElement?.removeEventListener('pointerdown', onScenePointerDown)
     renderer?.domElement?.removeEventListener('pointerup', onScenePointerUp)
     clearSelection()
+    clearRpgPreview()
     input?.dispose()
     cameraRig?.dispose()
     scene?.traverse((object) => {
@@ -248,5 +312,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, updateSceneObject, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, updateSceneObject, previewRpgMap, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

@@ -31,6 +31,14 @@ npm run preview
 
 **重要：当前演示场景不是南昌工学院真实测绘模型。** 原先虚构的示例建筑位置已从建筑数据中移除，避免将假数据误认为真实建筑坐标。道路、地面、树木和环境布局仍是演示占位内容，后续必须使用经配准的校园底图数据替换。
 
+## 多校园平台架构
+
+- [多校园平台架构与 API 边界](docs/multi-campus-architecture.md)
+- [MySQL 数据库结构 V1](docs/multi-campus-database-v1.sql)
+- [地图数据契约 V1](docs/campus-map-data-contract-v1.md)
+
+当前仓库仍是前端演示工程；上述文档先固化多学校数据模型和服务端边界，后续再在独立 Node.js API 服务中落地。线上地图数据应由后端持久化，不能将浏览器缓存或 public JSON 作为正式数据源。
+
 ## 真实校园建模资料
 
 - 实施方案：[`docs/real-campus-modeling-plan.md`](docs/real-campus-modeling-plan.md)

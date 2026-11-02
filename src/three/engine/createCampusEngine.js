@@ -94,6 +94,7 @@ export function createCampusEngine(container, callbacks = {}) {
       })
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    const outdoorCollisionWorld = collisionWorld
     // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
     if (!campus.userData.isGISDriven) {
       loadCampusBuildingModels(scene)
@@ -101,7 +102,7 @@ export function createCampusEngine(container, callbacks = {}) {
           for (const model of result.models || []) {
             model.updateMatrixWorld(true)
             const bounds = new THREE.Box3().setFromObject(model)
-            if (!bounds.isEmpty()) collisionWorld.addObstacle({
+            if (!bounds.isEmpty()) outdoorCollisionWorld.addObstacle({
               minX: bounds.min.x, maxX: bounds.max.x,
               minZ: bounds.min.z, maxZ: bounds.max.z,
             })

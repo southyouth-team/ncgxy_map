@@ -147,11 +147,24 @@ export function addPixelLamp(THREE, parent, x, z, mats) {
  * footprint 使用建筑局部 X/Z 平面坐标，shape 的 Y 轴代表 -Z。
  * 仅负责视觉资产，不代表真实建筑测绘尺寸。
  */
+export const CAMPUS_BUILDING_TEMPLATES = Object.freeze({
+  '教学楼': { height: 4.2, windowDensity: 1, roofRise: 1.35, wall: 'wallCream', doorWidth: 0.9 },
+  '宿舍楼': { height: 4.8, windowDensity: 1.45, roofRise: 1.2, wall: 'wallPeach', doorWidth: 0.86 },
+  '办公楼': { height: 3.8, windowDensity: 1.15, roofRise: 1.25, wall: 'wall', doorWidth: 0.86 },
+  '实验楼': { height: 4.5, windowDensity: 0.9, roofRise: 1.4, wall: 'wallMint', doorWidth: 0.92 },
+  '图书馆': { height: 4.6, windowDensity: 0.7, roofRise: 1.55, wall: 'wallCream', doorWidth: 1.2 },
+  '体育馆': { height: 3.2, windowDensity: 0.35, roofRise: 1.8, wall: 'wallPeach', doorWidth: 1.5 },
+})
+
 export function createPixelBuilding(THREE, options = {}) {
   const {
-    footprint, width = 8, depth = 5, height = 3.4,
-    materials, label = 'Campus Building', confidence = 'unverified',
+    footprint, width = 8, depth = 5, height,
+    materials, wallMaterial, template = '教学楼',
+    label = 'Campus Building', confidence = 'unverified',
   } = options
+  const preset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
+  const buildingHeight = Number(height || preset.height)
+  const facadeMaterial = wallMaterial || materials[preset.wall] || materials.wall
   const group = new THREE.Group()
   group.name = label
   group.userData.assetStyle = 'stardew-pixel-campus'
@@ -163,8 +176,8 @@ export function createPixelBuilding(THREE, options = {}) {
     new THREE.Vector2(-width / 2, depth / 2),
   ])
   const wall = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 1 }),
-    wallMaterial,
+    new THREE.ExtrudeGeometry(shape, { depth: buildingHeight, bevelEnabled: false, curveSegments: 1 }),
+    facadeMaterial,
   )
   wall.geometry.rotateX(-Math.PI / 2)
   wall.castShadow = true
@@ -175,21 +188,21 @@ export function createPixelBuilding(THREE, options = {}) {
   const roofDepth = depth + 0.42
   const roofShape = new THREE.Shape()
   roofShape.moveTo(-roofWidth / 2, 0)
-  roofShape.lineTo(0, 1.35)
+  roofShape.lineTo(0, preset.roofRise)
   roofShape.lineTo(roofWidth / 2, 0)
   roofShape.closePath()
   const roofGeometry = new THREE.ExtrudeGeometry(roofShape, { depth: roofDepth, bevelEnabled: false, steps: 1 })
-  roofGeometry.translate(0, height - 0.08, -roofDepth / 2)
+  roofGeometry.translate(0, buildingHeight - 0.08, -roofDepth / 2)
   const roof = new THREE.Mesh(roofGeometry, materials.roof)
   roof.castShadow = true
   roof.receiveShadow = true
   group.add(roof)
 
   const eave = new THREE.Mesh(new THREE.BoxGeometry(roofWidth + 0.18, 0.16, roofDepth + 0.2), materials.roofDark)
-  eave.position.y = height - 0.05
+  eave.position.y = buildingHeight - 0.05
   group.add(eave)
 
-  const windows = Math.max(2, Math.min(6, Math.floor(width / 2.5)))
+  const windows = Math.max(1, Math.min(8, Math.round(width / 2.5 * preset.windowDensity)))
   for (let i = 0; i < windows; i += 1) {
     const x = -width / 2 + (i + 1) * width / (windows + 1)
     const frame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.92, 0.12), materials.windowTrim)
@@ -200,7 +213,7 @@ export function createPixelBuilding(THREE, options = {}) {
     mullion.position.set(x, 1.95, depth / 2 + 0.19)
     group.add(frame, glass, mullion)
   }
-  const door = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.55, 0.16), materials.door)
+  const door = new THREE.Mesh(new THREE.BoxGeometry(preset.doorWidth, 1.55, 0.16), materials.door)
   door.position.set(0, 0.78, depth / 2 + 0.09)
   group.add(door)
   group.traverse((object) => {

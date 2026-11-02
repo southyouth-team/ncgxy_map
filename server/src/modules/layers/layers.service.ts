@@ -37,6 +37,7 @@ export class LayersService {
 
   async update(userId: string, campusId: string, mapId: string, layerId: string, dto: UpdateLayerDto) {
     await this.requireRole(userId,campusId,['owner','admin','editor']);
+    await this.requireMap(campusId,mapId);
     const rows = await this.dataSource.query(
       `UPDATE campus_layer SET name=COALESCE($4,name),feature_type=COALESCE($5,feature_type),
          visible=COALESCE($6,visible),locked=COALESCE($7,locked),updated_at=now()

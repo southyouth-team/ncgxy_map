@@ -22,13 +22,12 @@ export function createCampusEngine(container, callbacks = {}) {
     scene.fog = new THREE.Fog('#aebfbd', 90, 260)
 
     renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false })
-    // 关闭抗锯齿并限制渲染倍率，保持像素边缘清晰并控制 GPU 开销。\n    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
+    // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。\n    renderer.setPixelRatio(1)
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.15
+    // 保留像素美术标准色板，避免电影色调映射改变颜色。\n    renderer.toneMapping = THREE.NoToneMapping
     container.appendChild(renderer.domElement)
 
     const campus = createCampusScene(THREE)

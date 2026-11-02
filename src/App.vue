@@ -2,6 +2,10 @@
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
 import CampusMapEditor from './editor/CampusMapEditor.vue'
+import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
+const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
 
 const viewport = ref(null)
 const appShell = ref(null)
@@ -35,6 +39,23 @@ async function switchMode(mode) {
   }
 }
 
+async function loadSceneData() {
+  const headers = { 'X-Dev-User-Id': DEV_USER_ID }
+  const get = async (path) => {
+    const response = await fetch(`${API_BASE}${path}`, { headers })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || `地图服务请求失败：HTTP ${response.status}`)
+    return payload
+  }
+  const campuses = await get('/campuses')
+  const campus = campuses.find((item) => item.slug === 'ncgxy')
+  if (!campus) throw new Error('地图服务中尚未初始化南昌工学院校园')
+  const maps = await get(`/campuses/${campus.id}/maps`)
+  const map = maps.find((item) => item.slug === 'main') || maps[0]
+  if (!map) throw new Error('当前校园尚未创建地图')
+  return loadCampusSceneData({ campusId: campus.id, map, userId: DEV_USER_ID })
+}
+
 function setMoveKey(key, pressed) { engine?.setVirtualKey(key, pressed) }
 function updateViewportState() {
   isMobile.value = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 760
@@ -56,6 +77,8 @@ onMounted(async () => {
   window.addEventListener('orientationchange', updateViewportState)
   try {
     engine = createCampusEngine(viewport.value, {
+      loadSceneData,
+      onSceneDataError: (error) => console.warn('GIS 三维场景加载失败，已回退示意场景：', error),
       onReady: () => {
         loading.value = false
         engineReady.value = true

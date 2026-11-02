@@ -42,12 +42,12 @@ function restore(raw) {
 }
 function undo() {
   if (!history.value.length) return
-  future.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value }))
+  future.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value }))
   restore(history.value.pop())
 }
 function redo() {
   if (!future.value.length) return
-  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value }))
+  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value }))
   restore(future.value.pop())
 }
 function point(event) {

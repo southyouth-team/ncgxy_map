@@ -18,6 +18,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let previousTime = 0
   let initialized = false
   let selectedFeatureObject = null
+  let loadedSceneData = null
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
   let pointerStart = null
@@ -43,6 +44,7 @@ export function createCampusEngine(container, callbacks = {}) {
     if (typeof callbacks.loadSceneData === 'function') {
       try {
         const sceneData = await callbacks.loadSceneData()
+        loadedSceneData = sceneData
         if (sceneData?.objects?.length) {
           campus = new THREE.Group()
           campus.name = 'GISDrivenCampusScene'
@@ -187,6 +189,32 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer.render(scene, cameraRig.camera)
   }
 
+  function updateSceneObject(sceneObject) {
+    if (!loadedSceneData || !campus?.userData.isGISDriven || !sceneObject?.id) return false
+    const item = loadedSceneData.objects.find((entry) => entry.sceneObject.id === sceneObject.id)
+    if (!item) return false
+    const current = campus.children.find((entry) => entry.userData?.sceneObjectId === sceneObject.id)
+    if (!current) return false
+    const wasSelected = selectedFeatureObject === current
+    if (wasSelected) restoreSelectionHighlight()
+    const replacement = buildFeatureObject(item.feature, sceneObject, {
+      mapCoordinateToWorld: loadedSceneData.mapCoordinateToWorld,
+    })
+    const index = campus.children.indexOf(current)
+    campus.remove(current)
+    campus.add(replacement)
+    campus.children.splice(campus.children.indexOf(replacement), 1)
+    campus.children.splice(index, 0, replacement)
+    current.traverse((object) => {
+      object.geometry?.dispose?.()
+      if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose())
+      else object.material?.dispose?.()
+    })
+    item.sceneObject = sceneObject
+    if (wasSelected) selectObject(item.feature.id)
+    return true
+  }
+
   function setVirtualKey(key, pressed) {
     input?.setVirtualKey(key, pressed)
   }
@@ -220,5 +248,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, updateSceneObject, dispose, get initialized() { return initialized } }
 }

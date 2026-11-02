@@ -16,6 +16,7 @@ const loading = ref(true)
 const errorMessage = ref('')
 const engineReady = ref(false)
 const showEditor = ref(false)
+const selectedObject = ref(null)
 
 let engine
 
@@ -79,6 +80,7 @@ onMounted(async () => {
     engine = createCampusEngine(viewport.value, {
       loadSceneData,
       onSceneDataError: (error) => console.warn('GIS 三维场景加载失败，已回退示意场景：', error),
+      onObjectSelected: (object) => { selectedObject.value = object },
       onReady: () => {
         loading.value = false
         engineReady.value = true
@@ -195,6 +197,13 @@ onBeforeUnmount(() => {
       <div>正在加载像素风格样板场景</div>
       <span>INITIALIZING SCENE</span>
     </div>
+    <aside v-if="selectedObject && !showEditor" style="position:absolute;right:24px;top:110px;z-index:12;min-width:190px;padding:14px 16px;background:rgba(255,255,255,.94);border:1px solid #d7ded7;border-radius:6px;color:#34443b;box-shadow:0 8px 24px rgba(30,50,40,.12)">
+      <div style="font-size:10px;letter-spacing:1px;color:#7a887e">已选中 GIS 对象</div>
+      <strong style="display:block;margin-top:8px;font-size:13px">{{ selectedObject.name }}</strong>
+      <div style="margin-top:7px;font-size:10px;color:#6d7b71">类型：{{ selectedObject.objectType || '未分类' }}</div>
+      <div style="margin-top:4px;font-size:10px;color:#6d7b71">Feature ID：{{ selectedObject.featureId }}</div>
+      <button style="margin-top:10px;padding:5px 9px;border:1px solid #d7ded7;background:#fff;border-radius:4px;font-size:10px;cursor:pointer" @click="engine?.clearSelection()">取消选择</button>
+    </aside>
     <div v-if="errorMessage" class="error-toast">{{ errorMessage }}</div>
     <div v-if="activeMode === 'firstPerson' && engineReady" class="first-person-hint">
       点击场景进入沉浸漫游 · 按 Esc 释放鼠标

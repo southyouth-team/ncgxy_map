@@ -104,6 +104,15 @@ function updateViewportState() {
   isPortrait.value = window.innerHeight > window.innerWidth
 }
 
+function onExplorerHotkey(event) {
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
+  const target = event.target
+  if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName))) return
+  if (event.key.toLowerCase() !== 'v' || activeMode.value === 'overview') return
+  event.preventDefault()
+  switchMode(activeMode.value === 'firstPerson' ? 'thirdPerson' : 'firstPerson')
+}
+
 function focusCampus() {
   engine?.focusCampus()
 }
@@ -142,6 +151,7 @@ onMounted(async () => {
   updateViewportState()
   window.addEventListener('resize', updateViewportState)
   window.addEventListener('orientationchange', updateViewportState)
+  window.addEventListener('keydown', onExplorerHotkey)
   try {
     engine = createCampusEngine(viewport.value, {
       loadSceneData,
@@ -167,6 +177,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewportState)
   window.removeEventListener('orientationchange', updateViewportState)
+  window.removeEventListener('keydown', onExplorerHotkey)
   engine?.dispose()
 })
 </script>
@@ -249,14 +260,16 @@ onBeforeUnmount(() => {
           <div class="control-row"><kbd>双击</kbd><span>聚焦场景</span></div>
         </template>
         <template v-else-if="activeMode === 'thirdPerson'">
-          <div class="control-row"><kbd>W A S D</kbd><span>移动观察目标</span></div>
-          <div class="control-row"><kbd>拖动</kbd><span>环绕旋转</span></div>
+          <div class="control-row"><kbd>W A S D</kbd><span>控制角色移动</span></div>
+          <div class="control-row"><kbd>拖动</kbd><span>环绕角色旋转</span></div>
+          <div class="control-row"><kbd>V</kbd><span>切换第一/第三人称</span></div>
           <div class="control-row"><kbd>滚轮</kbd><span>调整跟随距离</span></div>
         </template>
         <template v-else>
           <div class="control-row"><kbd>W A S D</kbd><span>前后左右移动</span></div>
           <div class="control-row"><kbd>鼠标</kbd><span>控制视线方向</span></div>
           <div class="control-row"><kbd>Shift</kbd><span>加速移动</span></div>
+          <div class="control-row"><kbd>V</kbd><span>切换第一/第三人称</span></div>
           <div class="control-row"><kbd>Esc</kbd><span>退出鼠标控制</span></div>
         </template>
       </div>

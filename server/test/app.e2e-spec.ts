@@ -3,6 +3,10 @@ import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import request = require('supertest');
 import { AppModule } from '../src/app.module';
+import { LayersModule } from '../src/modules/layers/layers.module';
+import { LayersService } from '../src/modules/layers/layers.service';
+import { FeaturesModule } from '../src/modules/features/features.module';
+import { FeaturesService } from '../src/modules/features/features.service';
 
 describe('Campus map API (PostGIS integration)', () => {
   let app: INestApplication;
@@ -78,7 +82,7 @@ describe('Campus map API (PostGIS integration)', () => {
 
   it('does not delete a layer that still contains features', async () => {
     // 先直接验证 Service 的业务分支，区分 Service 逻辑与 HTTP 路由/异常映射问题。
-    const layersService = app.get('LayersService');
+    const layersService = app.select(LayersModule).get(LayersService);
     await expect(layersService.remove(ownerId, campusId, mapId, layerId))
       .rejects.toMatchObject({ status: 409 });
 
@@ -119,7 +123,7 @@ describe('Campus map API (PostGIS integration)', () => {
 
   it('uses optimistic revision checks for feature updates', async () => {
     // 先直接验证 Service 对过期 revision 的处理，再验证 HTTP 层响应。
-    const featuresService = app.get('FeaturesService');
+    const featuresService = app.select(FeaturesModule).get(FeaturesService);
     await expect(featuresService.update(ownerId, campusId, mapId, featureId, {
       revision: 0,
       name: '直接调用过期更新',

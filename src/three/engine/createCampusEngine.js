@@ -30,8 +30,8 @@ export function createCampusEngine(container, callbacks = {}) {
     if (!container) throw new Error('未找到三维场景容器')
 
     scene = new THREE.Scene()
-    scene.background = new THREE.Color('#aebfbd')
-    scene.fog = new THREE.Fog('#aebfbd', 90, 260)
+    scene.background = new THREE.Color('#b9d0c2')
+    scene.fog = new THREE.Fog('#b9d0c2', 115, 310)
 
     renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false })
     // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。
@@ -81,9 +81,9 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)
 
-    const hemi = new THREE.HemisphereLight(0xe8f0e8, 0x64735e, 2.0)
+    const hemi = new THREE.HemisphereLight(0xfff2d8, 0x71865e, 2.2)
     scene.add(hemi)
-    const sun = new THREE.DirectionalLight(0xffedcf, 3.0)
+    const sun = new THREE.DirectionalLight(0xffe2b2, 2.7)
     sun.position.set(-55, 90, 45)
     sun.castShadow = true
     sun.shadow.mapSize.set(1024, 1024)
@@ -185,7 +185,7 @@ export function createCampusEngine(container, callbacks = {}) {
     }
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(150, 96),
-      new THREE.MeshStandardMaterial({ color: '#91a77b', roughness: 1 }),
+      new THREE.MeshStandardMaterial({ color: '#8eae69', roughness: 1 }),
     )
     ground.rotation.x = -Math.PI / 2
     ground.position.y = -0.12
@@ -201,7 +201,7 @@ export function createCampusEngine(container, callbacks = {}) {
         const shape = new THREE.Shape(points)
         const mesh = new THREE.Mesh(
           new THREE.ShapeGeometry(shape),
-          new THREE.MeshStandardMaterial({ color: area.type === 'water' ? '#6bb8b4' : '#9eaa83', roughness: 1 }),
+          new THREE.MeshStandardMaterial({ color: area.type === 'water' ? '#68b9b5' : '#a4bd83', roughness: 1 }),
         )
         mesh.rotation.x = -Math.PI / 2
         mesh.position.y = 0.015
@@ -236,7 +236,7 @@ export function createCampusEngine(container, callbacks = {}) {
       geometry.rotateX(-Math.PI / 2)
       const mesh = new THREE.Mesh(
         geometry,
-        new THREE.MeshStandardMaterial({ color: '#777b73', roughness: 1, side: THREE.DoubleSide }),
+        new THREE.MeshStandardMaterial({ color: '#c4a477', roughness: 1, side: THREE.DoubleSide }),
       )
       mesh.position.y = 0.075
       mesh.name = `RoadNetworkUnion-${polygonIndex + 1}`
@@ -261,7 +261,7 @@ export function createCampusEngine(container, callbacks = {}) {
       bodyGeometry.rotateX(-Math.PI / 2)
       const body = new THREE.Mesh(
         bodyGeometry,
-        new THREE.MeshStandardMaterial({ color: building.color || '#c8a66e', roughness: 0.9 }),
+        new THREE.MeshStandardMaterial({ color: building.color || '#e4cda0', roughness: 1 }),
       )
       body.castShadow = true
       body.receiveShadow = true
@@ -269,7 +269,7 @@ export function createCampusEngine(container, callbacks = {}) {
       body.userData.campusBuildingId = building.id
       const roofGeometry = new THREE.ShapeGeometry(shape)
       roofGeometry.rotateX(-Math.PI / 2)
-      const roof = new THREE.Mesh(roofGeometry, new THREE.MeshStandardMaterial({ color: '#8e7657', roughness: 0.95, side: THREE.DoubleSide }))
+      const roof = new THREE.Mesh(roofGeometry, new THREE.MeshStandardMaterial({ color: '#a85f4e', roughness: 1, side: THREE.DoubleSide }))
       roof.position.y = height
       roof.castShadow = true
       const group = new THREE.Group()

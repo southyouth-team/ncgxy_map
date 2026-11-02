@@ -222,25 +222,35 @@ export function createCampusEngine(container, callbacks = {}) {
     }
 
     for (const building of document.buildings) {
-      if (!Array.isArray(building.rect) || building.rect.length !== 4) continue
-      const bounds = mapRectToWorld(building.rect)
+      const footprint = Array.isArray(building.footprint) && building.footprint.length >= 3
+        ? building.footprint
+        : Array.isArray(building.rect) && building.rect.length === 4
+          ? [[building.rect[0], building.rect[1]], [building.rect[2], building.rect[1]], [building.rect[2], building.rect[3]], [building.rect[0], building.rect[3]]]
+          : null
+      if (!footprint) continue
+      const points = footprint.map(([x, y]) => {
+        const point = mapPixelToWorld(x, y)
+        return new THREE.Vector2(point.x, -point.z)
+      })
+      const shape = new THREE.Shape(points)
       const height = Math.max(1.8, Number(building.height || building.floors * 0.45 || 3.2))
-      const group = new THREE.Group()
+      const bodyGeometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 1 })
+      bodyGeometry.rotateX(-Math.PI / 2)
       const body = new THREE.Mesh(
-        new THREE.BoxGeometry(bounds.width, height, bounds.depth),
+        bodyGeometry,
         new THREE.MeshStandardMaterial({ color: building.color || '#c8a66e', roughness: 0.9 }),
       )
-      body.position.y = height / 2
       body.castShadow = true
       body.receiveShadow = true
-      const roof = new THREE.Mesh(
-        new THREE.BoxGeometry(bounds.width * 1.04, 0.22, bounds.depth * 1.04),
-        new THREE.MeshStandardMaterial({ color: '#8e7657', roughness: 0.95 }),
-      )
-      roof.position.y = height + 0.11
+      body.name = building.label || building.id
+      body.userData.campusBuildingId = building.id
+      const roofGeometry = new THREE.ShapeGeometry(shape)
+      roofGeometry.rotateX(-Math.PI / 2)
+      const roof = new THREE.Mesh(roofGeometry, new THREE.MeshStandardMaterial({ color: '#8e7657', roughness: 0.95, side: THREE.DoubleSide }))
+      roof.position.y = height
       roof.castShadow = true
+      const group = new THREE.Group()
       group.add(body, roof)
-      group.position.set(bounds.x, 0, bounds.z)
       group.name = building.label || building.id
       group.userData.campusBuildingId = building.id
       rpgPreviewGroup.add(group)

@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "three": "^0.180.0",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "polygon-clipping": "^0.15.7"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

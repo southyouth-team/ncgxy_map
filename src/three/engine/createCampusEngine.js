@@ -6,6 +6,7 @@ import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingM
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld, mapRectToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
+import { createCampusMaterials, createPixelBuilding } from '../world/campus/campusAssetLibrary.js'
 
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
@@ -244,6 +245,7 @@ export function createCampusEngine(container, callbacks = {}) {
       rpgPreviewGroup.add(mesh)
     })
 
+    const buildingMaterials = createCampusMaterials(THREE)
     for (const building of document.buildings) {
       const footprint = Array.isArray(building.footprint) && building.footprint.length >= 3
         ? building.footprint
@@ -251,31 +253,32 @@ export function createCampusEngine(container, callbacks = {}) {
           ? [[building.rect[0], building.rect[1]], [building.rect[2], building.rect[1]], [building.rect[2], building.rect[3]], [building.rect[0], building.rect[3]]]
           : null
       if (!footprint) continue
-      const points = footprint.map(([x, y]) => {
+      const worldPoints = footprint.map(([x, y]) => {
         const point = mapPixelToWorld(x, y)
-        return new THREE.Vector2(point.x, -point.z)
+        return { x: point.x, z: point.z }
       })
-      const shape = new THREE.Shape(points)
-      const height = Math.max(1.8, Number(building.height || building.floors * 0.45 || 3.2))
-      const bodyGeometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 1 })
-      bodyGeometry.rotateX(-Math.PI / 2)
-      const body = new THREE.Mesh(
-        bodyGeometry,
-        new THREE.MeshStandardMaterial({ color: building.color || '#e4cda0', roughness: 1 }),
-      )
-      body.castShadow = true
-      body.receiveShadow = true
-      body.name = building.label || building.id
-      body.userData.campusBuildingId = building.id
-      const roofGeometry = new THREE.ShapeGeometry(shape)
-      roofGeometry.rotateX(-Math.PI / 2)
-      const roof = new THREE.Mesh(roofGeometry, new THREE.MeshStandardMaterial({ color: '#a85f4e', roughness: 1, side: THREE.DoubleSide }))
-      roof.position.y = height
-      roof.castShadow = true
-      const group = new THREE.Group()
-      group.add(body, roof)
-      group.name = building.label || building.id
+      const minX = Math.min(...worldPoints.map(point => point.x))
+      const maxX = Math.max(...worldPoints.map(point => point.x))
+      const minZ = Math.min(...worldPoints.map(point => point.z))
+      const maxZ = Math.max(...worldPoints.map(point => point.z))
+      const centerX = (minX + maxX) / 2
+      const centerZ = (minZ + maxZ) / 2
+      const width = Math.max(4.2, maxX - minX)
+      const depth = Math.max(2.4, maxZ - minZ)
+      const localShape = new THREE.Shape(worldPoints.map(point => new THREE.Vector2(point.x - centerX, -(point.z - centerZ))))
+      const height = Math.max(2.2, Number(building.height || building.floors * 0.45 || 3.4))
+      const group = createPixelBuilding(THREE, {
+        footprint: localShape,
+        width,
+        depth,
+        height,
+        materials: buildingMaterials,
+        label: building.label || building.id || 'Campus Building',
+        confidence: building.confidence || 'unverified',
+      })
+      group.position.set(centerX, 0.16, centerZ)
       group.userData.campusBuildingId = building.id
+      group.userData.displayName = building.label
       rpgPreviewGroup.add(group)
     }
 

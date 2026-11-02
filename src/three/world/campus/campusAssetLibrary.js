@@ -156,7 +156,7 @@ export function createPixelBuilding(THREE, options = {}) {
   group.name = label
   group.userData.assetStyle = 'stardew-pixel-campus'
   group.userData.confidence = confidence
-  const shape = footprint?.isShape ? footprint : new THREE.Shape([
+  const shape = footprint && typeof footprint.getPoints === 'function' ? footprint : new THREE.Shape([
     new THREE.Vector2(-width / 2, -depth / 2),
     new THREE.Vector2(width / 2, -depth / 2),
     new THREE.Vector2(width / 2, depth / 2),

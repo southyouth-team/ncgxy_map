@@ -80,11 +80,8 @@ async function loadMapData() {
 }
 
 function pointFromEvent(event) {
-  const rect = event.currentTarget.getBoundingClientRect()
-  return [
-    Math.round((event.clientX - rect.left) / rect.width * canvasWidth.value * 100) / 100,
-    Math.round((event.clientY - rect.top) / rect.height * canvasHeight.value * 100) / 100,
-  ]
+  // 使用 SVG 当前变换矩阵转换坐标，避免 preserveAspectRatio 留白导致绘制位置偏移。
+  return svgPoint(event)
 }
 
 function canvasClick(event) {

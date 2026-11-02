@@ -166,6 +166,7 @@ onBeforeUnmount(() => {
     <div ref="viewport" class="scene-viewport" v-show="!showEditor"></div>
     <RpgMapEditor v-if="showEditor" @close="closeEditor" />
 
+    <template v-if="!showEditor">
     <header class="topbar">
       <div class="brand-lockup">
         <div class="brand-mark">NC</div>
@@ -274,5 +275,6 @@ onBeforeUnmount(() => {
     <div v-if="activeMode === 'firstPerson' && engineReady" class="first-person-hint">
       点击场景进入沉浸漫游 · 按 Esc 释放鼠标
     </div>
+    </template>
   </main>
 </template>

@@ -196,8 +196,8 @@ onBeforeUnmount(() => {
         <span class="mode-hint">{{ mode.hint }}</span>
       </button>
       <button class="mode-button editor-mode-button" :class="{ active: showEditor }" @click="openEditor">
-        <span class="mode-label">底图编辑</span>
-        <span class="mode-hint">二维矢量化</span>
+        <span class="mode-label">二维搭建</span>
+        <span class="mode-hint">像素地图编辑</span>
       </button>
     </nav>
 

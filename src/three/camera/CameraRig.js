@@ -64,6 +64,7 @@ export class CameraRig {
   setMode(mode) {
     if (!['overview', 'thirdPerson', 'firstPerson'].includes(mode) || mode === this.mode) return
     const previousCamera = this.camera
+    const previousMode = this.mode
     this.mode = mode
     this.orbit.enabled = false
 
@@ -83,10 +84,14 @@ export class CameraRig {
         this.thirdDistance = 15
         this.updateThirdPersonDesired()
       } else {
-        const direction = new this.THREE.Vector3()
-        this.camera.getWorldDirection(direction)
-        this.firstYaw = Math.atan2(direction.x, direction.z)
-        this.firstPitch = Math.asin(direction.y)
+        // 从第三人称切入时沿用角色前进方向；从地图视角进入时默认朝向校园内部。
+        if (previousMode === 'thirdPerson') {
+          this.firstYaw = this.thirdYaw + Math.PI
+          this.firstPitch = -this.thirdPitch
+        } else {
+          this.firstYaw = Math.PI
+          this.firstPitch = -0.12
+        }
         this.updateFirstPersonDesired()
       }
     }

@@ -24,6 +24,27 @@ export class ScenesController {
   }
 
 
+  @Get('plan')
+  @ApiOperation({ summary: '获取二维校园平面编辑文档' })
+  findPlan(
+    @Req() req: Request & { user: { id: string } },
+    @Param('campusId', ParseBigIntIdPipe) campusId: string,
+    @Param('mapId', ParseBigIntIdPipe) mapId: string,
+  ) {
+    return this.service.findPlan(req.user.id, campusId, mapId);
+  }
+
+  @Put('plan')
+  @ApiOperation({ summary: '保存二维校园平面编辑文档并执行版本冲突检测' })
+  savePlan(
+    @Req() req: Request & { user: { id: string } },
+    @Param('campusId', ParseBigIntIdPipe) campusId: string,
+    @Param('mapId', ParseBigIntIdPipe) mapId: string,
+    @Body() dto: SaveRpgMapDto,
+  ) {
+    return this.service.savePlan(req.user.id, campusId, mapId, dto.revision, dto.document);
+  }
+
   @Get('rpg')
   @ApiOperation({ summary: '获取二维 RPG 瓦片地图文档' })
   findRpgMap(

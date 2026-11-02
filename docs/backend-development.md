@@ -5,7 +5,7 @@
 - NestJS 11 + TypeScript
 - Node.js 24 LTS
 - PostgreSQL 16+ + PostGIS 3.4+
-- TypeORM：连接池与迁移管理；业务读写使用参数化 SQL，复杂 GIS 查询集中在 GIS repository
+- TypeORM：连接池与迁移管理；业务读写使用参数化 SQL，空间几何由 PostGIS 处理
 - Redis、对象存储暂不作为首阶段强依赖
 
 ## 本地启动
@@ -37,6 +37,17 @@
 - `GET /api/v1/campuses/:campusId/maps/:mapId`：地图详情。
 - `PATCH /api/v1/campuses/:campusId/maps/:mapId`：更新地图配置。
 
+### Layers
+- `POST /api/v1/campuses/:campusId/maps/:mapId/layers`：创建图层。
+- `GET /api/v1/campuses/:campusId/maps/:mapId/layers`：图层列表。
+- `PATCH/DELETE /api/v1/campuses/:campusId/maps/:mapId/layers/:layerId`：更新/删除图层。
+
+### Features
+- `POST /api/v1/campuses/:campusId/maps/:mapId/features`：创建空间要素，GeoJSON 转 PostGIS Geometry。
+- `GET /api/v1/campuses/:campusId/maps/:mapId/features`：读取要素及 GeoJSON。
+- `PATCH /api/v1/campuses/:campusId/maps/:mapId/features/:featureId`：更新要素，必须携带 revision。
+- `DELETE /api/v1/campuses/:campusId/maps/:mapId/features/:featureId?revision=N`：按 revision 删除。
+
 ## 开发身份与生产认证边界
 
 当前 `DevIdentityGuard` 仅用于本地联调，通过 `X-Dev-User-Id` 请求头模拟身份。仅当 `NODE_ENV` 不是 production 时允许；生产环境所有受保护业务接口均拒绝该模式，返回 401。该机制不是正式认证，部署生产前必须接入宿主应用的 JWT/Session 身份适配器。
@@ -47,22 +58,9 @@
 curl -H "X-Dev-User-Id: dev-user-001" http://localhost:3001/api/v1/campuses
 ```
 
-## 目录约定
-
-- `src/common/auth`：开发身份 Guard 和当前用户装饰器。
-- `src/config`：环境配置。
-- `src/database`：TypeORM 数据源与迁移。
-- `src/modules/health`：存活与就绪探针。
-- `src/modules/campuses`：学校与成员访问边界。
-- `src/modules/maps`：地图项目。
-- 后续拆分 `layers`、`features`、`assets`、`versions`。
-- Controller 负责 HTTP 边界；Service 负责业务编排；持久化通过 DataSource 参数化 SQL。复杂空间查询放入独立 GIS repository。
-
 ## 空间数据规范
 
-校园二维编辑首期使用 `campus-local` 平面坐标，坐标顺序为 `[x,y]`，x 向右、y 向下。该坐标不是经纬度，也不自动代表米。数据库采用 PostGIS geometry SRID 0 存储此类本地坐标，并在地图元数据中声明坐标单位、画布尺寸和校准参数。未来接入真实地理坐标时，必须通过明确的坐标参考系统和转换流程处理，不能直接给本地坐标标注 EPSG:4326。
-
-Feature geometry 使用 GeoJSON 作为 API 传输格式，PostGIS Geometry 作为数据库空间存储。空间列必须建立 GiST 索引。
+首期校园二维编辑使用 `campus-local` 平面坐标，坐标顺序为 `[x,y]`，x 向右、y 向下。该坐标不是经纬度，也不自动代表米。数据库采用 PostGIS geometry SRID 0 存储本地平面坐标。GeoJSON 是 API 传输格式，Geometry 是数据库存储格式；首期接受 Point、LineString、Polygon、MultiPolygon，写入前使用 PostGIS 检查几何有效性，空间列建立 GiST 索引。
 
 ## 数据库迁移策略
 
@@ -74,4 +72,4 @@ Feature geometry 使用 GeoJSON 作为 API 传输格式，PostGIS Geometry 作�
 
 ## 当前未实现
 
-图层与 Feature CRUD、GeoJSON 几何校验、revision/If-Match 乐观锁、正式认证、对象存储上传、地图发布与版本回滚尚未实现。不要将当前基础接口视为可直接投入生产的完整地图服务。
+正式认证、校园成员邀请/角色变更、地图 revision/If-Match、图层排序与样式管理、Feature 分页/空间过滤、资源上传、地图发布与版本回滚尚未实现。不要将当前基础接口视为可直接投入生产的完整地图服务。

@@ -48,6 +48,8 @@ jobs:
         run: npm run build
       - name: Apply PostGIS migrations
         run: npm run db:migrate
+      - name: Run API integration tests
+        run: npm run test:e2e
       - name: Verify PostGIS schema
         run: |
           node -e "const { Client } = require('pg'); (async () => { const c = new Client({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME }); await c.connect(); const r = await c.query(\"SELECT to_regclass('public.campus') AS campus, to_regclass('public.campus_feature') AS feature, (SELECT count(*) FROM pg_indexes WHERE indexname='idx_feature_geometry_gist') AS spatial_index\"); await c.end(); if (!r.rows[0].campus || !r.rows[0].feature || Number(r.rows[0].spatial_index) !== 1) { console.error(r.rows[0]); process.exit(1); } console.log(r.rows[0]); })().catch(e => { console.error(e); process.exit(1); });"

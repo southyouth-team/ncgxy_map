@@ -146,7 +146,8 @@ onMounted(async () => {
         loading.value = false
       },
     })
-    await engine.init()\n    if (new URLSearchParams(window.location.search).get('view') === 'editor') showEditor.value = true
+    await engine.init()
+    if (new URLSearchParams(window.location.search).get('view') === 'editor') showEditor.value = true
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'
     loading.value = false

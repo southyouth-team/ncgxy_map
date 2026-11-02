@@ -42,6 +42,7 @@ export function createCampusEngine(container, callbacks = {}) {
         if (sceneData?.objects?.length) {
           campus = new THREE.Group()
           campus.name = 'GISDrivenCampusScene'
+          campus.userData.isGISDriven = true
           campus.userData.coordinateSystem = 'campus-local'
           campus.userData.walkableBounds = {
             minX: -75, maxX: 75, minZ: -52.5, maxZ: 52.5,
@@ -60,9 +61,11 @@ export function createCampusEngine(container, callbacks = {}) {
     // API 暂无可渲染要素或加载失败时，保留示意场景作为回退。
     if (!campus) campus = createCampusScene(THREE)
     scene.add(campus)
-    loadCampusBuildingModels(scene)
-      .then((result) => callbacks.onAssetsLoaded?.(result))
-      .catch((error) => callbacks.onAssetError?.(error))
+    if (!campus.userData.isGISDriven) {
+      loadCampusBuildingModels(scene)
+        .then((result) => callbacks.onAssetsLoaded?.(result))
+        .catch((error) => callbacks.onAssetError?.(error))
+    }
     cameraRig = new CameraRig(THREE, renderer.domElement)
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds)
     input.attach()

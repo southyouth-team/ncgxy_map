@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 
 export interface UploadedAsset {
   originalname: string;
@@ -86,7 +86,11 @@ export class AssetsService {
     );
     if (!rows.length) throw new NotFoundException('底图资源不存在');
     const absolutePath = resolve(this.storageDir, rows[0].object_key);
-    if (!absolutePath.startsWith(this.storageDir + '/')) throw new NotFoundException('底图资源路径无效');
+    // 使用 relative 判断路径是否仍位于存储根目录内，兼容 Windows（\\）和 POSIX（/）。
+    const relativePath = relative(this.storageDir, absolutePath);
+    if (!relativePath || relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+      throw new NotFoundException('底图资源路径无效');
+    }
     try { await readFile(absolutePath, { flag: 'r' }).then(() => undefined); }
     catch { throw new NotFoundException('底图文件不存在，请检查存储卷'); }
     return { ...rows[0], absolute_path: absolutePath };

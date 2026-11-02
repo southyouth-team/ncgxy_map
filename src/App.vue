@@ -88,6 +88,7 @@ async function saveSceneProperties() {
     }
     sceneRevision.value = Number(payload.revision ?? payload.document?.revision ?? sceneRevision.value + 1)
     sceneDocument.value = payload.document || { ...sceneDocument.value, revision: sceneRevision.value }
+    engine?.updateSceneObject(selectedSceneObject.value)
     sceneSaveMessage.value = '三维属性已保存'
   } catch (error) {
     sceneSaveMessage.value = error.message || '保存失败'
@@ -243,9 +244,9 @@ onBeforeUnmount(() => {
       <div style="margin-top:4px;font-size:10px;color:#6d7b71">Feature ID：{{ selectedObject.featureId }}</div>
       <template v-if="selectedSceneObject?.type === 'building'">
         <label style="display:block;margin-top:12px;font-size:10px;color:#6d7b71">建筑楼层</label>
-        <input v-model.number="selectedSceneObject.properties.floors" type="number" min="1" max="200" step="1" style="width:100%;margin-top:5px;padding:6px;border:1px solid #d7ded7;border-radius:4px">
+        <input v-model.number="selectedSceneObject.properties.floors" type="number" min="1" max="200" step="1" @change="engine?.updateSceneObject(selectedSceneObject)" style="width:100%;margin-top:5px;padding:6px;border:1px solid #d7ded7;border-radius:4px">
         <label style="display:block;margin-top:9px;font-size:10px;color:#6d7b71">层高（场景单位）</label>
-        <input v-model.number="selectedSceneObject.properties.floorHeight" type="number" min="0.1" max="30" step="0.1" style="width:100%;margin-top:5px;padding:6px;border:1px solid #d7ded7;border-radius:4px">
+        <input v-model.number="selectedSceneObject.properties.floorHeight" type="number" min="0.1" max="30" step="0.1" @change="engine?.updateSceneObject(selectedSceneObject)" style="width:100%;margin-top:5px;padding:6px;border:1px solid #d7ded7;border-radius:4px">
         <button :disabled="sceneSaving || sceneSource !== 'postgis'" style="width:100%;margin-top:10px;padding:7px 9px;border:1px solid #315f49;background:#315f49;color:white;border-radius:4px;font-size:10px;cursor:pointer" @click="saveSceneProperties">{{ sceneSaving ? '保存中…' : '保存三维属性' }}</button>
         <div v-if="sceneSaveMessage" style="margin-top:7px;font-size:10px;color:#9a6037">{{ sceneSaveMessage }}</div>
       </template>

@@ -4,7 +4,7 @@ import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
-import { mapPixelToWorld, mapRectToWorld } from '../../data/campus/campusLayout.js'
+import { mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
 import { createCampusMaterials, createPixelBuilding } from '../world/campus/campusAssetLibrary.js'
@@ -217,12 +217,16 @@ export function createCampusEngine(container, callbacks = {}) {
         mesh.receiveShadow = true
         rpgPreviewGroup.add(mesh)
       } else if (area.rect) {
-        const bounds = mapRectToWorld(area.rect)
+        const [left, top, right, bottom] = area.rect
+        const corners = [[left, top], [right, top], [right, bottom], [left, bottom]]
+          .map(([x, y]) => calibratedPoint(x, y))
+        const shape = new THREE.Shape(corners.map((point) => new THREE.Vector2(point.x, -point.z)))
         const mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(bounds.width, 0.08, bounds.depth),
-          new THREE.MeshStandardMaterial({ color: area.type === 'sports' ? '#b9b69f' : '#829a70', roughness: 1 }),
+          new THREE.ShapeGeometry(shape),
+          new THREE.MeshStandardMaterial({ color: area.type === 'sports' ? '#b9b69f' : '#829a70', roughness: 1, side: THREE.DoubleSide }),
         )
-        mesh.position.set(bounds.x, 0.02, bounds.z)
+        mesh.rotation.x = -Math.PI / 2
+        mesh.position.y = 0.02
         rpgPreviewGroup.add(mesh)
       }
     }
@@ -262,7 +266,7 @@ export function createCampusEngine(container, callbacks = {}) {
           : null
       if (!footprint) continue
       const worldPoints = footprint.map(([x, y]) => {
-        const point = mapPixelToWorld(x, y)
+        const point = calibratedPoint(x, y)
         return { x: point.x, z: point.z }
       })
       const minX = Math.min(...worldPoints.map(point => point.x))

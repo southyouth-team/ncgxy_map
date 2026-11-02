@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import RegistrationPanel from './RegistrationPanel.vue'
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -28,6 +29,8 @@ const dragSnapshot = ref('')
 const geometryUndo = ref([])
 const geometryRedo = ref([])
 const baseMapTransform = ref({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 0.82 })
+const registration = ref(null)
+const registrationImageSize = ref({ width: 0, height: 0 })
 
 const headers = { 'Content-Type': 'application/json', 'X-Dev-User-Id': USER_ID }
 const activeFeatures = computed(() => features.value.filter(item => String(item.layer_id) === String(activeLayer.value?.id)))
@@ -62,6 +65,7 @@ async function initialize() {
     canvasHeight.value = Number(map.value.canvas_height || map.value.canvasHeight || 700)
     const savedTransform = map.value.coordinate_config?.baseMapTransform
     if (savedTransform) baseMapTransform.value = { ...baseMapTransform.value, ...savedTransform }
+    registration.value = map.value.coordinate_config?.registration || null
     await loadMapData()
     await loadLatestBaseMap()
     status.value = '已连接 PostGIS 地图数据服务'
@@ -264,6 +268,9 @@ async function loadBaseMapAsset(asset) {
   if (backgroundUrl.value) URL.revokeObjectURL(backgroundUrl.value)
   backgroundUrl.value = URL.createObjectURL(blob)
   backgroundName.value = asset.original_name
+  const image = new Image()
+  await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = backgroundUrl.value })
+  registrationImageSize.value = { width: image.naturalWidth, height: image.naturalHeight }
 }
 
 async function saveBaseMapTransform() {
@@ -278,6 +285,20 @@ async function saveBaseMapTransform() {
     map.value.revision = updated.revision
     map.value.coordinate_config = updated.coordinate_config
     status.value = '底图显示参数已保存'
+  } catch (e) { error.value = e.message; if (e.message.includes('冲突')) await refreshData() }
+  finally { busy.value = false }
+}
+async function applyRegistration(result) {
+  if (!map.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const config = { ...(map.value.coordinate_config || {}), registration: { ...result, status: 'registered', source: 'image-pixel', target: 'campus-local' } }
+    const updated = await api('/campuses/' + campus.value.id + '/maps/' + map.value.id + '/config', { method: 'PUT', body: JSON.stringify({ revision: Number(map.value.revision), coordinateConfig: config }) })
+    map.value.revision = updated.revision
+    map.value.coordinate_config = updated.coordinate_config
+    registration.value = updated.coordinate_config.registration
+    status.value = '仿射配准参数已保存'
   } catch (e) { error.value = e.message; if (e.message.includes('冲突')) await refreshData() }
   finally { busy.value = false }
 }
@@ -326,7 +347,8 @@ onMounted(initialize)
 <label>透明度 {{ Math.round(baseMapTransform.opacity * 100) }}%</label><input type="range" min="0.1" max="1" step="0.01" v-model.number="baseMapTransform.opacity">
 <button class="editor-button full" :disabled="busy || !backgroundUrl" @click="saveBaseMapTransform">保存底图参数</button>
 <p class="muted">当前为画布内显示变换，不代表地理配准或真实比例尺。</p></div>
-<div class="panel-section"><div class="panel-title">图层</div><div v-for="layer in layers" :key="layer.id" class="layer-entry"><button class="layer-row" :class="{ active: activeLayer?.id === layer.id }" @click="activeLayer = layer; selectedFeature = null; editingGeometry = null"><span class="layer-dot" :class="layer.feature_type"></span><span>{{ layer.name }}</span><small>{{ features.filter(f => String(f.layer_id) === String(layer.id)).length }}</small></button><button class="layer-visibility" :disabled="busy" :title="layer.visible === false ? '显示图层' : '隐藏图层'" @click="toggleLayerVisibility(layer)">{{ layer.visible === false ? '○' : '◉' }}</button></div></div>
+<div class="panel-section"><div class="panel-title">仿射配准</div><RegistrationPanel :image-width="registrationImageSize.width" :image-height="registrationImageSize.height" :current-registration="registration" :disabled="busy || !backgroundUrl" @apply="applyRegistration"/><p class="muted">配准矩阵独立于显示变换；录入控制点需使用底图原始像素坐标和 campus-local 目标坐标。</p></div>
+        <div class="panel-section"><div class="panel-title">图层</div><div v-for="layer in layers" :key="layer.id" class="layer-entry"><button class="layer-row" :class="{ active: activeLayer?.id === layer.id }" @click="activeLayer = layer; selectedFeature = null; editingGeometry = null"><span class="layer-dot" :class="layer.feature_type"></span><span>{{ layer.name }}</span><small>{{ features.filter(f => String(f.layer_id) === String(layer.id)).length }}</small></button><button class="layer-visibility" :disabled="busy" :title="layer.visible === false ? '显示图层' : '隐藏图层'" @click="toggleLayerVisibility(layer)">{{ layer.visible === false ? '○' : '◉' }}</button></div></div>
         <div class="panel-section"><div class="panel-title">绘制工具</div><button class="tool-row" :class="{ active: tool === 'select' }" @click="tool = 'select'">↖ <span>选择 / 查看要素</span></button><button class="tool-row" :class="{ active: tool === 'polygon' }" :disabled="activeLayer?.locked" @click="startPolygon">⬡ <span>绘制多边形</span></button><div v-if="tool === 'polygon'" class="draft-actions"><small>已采集 {{ points.length }} 个顶点</small><button @click="undoPoint">撤销顶点</button><button @click="clearDraft">取消绘制</button></div></div>
         <div class="panel-section"><div class="panel-title">数据质量</div><p class="quality-note">新绘制要素默认标记为 <b>unverified</b>。未经底图配准和现场核验，不作为真实测绘成果。</p></div>
       </aside>
@@ -336,7 +358,7 @@ onMounted(initialize)
           <svg ref="canvasSvg" class="map-canvas" :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`" preserveAspectRatio="xMidYMid meet" @click="canvasClick" @pointermove="moveVertex" @pointerup="endVertexDrag" @pointercancel="endVertexDrag">
             <defs><pattern id="editor-grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M 25 0 L 0 0 0 25" fill="none" stroke="#d9e0dc" stroke-width="0.7"/></pattern></defs>
             <rect :width="canvasWidth" :height="canvasHeight" fill="#f4f6f2"/><rect :width="canvasWidth" :height="canvasHeight" fill="url(#editor-grid)"/>
-            <image v-if="backgroundUrl" :href="backgroundUrl" :width="canvasWidth" :height="canvasHeight" preserveAspectRatio="none" :opacity="baseMapTransform.opacity" :transform="'translate(' + baseMapTransform.x + ' ' + baseMapTransform.y + ') rotate(' + baseMapTransform.rotation + ' ' + canvasWidth / 2 + ' ' + canvasHeight / 2 + ') translate(' + canvasWidth / 2 + ' ' + canvasHeight / 2 + ') scale(' + baseMapTransform.scale + ') translate(' + -canvasWidth / 2 + ' ' + -canvasHeight / 2 + ')'"/>
+            <image v-if="backgroundUrl" :href="backgroundUrl" :width="registration ? registrationImageSize.width : canvasWidth" :height="registration ? registrationImageSize.height : canvasHeight" preserveAspectRatio="none" :opacity="baseMapTransform.opacity" :transform="registration ? ('matrix(' + registration.transform.a + ' ' + registration.transform.d + ' ' + registration.transform.b + ' ' + registration.transform.e + ' ' + registration.transform.c + ' ' + registration.transform.f + ')') : ('translate(' + baseMapTransform.x + ' ' + baseMapTransform.y + ') rotate(' + baseMapTransform.rotation + ' ' + canvasWidth / 2 + ' ' + canvasHeight / 2 + ') translate(' + canvasWidth / 2 + ' ' + canvasHeight / 2 + ') scale(' + baseMapTransform.scale + ') translate(' + -canvasWidth / 2 + ' ' + -canvasHeight / 2 + ')')"/>
             <g v-for="feature in visibleFeatures" :key="feature.id" @click.stop="featureClick(feature)">
               <polygon v-if="feature.geometry?.type === 'Polygon'" :points="(selectedFeature?.id === feature.id && editingGeometry?.type === 'Polygon' ? editingGeometry.coordinates[0] : feature.geometry.coordinates[0]).map(p => p.join(',')).join(' ')" :class="['feature-shape', { selected: selectedFeature?.id === feature.id }]" />
               <polyline v-else-if="feature.geometry?.type === 'LineString'" :points="feature.geometry.coordinates.map(p => p.join(',')).join(' ')" class="feature-line"/>

@@ -150,15 +150,20 @@ export function createCampusScene(THREE) {
   characterCanvas.width = 32
   characterCanvas.height = 48
   const ctx = characterCanvas.getContext('2d')
-  ctx.clearRect(0, 0, 32, 48)
   const pixel = (x,y,w,h,color) => { ctx.fillStyle = color; ctx.fillRect(x,y,w,h) }
-  pixel(11,2,10,3,'#2c2928'); pixel(8,5,16,12,'#e7b58a')
-  pixel(8,5,16,4,'#3c302e'); pixel(6,10,3,8,'#3c302e'); pixel(23,10,3,8,'#3c302e')
-  pixel(11,11,3,3,'#292b35'); pixel(19,11,3,3,'#292b35')
-  pixel(12,18,8,3,'#f0dfbd'); pixel(8,21,16,13,'#3e7290')
-  pixel(5,22,3,12,'#e7b58a'); pixel(24,22,3,12,'#e7b58a')
-  pixel(9,34,6,10,'#303c58'); pixel(18,34,6,10,'#303c58')
-  pixel(8,44,8,3,'#292624'); pixel(18,44,8,3,'#292624')
+  const drawCharacterFrame = (step = 0) => {
+    ctx.clearRect(0, 0, 32, 48)
+    pixel(11,2,10,3,'#2c2928'); pixel(8,5,16,12,'#e7b58a')
+    pixel(8,5,16,4,'#3c302e'); pixel(6,10,3,8,'#3c302e'); pixel(23,10,3,8,'#3c302e')
+    pixel(11,11,3,3,'#292b35'); pixel(19,11,3,3,'#292b35')
+    pixel(12,18,8,3,'#f0dfbd'); pixel(8,21,16,13,'#3e7290')
+    const swing = step === 1 ? 2 : step === 2 ? 0 : step === 3 ? -2 : 0
+    pixel(5,22 + swing,3,10,'#e7b58a'); pixel(24,22 - swing,3,10,'#e7b58a')
+    pixel(9 + swing,34,6,10 - Math.abs(swing),'#303c58')
+    pixel(18 - swing,34,6,10 - Math.abs(swing),'#303c58')
+    pixel(8 + swing,44,8,3,'#292624'); pixel(18 - swing,44,8,3,'#292624')
+  }
+  drawCharacterFrame(0)
   const characterTexture = new THREE.CanvasTexture(characterCanvas)
   characterTexture.magFilter = THREE.NearestFilter
   characterTexture.minFilter = THREE.NearestFilter
@@ -169,6 +174,14 @@ export function createCampusScene(THREE) {
   character.scale.set(2.4, 3.6, 1)
   root.add(character)
   root.userData.playerSprite = character
+  let lastAnimationFrame = -1
+  root.userData.updatePlayerAnimation = (moving, elapsedSeconds) => {
+    const frame = moving ? Math.floor(elapsedSeconds / 0.14) % 4 : 0
+    if (frame === lastAnimationFrame) return
+    lastAnimationFrame = frame
+    drawCharacterFrame(frame)
+    characterTexture.needsUpdate = true
+  }
 
   // 供漫游控制器使用的边界；样板区域不是实际校园边界。
   root.userData.walkableBounds = { minX: -70, maxX: 70, minZ: -58, maxZ: 60 }

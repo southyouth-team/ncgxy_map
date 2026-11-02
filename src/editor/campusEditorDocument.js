@@ -62,3 +62,69 @@ export function validateCampusEditorDocument(document) {
   }
   return { valid: errors.length === 0, errors }
 }
+
+/**
+ * 通用校园空间要素：建筑、道路、广场、绿地、水体、运动场、停车场等。
+ * 面状要素统一使用 Polygon 顶点环；道路使用中心线 + 宽度；
+ * modelRef 只引用外部/生成的三维资产，不把模型网格塞进 GIS 几何。
+ */
+export const CAMPUS_FEATURE_TYPES = Object.freeze([
+  'building', 'road', 'plaza', 'green', 'water', 'sports',
+  'parking', 'path', 'facility', 'terrain',
+])
+
+export function createSceneFeature({
+  id, type = 'facility', name = '未命名要素', geometry,
+  modelRef = null, properties = {},
+}) {
+  if (!CAMPUS_FEATURE_TYPES.includes(type)) throw new Error(`不支持的空间要素类型：${type}`)
+  return {
+    id: id || `feature-${Date.now()}`,
+    type,
+    name,
+    geometry,
+    modelRef,
+    properties: { ...properties },
+    confidence: 'unverified',
+  }
+}
+
+export function validateSceneFeature(feature) {
+  const errors = []
+  if (!feature?.id) errors.push('空间要素缺少 id')
+  if (!CAMPUS_FEATURE_TYPES.includes(feature?.type)) errors.push('空间要素类型不受支持')
+  const geometry = feature?.geometry
+  if (['building', 'plaza', 'green', 'water', 'sports', 'parking', 'facility', 'terrain'].includes(feature?.type)) {
+    if (geometry?.type !== 'Polygon' || !Array.isArray(geometry.coordinates?.[0]) || geometry.coordinates[0].length < 4) {
+      errors.push('面状要素必须提供闭合 Polygon 坐标环')
+    }
+  }
+  if (['road', 'path'].includes(feature?.type)) {
+    if (geometry?.type !== 'LineString' || !Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) {
+      errors.push('线状要素必须提供至少两个点的 LineString')
+    }
+    if (!(Number(feature?.properties?.width) > 0)) errors.push('道路/路径必须提供大于 0 的 width')
+  }
+  return { valid: errors.length === 0, errors }
+}
+
+export function createModelAsset({
+  id, name, source, format, uri, prompt = null, generator = null,
+  license = null, bounds = null,
+}) {
+  const supportedFormats = ['glb', 'gltf', 'obj', 'fbx']
+  if (!supportedFormats.includes(String(format).toLowerCase())) throw new Error('模型格式仅支持 GLB、GLTF、OBJ、FBX')
+  if (!uri) throw new Error('模型资源必须提供可访问的资源 URI')
+  if (!['import', 'ai-generated', 'builtin'].includes(source)) throw new Error('模型来源无效')
+  return {
+    id: id || `asset-${Date.now()}`,
+    name: name || '未命名模型',
+    source,
+    format: String(format).toLowerCase(),
+    uri,
+    generation: source === 'ai-generated' ? { prompt, generator } : null,
+    license,
+    bounds,
+    status: 'pending-review',
+  }
+}

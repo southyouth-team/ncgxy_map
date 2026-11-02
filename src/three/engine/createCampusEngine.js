@@ -4,6 +4,7 @@ import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor } from '../indoor/indoorScene.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -21,6 +22,8 @@ export function createCampusEngine(container, callbacks = {}) {
   let input
   let collisionWorld
   let indoorGroup = null
+  let indoorBuilding = null
+  let currentIndoorFloor = null
   let outdoorState = null
   let frameId = 0
   let resizeObserver
@@ -455,40 +458,42 @@ export function createCampusEngine(container, callbacks = {}) {
     return true
   }
 
+  function buildIndoorFloor(level) {
+    const floor = indoorBuilding?.floors.find(item => item.level === level)
+    if (!floor) return false
+    const group = createIndoorFloor(THREE, floor)
+    group.position.y = (level - 1) * indoorBuilding.floorHeight
+    scene.add(group)
+    if (indoorGroup) { scene.remove(indoorGroup); disposeObjectGroup(indoorGroup) }
+    indoorGroup = group
+    currentIndoorFloor = level
+    collisionWorld = new CollisionWorld(indoorBuilding.bounds, group.userData.collisionObstacles, 0.48)
+    input.collisionWorld = collisionWorld
+    cameraRig.player.set(floor.spawnPoint.x, group.position.y + floor.spawnPoint.y, floor.spawnPoint.z)
+    cameraRig.updateThirdPersonDesired()
+    callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true })
+    return true
+  }
+
   function enterIndoorPrototype() {
     if (!scene || indoorGroup) return false
-    const floor = {
-      level: 1, width: 24, depth: 18, wallHeight: 3.4,
-      doors: [{ wall: 'south', offset: 0, width: 2.2 }],
-      rooms: [
-        { id: 'classroom-101', name: '教室 101', x: -5.4, z: -1.2, width: 7.2, depth: 6.2 },
-        { id: 'classroom-102', name: '教室 102', x: 5.4, z: -1.2, width: 7.2, depth: 6.2 },
-      ],
-      spawnPoint: { x: 0, y: 1.7, z: 5.2 },
-    }
-    indoorGroup = createIndoorFloor(THREE, floor)
-    indoorGroup.position.set(0, 0, 0)
-    scene.add(indoorGroup)
-    outdoorState = {
-      visible: campus.visible,
-      player: cameraRig.player.clone(),
-      mode: cameraRig.mode,
-      collisionWorld,
-    }
+    const definition = indoorBuildingDefinitions.teachingBlockPrototype
+    const errors = validateIndoorBuilding(definition)
+    if (errors.length) throw new TypeError(errors.join('；'))
+    indoorBuilding = definition
+    outdoorState = { visible: campus.visible, player: cameraRig.player.clone(), mode: cameraRig.mode, collisionWorld }
     campus.visible = false
-    collisionWorld = new CollisionWorld(
-      { minX: -12, maxX: 12, minZ: -12, maxZ: 12 },
-      indoorGroup.userData.collisionObstacles,
-      0.48,
-    )
-    input.collisionWorld = collisionWorld
-    cameraRig.player.set(floor.spawnPoint.x, floor.spawnPoint.y, floor.spawnPoint.z)
     cameraRig.setMode('thirdPerson')
     input.setMode('thirdPerson')
+    buildIndoorFloor(definition.floors[0].level)
     cameraRig.thirdDistance = 8
     cameraRig.updateThirdPersonDesired()
-    callbacks.onIndoorStateChange?.({ active: true, floor: floor.level, prototype: true })
     return true
+  }
+
+  function switchIndoorFloor(level) {
+    if (!indoorGroup || !indoorBuilding || !Number.isInteger(level) || level === currentIndoorFloor) return false
+    return buildIndoorFloor(level)
   }
 
   function exitIndoorPrototype() {
@@ -496,6 +501,8 @@ export function createCampusEngine(container, callbacks = {}) {
     scene.remove(indoorGroup)
     disposeObjectGroup(indoorGroup)
     indoorGroup = null
+    indoorBuilding = null
+    currentIndoorFloor = null
     campus.visible = outdoorState.visible
     collisionWorld = outdoorState.collisionWorld
     input.collisionWorld = collisionWorld
@@ -543,5 +550,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

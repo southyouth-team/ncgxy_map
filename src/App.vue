@@ -17,6 +17,9 @@ const loading = ref(true)
 const errorMessage = ref('')
 const engineReady = ref(false)
 const indoorPrototypeActive = ref(false)
+const indoorFloor = ref(1)
+const indoorFloors = ref([1])
+const indoorBuildingName = ref('室内空间样板')
 const showEditor = ref(false)
 const editorViewMode = ref('2d')
 const selectedObject = ref(null)
@@ -158,7 +161,11 @@ onMounted(async () => {
       loadSceneData,
       onSceneDataError: (error) => console.warn('GIS 三维场景加载失败，已回退示意场景：', error),
       onObjectSelected: (object) => { selectedObject.value = object },
-      onIndoorStateChange: (state) => { indoorPrototypeActive.value = Boolean(state.active) },
+      onIndoorStateChange: (state) => {
+        indoorPrototypeActive.value = Boolean(state.active)
+        if (state.active) { indoorFloor.value = state.floor; indoorFloors.value = state.floors || [state.floor]; indoorBuildingName.value = state.buildingName || '室内空间样板' }
+        else { indoorFloor.value = 1; indoorFloors.value = [1] }
+      },
       onReady: () => {
         loading.value = false
         engineReady.value = true
@@ -214,7 +221,13 @@ onBeforeUnmount(() => {
         <span class="mode-label">室内原型</span>
         <span class="mode-hint">体验楼层空间</span>
       </button>
-      <button v-else class="mode-button active" @click="engine?.exitIndoorPrototype()">
+      <button v-if="indoorPrototypeActive && indoorFloors.some(level => level < indoorFloor)" class="mode-button" @click="engine?.switchIndoorFloor(indoorFloor - 1)">
+        <span class="mode-label">上一层</span><span class="mode-hint">{{ indoorBuildingName }} · 当前 {{ indoorFloor }}F</span>
+      </button>
+      <button v-if="indoorPrototypeActive && indoorFloors.some(level => level > indoorFloor)" class="mode-button" @click="engine?.switchIndoorFloor(indoorFloor + 1)">
+        <span class="mode-label">下一层</span><span class="mode-hint">{{ indoorBuildingName }} · 当前 {{ indoorFloor }}F</span>
+      </button>
+      <button v-else-if="indoorPrototypeActive" class="mode-button active" @click="engine?.exitIndoorPrototype()">
         <span class="mode-label">返回室外</span>
         <span class="mode-hint">退出室内原型</span>
       </button>

@@ -3,6 +3,7 @@ import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
+import { buildFeatureObject } from '../world/buildFeatureObject.js'
 
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
@@ -35,7 +36,29 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer.toneMapping = THREE.NoToneMapping
     container.appendChild(renderer.domElement)
 
-    campus = createCampusScene(THREE)
+    if (typeof callbacks.loadSceneData === 'function') {
+      try {
+        const sceneData = await callbacks.loadSceneData()
+        if (sceneData?.objects?.length) {
+          campus = new THREE.Group()
+          campus.name = 'GISDrivenCampusScene'
+          campus.userData.coordinateSystem = 'campus-local'
+          campus.userData.walkableBounds = {
+            minX: -75, maxX: 75, minZ: -52.5, maxZ: 52.5,
+          }
+          for (const item of sceneData.objects) {
+            campus.add(buildFeatureObject(item.feature, item.sceneObject, {
+              mapCoordinateToWorld: sceneData.mapCoordinateToWorld,
+            }))
+          }
+          callbacks.onSceneDataLoaded?.(sceneData)
+        }
+      } catch (error) {
+        callbacks.onSceneDataError?.(error)
+      }
+    }
+    // API 暂无可渲染要素或加载失败时，保留示意场景作为回退。
+    if (!campus) campus = createCampusScene(THREE)
     scene.add(campus)
     loadCampusBuildingModels(scene)
       .then((result) => callbacks.onAssetsLoaded?.(result))

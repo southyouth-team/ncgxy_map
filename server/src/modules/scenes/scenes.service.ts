@@ -113,7 +113,7 @@ export class ScenesService {
       if (!id || objectIds.has(id)) throw new BadRequestException('场景对象 ID 缺失或重复');
       objectIds.add(id);
       if (!OBJECT_TYPES.has(String(item.type))) throw new BadRequestException(`不支持的场景对象类型：${item.type}`);
-      if (!/^\\d+$/.test(featureId)) throw new BadRequestException(`场景对象 ${id} 必须关联有效 GIS Feature ID`);
+      if (!/^\d+$/.test(featureId)) throw new BadRequestException(`场景对象 ${id} 必须关联有效 GIS Feature ID`);
     }
   }
 

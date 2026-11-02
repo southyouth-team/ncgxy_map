@@ -63,12 +63,16 @@ export class RecognitionService implements OnModuleInit, OnModuleDestroy {
         WHERE job.id = picked.id
         RETURNING job.id, job.campus_id, job.map_id, job.asset_id
       `);
-      if (Array.isArray(claimed) && claimed.length > 0) {
-        // TypeORM PostgreSQL driver 正常返回对象数组；兼容部分驱动包装的 rows 结构。
-        const resultRows = Array.isArray(claimed[0]) ? claimed[0] : claimed;
+      // 部署环境中的查询适配层可能返回 [rows, rowCount]，而 TypeORM 原生 PostgreSQL
+      // 驱动返回 rows。统一提取记录数组；[[], 0] 表示本轮没有可领取任务，不是异常。
+      const resultRows = Array.isArray(claimed)
+        ? (Array.isArray(claimed[0]) ? claimed[0] : claimed)
+        : [];
+      if (resultRows.length === 0) return;
+      if (resultRows.length > 0) {
         const row = resultRows[0];
         if (!row || typeof row !== 'object') {
-          this.logger.error('识图任务领取结果结构异常：' + JSON.stringify(claimed).slice(0, 1200));
+          this.logger.error('识图任务领取结果记录无效：' + JSON.stringify(claimed).slice(0, 1200));
           return;
         }
         const job = {

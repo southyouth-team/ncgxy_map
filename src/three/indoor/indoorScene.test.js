@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { validateIndoorFloor, createIndoorFloor } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding } from './indoorBuildingDefinitions.js'
+
 
 const sample = {
   level: 1, width: 24, depth: 18, wallHeight: 3.4,
@@ -47,5 +49,20 @@ describe('indoor floor contract', () => {
 
   it('requires integer floor levels', () => {
     expect(validateIndoorFloor({ ...sample, level: 1.5 })).toContain('楼层 level 必须是整数')
+  })
+})
+
+describe('indoor building definition', () => {
+  it('provides unique, ordered prototype floors with valid geometry', () => {
+    const building = indoorBuildingDefinitions.teachingBlockPrototype
+    expect(validateIndoorBuilding(building)).toEqual([])
+    expect(building.floors.map(floor => floor.level)).toEqual([1, 2])
+    for (const floor of building.floors) expect(validateIndoorFloor(floor)).toEqual([])
+  })
+
+  it('rejects duplicate floor levels', () => {
+    const building = indoorBuildingDefinitions.teachingBlockPrototype
+    expect(validateIndoorBuilding({ ...building, floors: [building.floors[0], building.floors[0]] }))
+      .toContain('楼层编号重复：1')
   })
 })

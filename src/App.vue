@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
       <button v-if="indoorPrototypeActive && indoorFloors.some(level => level > indoorFloor)" class="mode-button" @click="engine?.switchIndoorFloor(indoorFloor + 1)">
         <span class="mode-label">下一层</span><span class="mode-hint">{{ indoorBuildingName }} · 当前 {{ indoorFloor }}F</span>
       </button>
-      <button v-else-if="indoorPrototypeActive" class="mode-button active" @click="engine?.exitIndoorPrototype()">
+      <button v-if="indoorPrototypeActive" class="mode-button active" @click="engine?.exitIndoorPrototype()">
         <span class="mode-label">返回室外</span>
         <span class="mode-hint">退出室内原型</span>
       </button>

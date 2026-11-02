@@ -11,6 +11,7 @@ export class FeaturesService {
 
   async create(userId: string, campusId: string, mapId: string, dto: CreateFeatureDto) {
     await this.requireRole(userId,campusId,['owner','admin','editor']);
+    await this.requireMap(campusId,mapId);
     await this.validateGeometry(dto.geometry);
     const layer = await this.dataSource.query(
       'SELECT id FROM campus_layer WHERE id=$1 AND campus_id=$2 AND map_id=$3',
@@ -35,6 +36,7 @@ export class FeaturesService {
 
   async findAll(userId: string, campusId: string, mapId: string) {
     await this.requireRole(userId,campusId,['owner','admin','editor','viewer']);
+    await this.requireMap(campusId,mapId);
     return this.dataSource.query(
       `SELECT id,campus_id,map_id,layer_id,feature_key,name,ST_AsGeoJSON(geometry)::jsonb AS geometry,
               properties,revision,created_at,updated_at
@@ -45,6 +47,7 @@ export class FeaturesService {
 
   async update(userId: string, campusId: string, mapId: string, featureId: string, dto: UpdateFeatureDto) {
     await this.requireRole(userId,campusId,['owner','admin','editor']);
+    await this.requireMap(campusId,mapId);
     if (dto.geometry) await this.validateGeometry(dto.geometry);
 
     const rows = await this.dataSource.query(
@@ -58,7 +61,7 @@ export class FeaturesService {
                  properties,revision,created_at,updated_at`,
       [featureId,campusId,mapId,userId,dto.name !== undefined,dto.name ?? null,dto.geometry !== undefined,
        dto.geometry ? JSON.stringify(dto.geometry) : null,dto.properties !== undefined,
-       dto.properties ? JSON.stringify(dto.properties) : null,dto.revision],
+       dto.properties !== undefined ? JSON.stringify(dto.properties) : null,dto.revision],
     );
     if (rows.length) return rows[0];
 
@@ -72,6 +75,7 @@ export class FeaturesService {
 
   async remove(userId: string, campusId: string, mapId: string, featureId: string, revision: number) {
     await this.requireRole(userId,campusId,['owner','admin','editor']);
+    await this.requireMap(campusId,mapId);
     if (!Number.isSafeInteger(revision) || revision < 1) throw new BadRequestException('revision 必须是正整数');
     const rows = await this.dataSource.query(
       'DELETE FROM campus_feature WHERE id=$1 AND campus_id=$2 AND map_id=$3 AND revision=$4 RETURNING id',
@@ -103,6 +107,11 @@ export class FeaturesService {
       if (error instanceof BadRequestException) throw error;
       throw new BadRequestException('GeoJSON 几何格式不合法');
     }
+  }
+
+  private async requireMap(campusId: string, mapId: string) {
+    const rows = await this.dataSource.query('SELECT id FROM campus_map WHERE id=$1 AND campus_id=$2',[mapId,campusId]);
+    if (!rows.length) throw new NotFoundException('地图项目不存在');
   }
 
   private async requireRole(userId: string, campusId: string, allowed: string[]) {

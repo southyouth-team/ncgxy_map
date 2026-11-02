@@ -155,7 +155,7 @@ async function saveDraftFeature() {
     selectedFeature.value = feature
     tool.value = 'select'
     points.value = []
-    status.value = '轮廓已保存至 PostGIS'
+    status.value = (geometry.type === 'LineString' ? '道路中心线' : '面要素') + '已保存至 PostGIS'
   } catch (e) { error.value = e.message }
   finally { busy.value = false }
 }
@@ -381,9 +381,9 @@ onMounted(initialize)
               <circle v-else-if="feature.geometry?.type === 'Point'" :cx="feature.geometry.coordinates[0]" :cy="feature.geometry.coordinates[1]" r="5" class="feature-point"/>
               <text v-if="feature.geometry?.type === 'Polygon'" :x="feature.geometry.coordinates[0][0][0]" :y="feature.geometry.coordinates[0][0][1] - 5" class="feature-label">{{ feature.name || '未命名' }}</text>
             </g>
-            <g v-if="selectedFeature && ['Polygon', 'LineString'].includes(editingGeometry?.type)" class="vertex-edit-handles"><circle v-for="(point,index) in selectedRing.slice(0,-1)" :key="index" :cx="point[0]" :cy="point[1]" r="6" :class="['edit-vertex',{ active: selectedVertex === index }]" @click.stop="selectedVertex = index" @pointerdown.stop.prevent="beginVertexDrag($event,index)" /></g>
+            <g v-if="selectedFeature && ['Polygon', 'LineString'].includes(editingGeometry?.type)" class="vertex-edit-handles"><circle v-for="(point,index) in selectedRing.slice(0, isSelectedPolygon ? -1 : selectedRing.length)" :key="index" :cx="point[0]" :cy="point[1]" r="6" :class="['edit-vertex',{ active: selectedVertex === index }]" @click.stop="selectedVertex = index" @pointerdown.stop.prevent="beginVertexDrag($event,index)" /></g>
             <polyline v-if="points.length" :points="points.map(p => p.join(',')).join(' ')" class="draft-line"/>
-            <polygon v-if="points.length >= 3" :points="points.map(p => p.join(',')).join(' ')" class="draft-polygon"/>
+            <polygon v-if="tool === 'polygon' && points.length >= 3" :points="points.map(p => p.join(',')).join(' ')" class="draft-polygon"/>
             <circle v-for="(point,index) in points" :key="index" :cx="point[0]" :cy="point[1]" r="4" class="draft-vertex"/>
           </svg>
           <div v-if="tool === 'polygon' || tool === 'line'" class="canvas-hint">{{ tool === 'line' ? '点击画布逐点绘制道路中心线，至少 2 个顶点后保存' : '点击画布逐点绘制建筑/区域轮廓，至少 3 个顶点后保存' }}</div>

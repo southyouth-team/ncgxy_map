@@ -101,6 +101,94 @@ export class ScenesService {
     });
   }
 
+
+  async findRpgMap(userId: string, campusId: string, mapId: string) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor','viewer']);
+    await this.requireMap(campusId, mapId);
+    const rows = await this.db.query(
+      `SELECT id,campus_id,map_id,schema_version,document,revision,created_at,updated_at
+       FROM campus_rpg_map WHERE campus_id=$1 AND map_id=$2`,
+      [campusId,mapId],
+    );
+    if (!rows.length) return { campusId, mapId, schemaVersion: 1, revision: 0, document: null };
+    return rows[0];
+  }
+
+  async saveRpgMap(userId: string, campusId: string, mapId: string, revision: number, document: Record<string, unknown>) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor']);
+    this.validateRpgDocument(document, mapId);
+    return this.db.transaction(async (manager) => {
+      const maps = await manager.query(
+        'SELECT id FROM campus_map WHERE id=$1 AND campus_id=$2 FOR UPDATE',
+        [mapId,campusId],
+      );
+      if (!maps.length) throw new NotFoundException('地图项目不存在');
+      const current = await manager.query(
+        'SELECT id,revision FROM campus_rpg_map WHERE campus_id=$1 AND map_id=$2 FOR UPDATE',
+        [campusId,mapId],
+      );
+      const currentRevision = current.length ? Number(current[0].revision) : 0;
+      if (currentRevision !== revision) {
+        throw new ConflictException({ message: '二维地图版本冲突，请重新加载后再保存', currentRevision });
+      }
+      const nextRevision = currentRevision + 1;
+      const nextDocument = { ...document, revision: nextRevision, mapId };
+      let id: string;
+      if (current.length) {
+        id = String(current[0].id);
+        await manager.query(
+          `UPDATE campus_rpg_map SET schema_version=1,document=$1::jsonb,
+           revision=$2,updated_by=$3,updated_at=now() WHERE id=$4`,
+          [JSON.stringify(nextDocument),nextRevision,userId,id],
+        );
+      } else {
+        const inserted = await manager.query(
+          `INSERT INTO campus_rpg_map
+           (campus_id,map_id,schema_version,document,revision,created_by,updated_by)
+           VALUES ($1,$2,1,$3::jsonb,$4,$5,$5) RETURNING id`,
+          [campusId,mapId,JSON.stringify(nextDocument),nextRevision,userId],
+        );
+        id = String(inserted[0].id);
+      }
+      return { id, campusId, mapId, schemaVersion: 1, revision: nextRevision, document: nextDocument };
+    });
+  }
+
+  private validateRpgDocument(document: Record<string, unknown>, mapId: string) {
+    if (Number(document.schemaVersion) !== 1) throw new BadRequestException('仅支持 schemaVersion 1 的二维地图文档');
+    if (String(document.mapId) !== mapId) throw new BadRequestException('二维地图文档 mapId 与请求地图不一致');
+    const grid = document.grid as Record<string, unknown> | undefined;
+    const width = Number(grid?.width);
+    const height = Number(grid?.height);
+    if (!Number.isInteger(width) || width < 1 || width > 512 || !Number.isInteger(height) || height < 1 || height > 512) {
+      throw new BadRequestException('地图网格尺寸必须在 1 至 512 之间');
+    }
+    if (!Array.isArray(document.layers) || document.layers.length > 32) throw new BadRequestException('地图图层格式无效或数量超限');
+    const layerIds = new Set<string>();
+    for (const layer of document.layers as Array<Record<string, unknown>>) {
+      const id = String(layer?.id || '');
+      if (!id || layerIds.has(id)) throw new BadRequestException('图层 ID 缺失或重复');
+      layerIds.add(id);
+      if (layer.type !== 'tile') continue;
+      const tiles = layer.tiles;
+      if (!Array.isArray(tiles) || tiles.length !== height || tiles.some((row) => !Array.isArray(row) || row.length !== width)) {
+        throw new BadRequestException(`图层 ${id} 的瓦片网格尺寸不匹配`);
+      }
+      for (const row of tiles as unknown[][]) {
+        for (const tile of row) {
+          if (tile !== null && (typeof tile !== 'string' || tile.length > 64)) throw new BadRequestException('瓦片 ID 格式无效');
+        }
+      }
+    }
+    if (!Array.isArray(document.objects) || document.objects.length > 20000) throw new BadRequestException('地图对象格式无效或数量超限');
+    for (const object of document.objects as Array<Record<string, unknown>>) {
+      if (!Number.isFinite(Number(object.x)) || !Number.isFinite(Number(object.y)) ||
+          Number(object.x) < 0 || Number(object.y) < 0 || Number(object.x) >= width || Number(object.y) >= height) {
+        throw new BadRequestException('装饰对象坐标超出地图范围');
+      }
+    }
+  }
+
   private validateDocument(document: Record<string, unknown>, mapId: string) {
     if (Number(document.schemaVersion) !== 2) throw new BadRequestException('仅支持 schemaVersion 2 的三维场景文档');
     if (String(document.mapId) !== mapId) throw new BadRequestException('场景文档 mapId 与请求地图不一致');

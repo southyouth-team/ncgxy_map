@@ -1,8 +1,9 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
 import CampusMapEditor from './editor/CampusMapEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
+import { createSceneDocument } from './three/scene/sceneDocument.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -17,6 +18,12 @@ const errorMessage = ref('')
 const engineReady = ref(false)
 const showEditor = ref(false)
 const selectedObject = ref(null)
+const sceneDocument = ref(null)
+const sceneRevision = ref(0)
+const sceneSource = ref(null)
+const sceneSaving = ref(false)
+const sceneSaveMessage = ref('')
+const selectedSceneObject = computed(() => sceneDocument.value?.objects?.find((item) => item.id === selectedObject.value?.sceneObjectId) || null)
 
 let engine
 
@@ -54,7 +61,39 @@ async function loadSceneData() {
   const maps = await get(`/campuses/${campus.id}/maps`)
   const map = maps.find((item) => item.slug === 'main') || maps[0]
   if (!map) throw new Error('当前校园尚未创建地图')
-  return loadCampusSceneData({ campusId: campus.id, map, userId: DEV_USER_ID })
+  const loaded = await loadCampusSceneData({ campusId: campus.id, map, userId: DEV_USER_ID })
+  sceneRevision.value = loaded.revision
+  sceneSource.value = loaded.source
+  sceneDocument.value = loaded.document || createSceneDocument({ campusId: String(campus.id), mapId: String(map.id), name: `${campus.name} · ${map.name}` })
+  sceneDocument.value.campusId = String(campus.id)
+  sceneDocument.value.mapId = String(map.id)
+  if (!loaded.document) sceneDocument.value.objects = loaded.objects.map((item) => item.sceneObject)
+  return loaded
+}
+
+async function saveSceneProperties() {
+  if (!sceneDocument.value || sceneSource.value !== 'postgis' || !selectedSceneObject.value) return
+  sceneSaving.value = true
+  sceneSaveMessage.value = ''
+  try {
+    const response = await fetch(`${API_BASE}/campuses/${sceneDocument.value.campusId}/maps/${sceneDocument.value.mapId}/scene`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({ revision: sceneRevision.value, document: sceneDocument.value }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      if (response.status === 409) throw new Error('场景版本冲突：其他编辑已先行保存，请重新加载场景后再修改')
+      throw new Error(payload.message || `保存失败：HTTP ${response.status}`)
+    }
+    sceneRevision.value = Number(payload.revision ?? payload.document?.revision ?? sceneRevision.value + 1)
+    sceneDocument.value = payload.document || { ...sceneDocument.value, revision: sceneRevision.value }
+    sceneSaveMessage.value = '三维属性已保存'
+  } catch (error) {
+    sceneSaveMessage.value = error.message || '保存失败'
+  } finally {
+    sceneSaving.value = false
+  }
 }
 
 function setMoveKey(key, pressed) { engine?.setVirtualKey(key, pressed) }
@@ -202,6 +241,15 @@ onBeforeUnmount(() => {
       <strong style="display:block;margin-top:8px;font-size:13px">{{ selectedObject.name }}</strong>
       <div style="margin-top:7px;font-size:10px;color:#6d7b71">类型：{{ selectedObject.objectType || '未分类' }}</div>
       <div style="margin-top:4px;font-size:10px;color:#6d7b71">Feature ID：{{ selectedObject.featureId }}</div>
+      <template v-if="selectedSceneObject?.type === 'building'">
+        <label style="display:block;margin-top:12px;font-size:10px;color:#6d7b71">建筑楼层</label>
+        <input v-model.number="selectedSceneObject.properties.floors" type="number" min="1" max="200" step="1" style="width:100%;margin-top:5px;padding:6px;border:1px solid #d7ded7;border-radius:4px">
+        <label style="display:block;margin-top:9px;font-size:10px;color:#6d7b71">层高（场景单位）</label>
+        <input v-model.number="selectedSceneObject.properties.floorHeight" type="number" min="0.1" max="30" step="0.1" style="width:100%;margin-top:5px;padding:6px;border:1px solid #d7ded7;border-radius:4px">
+        <button :disabled="sceneSaving || sceneSource !== 'postgis'" style="width:100%;margin-top:10px;padding:7px 9px;border:1px solid #315f49;background:#315f49;color:white;border-radius:4px;font-size:10px;cursor:pointer" @click="saveSceneProperties">{{ sceneSaving ? '保存中…' : '保存三维属性' }}</button>
+        <div v-if="sceneSaveMessage" style="margin-top:7px;font-size:10px;color:#9a6037">{{ sceneSaveMessage }}</div>
+      </template>
+      <div v-else style="margin-top:9px;font-size:10px;color:#7a887e">该类型暂不支持三维属性编辑</div>
       <button style="margin-top:10px;padding:5px 9px;border:1px solid #d7ded7;background:#fff;border-radius:4px;font-size:10px;cursor:pointer" @click="engine?.clearSelection()">取消选择</button>
     </aside>
     <div v-if="errorMessage" class="error-toast">{{ errorMessage }}</div>

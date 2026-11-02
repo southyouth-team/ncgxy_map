@@ -31,6 +31,7 @@
 | B014 | 食堂（名称待核实） | building-or-building-group | official-mentioned | 需确认对应第一食堂、第二食堂或其他食堂建筑 |
 | B015 | 第一食堂（待核实） | building | official-mentioned | 需核对与“食堂”条目是否为同一实体，暂不重复计入建筑总数 |
 | B016 | 宿舍楼群（待拆分） | building-group | group-needs-splitting | 现场按独立楼栋拆分，逐栋记录楼号与建筑轮廓 |
+| B017 | 美术大师博物馆 | building-or-museum-venue | official-mentioned | 待确认是否独立建筑或位于其他建筑内部 |
 | E001 | 赣江体育场 | sports-facility | environment-asset | 作为场地/看台等组合资产建模，核对是否包含独立建筑 |
 | E002 | 景明桥 | bridge | environment-asset | 环境资产，不计入建筑楼栋数量 |
 | E003 | 望月湖 | water-body | environment-asset | 环境资产，采集水岸线 |

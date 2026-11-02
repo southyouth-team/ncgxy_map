@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon } from './campusEditorDocument.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
@@ -19,6 +19,7 @@ const tool = ref('select')
 const scale = ref(1)
 const pan = ref({ x: 0, y: 0 })
 const canvasPan = ref(null)
+const spacePressed = ref(false)
 const suppressCanvasClick = ref(false)
 const showGrid = ref(false)
 const drag = ref(null)
@@ -72,11 +73,14 @@ function canvasViewBox() {
   return [pan.value.x, pan.value.y, 640 / scale.value, 480 / scale.value].join(' ')
 }
 function startCanvasPan(event) {
-  if (event.button !== 0 || event.target.closest?.('.map-feature')) return
+  const panGesture = event.button === 1 || (event.button === 0 && spacePressed.value)
+  if ((!panGesture && event.button !== 0) || (event.button === 0 && !spacePressed.value && event.target.closest?.('.map-feature'))) return
+  if (event.button === 2) return
   const svg = event.currentTarget
   const width = 640 / scale.value, height = 480 / scale.value
   canvasPan.value = { clientX: event.clientX, clientY: event.clientY, x: pan.value.x, y: pan.value.y, width, height, rect: svg.getBoundingClientRect(), moved: false }
   svg.setPointerCapture?.(event.pointerId)
+  if (panGesture) event.preventDefault()
 }
 function moveCanvasPan(event) {
   if (!canvasPan.value) return
@@ -91,23 +95,60 @@ function endCanvasPan() {
   canvasPan.value = null
   if (suppressCanvasClick.value) window.setTimeout(() => { suppressCanvasClick.value = false }, 0)
 }
-function zoomCanvas(event) {
-  const svg = event.currentTarget
+function zoomAt(next, clientX, clientY) {
+  const svg = document.querySelector('.campus-map')
+  if (!svg) { scale.value = next; return }
   const cursor = svg.createSVGPoint()
-  cursor.x = event.clientX
-  cursor.y = event.clientY
+  const rect = svg.getBoundingClientRect()
+  cursor.x = clientX ?? rect.left + rect.width / 2
+  cursor.y = clientY ?? rect.top + rect.height / 2
   const anchor = cursor.matrixTransform(svg.getScreenCTM().inverse())
   const oldWidth = 640 / scale.value, oldHeight = 480 / scale.value
   const rx = (anchor.x - pan.value.x) / oldWidth
   const ry = (anchor.y - pan.value.y) / oldHeight
-  const next = Math.min(4, Math.max(0.35, scale.value * (event.deltaY < 0 ? 1.12 : 1 / 1.12)))
   scale.value = next
   pan.value = { x: anchor.x - rx * 640 / next, y: anchor.y - ry * 480 / next }
+}
+function zoomCanvas(event) {
+  const next = Math.min(4, Math.max(0.35, scale.value * (event.deltaY < 0 ? 1.12 : 1 / 1.12)))
+  zoomAt(next, event.clientX, event.clientY)
 }
 function resetCanvasView() {
   scale.value = 1
   pan.value = { x: 0, y: 0 }
 }
+function zoomToSelection() {
+  const item = selectedBuilding.value || selectedArea.value
+  const road = selectedRoad.value
+  let bounds = item ? polygonBounds(item.footprint) : null
+  if (road?.points?.length) {
+    const xs = road.points.map(point => point[0]), ys = road.points.map(point => point[1])
+    bounds = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+  }
+  if (!bounds) return
+  const width = Math.max(bounds[2] - bounds[0], 24), height = Math.max(bounds[3] - bounds[1], 24)
+  const next = Math.min(4, Math.max(0.35, Math.min(640 / (width * 2.2), 480 / (height * 2.2))))
+  scale.value = next
+  pan.value = { x: (bounds[0] + bounds[2]) / 2 - 320 / next, y: (bounds[1] + bounds[3]) / 2 - 240 / next }
+}
+function onWindowKeyDown(event) {
+  if (event.target?.matches?.('input, textarea, select, [contenteditable="true"]')) return
+  if (event.code === 'Space') { spacePressed.value = true; event.preventDefault() }
+  if (event.key === '+' || event.key === '=') zoomAt(Math.min(4, scale.value * 1.12))
+  if (event.key === '-') zoomAt(Math.max(0.35, scale.value / 1.12))
+  if (event.key === '0') resetCanvasView()
+  if ((event.key === 'Delete' || event.key === 'Backspace') && selected.value.id) deleteSelected()
+}
+function onWindowKeyUp(event) { if (event.code === 'Space') spacePressed.value = false }
+function preventCanvasContextMenu(event) { event.preventDefault() }
+onMounted(() => {
+  window.addEventListener('keydown', onWindowKeyDown)
+  window.addEventListener('keyup', onWindowKeyUp)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onWindowKeyDown)
+  window.removeEventListener('keyup', onWindowKeyUp)
+})
 function point(event) {
   const svg = event.currentTarget.ownerSVGElement || event.currentTarget
   const p = svg.createSVGPoint()
@@ -266,7 +307,7 @@ function exportDocument() {
       <div class="header-actions">
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
-        <button @click="scale = Math.max(.35, scale - .1)">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配画布</button><button @click="scale = Math.min(4, scale + .1)">＋</button>
+        <button title="缩小（-）" @click="zoomAt(Math.max(.35, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配画布</button><button title="放大（+）" @click="zoomAt(Math.min(4, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
         <button @click="preview3d">三维预览</button><button class="primary" @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
     </header>
@@ -288,7 +329,7 @@ function exportDocument() {
       <main class="map-stage">
         <div class="stage-label"><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>示意坐标 · 非米制</em></div>
         <div class="map-scroll">
-          <svg class="campus-map" :viewBox="canvasViewBox()" @wheel.prevent="zoomCanvas" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan($event); movePointer($event)" @pointerup="endCanvasPan(); endPointer()" @pointercancel="endCanvasPan(); endPointer()" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
+          <svg class="campus-map" :viewBox="canvasViewBox()" @wheel.prevent="zoomCanvas" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan($event); movePointer($event)" @pointerup="endCanvasPan(); endPointer()" @pointercancel="endCanvasPan(); endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
@@ -300,7 +341,7 @@ function exportDocument() {
             </g>
             <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
             <path :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
-            <g v-for="road in roads" :key="road.id">
+            <g v-for="road in roads" :key="road.id" class="map-feature">
               <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="selected={type:'road',id:road.id}"/>
               <path v-if="selected.id===road.id" :d="roadPath(road.points)" fill="none" stroke="#d59a43" :stroke-width="Math.max(2,(road.width || 13)*0.18)" stroke-linecap="round" pointer-events="none"/>
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
@@ -321,7 +362,7 @@ function exportDocument() {
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>
           </svg>
         </div>
-        <footer class="stage-footer"><span>画布：校园平面示意图 640 × 480</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路 · {{ areas.length }} 个区域</span><span>坐标来源：校园原图标注</span></footer>
+        <footer class="stage-footer"><span>画布：校园平面示意图 640 × 480 · 滚轮缩放 / 中键或空格拖动 / +/-/0 快捷键</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路 · {{ areas.length }} 个区域</span><span>坐标来源：校园原图标注</span></footer>
       </main>
       <aside class="inspector">
         <div class="panel-title">属性检查器</div>

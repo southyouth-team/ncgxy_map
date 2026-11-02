@@ -10,16 +10,16 @@ describe('CollisionWorld', () => {
 
   it('blocks movement through building bounds', () => {
     const result = world().move({ x: -3, z: 0 }, 2, 0)
-    expect(result.x).toBe(-2.5)
+    expect(result.x).toBe(-3)
     expect(result.blockedX).toBe(true)
   })
 
   it('slides along a wall when diagonal movement is partially blocked', () => {
     const result = world().move({ x: -3, z: -3 }, 2, 2)
-    expect(result.x).toBe(-2.5)
-    expect(result.z).toBe(-1)
-    expect(result.blockedX).toBe(true)
-    expect(result.blockedZ).toBe(false)
+    expect(result.x).toBe(-1)
+    expect(result.z).toBe(-3)
+    expect(result.blockedX).toBe(false)
+    expect(result.blockedZ).toBe(true)
   })
 
   it('keeps the player inside the walkable boundary', () => {

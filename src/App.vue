@@ -17,6 +17,7 @@ const loading = ref(true)
 const errorMessage = ref('')
 const engineReady = ref(false)
 const showEditor = ref(false)
+const editorViewMode = ref('2d')
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
 const sceneRevision = ref(0)
@@ -109,13 +110,20 @@ function focusCampus() {
 
 function openEditor() {
   showEditor.value = true
+  editorViewMode.value = '2d'
   const url = new URL(window.location.href)
   url.searchParams.set('view', 'editor')
   window.history.replaceState({}, '', url)
 }
 
+function switchEditorView(mode) {
+  editorViewMode.value = mode
+  if (mode === '3d') activeMode.value = 'overview'
+}
+
 function closeEditor() {
   showEditor.value = false
+  editorViewMode.value = '2d'
   const url = new URL(window.location.href)
   url.searchParams.delete('view')
   window.history.replaceState({}, '', url)
@@ -147,7 +155,7 @@ onMounted(async () => {
       },
     })
     await engine.init()
-    if (new URLSearchParams(window.location.search).get('view') === 'editor') showEditor.value = true
+    if (new URLSearchParams(window.location.search).get('view') === 'editor') { showEditor.value = true; editorViewMode.value = '2d' }
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'
     loading.value = false
@@ -163,10 +171,10 @@ onBeforeUnmount(() => {
 
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
-    <div ref="viewport" class="scene-viewport" v-show="!showEditor"></div>
-    <RpgMapEditor v-if="showEditor" @close="closeEditor" />
+    <div ref="viewport" class="scene-viewport" v-show="!showEditor || editorViewMode === '3d'"></div>
+    <RpgMapEditor v-if="showEditor && editorViewMode === '2d'" @switch-view="switchEditorView" @close="closeEditor" />
 
-    <template v-if="!showEditor">
+    <template v-if="!showEditor || editorViewMode === '3d'">
     <header class="topbar">
       <div class="brand-lockup">
         <div class="brand-mark">NC</div>
@@ -196,7 +204,15 @@ onBeforeUnmount(() => {
         <span class="mode-label">{{ mode.label }}</span>
         <span class="mode-hint">{{ mode.hint }}</span>
       </button>
-      <button class="mode-button editor-mode-button" :class="{ active: showEditor }" @click="openEditor">
+      <button v-if="showEditor" class="mode-button editor-mode-button active" @click="switchEditorView('2d')">
+        <span class="mode-label">返回二维编辑</span>
+        <span class="mode-hint">继续搭建地图</span>
+      </button>
+      <button v-if="showEditor" class="mode-button" @click="closeEditor">
+        <span class="mode-label">退出编辑模式</span>
+        <span class="mode-hint">返回普通浏览</span>
+      </button>
+      <button v-else class="mode-button editor-mode-button" @click="openEditor">
         <span class="mode-label">二维搭建</span>
         <span class="mode-hint">像素地图编辑</span>
       </button>

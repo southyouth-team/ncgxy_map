@@ -55,7 +55,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="app-shell">
+  <main :class="['app-shell', { 'is-overview': activeMode === 'overview' }]">
     <div ref="viewport" class="scene-viewport"></div>
 
     <header class="topbar">

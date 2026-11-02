@@ -75,3 +75,10 @@
 - 未提供校准数据的历史文档继续走原有 mapPixelToWorld 演示投影，保持向后兼容。
 - 文档字段 `worldUnitsPerCampusUnit` 默认 1，只定义 campus-local 单位到 Three.js world unit 的数值比例；它不会自动证明 campus-local 单位是米。只有测量控制点使用米时，才能把该单位解释为米。
 - 三维预览的地面仍是演示底板；本阶段不改变二维几何存储坐标、不执行数据迁移，也不代表底图资源已持久化。当前本地预览图片刷新后仍需重新导入。
+
+
+## 第十二阶段：二维平面文档持久化
+- 二维编辑器文档使用独立的 `campus_plan_document` 表和 `GET/PUT /campuses/:campusId/maps/:mapId/scene/plan` 接口。
+- 二维编辑文档与三维 GIS 场景文档（`campus_scene`）隔离，避免编辑器保存时覆盖三维场景对象及其 Feature 关联。
+- 文档通过 revision 乐观锁避免并发覆盖；底图文件通过地图资源接口上传，编辑文档仅保存资源 ID 和受控 contentPath。
+- 当前资源存储由 `ASSET_STORAGE_DIR` 指定的本地文件系统提供，部署时必须挂载持久化卷；尚未实现对象存储适配。

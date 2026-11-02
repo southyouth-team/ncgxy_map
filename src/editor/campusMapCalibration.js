@@ -94,3 +94,22 @@ export function createReferenceImageMetadata({ id, name, uri, width, height, opa
     status: 'unverified',
   }
 }
+
+/**
+ * 将编辑器 640×480 视口坐标映射到 Three.js XZ 平面。
+ * 有校准参数时：视口坐标 -> 原始底图像素 -> campus-local -> world；
+ * 无校准时返回 null，由调用方继续使用历史 mapPixelToWorld 兼容路径。
+ */
+export function mapEditorPointToCalibratedWorld(point, calibration, referenceImage, worldUnitsPerCampusUnit = 1) {
+  if (!calibration || !referenceImage?.width || !referenceImage?.height) return null
+  assertPoint(point, 'editor')
+  if (!Number.isFinite(worldUnitsPerCampusUnit) || worldUnitsPerCampusUnit <= 0) {
+    throw new TypeError('worldUnitsPerCampusUnit 必须为正数')
+  }
+  const imagePixel = [
+    Number(point[0]) * Number(referenceImage.width) / 640,
+    Number(point[1]) * Number(referenceImage.height) / 480,
+  ]
+  const [localX, localY] = applyCampusCalibration(imagePixel, calibration)
+  return { x: localX * worldUnitsPerCampusUnit, z: localY * worldUnitsPerCampusUnit }
+}

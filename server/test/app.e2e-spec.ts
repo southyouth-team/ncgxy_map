@@ -168,7 +168,7 @@ describe('Campus map API (PostGIS integration)', () => {
 
     await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
-      .set(auth).send({ revision: Number(map.revision), coordinateConfig: {} }).expect(409);
+      .set(auth).send({ revision: Number(persistedConfig[0].revision) - 1, coordinateConfig: {} }).expect(409);
 
     const viewerId = `e2e-config-viewer-${Date.now()}`;
     await db.query("INSERT INTO campus_member (campus_id,user_id,role) VALUES ($1,$2,'viewer')", [campusId, viewerId]);

@@ -45,6 +45,10 @@ API 前缀为 `/api/v1`，Swagger 文档地址为 `/api/docs`（开发环境）�
 ## 多校园平台架构
 
 - [多校园平台架构与 API 边界](docs/multi-campus-architecture.md)
+- [数字校园产品架构](docs/PRODUCT_ARCHITECTURE.md)
+- [空间数据模型与数据库设计](docs/SPATIAL_DATA_MODEL.md)
+- [空间 API 规范](docs/API_SPECIFICATION.md)
+- [开发路线与验收标准](docs/DEVELOPMENT_ROADMAP.md)
 - [PostgreSQL + PostGIS 数据库结构 V1](docs/multi-campus-database-v1.sql)
 - [地图数据契约 V1](docs/campus-map-data-contract-v1.md)
 - [后端开发说明](docs/backend-development.md)

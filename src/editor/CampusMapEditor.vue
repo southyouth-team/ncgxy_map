@@ -23,6 +23,10 @@ const tool = ref('select')
 const canvasSvg = ref(null)
 const editingGeometry = ref(null)
 const draggingVertex = ref(-1)
+const selectedVertex = ref(-1)
+const dragSnapshot = ref('')
+const geometryUndo = ref([])
+const geometryRedo = ref([])
 
 const headers = { 'Content-Type': 'application/json', 'X-Dev-User-Id': USER_ID }
 const activeFeatures = computed(() => features.value.filter(item => String(item.layer_id) === String(activeLayer.value?.id)))
@@ -98,6 +102,7 @@ function featureClick(feature) {
   if (tool.value === 'polygon') return
   selectedFeature.value = feature
   editingGeometry.value = feature.geometry ? JSON.parse(JSON.stringify(feature.geometry)) : null
+  geometryUndo.value = []; geometryRedo.value = []; selectedVertex.value = -1
   featureName.value = feature.name || feature.properties?.name || ''
   points.value = []
   tool.value = 'select'
@@ -149,8 +154,49 @@ function svgPoint(event) {
   return [Math.round(local.x * 100) / 100, Math.round(local.y * 100) / 100]
 }
 
+function snapshotGeometry() {
+  return editingGeometry.value ? JSON.stringify(editingGeometry.value) : ''
+}
+function recordGeometryChange(before) {
+  if (!before || before === snapshotGeometry()) return
+  geometryUndo.value.push(before)
+  if (geometryUndo.value.length > 100) geometryUndo.value.shift()
+  geometryRedo.value = []
+}
+function undoGeometry() {
+  if (!geometryUndo.value.length) return
+  geometryRedo.value.push(snapshotGeometry())
+  editingGeometry.value = JSON.parse(geometryUndo.value.pop())
+}
+function redoGeometry() {
+  if (!geometryRedo.value.length) return
+  geometryUndo.value.push(snapshotGeometry())
+  editingGeometry.value = JSON.parse(geometryRedo.value.pop())
+}
+function addVertex() {
+  const ring = editingGeometry.value?.coordinates?.[0]
+  if (!ring || selectedVertex.value < 0 || selectedVertex.value >= ring.length - 1) return
+  const before = snapshotGeometry()
+  const index = selectedVertex.value
+  const next = (index + 1) % (ring.length - 1)
+  ring.splice(index + 1, 0, [(ring[index][0] + ring[next][0]) / 2, (ring[index][1] + ring[next][1]) / 2])
+  ring[ring.length - 1] = [...ring[0]]
+  selectedVertex.value = index + 1
+  recordGeometryChange(before)
+}
+function deleteVertex() {
+  const ring = editingGeometry.value?.coordinates?.[0]
+  if (!ring || ring.length <= 4 || selectedVertex.value < 0 || selectedVertex.value >= ring.length - 1) return
+  const before = snapshotGeometry()
+  ring.splice(selectedVertex.value, 1)
+  ring[ring.length - 1] = [...ring[0]]
+  selectedVertex.value = Math.min(selectedVertex.value, ring.length - 2)
+  recordGeometryChange(before)
+}
 function beginVertexDrag(event, index) {
   if (!editingGeometry.value || editingGeometry.value.type !== 'Polygon') return
+  selectedVertex.value = index
+  dragSnapshot.value = snapshotGeometry()
   draggingVertex.value = index
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
@@ -163,7 +209,7 @@ function moveVertex(event) {
   if (draggingVertex.value === 0) ring[ring.length - 1] = [...point]
 }
 
-function endVertexDrag() { draggingVertex.value = -1 }
+function endVertexDrag() { if (draggingVertex.value >= 0) recordGeometryChange(dragSnapshot.value); draggingVertex.value = -1; dragSnapshot.value = '' }
 
 async function updateSelected() {
   if (!selectedFeature.value) return
@@ -178,6 +224,7 @@ async function updateSelected() {
     if (index >= 0) features.value[index] = updated
     selectedFeature.value = updated
     editingGeometry.value = updated.geometry ? JSON.parse(JSON.stringify(updated.geometry)) : null
+    geometryUndo.value = []; geometryRedo.value = []; selectedVertex.value = -1
     status.value = '属性与几何已保存'
   } catch (e) {
     error.value = e.message.includes('409') || e.message.includes('版本') ? '数据版本冲突，请刷新地图数据后重试' : e.message
@@ -268,7 +315,7 @@ onMounted(initialize)
               <circle v-else-if="feature.geometry?.type === 'Point'" :cx="feature.geometry.coordinates[0]" :cy="feature.geometry.coordinates[1]" r="5" class="feature-point"/>
               <text v-if="feature.geometry?.type === 'Polygon'" :x="feature.geometry.coordinates[0][0][0]" :y="feature.geometry.coordinates[0][0][1] - 5" class="feature-label">{{ feature.name || '未命名' }}</text>
             </g>
-            <g v-if="selectedFeature && editingGeometry?.type === 'Polygon'" class="vertex-edit-handles"><circle v-for="(point,index) in selectedRing.slice(0,-1)" :key="index" :cx="point[0]" :cy="point[1]" r="6" class="edit-vertex" @pointerdown.stop.prevent="beginVertexDrag($event,index)" /></g>
+            <g v-if="selectedFeature && editingGeometry?.type === 'Polygon'" class="vertex-edit-handles"><circle v-for="(point,index) in selectedRing.slice(0,-1)" :key="index" :cx="point[0]" :cy="point[1]" r="6" :class="['edit-vertex',{ active: selectedVertex === index }]" @click.stop="selectedVertex = index" @pointerdown.stop.prevent="beginVertexDrag($event,index)" /></g>
             <polyline v-if="points.length" :points="points.map(p => p.join(',')).join(' ')" class="draft-line"/>
             <polygon v-if="points.length >= 3" :points="points.map(p => p.join(',')).join(' ')" class="draft-polygon"/>
             <circle v-for="(point,index) in points" :key="index" :cx="point[0]" :cy="point[1]" r="4" class="draft-vertex"/>
@@ -280,7 +327,15 @@ onMounted(initialize)
       </main>
       <aside class="editor-inspector">
         <div class="panel-title">要素属性</div>
-        <template v-if="selectedFeature"><label>名称</label><input v-model="featureName" maxlength="160" placeholder="输入要素名称"><label>要素 ID</label><code>{{ selectedFeature.id }}</code><label>数据版本</label><code>revision {{ selectedFeature.revision }}</code><label>质量状态</label><code>{{ selectedFeature.properties?.confidence || 'unknown' }}</code><p v-if="editingGeometry?.type === 'Polygon'" class="muted">拖动地图上的白色顶点可调整建筑轮廓，完成后保存。</p><button class="editor-button primary full" :disabled="busy" @click="updateSelected">保存属性</button></template>
+        <template v-if="selectedFeature"><label>名称</label><input v-model="featureName" maxlength="160" placeholder="输入要素名称"><label>要素 ID</label><code>{{ selectedFeature.id }}</code><label>数据版本</label><code>revision {{ selectedFeature.revision }}</code><label>质量状态</label><code>{{ selectedFeature.properties?.confidence || 'unknown' }}</code><template v-if="editingGeometry?.type === 'Polygon'">
+          <p class="muted">拖动顶点调整轮廓；选中顶点后可插入中点或删除顶点。</p>
+          <div class="vertex-actions">
+            <button class="editor-button" :disabled="selectedVertex < 0" @click="addVertex">插入顶点</button>
+            <button class="editor-button" :disabled="selectedVertex < 0 || selectedRing.length <= 4" @click="deleteVertex">删除顶点</button>
+            <button class="editor-button" :disabled="!geometryUndo.length" @click="undoGeometry">撤销</button>
+            <button class="editor-button" :disabled="!geometryRedo.length" @click="redoGeometry">重做</button>
+          </div>
+        </template><button class="editor-button primary full" :disabled="busy" @click="updateSelected">保存属性</button></template>
         <template v-else-if="tool === 'polygon'"><label>要素名称</label><input v-model="featureName" maxlength="160" placeholder="例如：第一教学楼"><p class="muted">完成轮廓绘制后保存。建筑名称和坐标需后续核验。</p></template>
         <div v-else class="inspector-empty">选择地图中的一个要素，查看或编辑其属性。</div>
         <div v-if="error" class="editor-error">{{ error }}</div>
@@ -291,5 +346,5 @@ onMounted(initialize)
 </template>
 
 <style scoped>
-.map-editor{position:absolute;z-index:30;inset:0;display:flex;flex-direction:column;background:#eef1ed;color:#26332f;font-family:Arial,"Microsoft YaHei",sans-serif}.editor-header{height:66px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#172622;color:#f4f5ef}.editor-brand,.editor-header-right{display:flex;align-items:center;gap:13px}.editor-mark{display:grid;place-items:center;width:36px;height:36px;border:1px solid #c8ad72;color:#d9c18f;font-size:12px;font-weight:700}.editor-brand strong,.editor-brand small{display:block}.editor-brand strong{font-size:14px}.editor-brand small{margin-top:4px;color:#aab8af;font-size:9px;letter-spacing:1.5px}.connection{font-size:11px;color:#c5d3c9}.connection i{display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:#75b58a}.editor-body{display:grid;grid-template-columns:230px minmax(0,1fr) 250px;gap:0;min-height:0;flex:1}.editor-sidebar,.editor-inspector{overflow:auto;background:#fff;padding:18px 16px;border-right:1px solid #dce2dc}.editor-inspector{border-right:0;border-left:1px solid #dce2dc}.panel-section{padding:0 0 17px;margin-bottom:17px;border-bottom:1px solid #e8ece7}.panel-title{margin-bottom:12px;color:#6f7c74;font-size:10px;font-weight:700;letter-spacing:1px}.panel-section strong{display:block;font-size:13px}.panel-section small,.workspace-toolbar small{display:block;margin-top:6px;color:#859189;font-size:10px}.muted,.quality-note{color:#859189;font-size:10px;line-height:1.7}.quality-note b{color:#a46f36}.editor-button{height:32px;padding:0 12px;border:1px solid #d6ded7;border-radius:4px;background:#fff;color:#46554c;font-size:11px;cursor:pointer}.editor-button.primary{border-color:#29483b;background:#29483b;color:#fff}.editor-button.ghost:hover,.layer-row:hover,.tool-row:hover{background:#f1f5f1}.editor-button:disabled{opacity:.45;cursor:not-allowed}.editor-button.full{width:100%}.layer-entry{display:flex;align-items:center}.layer-entry .layer-row{flex:1}.layer-visibility{width:30px;height:30px;border:0;background:transparent;color:#68796e;cursor:pointer}.layer-visibility:disabled{opacity:.4;cursor:wait}.layer-row,.tool-row{width:100%;display:flex;align-items:center;gap:9px;padding:9px 7px;border:0;background:transparent;color:#425148;text-align:left;font-size:11px;cursor:pointer}.layer-row.active,.tool-row.active{background:#edf3ee;color:#234a37}.layer-row small{margin:0 0 0 auto}.layer-dot{width:8px;height:8px;border-radius:2px;background:#9aa69e}.layer-dot.building{background:#c18d64}.layer-dot.road{background:#9b9d93}.layer-dot.water{background:#73a9bd}.layer-dot.green{background:#7b9e78}.draft-actions{display:flex;flex-wrap:wrap;gap:7px;padding:6px}.draft-actions small{width:100%;color:#76847a}.draft-actions button{border:0;background:none;color:#466d54;font-size:10px;cursor:pointer}.editor-workspace{display:flex;flex-direction:column;min-width:0;padding:16px 18px}.workspace-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.workspace-toolbar strong{font-size:13px}.toolbar-actions{display:flex;gap:8px}.canvas-wrap{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-height:0;overflow:hidden;border:1px solid #d7ded7;background:#e5eae5}.map-canvas{display:block;width:100%;height:100%;max-width:100%;max-height:100%;cursor:crosshair}.feature-shape{fill:#d7b69a;fill-opacity:.72;stroke:#986d4e;stroke-width:2;cursor:pointer}.feature-shape.selected{fill:#e7a96f;stroke:#8b4d1f;stroke-width:3}.feature-line{fill:none;stroke:#89918b;stroke-width:4}.feature-point{fill:#527d9a}.edit-vertex{fill:#fff;stroke:#315f49;stroke-width:2;cursor:move;pointer-events:all}.feature-label{fill:#554538;font-size:12px;pointer-events:none}.draft-line{fill:none;stroke:#315f49;stroke-width:2;stroke-dasharray:7 4}.draft-polygon{fill:#75a987;fill-opacity:.3;stroke:#315f49;stroke-width:2}.draft-vertex{fill:#fff;stroke:#315f49;stroke-width:2}.canvas-hint,.empty-canvas{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:8px 12px;border:1px solid #d6ded7;border-radius:4px;background:rgba(255,255,255,.92);color:#5e6b62;font-size:10px;white-space:nowrap;pointer-events:none}.empty-canvas{top:50%;bottom:auto;transform:translate(-50%,-50%);background:rgba(255,255,255,.82)}.workspace-footer{display:flex;justify-content:space-between;gap:8px;padding-top:11px;color:#7b887f;font-size:9px}.editor-inspector label{display:block;margin:17px 0 6px;color:#78847b;font-size:10px}.editor-inspector input{width:100%;height:34px;padding:0 9px;border:1px solid #d6ded7;border-radius:4px;outline:none;font-size:11px}.editor-inspector input:focus{border-color:#668c72}.editor-inspector code{display:block;padding:8px;background:#f3f5f2;color:#526056;font-size:10px;overflow-wrap:anywhere}.editor-inspector .editor-button{margin-top:18px}.inspector-empty{padding:18px 0;color:#89948d;font-size:11px;line-height:1.8}.editor-error{margin-top:14px;padding:9px;background:#fff0ed;color:#a14335;font-size:10px;line-height:1.6}.editor-footer{height:28px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:0 18px;background:#e2e8e2;color:#758178;font-size:9px}@media(max-width:900px){.editor-body{grid-template-columns:190px minmax(0,1fr)}.editor-inspector{display:none}.workspace-footer span:last-child{display:none}}@media(max-width:620px){.editor-header{height:54px;padding:0 12px}.editor-header-right .connection{display:none}.editor-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.editor-sidebar{display:flex;gap:12px;overflow-x:auto;padding:8px;border-right:0;border-bottom:1px solid #dce2dc}.panel-section{min-width:150px;padding:0 8px 4px;margin:0;border:0}.panel-section:nth-child(5){display:none}.editor-workspace{padding:9px}.workspace-footer{font-size:8px;flex-wrap:wrap}.editor-footer span:last-child{display:none}.empty-canvas{max-width:90%;white-space:normal;text-align:center}}
+.map-editor{position:absolute;z-index:30;inset:0;display:flex;flex-direction:column;background:#eef1ed;color:#26332f;font-family:Arial,"Microsoft YaHei",sans-serif}.editor-header{height:66px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#172622;color:#f4f5ef}.editor-brand,.editor-header-right{display:flex;align-items:center;gap:13px}.editor-mark{display:grid;place-items:center;width:36px;height:36px;border:1px solid #c8ad72;color:#d9c18f;font-size:12px;font-weight:700}.editor-brand strong,.editor-brand small{display:block}.editor-brand strong{font-size:14px}.editor-brand small{margin-top:4px;color:#aab8af;font-size:9px;letter-spacing:1.5px}.connection{font-size:11px;color:#c5d3c9}.connection i{display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:#75b58a}.editor-body{display:grid;grid-template-columns:230px minmax(0,1fr) 250px;gap:0;min-height:0;flex:1}.editor-sidebar,.editor-inspector{overflow:auto;background:#fff;padding:18px 16px;border-right:1px solid #dce2dc}.editor-inspector{border-right:0;border-left:1px solid #dce2dc}.panel-section{padding:0 0 17px;margin-bottom:17px;border-bottom:1px solid #e8ece7}.panel-title{margin-bottom:12px;color:#6f7c74;font-size:10px;font-weight:700;letter-spacing:1px}.panel-section strong{display:block;font-size:13px}.panel-section small,.workspace-toolbar small{display:block;margin-top:6px;color:#859189;font-size:10px}.muted,.quality-note{color:#859189;font-size:10px;line-height:1.7}.quality-note b{color:#a46f36}.editor-button{height:32px;padding:0 12px;border:1px solid #d6ded7;border-radius:4px;background:#fff;color:#46554c;font-size:11px;cursor:pointer}.editor-button.primary{border-color:#29483b;background:#29483b;color:#fff}.editor-button.ghost:hover,.layer-row:hover,.tool-row:hover{background:#f1f5f1}.editor-button:disabled{opacity:.45;cursor:not-allowed}.editor-button.full{width:100%}.layer-entry{display:flex;align-items:center}.layer-entry .layer-row{flex:1}.layer-visibility{width:30px;height:30px;border:0;background:transparent;color:#68796e;cursor:pointer}.layer-visibility:disabled{opacity:.4;cursor:wait}.layer-row,.tool-row{width:100%;display:flex;align-items:center;gap:9px;padding:9px 7px;border:0;background:transparent;color:#425148;text-align:left;font-size:11px;cursor:pointer}.layer-row.active,.tool-row.active{background:#edf3ee;color:#234a37}.layer-row small{margin:0 0 0 auto}.layer-dot{width:8px;height:8px;border-radius:2px;background:#9aa69e}.layer-dot.building{background:#c18d64}.layer-dot.road{background:#9b9d93}.layer-dot.water{background:#73a9bd}.layer-dot.green{background:#7b9e78}.draft-actions{display:flex;flex-wrap:wrap;gap:7px;padding:6px}.draft-actions small{width:100%;color:#76847a}.draft-actions button{border:0;background:none;color:#466d54;font-size:10px;cursor:pointer}.editor-workspace{display:flex;flex-direction:column;min-width:0;padding:16px 18px}.workspace-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.workspace-toolbar strong{font-size:13px}.toolbar-actions{display:flex;gap:8px}.canvas-wrap{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-height:0;overflow:hidden;border:1px solid #d7ded7;background:#e5eae5}.map-canvas{display:block;width:100%;height:100%;max-width:100%;max-height:100%;cursor:crosshair}.feature-shape{fill:#d7b69a;fill-opacity:.72;stroke:#986d4e;stroke-width:2;cursor:pointer}.feature-shape.selected{fill:#e7a96f;stroke:#8b4d1f;stroke-width:3}.feature-line{fill:none;stroke:#89918b;stroke-width:4}.feature-point{fill:#527d9a}.edit-vertex{fill:#fff;stroke:#315f49;stroke-width:2;cursor:move;pointer-events:all}.edit-vertex.active{fill:#e6b66d;stroke:#80521e}.vertex-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}.feature-label{fill:#554538;font-size:12px;pointer-events:none}.draft-line{fill:none;stroke:#315f49;stroke-width:2;stroke-dasharray:7 4}.draft-polygon{fill:#75a987;fill-opacity:.3;stroke:#315f49;stroke-width:2}.draft-vertex{fill:#fff;stroke:#315f49;stroke-width:2}.canvas-hint,.empty-canvas{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:8px 12px;border:1px solid #d6ded7;border-radius:4px;background:rgba(255,255,255,.92);color:#5e6b62;font-size:10px;white-space:nowrap;pointer-events:none}.empty-canvas{top:50%;bottom:auto;transform:translate(-50%,-50%);background:rgba(255,255,255,.82)}.workspace-footer{display:flex;justify-content:space-between;gap:8px;padding-top:11px;color:#7b887f;font-size:9px}.editor-inspector label{display:block;margin:17px 0 6px;color:#78847b;font-size:10px}.editor-inspector input{width:100%;height:34px;padding:0 9px;border:1px solid #d6ded7;border-radius:4px;outline:none;font-size:11px}.editor-inspector input:focus{border-color:#668c72}.editor-inspector code{display:block;padding:8px;background:#f3f5f2;color:#526056;font-size:10px;overflow-wrap:anywhere}.editor-inspector .editor-button{margin-top:18px}.inspector-empty{padding:18px 0;color:#89948d;font-size:11px;line-height:1.8}.editor-error{margin-top:14px;padding:9px;background:#fff0ed;color:#a14335;font-size:10px;line-height:1.6}.editor-footer{height:28px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:0 18px;background:#e2e8e2;color:#758178;font-size:9px}@media(max-width:900px){.editor-body{grid-template-columns:190px minmax(0,1fr)}.editor-inspector{display:none}.workspace-footer span:last-child{display:none}}@media(max-width:620px){.editor-header{height:54px;padding:0 12px}.editor-header-right .connection{display:none}.editor-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.editor-sidebar{display:flex;gap:12px;overflow-x:auto;padding:8px;border-right:0;border-bottom:1px solid #dce2dc}.panel-section{min-width:150px;padding:0 8px 4px;margin:0;border:0}.panel-section:nth-child(5){display:none}.editor-workspace{padding:9px}.workspace-footer{font-size:8px;flex-wrap:wrap}.editor-footer span:last-child{display:none}.empty-canvas{max-width:90%;white-space:normal;text-align:center}}
 </style>

@@ -523,10 +523,16 @@ export function createCampusEngine(container, callbacks = {}) {
     if (!target) return false
     const direction = Math.sign(targetLevel - currentIndoorFloor)
     if (!direction) return false
+    const stairPoint = indoorGroup.userData.stairPoint
     const fromY = cameraRig.player.y
     stairTransition = {
-      targetLevel, x: cameraRig.player.x, z: cameraRig.player.z,
-      fromY, toY: fromY + direction * indoorBuilding.floorHeight,
+      targetLevel,
+      fromX: cameraRig.player.x,
+      toX: indoorGroup.userData.stairPoint.x,
+      fromZ: indoorGroup.userData.stairPoint.z - direction * 2.1,
+      toZ: indoorGroup.userData.stairPoint.z + direction * 2.1,
+      fromY,
+      toY: fromY + direction * indoorBuilding.floorHeight,
       elapsed: 0, duration: 2.8,
     }
     input.setMovementEnabled(false)
@@ -539,12 +545,14 @@ export function createCampusEngine(container, callbacks = {}) {
     transition.elapsed = Math.min(transition.duration, transition.elapsed + delta)
     const progress = transition.elapsed / transition.duration
     const eased = progress * progress * (3 - 2 * progress)
+    cameraRig.player.x = transition.fromX + (transition.toX - transition.fromX) * eased
     cameraRig.player.y = transition.fromY + (transition.toY - transition.fromY) * eased
+    cameraRig.player.z = transition.fromZ + (transition.toZ - transition.fromZ) * eased
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
     else cameraRig.updateThirdPersonDesired()
     if (progress >= 1) {
       stairTransition = null
-      buildIndoorFloor(transition.targetLevel, { x: transition.x, z: transition.z })
+      buildIndoorFloor(transition.targetLevel, { x: transition.toX, z: transition.toZ })
       input.setMovementEnabled(true)
     }
   }

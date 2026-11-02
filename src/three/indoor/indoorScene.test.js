@@ -65,6 +65,19 @@ describe('indoor floor contract', () => {
     expect(points[1].inside).toEqual({ x: 8.15, z: -1 })
   })
 
+  it('renders room furniture and registers solid furniture as collision obstacles', () => {
+    const furnished = { ...sample, rooms: [{ ...sample.rooms[0], furniture: [
+      { id: 'desk-1', type: 'desk', x: 0, z: 0, width: 1.4, depth: 0.7, height: 0.75 },
+      { id: 'board-1', type: 'board', x: 0, z: -2.7, width: 3, depth: 0.12, height: 1.1 },
+    ] }] }
+    const group = createIndoorFloor(THREE, furnished)
+    expect(group.children.some(child => child.name === 'indoor-furniture-classroom-101-desk-1')).toBe(true)
+    expect(group.children.some(child => child.name === 'indoor-furniture-classroom-101-board-1')).toBe(true)
+    expect(group.userData.collisionObstacles.some(item => item.minX === -5.7 && item.maxX === -4.3)).toBe(true)
+    expect(validateIndoorFloor({ ...sample, rooms: [{ ...sample.rooms[0], furniture: [{ id: 'bad', type: 'desk', x: 5, z: 0, width: 2, depth: 1, height: 1 }] }] }))
+      .toContain('房间 classroom-101 的家具超出房间范围')
+  })
+
   it('requires integer floor levels', () => {
     expect(validateIndoorFloor({ ...sample, level: 1.5 })).toContain('楼层 level 必须是整数')
   })

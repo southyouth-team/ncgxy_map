@@ -33,6 +33,12 @@ export function validateIndoorFloor(floor) {
        room.z - room.depth / 2 < -floor.depth / 2 || room.z + room.depth / 2 > floor.depth / 2)) {
       errors.push(`房间 ${room.id} 超出楼层边界`)
     }
+    if (room.furniture !== undefined && !Array.isArray(room.furniture)) errors.push(`房间 ${room.id} 的 furniture 必须是数组`)
+    for (const item of Array.isArray(room.furniture) ? room.furniture : []) {
+      if (!item.id || !['desk', 'table', 'chair', 'cabinet', 'podium', 'board'].includes(item.type)) errors.push(`房间 ${room.id} 的家具定义无效`)
+      if (![item.x, item.z, item.width, item.depth, item.height].every(Number.isFinite) || item.width <= 0 || item.depth <= 0 || item.height <= 0) errors.push(`房间 ${room.id} 的家具尺寸无效`)
+      else if (Math.abs(item.x) + item.width / 2 > room.width / 2 - 0.25 || Math.abs(item.z) + item.depth / 2 > room.depth / 2 - 0.25) errors.push(`房间 ${room.id} 的家具超出房间范围`)
+    }
     if (room.doorWidth !== undefined && room.doorWidth > 0) {
       if (!['north', 'south', 'east', 'west'].includes(room.doorWall || 'south')) errors.push(`房间 ${room.id} 的 doorWall 无效`)
       const wallLength = ['north', 'south'].includes(room.doorWall || 'south') ? room.width : room.depth
@@ -187,6 +193,22 @@ export function createIndoorFloor(THREE, floor) {
     addWallSegments({ axis: 'z', centerX: x + w / 2, centerZ: z, length: d, wallName: `${room.id}-east`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'east' ? roomDoor : [] })
     addBox(THREE, group, `room-floor-${room.id}`, x, 0.01, z, w - t, 0.04, d - t, trim)
     addLabel(THREE, group, room.name, x, z)
+    const furnitureMaterials = {
+      desk: new THREE.MeshStandardMaterial({ color: '#9a704b', roughness: 0.9 }),
+      table: new THREE.MeshStandardMaterial({ color: '#b58a5c', roughness: 0.9 }),
+      chair: new THREE.MeshStandardMaterial({ color: '#78634d', roughness: 0.95 }),
+      cabinet: new THREE.MeshStandardMaterial({ color: '#8c765d', roughness: 0.95 }),
+      podium: new THREE.MeshStandardMaterial({ color: '#a27b51', roughness: 0.9 }),
+      board: new THREE.MeshStandardMaterial({ color: '#e5e2d6', roughness: 0.95 }),
+    }
+    for (const item of room.furniture || []) {
+      const itemX = x + item.x
+      const itemZ = z + item.z
+      addBox(THREE, group, `indoor-furniture-${room.id}-${item.id}`, itemX, 0, itemZ, item.width, item.height, item.depth, furnitureMaterials[item.type])
+      if (item.type !== 'board') {
+        collision.push({ minX: itemX - item.width / 2, maxX: itemX + item.width / 2, minZ: itemZ - item.depth / 2, maxZ: itemZ + item.depth / 2 })
+      }
+    }
   }
   // 楼梯视觉模型；上下楼由近距离交互触发，不冒充完整楼梯物理。
   const stairPoint = floor.stairPoint || { x: 9, z: 0 }

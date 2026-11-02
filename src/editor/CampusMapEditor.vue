@@ -226,7 +226,7 @@ onMounted(initialize)
             <rect :width="canvasWidth" :height="canvasHeight" fill="#f4f6f2"/><rect :width="canvasWidth" :height="canvasHeight" fill="url(#editor-grid)"/>
             <image v-if="backgroundUrl" :href="backgroundUrl" :width="canvasWidth" :height="canvasHeight" preserveAspectRatio="none" opacity=".82"/>
             <g v-for="feature in activeFeatures" :key="feature.id" @click.stop="featureClick(feature)">
-              <polygon v-if="feature.geometry?.type === 'Polygon'" :points="feature.geometry.coordinates[0].map(p => p.join(',')).join(' ')" :class="['feature-shape', { selected: selectedFeature?.id === feature.id }]" />
+              <polygon v-if="feature.geometry?.type === 'Polygon'" :points="(selectedFeature?.id === feature.id && editingGeometry?.type === 'Polygon' ? editingGeometry.coordinates[0] : feature.geometry.coordinates[0]).map(p => p.join(',')).join(' ')" :class="['feature-shape', { selected: selectedFeature?.id === feature.id }]" />
               <polyline v-else-if="feature.geometry?.type === 'LineString'" :points="feature.geometry.coordinates.map(p => p.join(',')).join(' ')" class="feature-line"/>
               <circle v-else-if="feature.geometry?.type === 'Point'" :cx="feature.geometry.coordinates[0]" :cy="feature.geometry.coordinates[1]" r="5" class="feature-point"/>
               <text v-if="feature.geometry?.type === 'Polygon'" :x="feature.geometry.coordinates[0][0][0]" :y="feature.geometry.coordinates[0][0][1] - 5" class="feature-label">{{ feature.name || '未命名' }}</text>

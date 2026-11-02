@@ -16,6 +16,7 @@ const activeMode = ref('overview')
 const loading = ref(true)
 const errorMessage = ref('')
 const engineReady = ref(false)
+const indoorPrototypeActive = ref(false)
 const showEditor = ref(false)
 const editorViewMode = ref('2d')
 const selectedObject = ref(null)
@@ -157,6 +158,7 @@ onMounted(async () => {
       loadSceneData,
       onSceneDataError: (error) => console.warn('GIS 三维场景加载失败，已回退示意场景：', error),
       onObjectSelected: (object) => { selectedObject.value = object },
+      onIndoorStateChange: (state) => { indoorPrototypeActive.value = Boolean(state.active) },
       onReady: () => {
         loading.value = false
         engineReady.value = true
@@ -208,6 +210,14 @@ onBeforeUnmount(() => {
     </section>
 
     <nav class="mode-switcher" aria-label="视角切换">
+      <button v-if="!indoorPrototypeActive" class="mode-button" @click="engine?.enterIndoorPrototype()">
+        <span class="mode-label">室内原型</span>
+        <span class="mode-hint">体验楼层空间</span>
+      </button>
+      <button v-else class="mode-button active" @click="engine?.exitIndoorPrototype()">
+        <span class="mode-label">返回室外</span>
+        <span class="mode-hint">退出室内原型</span>
+      </button>
       <button
         v-for="mode in modes"
         :key="mode.id"

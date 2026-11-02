@@ -3,6 +3,7 @@ import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
+import { createIndoorFloor } from '../indoor/indoorScene.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -18,6 +19,9 @@ export function createCampusEngine(container, callbacks = {}) {
   let lastPlayerZ = 24
   let cameraRig
   let input
+  let collisionWorld
+  let indoorGroup = null
+  let outdoorState = null
   let frameId = 0
   let resizeObserver
   let previousTime = 0
@@ -89,7 +93,7 @@ export function createCampusEngine(container, callbacks = {}) {
         minZ: bounds.min.z, maxZ: bounds.max.z,
       })
     })
-    const collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
     // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
     if (!campus.userData.isGISDriven) {
       loadCampusBuildingModels(scene)
@@ -450,6 +454,59 @@ export function createCampusEngine(container, callbacks = {}) {
     return true
   }
 
+  function enterIndoorPrototype() {
+    if (!scene || indoorGroup) return false
+    const floor = {
+      level: 1, width: 24, depth: 18, wallHeight: 3.4,
+      doors: [{ wall: 'south', offset: 0, width: 2.2 }],
+      rooms: [
+        { id: 'classroom-101', name: '教室 101', x: -5.4, z: -1.2, width: 7.2, depth: 6.2 },
+        { id: 'classroom-102', name: '教室 102', x: 5.4, z: -1.2, width: 7.2, depth: 6.2 },
+      ],
+      spawnPoint: { x: 0, y: 1.7, z: 5.2 },
+    }
+    indoorGroup = createIndoorFloor(THREE, floor)
+    indoorGroup.position.set(0, 0, 0)
+    scene.add(indoorGroup)
+    outdoorState = {
+      visible: campus.visible,
+      player: cameraRig.player.clone(),
+      mode: cameraRig.mode,
+      collisionWorld,
+    }
+    campus.visible = false
+    collisionWorld = new CollisionWorld(
+      { minX: -11.4, maxX: 11.4, minZ: -8.4, maxZ: 8.4 },
+      indoorGroup.userData.collisionObstacles,
+      0.48,
+    )
+    input.collisionWorld = collisionWorld
+    cameraRig.player.set(floor.spawnPoint.x, floor.spawnPoint.y, floor.spawnPoint.z)
+    cameraRig.setMode('thirdPerson')
+    input.setMode('thirdPerson')
+    cameraRig.thirdDistance = 8
+    cameraRig.updateThirdPersonDesired()
+    callbacks.onIndoorStateChange?.({ active: true, floor: floor.level, prototype: true })
+    return true
+  }
+
+  function exitIndoorPrototype() {
+    if (!indoorGroup || !outdoorState) return false
+    scene.remove(indoorGroup)
+    disposeObjectGroup(indoorGroup)
+    indoorGroup = null
+    campus.visible = outdoorState.visible
+    collisionWorld = outdoorState.collisionWorld
+    input.collisionWorld = collisionWorld
+    cameraRig.player.copy(outdoorState.player)
+    cameraRig.setMode(outdoorState.mode === 'overview' ? 'thirdPerson' : outdoorState.mode)
+    input.setMode(cameraRig.mode)
+    cameraRig.updateThirdPersonDesired()
+    outdoorState = null
+    callbacks.onIndoorStateChange?.({ active: false })
+    return true
+  }
+
   function setVirtualKey(key, pressed) {
     input?.setVirtualKey(key, pressed)
   }
@@ -472,6 +529,7 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer?.domElement?.removeEventListener('pointerup', onScenePointerUp)
     clearSelection()
     clearRpgPreview()
+    if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()
     cameraRig?.dispose()
     scene?.traverse((object) => {
@@ -484,5 +542,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

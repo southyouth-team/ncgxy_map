@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import RegistrationPanel from './RegistrationPanel.vue'
+import { createDraftGeometry } from './geometryDraft.js'
 
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -36,7 +37,12 @@ const headers = { 'Content-Type': 'application/json', 'X-Dev-User-Id': USER_ID }
 const activeFeatures = computed(() => features.value.filter(item => String(item.layer_id) === String(activeLayer.value?.id)))
 const visibleFeatures = computed(() => features.value.filter(item => layers.value.find(layer => String(layer.id) === String(item.layer_id))?.visible !== false))
 const selectedGeometry = computed(() => selectedFeature.value?.geometry)
-const selectedRing = computed(() => editingGeometry.value?.type === 'Polygon' ? editingGeometry.value.coordinates?.[0] || [] : [])
+const selectedRing = computed(() => {
+  if (editingGeometry.value?.type === 'Polygon') return editingGeometry.value.coordinates?.[0] || []
+  if (editingGeometry.value?.type === 'LineString') return editingGeometry.value.coordinates || []
+  return []
+})
+const isSelectedPolygon = computed(() => editingGeometry.value?.type === 'Polygon')
 const drawPoints = computed(() => selectedGeometry.value?.coordinates?.[0]?.slice(0, -1) || points.value)
 
 async function api(path, options = {}) {
@@ -100,13 +106,13 @@ function pointFromEvent(event) {
 }
 
 function canvasClick(event) {
-  if (tool.value !== 'polygon' || activeLayer.value?.locked) return
+  if (!['polygon', 'line'].includes(tool.value) || activeLayer.value?.locked) return
   const point = pointFromEvent(event)
   points.value.push(point)
 }
 
 function featureClick(feature) {
-  if (tool.value === 'polygon') return
+  if (tool.value === 'polygon' || tool.value === 'line') return
   selectedFeature.value = feature
   editingGeometry.value = feature.geometry ? JSON.parse(JSON.stringify(feature.geometry)) : null
   geometryUndo.value = []; geometryRedo.value = []; selectedVertex.value = -1
@@ -115,19 +121,23 @@ function featureClick(feature) {
   tool.value = 'select'
 }
 
-function startPolygon() {
-  if (!activeLayer.value) return
+function startDrawing(mode) {
+  if (!activeLayer.value || activeLayer.value.locked) return
   selectedFeature.value = null
   editingGeometry.value = null
   featureName.value = ''
   points.value = []
-  tool.value = 'polygon'
+  tool.value = mode
 }
 
-async function savePolygon() {
-  if (points.value.length < 3) { error.value = '建筑轮廓至少需要 3 个顶点'; return }
-  const ring = [...points.value, points.value[0]]
-  const geometry = { type: 'Polygon', coordinates: [ring] }
+async function saveDraftFeature() {
+  let geometry
+  try {
+    geometry = createDraftGeometry(tool.value === 'line' ? 'LineString' : 'Polygon', points.value)
+  } catch (e) {
+    error.value = e.message
+    return
+  }
   busy.value = true
   error.value = ''
   try {
@@ -136,7 +146,7 @@ async function savePolygon() {
       body: JSON.stringify({
         featureKey: `ncgxy-${activeLayer.value.key}-${Date.now()}`,
         layerId: String(activeLayer.value.id),
-        name: featureName.value.trim() || '未命名建筑',
+        name: featureName.value.trim() || (activeLayer.value.feature_type === 'road' ? '未命名道路' : activeLayer.value.feature_type === 'green' ? '未命名绿地' : activeLayer.value.feature_type === 'water' ? '未命名水域' : '未命名要素'),
         geometry,
         properties: { source: 'manual-digitization', confidence: 'unverified', coordinateUnit: map.value.coordinate_unit || 'pixel' },
       }),
@@ -181,27 +191,33 @@ function redoGeometry() {
   editingGeometry.value = JSON.parse(geometryRedo.value.pop())
 }
 function addVertex() {
-  const ring = editingGeometry.value?.coordinates?.[0]
-  if (!ring || selectedVertex.value < 0 || selectedVertex.value >= ring.length - 1) return
+  const path = selectedRing.value
+  const polygon = isSelectedPolygon.value
+  const vertexCount = polygon ? path.length - 1 : path.length
+  if (!path.length || selectedVertex.value < 0 || selectedVertex.value >= vertexCount) return
+  if (!polygon && selectedVertex.value >= vertexCount - 1) return
   const before = snapshotGeometry()
   const index = selectedVertex.value
-  const next = (index + 1) % (ring.length - 1)
-  ring.splice(index + 1, 0, [(ring[index][0] + ring[next][0]) / 2, (ring[index][1] + ring[next][1]) / 2])
-  ring[ring.length - 1] = [...ring[0]]
+  const next = polygon ? (index + 1) % vertexCount : index + 1
+  path.splice(index + 1, 0, [(path[index][0] + path[next][0]) / 2, (path[index][1] + path[next][1]) / 2])
+  if (polygon) path[path.length - 1] = [...path[0]]
   selectedVertex.value = index + 1
   recordGeometryChange(before)
 }
 function deleteVertex() {
-  const ring = editingGeometry.value?.coordinates?.[0]
-  if (!ring || ring.length <= 4 || selectedVertex.value < 0 || selectedVertex.value >= ring.length - 1) return
+  const path = selectedRing.value
+  const polygon = isSelectedPolygon.value
+  const vertexCount = polygon ? path.length - 1 : path.length
+  const minimum = polygon ? 3 : 2
+  if (vertexCount <= minimum || selectedVertex.value < 0 || selectedVertex.value >= vertexCount) return
   const before = snapshotGeometry()
-  ring.splice(selectedVertex.value, 1)
-  ring[ring.length - 1] = [...ring[0]]
-  selectedVertex.value = Math.min(selectedVertex.value, ring.length - 2)
+  path.splice(selectedVertex.value, 1)
+  if (polygon) path[path.length - 1] = [...path[0]]
+  selectedVertex.value = Math.min(selectedVertex.value, vertexCount - 2)
   recordGeometryChange(before)
 }
 function beginVertexDrag(event, index) {
-  if (!editingGeometry.value || editingGeometry.value.type !== 'Polygon') return
+  if (!editingGeometry.value || !['Polygon', 'LineString'].includes(editingGeometry.value.type)) return
   selectedVertex.value = index
   dragSnapshot.value = snapshotGeometry()
   draggingVertex.value = index
@@ -210,10 +226,10 @@ function beginVertexDrag(event, index) {
 
 function moveVertex(event) {
   if (draggingVertex.value < 0 || !editingGeometry.value) return
-  const ring = editingGeometry.value.coordinates[0]
+  const path = selectedRing.value
   const point = svgPoint(event)
-  ring.splice(draggingVertex.value, 1, point)
-  if (draggingVertex.value === 0) ring[ring.length - 1] = [...point]
+  path.splice(draggingVertex.value, 1, point)
+  if (isSelectedPolygon.value && draggingVertex.value === 0) path[path.length - 1] = [...point]
 }
 
 function endVertexDrag() { if (draggingVertex.value >= 0) recordGeometryChange(dragSnapshot.value); draggingVertex.value = -1; dragSnapshot.value = '' }
@@ -349,11 +365,11 @@ onMounted(initialize)
 <p class="muted">当前为画布内显示变换，不代表地理配准或真实比例尺。</p></div>
 <div class="panel-section"><div class="panel-title">仿射配准</div><RegistrationPanel :image-width="registrationImageSize.width" :image-height="registrationImageSize.height" :current-registration="registration" :disabled="busy || !backgroundUrl" @apply="applyRegistration"/><p class="muted">配准矩阵独立于显示变换；录入控制点需使用底图原始像素坐标和 campus-local 目标坐标。</p></div>
         <div class="panel-section"><div class="panel-title">图层</div><div v-for="layer in layers" :key="layer.id" class="layer-entry"><button class="layer-row" :class="{ active: activeLayer?.id === layer.id }" @click="activeLayer = layer; selectedFeature = null; editingGeometry = null"><span class="layer-dot" :class="layer.feature_type"></span><span>{{ layer.name }}</span><small>{{ features.filter(f => String(f.layer_id) === String(layer.id)).length }}</small></button><button class="layer-visibility" :disabled="busy" :title="layer.visible === false ? '显示图层' : '隐藏图层'" @click="toggleLayerVisibility(layer)">{{ layer.visible === false ? '○' : '◉' }}</button></div></div>
-        <div class="panel-section"><div class="panel-title">绘制工具</div><button class="tool-row" :class="{ active: tool === 'select' }" @click="tool = 'select'">↖ <span>选择 / 查看要素</span></button><button class="tool-row" :class="{ active: tool === 'polygon' }" :disabled="activeLayer?.locked" @click="startPolygon">⬡ <span>绘制多边形</span></button><div v-if="tool === 'polygon'" class="draft-actions"><small>已采集 {{ points.length }} 个顶点</small><button @click="undoPoint">撤销顶点</button><button @click="clearDraft">取消绘制</button></div></div>
+        <div class="panel-section"><div class="panel-title">绘制工具</div><button class="tool-row" :class="{ active: tool === 'select' }" @click="tool = 'select'">↖ <span>选择 / 查看要素</span></button><button class="tool-row" :class="{ active: tool === 'polygon' }" :disabled="activeLayer?.locked" @click="startDrawing('polygon')">⬡ <span>绘制面要素（建筑/绿地/水体）</span></button><button class="tool-row" :class="{ active: tool === 'line' }" :disabled="activeLayer?.locked" @click="startDrawing('line')">／ <span>绘制线要素（道路）</span></button><div v-if="tool === 'polygon' || tool === 'line'" class="draft-actions"><small>已采集 {{ points.length }} 个顶点</small><button @click="undoPoint">撤销顶点</button><button @click="clearDraft">取消绘制</button></div></div>
         <div class="panel-section"><div class="panel-title">数据质量</div><p class="quality-note">新绘制要素默认标记为 <b>unverified</b>。未经底图配准和现场核验，不作为真实测绘成果。</p></div>
       </aside>
       <main class="editor-workspace">
-        <div class="workspace-toolbar"><div><strong>{{ activeLayer?.name || '地图画布' }}</strong><small>坐标系：campus-local · 单位：{{ map?.coordinate_unit || 'pixel' }}</small></div><div class="toolbar-actions"><button class="editor-button ghost" @click="refreshData">刷新数据</button><button v-if="tool === 'polygon'" class="editor-button primary" :disabled="busy || points.length < 3" @click="savePolygon">保存轮廓</button></div></div>
+        <div class="workspace-toolbar"><div><strong>{{ activeLayer?.name || '地图画布' }}</strong><small>坐标系：campus-local · 单位：{{ map?.coordinate_unit || 'pixel' }}</small></div><div class="toolbar-actions"><button class="editor-button ghost" @click="refreshData">刷新数据</button><button v-if="tool === 'polygon' || tool === 'line'" class="editor-button primary" :disabled="busy || points.length < (tool === 'line' ? 2 : 3)" @click="saveDraftFeature">保存要素</button></div></div>
         <div class="canvas-wrap">
           <svg ref="canvasSvg" class="map-canvas" :viewBox="`0 0 ${canvasWidth} ${canvasHeight}`" preserveAspectRatio="xMidYMid meet" @click="canvasClick" @pointermove="moveVertex" @pointerup="endVertexDrag" @pointercancel="endVertexDrag">
             <defs><pattern id="editor-grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M 25 0 L 0 0 0 25" fill="none" stroke="#d9e0dc" stroke-width="0.7"/></pattern></defs>
@@ -361,32 +377,32 @@ onMounted(initialize)
             <image v-if="backgroundUrl" :href="backgroundUrl" :width="registration ? registrationImageSize.width : canvasWidth" :height="registration ? registrationImageSize.height : canvasHeight" preserveAspectRatio="none" :opacity="baseMapTransform.opacity" :transform="registration ? ('matrix(' + registration.transform.a + ' ' + registration.transform.d + ' ' + registration.transform.b + ' ' + registration.transform.e + ' ' + registration.transform.c + ' ' + registration.transform.f + ')') : ('translate(' + baseMapTransform.x + ' ' + baseMapTransform.y + ') rotate(' + baseMapTransform.rotation + ' ' + canvasWidth / 2 + ' ' + canvasHeight / 2 + ') translate(' + canvasWidth / 2 + ' ' + canvasHeight / 2 + ') scale(' + baseMapTransform.scale + ') translate(' + -canvasWidth / 2 + ' ' + -canvasHeight / 2 + ')')"/>
             <g v-for="feature in visibleFeatures" :key="feature.id" @click.stop="featureClick(feature)">
               <polygon v-if="feature.geometry?.type === 'Polygon'" :points="(selectedFeature?.id === feature.id && editingGeometry?.type === 'Polygon' ? editingGeometry.coordinates[0] : feature.geometry.coordinates[0]).map(p => p.join(',')).join(' ')" :class="['feature-shape', { selected: selectedFeature?.id === feature.id }]" />
-              <polyline v-else-if="feature.geometry?.type === 'LineString'" :points="feature.geometry.coordinates.map(p => p.join(',')).join(' ')" class="feature-line"/>
+              <polyline v-else-if="feature.geometry?.type === 'LineString'" :points="(selectedFeature?.id === feature.id && editingGeometry?.type === 'LineString' ? editingGeometry.coordinates : feature.geometry.coordinates).map(p => p.join(',')).join(' ')" class="feature-line"/>
               <circle v-else-if="feature.geometry?.type === 'Point'" :cx="feature.geometry.coordinates[0]" :cy="feature.geometry.coordinates[1]" r="5" class="feature-point"/>
               <text v-if="feature.geometry?.type === 'Polygon'" :x="feature.geometry.coordinates[0][0][0]" :y="feature.geometry.coordinates[0][0][1] - 5" class="feature-label">{{ feature.name || '未命名' }}</text>
             </g>
-            <g v-if="selectedFeature && editingGeometry?.type === 'Polygon'" class="vertex-edit-handles"><circle v-for="(point,index) in selectedRing.slice(0,-1)" :key="index" :cx="point[0]" :cy="point[1]" r="6" :class="['edit-vertex',{ active: selectedVertex === index }]" @click.stop="selectedVertex = index" @pointerdown.stop.prevent="beginVertexDrag($event,index)" /></g>
+            <g v-if="selectedFeature && ['Polygon', 'LineString'].includes(editingGeometry?.type)" class="vertex-edit-handles"><circle v-for="(point,index) in selectedRing.slice(0,-1)" :key="index" :cx="point[0]" :cy="point[1]" r="6" :class="['edit-vertex',{ active: selectedVertex === index }]" @click.stop="selectedVertex = index" @pointerdown.stop.prevent="beginVertexDrag($event,index)" /></g>
             <polyline v-if="points.length" :points="points.map(p => p.join(',')).join(' ')" class="draft-line"/>
             <polygon v-if="points.length >= 3" :points="points.map(p => p.join(',')).join(' ')" class="draft-polygon"/>
             <circle v-for="(point,index) in points" :key="index" :cx="point[0]" :cy="point[1]" r="4" class="draft-vertex"/>
           </svg>
-          <div v-if="tool === 'polygon'" class="canvas-hint">点击画布逐点绘制建筑轮廓，至少 3 个顶点后保存</div>
+          <div v-if="tool === 'polygon' || tool === 'line'" class="canvas-hint">{{ tool === 'line' ? '点击画布逐点绘制道路中心线，至少 2 个顶点后保存' : '点击画布逐点绘制建筑/区域轮廓，至少 3 个顶点后保存' }}</div>
           <div v-if="!features.length && !points.length" class="empty-canvas">导入校园平面图，或直接在画布上开始矢量化</div>
         </div>
         <div class="workspace-footer"><span>当前图层：{{ activeLayer?.name || '—' }}</span><span>要素数：{{ activeFeatures.length }}</span><span>草稿顶点：{{ points.length }}</span><span>数据存储：PostgreSQL / PostGIS</span></div>
       </main>
       <aside class="editor-inspector">
         <div class="panel-title">要素属性</div>
-        <template v-if="selectedFeature"><label>名称</label><input v-model="featureName" maxlength="160" placeholder="输入要素名称"><label>要素 ID</label><code>{{ selectedFeature.id }}</code><label>数据版本</label><code>revision {{ selectedFeature.revision }}</code><label>质量状态</label><code>{{ selectedFeature.properties?.confidence || 'unknown' }}</code><template v-if="editingGeometry?.type === 'Polygon'">
+        <template v-if="selectedFeature"><label>名称</label><input v-model="featureName" maxlength="160" placeholder="输入要素名称"><label>要素 ID</label><code>{{ selectedFeature.id }}</code><label>数据版本</label><code>revision {{ selectedFeature.revision }}</code><label>质量状态</label><code>{{ selectedFeature.properties?.confidence || 'unknown' }}</code><template v-if="['Polygon', 'LineString'].includes(editingGeometry?.type)">
           <p class="muted">拖动顶点调整轮廓；选中顶点后可插入中点或删除顶点。</p>
           <div class="vertex-actions">
             <button class="editor-button" :disabled="selectedVertex < 0" @click="addVertex">插入顶点</button>
-            <button class="editor-button" :disabled="selectedVertex < 0 || selectedRing.length <= 4" @click="deleteVertex">删除顶点</button>
+            <button class="editor-button" :disabled="selectedVertex < 0 || (isSelectedPolygon ? selectedRing.length <= 4 : selectedRing.length <= 2)" @click="deleteVertex">删除顶点</button>
             <button class="editor-button" :disabled="!geometryUndo.length" @click="undoGeometry">撤销</button>
             <button class="editor-button" :disabled="!geometryRedo.length" @click="redoGeometry">重做</button>
           </div>
         </template><button class="editor-button primary full" :disabled="busy" @click="updateSelected">保存属性</button></template>
-        <template v-else-if="tool === 'polygon'"><label>要素名称</label><input v-model="featureName" maxlength="160" placeholder="例如：第一教学楼"><p class="muted">完成轮廓绘制后保存。建筑名称和坐标需后续核验。</p></template>
+        <template v-else-if="tool === 'polygon' || tool === 'line'"><label>要素名称</label><input v-model="featureName" maxlength="160" :placeholder="tool === 'line' ? '例如：校园主干道' : '例如：第一教学楼'"><p class="muted">{{ tool === 'line' ? '完成道路中心线后保存，线宽和道路边界可在后续道路建模阶段补充。' : '完成轮廓绘制后保存。建筑名称和坐标需后续核验。' }}</p></template>
         <div v-else class="inspector-empty">选择地图中的一个要素，查看或编辑其属性。</div>
         <div v-if="error" class="editor-error">{{ error }}</div>
       </aside>

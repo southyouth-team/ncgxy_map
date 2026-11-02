@@ -51,7 +51,8 @@ export class RecognitionService {
       if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new BadRequestException('第 ' + (index + 1) + ' 个要素置信度无效');
       return { type: item.type, name: String(item.name || item.type).slice(0,120), confidence, geometry: item.geometry, properties: item.properties || {}, source: 'ai-vision', reviewRequired: confidence < 0.75 };
     });
-    return { provider: baseUrl, model, imageSummary: String(parsed.imageSummary || ''), featureCount: features.length, features };
+    const saved = await this.db.query(`INSERT INTO campus_recognition_result (campus_id,map_id,asset_id,result,created_by) VALUES ($1,$2,$3,$4::jsonb,$5) RETURNING id,created_at`, [campusId,mapId,assetId,JSON.stringify({ provider: baseUrl, model, imageSummary: String(parsed.imageSummary || ''), features }),userId]);
+    return { id: String(saved[0].id), provider: baseUrl, model, imageSummary: String(parsed.imageSummary || ''), featureCount: features.length, features };
   }
 
   private async requireRole(userId: string, campusId: string, allowed: string[]) {

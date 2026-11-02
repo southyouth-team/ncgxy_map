@@ -163,13 +163,15 @@ export function createIndoorFloor(THREE, floor) {
   // 楼梯视觉模型；上下楼由近距离交互触发，不冒充完整楼梯物理。
   const stairPoint = floor.stairPoint || { x: 9, z: 0 }
   const stairMaterial = new THREE.MeshStandardMaterial({ color: '#9a7958', roughness: 1 })
-  for (let index = 0; index < 8; index += 1) {
-    const height = 0.22 + index * 0.2
-    const z = stairPoint.z - 2.1 + (index + 0.5) * 0.52
-    addBox(THREE, group, 'indoor-stair-step', stairPoint.x, index * 0.2, z, 1.7, height, 0.56, stairMaterial)
+  const stairCount = 12
+  const stairRise = 4.2 / stairCount
+  const stairDepth = 4.2 / stairCount
+  for (let index = 0; index < stairCount; index += 1) {
+    const z = stairPoint.z - 2.1 + (index + 0.5) * stairDepth
+    addBox(THREE, group, 'indoor-stair-step', stairPoint.x, index * stairRise, z, 1.7, stairRise, stairDepth, stairMaterial)
   }
   const railMaterial = new THREE.MeshStandardMaterial({ color: '#6d5842', roughness: 1 })
-  for (const offset of [-0.95, 0.95]) addBox(THREE, group, 'indoor-stair-rail', stairPoint.x + offset, 0.25, stairPoint.z, 0.12, 1.1, 4.4, railMaterial)
+  for (const offset of [-0.95, 0.95]) addBox(THREE, group, 'indoor-stair-rail', stairPoint.x + offset, 0.25, stairPoint.z, 0.12, 4.2, 4.4, railMaterial)
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
   group.userData.collisionObstacles = collision
   group.userData.spawnPoint = floor.spawnPoint || { x: 0, y: 1.7, z: 0 }

@@ -77,7 +77,7 @@ describe('indoor stair construction', () => {
   it('creates a stair interaction point and visible stair steps', () => {
     const group = createIndoorFloor(THREE, { ...sample, stairPoint: { x: 10.5, z: 0 } })
     expect(group.userData.stairPoint).toEqual({ x: 10.5, z: 0 })
-    expect(group.children.filter(child => child.name === 'indoor-stair-step')).toHaveLength(8)
+    expect(group.children.filter(child => child.name === 'indoor-stair-step')).toHaveLength(12)
     expect(group.children.filter(child => child.name === 'indoor-stair-rail')).toHaveLength(2)
   })
 })

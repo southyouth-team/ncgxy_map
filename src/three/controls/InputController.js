@@ -8,6 +8,7 @@ export class InputController {
     this.bounds = bounds || { minX: -75, maxX: 75, minZ: -75, maxZ: 75 }
     this.collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
     this.mode = 'overview'
+    this.movementEnabled = true
     this.keys = new Set()
     this.pointerDown = false
     this.lastPointer = { x: 0, y: 0 }
@@ -104,8 +105,13 @@ export class InputController {
     this.cameraRig.player.set(0, 1.7, 24)
   }
 
+  setMovementEnabled(enabled) {
+    this.movementEnabled = Boolean(enabled)
+    if (!this.movementEnabled) this.keys.clear()
+  }
+
   update(delta) {
-    if (this.mode === 'overview') return
+    if (this.mode === 'overview' || !this.movementEnabled) return
     const forward = (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0) - (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0)
     const strafe = (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0)
     if (!forward && !strafe) return

@@ -25,6 +25,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let indoorBuilding = null
   let currentIndoorFloor = null
   let stairInteractionActive = false
+  let stairTransition = null
   let outdoorState = null
   let frameId = 0
   let resizeObserver
@@ -407,7 +408,7 @@ export function createCampusEngine(container, callbacks = {}) {
       const levels = indoorBuilding.floors.map(floor => floor.level).sort((a, b) => a - b)
       const index = levels.indexOf(currentIndoorFloor)
       const target = levels[index + 1] ?? levels[index - 1]
-      if (target !== undefined) switchIndoorFloor(target)
+      if (target !== undefined) beginStairTransition(target)
     }
   }
 
@@ -423,7 +424,8 @@ export function createCampusEngine(container, callbacks = {}) {
     frameId = requestAnimationFrame(animate)
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
-    input?.update(delta)
+    if (stairTransition) updateStairTransition(delta)
+    else input?.update(delta)
     if (indoorGroup?.userData.stairPoint && cameraRig?.player) {
       const point = indoorGroup.userData.stairPoint
       const near = Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z) <= 2.4
@@ -486,7 +488,8 @@ export function createCampusEngine(container, callbacks = {}) {
     collisionWorld = new CollisionWorld(indoorBuilding.bounds, group.userData.collisionObstacles, 0.48)
     input.collisionWorld = collisionWorld
     cameraRig.player.set(transitionPosition?.x ?? floor.spawnPoint.x, group.position.y + floor.spawnPoint.y, transitionPosition?.z ?? floor.spawnPoint.z)
-    cameraRig.updateThirdPersonDesired()
+    if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
+    else cameraRig.updateThirdPersonDesired()
     stairInteractionActive = false
     callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false })
     return true
@@ -509,9 +512,41 @@ export function createCampusEngine(container, callbacks = {}) {
   }
 
   function switchIndoorFloor(level) {
-    if (!indoorGroup || !indoorBuilding || !Number.isInteger(level) || level === currentIndoorFloor) return false
+    if (!indoorGroup || !indoorBuilding || !Number.isInteger(level) || level === currentIndoorFloor || stairTransition) return false
     const transitionPosition = { x: cameraRig.player.x, z: cameraRig.player.z }
     return buildIndoorFloor(level, transitionPosition)
+  }
+
+  function beginStairTransition(targetLevel) {
+    if (stairTransition || !indoorBuilding || !indoorGroup) return false
+    const target = indoorBuilding.floors.find(floor => floor.level === targetLevel)
+    if (!target) return false
+    const direction = Math.sign(targetLevel - currentIndoorFloor)
+    if (!direction) return false
+    const fromY = cameraRig.player.y
+    stairTransition = {
+      targetLevel, x: cameraRig.player.x, z: cameraRig.player.z,
+      fromY, toY: fromY + direction * indoorBuilding.floorHeight,
+      elapsed: 0, duration: 2.8,
+    }
+    input.setMovementEnabled(false)
+    return true
+  }
+
+  function updateStairTransition(delta) {
+    if (!stairTransition) return
+    const transition = stairTransition
+    transition.elapsed = Math.min(transition.duration, transition.elapsed + delta)
+    const progress = transition.elapsed / transition.duration
+    const eased = progress * progress * (3 - 2 * progress)
+    cameraRig.player.y = transition.fromY + (transition.toY - transition.fromY) * eased
+    if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
+    else cameraRig.updateThirdPersonDesired()
+    if (progress >= 1) {
+      stairTransition = null
+      buildIndoorFloor(transition.targetLevel, { x: transition.x, z: transition.z })
+      input.setMovementEnabled(true)
+    }
   }
 
   function exitIndoorPrototype() {
@@ -520,6 +555,8 @@ export function createCampusEngine(container, callbacks = {}) {
     disposeObjectGroup(indoorGroup)
     indoorGroup = null
     stairInteractionActive = false
+    stairTransition = null
+    input.setMovementEnabled(true)
     indoorBuilding = null
     currentIndoorFloor = null
     campus.visible = outdoorState.visible

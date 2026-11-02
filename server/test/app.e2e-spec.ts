@@ -77,6 +77,11 @@ describe('Campus map API (PostGIS integration)', () => {
   });
 
   it('does not delete a layer that still contains features', async () => {
+    // 先直接验证 Service 的业务分支，区分 Service 逻辑与 HTTP 路由/异常映射问题。
+    const layersService = app.get('LayersService');
+    await expect(layersService.remove(ownerId, campusId, mapId, layerId))
+      .rejects.toMatchObject({ status: 409 });
+
     const response = await request(app.getHttpServer())
       .delete(`${base}/campuses/${campusId}/maps/${mapId}/layers/${layerId}`)
       .set(auth);
@@ -113,6 +118,13 @@ describe('Campus map API (PostGIS integration)', () => {
   });
 
   it('uses optimistic revision checks for feature updates', async () => {
+    // 先直接验证 Service 对过期 revision 的处理，再验证 HTTP 层响应。
+    const featuresService = app.get('FeaturesService');
+    await expect(featuresService.update(ownerId, campusId, mapId, featureId, {
+      revision: 0,
+      name: '直接调用过期更新',
+    })).rejects.toMatchObject({ status: 409 });
+
     await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/features/${featureId}`)
       .set(auth)

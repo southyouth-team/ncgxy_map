@@ -3,7 +3,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { createRpgMapDocument, TILE_PALETTE, RPG_OBJECT_PALETTE, paintTile } from './rpgMapDocument.js'
 
 const emit = defineEmits(['close'])
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
+const USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
 const map = ref(createRpgMapDocument())
+const campusId = ref(null)
+const mapId = ref(null)
+const revision = ref(0)
+const saving = ref(false)
+const loading = ref(true)
 const canvas = ref(null)
 const selectedTile = ref('grass')
 const selectedObject = ref(null)
@@ -11,7 +18,7 @@ const activeLayerId = ref('ground')
 const zoom = ref(2)
 const tool = ref('brush')
 const painting = ref(false)
-const status = ref('新建俯视地图草稿')
+const status = ref('正在加载地图文档…')
 const activeLayer = computed(() => map.value.layers.find(layer => layer.id === activeLayerId.value))
 const tileColor = id => TILE_PALETTE.find(tile => tile.id === id)?.color || 'transparent'
 
@@ -76,6 +83,64 @@ function pointerDown(event) {
 }
 function pointerMove(event) { if (painting.value) applyAt(event) }
 function pointerUp() { painting.value = false }
+async function api(path, options = {}) {
+  const response = await fetch(`${API}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': USER_ID, ...(options.headers || {}) },
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.message || `请求失败：HTTP ${response.status}`)
+  return payload
+}
+
+async function loadMapDocument() {
+  loading.value = true
+  try {
+    const campuses = await api('/campuses')
+    const campus = campuses.find(item => item.slug === 'ncgxy')
+    if (!campus) throw new Error('地图服务中尚未初始化南昌工学院校园')
+    campusId.value = String(campus.id)
+    const maps = await api(`/campuses/${campus.id}/maps`)
+    const campusMap = maps.find(item => item.slug === 'main') || maps[0]
+    if (!campusMap) throw new Error('当前校园尚未创建主地图')
+    mapId.value = String(campusMap.id)
+    const saved = await api(`/campuses/${campusId.value}/maps/${mapId.value}/scene/rpg`)
+    revision.value = Number(saved.revision || 0)
+    if (saved.document) map.value = saved.document
+    map.value.mapId = mapId.value
+    map.value.campusId = campusId.value
+    status.value = saved.document ? `已加载服务端地图 · 版本 ${revision.value}` : '已连接地图服务 · 新建草稿'
+    draw()
+  } catch (error) {
+    status.value = `加载失败：${error.message}`
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveMapDocument() {
+  if (!campusId.value || !mapId.value || saving.value) return
+  saving.value = true
+  try {
+    map.value.mapId = mapId.value
+    map.value.campusId = campusId.value
+    const saved = await api(`/campuses/${campusId.value}/maps/${mapId.value}/scene/rpg`, {
+      method: 'PUT',
+      body: JSON.stringify({ revision: revision.value, document: map.value }),
+    })
+    revision.value = Number(saved.revision)
+    map.value = saved.document
+    status.value = `已保存至服务器 · 版本 ${revision.value}`
+  } catch (error) {
+    status.value = error.message.includes('409') || error.message.includes('版本冲突')
+      ? '保存冲突：其他编辑者已更新，请刷新后再操作'
+      : `保存失败：${error.message}`
+  } finally {
+    saving.value = false
+    draw()
+  }
+}
+
 function saveDraft() {
   const blob = new Blob([JSON.stringify(map.value, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -84,10 +149,10 @@ function saveDraft() {
   anchor.download = 'ncgxy-rpg-map-draft.json'
   anchor.click()
   URL.revokeObjectURL(url)
-  status.value = '已导出本地 JSON 草稿（尚未写入服务端）'
+  status.value = '已导出本地 JSON 文件'
 }
 watch([zoom, activeLayerId], draw)
-onMounted(draw)
+onMounted(loadMapDocument)
 </script>
 
 <template>
@@ -96,7 +161,8 @@ onMounted(draw)
       <div class="rpg-brand"><span class="rpg-mark">NC</span><div><strong>南昌工学院地图搭建器</strong><small>TOP-DOWN PIXEL MAP EDITOR</small></div></div>
       <div class="rpg-actions">
         <span class="rpg-status">{{ status }}</span>
-        <button @click="saveDraft">导出草稿</button>
+        <button :disabled="saving || loading" @click="saveMapDocument">{{ saving ? '保存中…' : '保存地图' }}</button>
+        <button @click="saveDraft">导出 JSON</button>
         <button class="rpg-close" @click="emit('close')">切换三维视图</button>
       </div>
     </header>
@@ -111,7 +177,7 @@ onMounted(draw)
         <button v-for="item in RPG_OBJECT_PALETTE" :key="item.id" :class="['rpg-asset', { chosen: tool === 'object' && selectedObject === item.id }]" @click="tool='object'; selectedObject=item.id">
           <i class="rpg-glyph" :style="{ color: item.color }">{{ item.glyph }}</i>{{ item.label }}
         </button>
-        <p class="rpg-note">当前为基础占位素材。专属校园建筑素材和自动拼接规则后续补充。</p>
+        <p class="rpg-note">当前为基础占位素材。地图文档已接入服务端版本化保存。专属校园建筑素材和自动拼接规则后续补充。</p>
       </aside>
       <main class="rpg-stage">
         <div class="rpg-stage-toolbar">
@@ -132,7 +198,7 @@ onMounted(draw)
         <label>地图名称<input v-model="map.name"></label>
         <label>网格宽度<input :value="map.grid.width" disabled></label>
         <label>网格高度<input :value="map.grid.height" disabled></label>
-        <div class="rpg-callout">二维地图数据与三维场景采用统一坐标约定。建筑等真实空间对象后续关联 GIS Feature，不在瓦片层重复保存轮廓。</div>
+        <div class="rpg-callout">地图文档保存在服务端并进行版本冲突检测。建筑等真实空间对象仍关联 GIS Feature，不在瓦片层重复保存轮廓。</div>
       </aside>
     </div>
   </section>

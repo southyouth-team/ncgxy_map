@@ -68,7 +68,7 @@ describe('indoor floor contract', () => {
   it('renders room furniture and registers solid furniture as collision obstacles', () => {
     const furnished = { ...sample, rooms: [{ ...sample.rooms[0], furniture: [
       { id: 'desk-1', type: 'desk', x: 0, z: 0, width: 1.4, depth: 0.7, height: 0.75 },
-      { id: 'board-1', type: 'board', x: 0, z: -2.7, width: 3, depth: 0.12, height: 1.1 },
+      { id: 'board-1', type: 'board', x: 0, z: -2.5, width: 3, depth: 0.12, height: 1.1 },
     ] }] }
     const group = createIndoorFloor(THREE, furnished)
     expect(group.children.some(child => child.name === 'indoor-furniture-classroom-101-desk-1')).toBe(true)

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "campus": {
+    "name": "南昌工学院",
+    "address": "江西省南昌市红谷滩区狮子山大道998号",
+    "coordinateSystem": "local-campus-meter",
+    "status": "survey-pending"
+  },
+  "georeference": {
+    "origin": null,
+    "northAngleDegrees": null,
+    "sourceMap": null,
+    "controlPoints": [],
+    "notes": "先确定公开地图版本、坐标基准与现场控制点，再建立本地米制坐标。禁止把未校准的示意坐标作为真实位置。"
+  },
+  "layers": {
+    "campusBoundary": [],
+    "roads": [],
+    "waterBodies": [],
+    "sportsFields": [],
+    "landscapeAreas": []
+  }
+}

@@ -6,6 +6,7 @@ import { FeaturesModule } from './modules/features/features.module';
 import { HealthModule } from './modules/health/health.module';
 import { LayersModule } from './modules/layers/layers.module';
 import { MapsModule } from './modules/maps/maps.module';
+import { AssetsModule } from './modules/assets/assets.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MapsModule } from './modules/maps/maps.module';
     MapsModule,
     LayersModule,
     FeaturesModule,
+    AssetsModule,
   ],
 })
 export class AppModule {}

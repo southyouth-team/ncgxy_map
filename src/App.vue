@@ -11,7 +11,7 @@ const engineReady = ref(false)
 let engine
 
 const modes = [
-  { id: 'overview', label: '上帝视角', hint: '校园全局' },
+  { id: 'overview', label: '上帝视角', hint: '像素地图' },
   { id: 'thirdPerson', label: '第三人称', hint: '跟随漫游' },
   { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
 ]
@@ -66,13 +66,13 @@ onBeforeUnmount(() => {
           <div class="brand-subtitle">NANCHANG INSTITUTE OF TECHNOLOGY · 3D CAMPUS</div>
         </div>
       </div>
-      <div class="topbar-status"><span class="status-dot"></span> 三维校园导览</div>
+      <div class="topbar-status"><span class="status-dot"></span> 像素风格样板</div>
     </header>
 
     <section class="intro-card">
       <div class="eyebrow">CAMPUS EXPLORER / 01</div>
       <h1>探索校园<br /><span>从这里开始</span></h1>
-      <p>切换观察视角，在三维校园中自由浏览。</p>
+      <p>等距像素风格样板场景 · 校园布局为演示数据，尚非真实测绘。</p>
       <div class="intro-rule"><span></span></div>
       <div class="intro-foot">INTERACTIVE CAMPUS MAP</div>
     </section>
@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="loading-screen">
       <div class="loader"></div>
-      <div>正在构建三维校园</div>
+      <div>正在加载像素风格样板场景</div>
       <span>INITIALIZING SCENE</span>
     </div>
     <div v-if="errorMessage" class="error-toast">{{ errorMessage }}</div>

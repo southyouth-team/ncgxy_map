@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, extname, resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 export interface UploadedAsset {
   originalname: string;
@@ -26,6 +26,21 @@ export class AssetsService {
 
   constructor(private readonly dataSource: DataSource, config: ConfigService) {
     this.storageDir = resolve(config.get<string>('ASSET_STORAGE_DIR', './uploads'));
+  }
+
+  async findAll(userId: string, campusId: string, mapId: string) {
+    await this.requireRole(userId, campusId, ['owner', 'admin', 'editor', 'viewer']);
+    await this.requireMap(campusId, mapId);
+    const rows = await this.dataSource.query(
+      `SELECT id,original_name,mime_type,file_size,checksum_sha256,created_at
+       FROM campus_asset WHERE campus_id=$1 AND map_id=$2 AND asset_type='base-map'
+       ORDER BY created_at DESC,id DESC`,
+      [campusId, mapId],
+    );
+    return rows.map((row: Record<string, unknown>) => ({
+      ...row,
+      contentPath: `/api/v1/campuses/${campusId}/maps/${mapId}/assets/${row.id}/content`,
+    }));
   }
 
   async uploadBaseMap(userId: string, campusId: string, mapId: string, file: UploadedAsset) {

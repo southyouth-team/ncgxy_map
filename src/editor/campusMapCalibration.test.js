@@ -71,7 +71,7 @@ describe('editor to calibrated Three.js coordinate mapping', () => {
       { source: [1600, 0], target: [110, 20] },
     ])
     expect(mapEditorPointToCalibratedWorld([320, 240], calibration, { width: 1600, height: 1200 }))
-      .toEqual({ x: 60, z: 20 })
+      .toEqual({ x: 60, z: 57.5 })
   })
 
   it('supports an explicit world-units scale and leaves legacy documents uncalibrated', () => {

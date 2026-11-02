@@ -174,3 +174,27 @@ export function roadToPolygon(points, width, samplesPerSegment = 8) {
   }
   return [...left, ...right.reverse()]
 }
+
+
+/**
+ * 将同一铺装网络中的道路面域执行 Polygon Union。
+ * 返回 GeoJSON MultiPolygon coordinates；每个 polygon 的首个 ring 为外环，
+ * 后续 ring 为洞。输入道路仍保留独立中心线，Union 只用于显示/导出拓扑结果。
+ */
+import polygonClipping from 'polygon-clipping'
+
+export function roadNetworkToMultiPolygon(roads = []) {
+  const polygons = []
+  for (const road of roads) {
+    const ring = roadToPolygon(road?.points, road?.width)
+    if (ring.length < 4) continue
+    const closed = [...ring.map(([x, y]) => [Number(x), Number(y)]), [Number(ring[0][0]), Number(ring[0][1])]]
+    polygons.push([[closed]])
+  }
+  if (!polygons.length) return []
+  try {
+    return polygonClipping.union(...polygons)
+  } catch (error) {
+    throw new Error(`道路网络融合失败：${error.message}`)
+  }
+}

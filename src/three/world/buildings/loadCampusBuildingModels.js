@@ -16,6 +16,7 @@ export async function loadCampusBuildingModels(scene, manifestUrl = '/data/build
   const manifest = await response.json()
   const buildings = Array.isArray(manifest.buildings) ? manifest.buildings : []
   const loaded = []
+  const models = []
   const errors = []
 
   for (const building of buildings) {
@@ -37,6 +38,7 @@ export async function loadCampusBuildingModels(scene, manifestUrl = '/data/build
       )
       model.rotation.y = rotationY
       model.userData.buildingId = building.buildingId
+      model.userData.objectType = 'building'
       model.userData.buildingName = building.name || building.buildingId
       model.traverse((object) => {
         if (!object.isMesh) return
@@ -46,10 +48,11 @@ export async function loadCampusBuildingModels(scene, manifestUrl = '/data/build
 
       scene.add(model)
       loaded.push(building.buildingId)
+      models.push(model)
     } catch (error) {
       errors.push({ buildingId: building.buildingId, error })
     }
   }
 
-  return { loaded, errors, total: buildings.length }
+  return { loaded, models, errors, total: buildings.length }
 }

@@ -14,6 +14,17 @@ export class CollisionWorld {
     this.radius = Math.max(0.1, Number(radius) || 0.55)
   }
 
+  addObstacle(bounds) {
+    if (!bounds || !Number.isFinite(bounds.minX) || !Number.isFinite(bounds.maxX) ||
+      !Number.isFinite(bounds.minZ) || !Number.isFinite(bounds.maxZ) ||
+      bounds.maxX <= bounds.minX || bounds.maxZ <= bounds.minZ) return false
+    this.obstacles.push({
+      minX: bounds.minX, maxX: bounds.maxX,
+      minZ: bounds.minZ, maxZ: bounds.maxZ,
+    })
+    return true
+  }
+
   isBlocked(x, z) {
     const r = this.radius
     return this.obstacles.some((box) =>

@@ -27,6 +27,18 @@ describe('CollisionWorld', () => {
     expect(result.x).toBe(9.5)
   })
 
+  it('accepts building obstacles loaded after the scene becomes interactive', () => {
+    const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 })
+    expect(collision.addObstacle({ minX: -1, maxX: 1, minZ: -1, maxZ: 1 })).toBe(true)
+    expect(collision.move({ x: -2, z: 0 }, 2, 0).x).toBe(-2)
+  })
+
+  it('rejects invalid dynamic obstacles', () => {
+    const collision = new CollisionWorld({ minX: -5, maxX: 5, minZ: -5, maxZ: 5 })
+    expect(collision.addObstacle({ minX: 2, maxX: 1, minZ: 0, maxZ: 1 })).toBe(false)
+    expect(collision.obstacles).toHaveLength(0)
+  })
+
   it('ignores invalid obstacle bounds', () => {
     const collision = new CollisionWorld(
       { minX: -5, maxX: 5, minZ: -5, maxZ: 5 },

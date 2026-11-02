@@ -73,11 +73,6 @@ export function createCampusEngine(container, callbacks = {}) {
     // API 暂无可渲染要素或加载失败时，保留示意场景作为回退。
     if (!campus) campus = createCampusScene(THREE)
     scene.add(campus)
-    if (!campus.userData.isGISDriven) {
-      loadCampusBuildingModels(scene)
-        .then((result) => callbacks.onAssetsLoaded?.(result))
-        .catch((error) => callbacks.onAssetError?.(error))
-    }
     cameraRig = new CameraRig(THREE, renderer.domElement)
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     const playerSprite = campus.getObjectByName('PixelExplorerSprite')
@@ -95,6 +90,22 @@ export function createCampusEngine(container, callbacks = {}) {
       })
     })
     const collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
+    if (!campus.userData.isGISDriven) {
+      loadCampusBuildingModels(scene)
+        .then((result) => {
+          for (const model of result.models || []) {
+            model.updateMatrixWorld(true)
+            const bounds = new THREE.Box3().setFromObject(model)
+            if (!bounds.isEmpty()) collisionWorld.addObstacle({
+              minX: bounds.min.x, maxX: bounds.max.x,
+              minZ: bounds.min.z, maxZ: bounds.max.z,
+            })
+          }
+          callbacks.onAssetsLoaded?.(result)
+        })
+        .catch((error) => callbacks.onAssetError?.(error))
+    }
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
     input.attach()
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)

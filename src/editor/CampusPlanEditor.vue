@@ -70,9 +70,7 @@ function captureCalibrationPoint(event) {
   if (!calibrationMode.value || !referenceImagePreview.value) return
   event.stopPropagation()
   const source = point(event)
-  calibrationPoints.value.push({ source: [source.x, source.y], target: [Number(targetX.value), Number(targetY.value)] })
-  targetX.value += 10
-  targetY.value += 10
+  calibrationPoints.value.push({ source: [source.x * referenceImage.value.width / 640, source.y * referenceImage.value.height / 480], target: [Number(targetX.value), Number(targetY.value)] })
 }
 function removeCalibrationPoint(index) { calibrationPoints.value.splice(index, 1) }
 function clearReferenceImage() {
@@ -391,7 +389,7 @@ function exportDocument() {
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
-            <rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="#86a765"/><image v-if="referenceImagePreview" href="" :xlink:href="referenceImagePreview" x="0" y="0" :width="referenceImage.width" :height="referenceImage.height" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
+            <rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="#86a765"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
             <g v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>

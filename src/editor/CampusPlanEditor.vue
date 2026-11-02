@@ -189,9 +189,20 @@ async function uploadReferenceImage(event) {
 async function recognizeReferenceImage(assetId = savedAssetId.value) {
   if (!assetId || recognitionBusy.value) return
   recognitionBusy.value = true
-  recognitionMessage.value = 'AI 正在分析底图，提取建筑、道路、绿地和水体…'
+  recognitionMessage.value = '已提交 AI 识图任务，后台正在排队…'
   try {
-    const result = await apiRequest(`${mapApiPath()}/assets/${assetId}/recognize`, { method: 'POST' })
+    const job = await apiRequest(`${mapApiPath()}/assets/${assetId}/recognize`, { method: 'POST' })
+    let result = null
+    for (let attempt = 0; attempt < 180; attempt++) {
+      await new Promise(resolve => window.setTimeout(resolve, 2000))
+      const status = await apiRequest(`${mapApiPath()}/assets/recognition/${job.id}`)
+      if (status.status === 'completed') { result = status; break }
+      if (status.status === 'failed') throw new Error(status.error_message || '视觉模型识图失败')
+      recognitionMessage.value = status.status === 'processing'
+        ? `AI 正在分析底图…（已等待 ${(attempt + 1) * 2} 秒）`
+        : 'AI 识图任务排队中…'
+    }
+    if (!result) throw new Error('识图任务等待超时；任务仍保留在服务端，可稍后重新查询')
     const features = result.features || []
     if (!features.length) {
       recognitionMessage.value = '识图已完成，但没有提取到可用空间要素；请检查图片清晰度。'
@@ -206,7 +217,7 @@ async function recognizeReferenceImage(assetId = savedAssetId.value) {
         if (ring.length < 4) continue
         if (feature.type === 'building') {
           buildings.value.push({
-            id: `ai-building-${Date.now()}-${added}`, label: feature.name || '识别建筑',
+            id: `ai-building-${job.id}-${added}`, label: feature.name || '识别建筑',
             template: generateSceneAssets.value ? '教学楼' : '识别建筑',
             rect: polygonBounds(ring), footprint: ring, floors: null,
             confidence: feature.confidence, source: 'ai-vision', reviewRequired: feature.reviewRequired,
@@ -214,7 +225,7 @@ async function recognizeReferenceImage(assetId = savedAssetId.value) {
           })
         } else {
           areas.value.push({
-            id: `ai-area-${Date.now()}-${added}`, name: feature.name || feature.type,
+            id: `ai-area-${job.id}-${added}`, name: feature.name || feature.type,
             type: feature.type === 'green' ? 'vegetation' : feature.type,
             footprint: ring, confidence: feature.confidence,
             source: 'ai-vision', reviewRequired: feature.reviewRequired,
@@ -225,7 +236,7 @@ async function recognizeReferenceImage(assetId = savedAssetId.value) {
         const points = feature.geometry.coordinates.map(toEditorPoint)
         if (points.length >= 2) {
           roads.value.push({
-            id: `ai-road-${Date.now()}-${added}`, points,
+            id: `ai-road-${job.id}-${added}`, points,
             width: Math.max(4, Number(feature.properties?.width) || 10),
             confidence: feature.confidence, source: 'ai-vision', reviewRequired: feature.reviewRequired,
           })

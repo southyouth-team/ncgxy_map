@@ -54,11 +54,13 @@ export class LayersService {
     await this.requireMap(campusId,mapId);
     let rows: Array<{ id: string }>;
     try {
-      rows = await this.dataSource.query(
+      const result = await this.dataSource.query(
         `DELETE FROM campus_layer l WHERE l.id=$1 AND l.campus_id=$2 AND l.map_id=$3
-         AND NOT EXISTS (SELECT 1 FROM campus_feature f WHERE f.layer_id=l.id) RETURNING l.id`,
+         AND NOT EXISTS (SELECT 1 FROM campus_feature f WHERE f.layer_id=l.id) RETURNING l.id AS id`,
         [layerId,campusId,mapId],
       );
+      // TypeORM QueryRunner 在不同驱动/返回模式下可能返回 rows 或 [rows, affected]。
+      rows = Array.isArray(result?.[0]) ? result[0] : result;
     } catch (error) {
       // 外键 RESTRICT 是最终并发保护；将数据库约束冲突转换为稳定的业务响应。
       if (this.isForeignKeyViolation(error)) {

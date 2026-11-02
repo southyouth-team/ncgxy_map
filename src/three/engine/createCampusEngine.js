@@ -359,7 +359,7 @@ export function createCampusEngine(container, callbacks = {}) {
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     input?.update(delta)
-    const playerSprite = scene?.getObjectByName('PixelExplorerSprite') || scene?.getObjectByName('CampusPlanPlayerSprite')
+    const playerSprite = scene?.getObjectByName('CampusPlanPlayerSprite') || scene?.getObjectByName('PixelExplorerSprite')
     if (playerSprite && cameraRig?.player) {
       // 第一人称相机位于角色眼部，隐藏自身 Sprite，避免角色贴图遮挡视野。
       playerSprite.visible = cameraRig.mode !== 'firstPerson'

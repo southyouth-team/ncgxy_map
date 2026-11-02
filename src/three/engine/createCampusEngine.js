@@ -25,7 +25,7 @@ export function createCampusEngine(container, callbacks = {}) {
     // 关闭抗锯齿并限制渲染倍率，保持像素边缘清晰并控制 GPU 开销。\n    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.15
@@ -45,7 +45,7 @@ export function createCampusEngine(container, callbacks = {}) {
     const sun = new THREE.DirectionalLight(0xffedcf, 3.0)
     sun.position.set(-55, 90, 45)
     sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
+    sun.shadow.mapSize.set(1024, 1024)
     sun.shadow.camera.left = -100
     sun.shadow.camera.right = 100
     sun.shadow.camera.top = 100
@@ -98,7 +98,7 @@ export function createCampusEngine(container, callbacks = {}) {
     cancelAnimationFrame(frameId)
     resizeObserver?.disconnect()
     window.removeEventListener('keydown', onKeyDown)
-    input?.dispose()
+    input?.dispose()\n    cameraRig?.dispose()
     scene?.traverse((object) => {
       object.geometry?.dispose?.()
       if (Array.isArray(object.material)) object.material.forEach((m) => m.dispose())

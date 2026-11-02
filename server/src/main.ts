@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -8,7 +8,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
-  app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api/v1'));
+  app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api/v1'), {
+    exclude: [
+      { path: 'health', method: RequestMethod.GET },
+      { path: 'ready', method: RequestMethod.GET },
+    ],
+  });
   app.enableCors({
     origin: config.get<string>('CORS_ORIGIN', 'http://localhost:5173')
       .split(',')
@@ -32,6 +37,6 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swaggerConfig));
   }
 
-  await app.listen(config.get<number>('PORT', 3001), '0.0.0.0');
+  await app.listen(Number(config.get<string>('PORT', '3001')), '0.0.0.0');
 }
 void bootstrap();

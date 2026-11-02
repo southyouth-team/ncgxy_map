@@ -9,11 +9,16 @@ export class CreateCampusRecognitionResults1762500000000 implements MigrationInt
       campus_id BIGINT NOT NULL REFERENCES campus(id) ON DELETE CASCADE,
       map_id BIGINT NOT NULL REFERENCES campus_map(id) ON DELETE CASCADE,
       asset_id BIGINT NOT NULL REFERENCES campus_asset(id) ON DELETE CASCADE,
-      result JSONB NOT NULL,
+      result JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status VARCHAR(24) NOT NULL DEFAULT 'completed' CHECK (status IN ('queued','processing','completed','failed')),
+      error_message TEXT,
+      started_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
       created_by VARCHAR(128) NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
     await queryRunner.query('CREATE INDEX IF NOT EXISTS idx_campus_recognition_result_map ON campus_recognition_result(campus_id,map_id,created_at DESC)');
+    await queryRunner.query('CREATE INDEX IF NOT EXISTS idx_campus_recognition_queue ON campus_recognition_result(status,created_at)');
   }
   async down(queryRunner: QueryRunner): Promise<void> { await queryRunner.query('DROP TABLE IF EXISTS campus_recognition_result'); }
 }

@@ -20,10 +20,14 @@ const busy = ref(false)
 const error = ref('')
 const fileInput = ref(null)
 const tool = ref('select')
+const canvasSvg = ref(null)
+const editingGeometry = ref(null)
+const draggingVertex = ref(-1)
 
 const headers = { 'Content-Type': 'application/json', 'X-Dev-User-Id': USER_ID }
 const activeFeatures = computed(() => features.value.filter(item => String(item.layer_id) === String(activeLayer.value?.id)))
 const selectedGeometry = computed(() => selectedFeature.value?.geometry)
+const selectedRing = computed(() => editingGeometry.value?.type === 'Polygon' ? editingGeometry.value.coordinates?.[0] || [] : [])
 const drawPoints = computed(() => selectedGeometry.value?.coordinates?.[0]?.slice(0, -1) || points.value)
 
 async function api(path, options = {}) {
@@ -91,6 +95,7 @@ function canvasClick(event) {
 function featureClick(feature) {
   if (tool.value === 'polygon') return
   selectedFeature.value = feature
+  editingGeometry.value = feature.geometry ? JSON.parse(JSON.stringify(feature.geometry)) : null
   featureName.value = feature.name || feature.properties?.name || ''
   points.value = []
   tool.value = 'select'
@@ -99,6 +104,7 @@ function featureClick(feature) {
 function startPolygon() {
   if (!activeLayer.value) return
   selectedFeature.value = null
+  editingGeometry.value = null
   featureName.value = ''
   points.value = []
   tool.value = 'polygon'
@@ -130,6 +136,33 @@ async function savePolygon() {
   finally { busy.value = false }
 }
 
+
+function svgPoint(event) {
+  const svg = canvasSvg.value
+  if (!svg) return [0, 0]
+  const point = svg.createSVGPoint()
+  point.x = event.clientX
+  point.y = event.clientY
+  const local = point.matrixTransform(svg.getScreenCTM().inverse())
+  return [Math.round(local.x * 100) / 100, Math.round(local.y * 100) / 100]
+}
+
+function beginVertexDrag(event, index) {
+  if (!editingGeometry.value || editingGeometry.value.type !== 'Polygon') return
+  draggingVertex.value = index
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
+
+function moveVertex(event) {
+  if (draggingVertex.value < 0 || !editingGeometry.value) return
+  const ring = editingGeometry.value.coordinates[0]
+  const point = svgPoint(event)
+  ring.splice(draggingVertex.value, 1, point)
+  if (draggingVertex.value === 0) ring[ring.length - 1] = [...point]
+}
+
+function endVertexDrag() { draggingVertex.value = -1 }
+
 async function updateSelected() {
   if (!selectedFeature.value) return
   busy.value = true
@@ -137,12 +170,13 @@ async function updateSelected() {
   try {
     const updated = await api(`/campuses/${campus.value.id}/maps/${map.value.id}/features/${selectedFeature.value.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ revision: selectedFeature.value.revision, name: featureName.value.trim() || '未命名要素' }),
+      body: JSON.stringify({ revision: selectedFeature.value.revision, name: featureName.value.trim() || '未命名要素', ...(editingGeometry.value ? { geometry: editingGeometry.value } : {}) }),
     })
     const index = features.value.findIndex(item => String(item.id) === String(updated.id))
     if (index >= 0) features.value[index] = updated
     selectedFeature.value = updated
-    status.value = '属性已保存'
+    editingGeometry.value = updated.geometry ? JSON.parse(JSON.stringify(updated.geometry)) : null
+    status.value = '属性与几何已保存'
   } catch (e) {
     error.value = e.message.includes('409') || e.message.includes('版本') ? '数据版本冲突，请刷新地图数据后重试' : e.message
   } finally { busy.value = false }

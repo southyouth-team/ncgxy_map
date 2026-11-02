@@ -116,12 +116,14 @@ function openEditor() {
   window.history.replaceState({}, '', url)
 }
 
-function switchEditorView(mode) {
+function switchEditorView(mode, document) {
   editorViewMode.value = mode
-  if (mode === '3d') activeMode.value = 'overview'
+  if (mode === '3d') { activeMode.value = 'overview'; engine?.previewRpgMap(document) }
+  else engine?.clearRpgPreview()
 }
 
 function closeEditor() {
+  engine?.clearRpgPreview()
   showEditor.value = false
   editorViewMode.value = '2d'
   const url = new URL(window.location.href)

@@ -84,9 +84,9 @@ export class InputController {
     const length = Math.hypot(forward, strafe) || 1
     const f = forward / length
     const s = strafe / length
-    // 相机局部 +Z 为前方；右方向由 yaw + 90° 得到，避免屏幕方向与世界坐标错位。
-    const dx = Math.sin(yaw) * f + Math.cos(yaw) * s
-    const dz = Math.cos(yaw) * f - Math.sin(yaw) * s
+    // 按当前镜头方向计算移动；修正横向输入符号，使 D/→ 向屏幕右侧、A/← 向屏幕左侧。
+    const dx = Math.sin(yaw) * f - Math.cos(yaw) * s
+    const dz = Math.cos(yaw) * f + Math.sin(yaw) * s
     const player = this.cameraRig.player
     player.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, player.x + dx * speed))
     player.z = Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, player.z + dz * speed))

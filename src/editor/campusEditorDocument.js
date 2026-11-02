@@ -2,6 +2,33 @@
  * 校园编辑器空间文档工具。
  * 所有坐标均为原始校园平面图像素，不是经纬度或米制坐标。
  */
+/**
+ * 根据当前空间要素计算编辑工作区边界。
+ * 保留原始 640×480 参考图范围，同时允许要素坐标超出参考图；
+ * padding 和 gridStep 仅影响画布工作区，不裁剪或重写要素几何。
+ */
+export function calculateWorkspaceBounds({ buildings = [], areas = [], roads = [], padding = 120, gridStep = 100 } = {}) {
+  const coordinates = []
+  const addPoint = (point) => {
+    if (Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]))) {
+      coordinates.push([Number(point[0]), Number(point[1])])
+    }
+  }
+  buildings.forEach((item) => (item.footprint || []).forEach(addPoint))
+  areas.forEach((item) => (item.footprint || item.polygon || []).forEach(addPoint))
+  roads.forEach((item) => (item.points || []).forEach(addPoint))
+  coordinates.push([0, 0], [640, 480])
+  const xs = coordinates.map(([x]) => x)
+  const ys = coordinates.map(([, y]) => y)
+  const step = Math.max(1, Number(gridStep) || 100)
+  const margin = Math.max(0, Number(padding) || 0)
+  const minX = Math.floor((Math.min(...xs) - margin) / step) * step
+  const minY = Math.floor((Math.min(...ys) - margin) / step) * step
+  const maxX = Math.ceil((Math.max(...xs) + margin) / step) * step
+  const maxY = Math.ceil((Math.max(...ys) + margin) / step) * step
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
+}
+
 export function rectToPolygon(rect) {
   const [left, top, right, bottom] = rect
   return [[left, top], [right, top], [right, bottom], [left, bottom]]

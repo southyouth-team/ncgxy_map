@@ -46,8 +46,8 @@ export class RecognitionService implements OnModuleInit, OnModuleDestroy {
     if (this.busy) return;
     this.busy = true;
     try {
-      const claimed = await this.db.query(`UPDATE campus_recognition_result SET status='processing',started_at=now() WHERE id=(SELECT id FROM campus_recognition_result WHERE status='queued' OR (status='processing' AND started_at < now() - interval '10 minutes') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,campus_id,map_id,asset_id`);
-      if (claimed.length) await this.processJob(claimed[0]);
+      const claimed = await this.db.query(`UPDATE campus_recognition_result SET status='processing',started_at=now() WHERE id=(SELECT id FROM campus_recognition_result WHERE status='queued' OR (status='processing' AND started_at < now() - interval '10 minutes') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id AS id,campus_id AS campus_id,map_id AS map_id,asset_id AS asset_id`);
+      if (claimed.length) {\n        const row = claimed[0];\n        const job = { id: String(row.id ?? row.ID ?? ''), campus_id: String(row.campus_id ?? row.CAMPUS_ID ?? ''), map_id: String(row.map_id ?? row.MAP_ID ?? ''), asset_id: String(row.asset_id ?? row.ASSET_ID ?? '') };\n        if (!job.id || !job.asset_id) throw new Error('领取识图任务失败：数据库未返回任务主键或底图资源 ID，返回字段=' + Object.keys(row).join(','));\n        await this.processJob(job);\n      }
     } catch (error) {
       this.logger.error('识图队列执行失败', error instanceof Error ? error.stack : String(error));
     } finally { this.busy = false; }
@@ -55,12 +55,12 @@ export class RecognitionService implements OnModuleInit, OnModuleDestroy {
 
   private async processJob(job: {id:string;campus_id:string;map_id:string;asset_id:string}) {
     try {
-      const assets = await this.db.query(`SELECT object_key,mime_type FROM campus_asset WHERE id=$1 AND campus_id=$2 AND map_id=$3 AND asset_type='base-map' AND storage_provider='local-filesystem'`, [job.asset_id,job.campus_id,job.map_id]);
-      if (!assets.length) throw new Error('底图文件不存在或存储方式暂不支持');
+      const assets = await this.db.query(`SELECT id,object_key,mime_type,storage_provider FROM campus_asset WHERE id=$1 AND campus_id=$2 AND map_id=$3 AND asset_type='base-map'`, [job.asset_id,job.campus_id,job.map_id]);
+      if (!assets.length) throw new Error('底图资源记录不存在：assetId=' + job.asset_id + ', campusId=' + job.campus_id + ', mapId=' + job.map_id);\n      if (assets[0].storage_provider !== 'local-filesystem') throw new Error('底图存储方式暂不支持：' + String(assets[0].storage_provider));\n      if (!assets[0].object_key) throw new Error('底图资源缺少 object_key');
       const absolutePath = resolve(this.storageDir, assets[0].object_key);
       const rel = relative(this.storageDir, absolutePath);
       if (!rel || rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)) throw new Error('底图资源路径无效');
-      const image = await readFile(absolutePath);
+      let image: Buffer;\n      try { image = await readFile(absolutePath); } catch { throw new Error('底图文件在服务器存储目录中不存在：' + absolutePath); }
       const mime = assets[0].mime_type;
       const model = this.config.get<string>('VISION_MODEL')!;
       const baseUrl = (this.config.get<string>('VISION_API_BASE_URL','https://api.openai.com/v1') || '').replace(/\/$/,'');

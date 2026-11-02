@@ -30,7 +30,7 @@ async function apiRequest(path, options = {}) {
 async function loadEditorDocument() {
   if (!props.campusId || !props.mapId) return
   try {
-    const saved = await apiRequest(`${mapApiPath()}/scene`)
+    const saved = await apiRequest(`${mapApiPath()}/scene/plan`)
     documentRevision.value = Number(saved.revision || 0)
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
@@ -60,7 +60,7 @@ async function saveEditorDocument() {
   persistenceMessage.value = ''
   try {
     const document = { ...buildDocument(), mapId: String(props.mapId), objects: [] }
-    const saved = await apiRequest(`${mapApiPath()}/scene`, {
+    const saved = await apiRequest(`${mapApiPath()}/scene/plan`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ revision: documentRevision.value, document }),

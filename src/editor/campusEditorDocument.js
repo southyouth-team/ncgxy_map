@@ -128,3 +128,49 @@ export function createModelAsset({
     status: 'pending-review',
   }
 }
+
+
+/**
+ * 将道路中心线转换为可渲染的面状轮廓。
+ * 先用 Catmull-Rom 采样平滑中心线，再按局部切线偏移两侧边界；
+ * miter 长度设上限，避免急弯处产生无限尖刺。
+ * 输出未闭合重复点的 Polygon 外环（渲染层负责闭合）。
+ */
+export function roadToPolygon(points, width, samplesPerSegment = 8) {
+  if (!Array.isArray(points) || points.length < 2 || !(Number(width) > 0)) return []
+  const sampled = []
+  if (points.length === 2) {
+    sampled.push(points[0].map(Number), points[1].map(Number))
+  } else {
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[Math.max(0, i - 1)]
+      const p1 = points[i]
+      const p2 = points[i + 1]
+      const p3 = points[Math.min(points.length - 1, i + 2)]
+      for (let step = 0; step < samplesPerSegment; step++) {
+        const t = step / samplesPerSegment
+        const t2 = t * t, t3 = t2 * t
+        const coordinate = (axis) => 0.5 * (
+          2 * p1[axis] + (-p0[axis] + p2[axis]) * t +
+          (2*p0[axis] - 5*p1[axis] + 4*p2[axis] - p3[axis]) * t2 +
+          (-p0[axis] + 3*p1[axis] - 3*p2[axis] + p3[axis]) * t3
+        )
+        sampled.push([coordinate(0), coordinate(1)])
+      }
+    }
+    sampled.push(points[points.length - 1].map(Number))
+  }
+  const half = Number(width) / 2
+  const left = [], right = []
+  for (let i = 0; i < sampled.length; i++) {
+    const previous = sampled[Math.max(0, i - 1)]
+    const next = sampled[Math.min(sampled.length - 1, i + 1)]
+    let dx = next[0] - previous[0], dy = next[1] - previous[1]
+    const length = Math.hypot(dx, dy) || 1
+    dx /= length; dy /= length
+    const nx = -dy, ny = dx
+    left.push([sampled[i][0] + nx * half, sampled[i][1] + ny * half])
+    right.push([sampled[i][0] - nx * half, sampled[i][1] - ny * half])
+  }
+  return [...left, ...right.reverse()]
+}

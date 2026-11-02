@@ -118,7 +118,7 @@ function openEditor() {
 
 function switchEditorView(mode, document) {
   editorViewMode.value = mode
-  if (mode === '3d') { activeMode.value = 'overview'; engine?.previewRpgMap(document) }
+  if (mode === '3d') { activeMode.value = 'overview'; engine?.previewCampusPlan(document) }
   else engine?.clearRpgPreview()
 }
 
@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
     <div ref="viewport" class="scene-viewport" v-show="!showEditor || editorViewMode === '3d'"></div>
-    <CampusPlanEditor v-if="showEditor" @close="closeEditor" />
+    <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 
     <template v-if="!showEditor || editorViewMode === '3d'">
     <header class="topbar">

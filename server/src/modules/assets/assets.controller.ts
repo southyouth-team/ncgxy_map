@@ -9,12 +9,13 @@ import { createReadStream } from 'node:fs';
 import { DevIdentityGuard } from '../../common/dev-identity.guard';
 import { ParseBigIntIdPipe } from '../../common/parse-bigint-id.pipe';
 import { AssetsService, UploadedAsset } from './assets.service';
+import { RecognitionService } from './recognition.service';
 
 @ApiTags('assets')
 @Controller('campuses/:campusId/maps/:mapId/assets')
 @UseGuards(DevIdentityGuard)
 export class AssetsController {
-  constructor(private readonly service: AssetsService) {}
+  constructor(private readonly service: AssetsService, private readonly recognition: RecognitionService) {}
 
   @Get()
   @ApiOperation({ summary: '获取地图底图资源列表' })
@@ -40,13 +41,19 @@ export class AssetsController {
     return this.service.uploadBaseMap(req.user.id, campusId, mapId, file);
   }
 
+  @Post(':assetId/recognize')
+  @ApiOperation({ summary: '调用视觉模型识别校园底图并返回待复核矢量要素' })
+  recognize(@Req() req: Request & { user: { id: string } }, @Param('campusId', ParseBigIntIdPipe) campusId: string, @Param('mapId', ParseBigIntIdPipe) mapId: string, @Param('assetId') assetId: string) {
+    return this.recognition.recognize(req.user.id, campusId, mapId, assetId);
+  }
+
   @Get(':assetId/content')
   @ApiOperation({ summary: '读取已上传的校园底图文件' })
   async getContent(
     @Req() req: Request & { user: { id: string } },
     @Param('campusId', ParseBigIntIdPipe) campusId: string,
     @Param('mapId', ParseBigIntIdPipe) mapId: string,
-    @Param('assetId', ParseBigIntIdPipe) assetId: string,
+    @Param('assetId') assetId: string,
     @Res({ passthrough: true }) response: Response,
   ) {
     const asset = await this.service.getBaseMap(req.user.id, campusId, mapId, assetId);

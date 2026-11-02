@@ -12,6 +12,12 @@ export function validateIndoorFloor(floor) {
   if (!Number.isFinite(floor.wallHeight) || floor.wallHeight < 2) errors.push('墙体高度必须大于等于 2')
   if (!Array.isArray(floor.rooms)) errors.push('rooms 必须是数组')
   if (floor.doors !== undefined && !Array.isArray(floor.doors)) errors.push('doors 必须是数组')
+  const spawn = floor.spawnPoint
+  if (spawn !== undefined && (!spawn || !Number.isFinite(spawn.x) || !Number.isFinite(spawn.y) || !Number.isFinite(spawn.z) ||
+    Math.abs(spawn.x) > floor.width / 2 || Math.abs(spawn.z) > floor.depth / 2 || spawn.y < 0.5 || spawn.y > floor.wallHeight)) errors.push('spawnPoint 必须位于楼层范围内且高度有效')
+  const stair = floor.stairPoint
+  if (stair !== undefined && (!stair || !Number.isFinite(stair.x) || !Number.isFinite(stair.z) ||
+    Math.abs(stair.x) > floor.width / 2 - 1 || Math.abs(stair.z) > floor.depth / 2 - 2.2)) errors.push('stairPoint 必须位于楼层范围内并预留楼梯空间')
   for (const door of Array.isArray(floor.doors) ? floor.doors : []) {
     if (!['north', 'south', 'east', 'west'].includes(door.wall)) errors.push('门洞 wall 必须是 north/south/east/west')
     const wallLength = ['north', 'south'].includes(door.wall) ? floor.width : floor.depth

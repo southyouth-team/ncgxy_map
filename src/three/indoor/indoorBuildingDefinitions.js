@@ -13,7 +13,7 @@ export const indoorBuildingDefinitions = {
         rooms: [
           { id: 'classroom-201', name: '教室 201', x: -5.4, z: -1.2, width: 7.2, depth: 6.2, doorWall: 'south', doorWidth: 1.5 },
           { id: 'classroom-202', name: '教室 202', x: 5.4, z: -1.2, width: 7.2, depth: 6.2, doorWall: 'south', doorWidth: 1.5 },
-        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 } },
+        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 }, stairPoint: { x: 10.5, z: 0 } },
     ],
   },
 }

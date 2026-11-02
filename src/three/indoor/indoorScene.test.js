@@ -47,6 +47,11 @@ describe('indoor floor contract', () => {
       .toContain('房间 r2 超出楼层边界')
   })
 
+  it('rejects spawn and stair interaction points outside the floor bounds', () => {
+    expect(validateIndoorFloor({ ...sample, spawnPoint: { x: 20, y: 1.7, z: 0 } })).toContain('spawnPoint 必须位于楼层范围内且高度有效')
+    expect(validateIndoorFloor({ ...sample, stairPoint: { x: 20, z: 0 } })).toContain('stairPoint 必须位于楼层范围内并预留楼梯空间')
+  })
+
   it('requires integer floor levels', () => {
     expect(validateIndoorFloor({ ...sample, level: 1.5 })).toContain('楼层 level 必须是整数')
   })
@@ -57,6 +62,7 @@ describe('indoor building definition', () => {
     const building = indoorBuildingDefinitions.teachingBlockPrototype
     expect(validateIndoorBuilding(building)).toEqual([])
     expect(building.floors.map(floor => floor.level)).toEqual([1, 2])
+    expect(building.floors.every(floor => floor.stairPoint)).toBe(true)
     for (const floor of building.floors) expect(validateIndoorFloor(floor)).toEqual([])
   })
 

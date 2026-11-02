@@ -39,6 +39,17 @@ const modes = [
   { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
 ]
 
+function adjacentIndoorFloor(direction) {
+  const levels = [...indoorFloors.value].sort((a, b) => a - b)
+  const index = levels.indexOf(indoorFloor.value)
+  return levels[index + direction]
+}
+
+function switchIndoorFloor(direction) {
+  const target = adjacentIndoorFloor(direction)
+  if (target !== undefined) engine?.switchIndoorFloor(target)
+}
+
 async function switchMode(mode) {
   activeMode.value = mode
   engine?.setMode(mode)
@@ -223,10 +234,10 @@ onBeforeUnmount(() => {
         <span class="mode-label">室内原型</span>
         <span class="mode-hint">体验楼层空间</span>
       </button>
-      <button v-if="indoorPrototypeActive && indoorFloors.some(level => level < indoorFloor)" class="mode-button" @click="engine?.switchIndoorFloor(indoorFloor - 1)">
+      <button v-if="indoorPrototypeActive && adjacentIndoorFloor(-1) !== undefined" class="mode-button" @click="switchIndoorFloor(-1)">
         <span class="mode-label">上一层</span><span class="mode-hint">{{ indoorBuildingName }} · 当前 {{ indoorFloor }}F</span>
       </button>
-      <button v-if="indoorPrototypeActive && indoorFloors.some(level => level > indoorFloor)" class="mode-button" @click="engine?.switchIndoorFloor(indoorFloor + 1)">
+      <button v-if="indoorPrototypeActive && adjacentIndoorFloor(1) !== undefined" class="mode-button" @click="switchIndoorFloor(1)">
         <span class="mode-label">下一层</span><span class="mode-hint">{{ indoorBuildingName }} · 当前 {{ indoorFloor }}F</span>
       </button>
       <button v-if="indoorPrototypeActive" class="mode-button active" @click="engine?.exitIndoorPrototype()">

@@ -17,6 +17,10 @@ export function createCampusEngine(container, callbacks = {}) {
   let resizeObserver
   let previousTime = 0
   let initialized = false
+  let selectedFeatureObject = null
+  const raycaster = new THREE.Raycaster()
+  const pointerNdc = new THREE.Vector2()
+  let pointerStart = null
 
   async function init() {
     if (!container) throw new Error('未找到三维场景容器')
@@ -69,6 +73,8 @@ export function createCampusEngine(container, callbacks = {}) {
     cameraRig = new CameraRig(THREE, renderer.domElement)
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds)
     input.attach()
+    renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
+    renderer.domElement.addEventListener('pointerup', onScenePointerUp)
 
     const hemi = new THREE.HemisphereLight(0xe8f0e8, 0x64735e, 2.0)
     scene.add(hemi)
@@ -92,6 +98,62 @@ export function createCampusEngine(container, callbacks = {}) {
     animate(0)
   }
 
+  function onScenePointerDown(event) {
+    if (event.button !== 0 || cameraRig?.mode !== 'overview') { pointerStart = null; return }
+    pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
+  }
+
+  function onScenePointerUp(event) {
+    if (!pointerStart || pointerStart.pointerId !== event.pointerId) return
+    const moved = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y)
+    pointerStart = null
+    if (moved > 5 || cameraRig?.mode !== 'overview') return
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointerNdc, cameraRig.camera)
+    const hits = raycaster.intersectObjects(campus.children, true)
+    let target = hits[0]?.object || null
+    while (target && target !== campus && !target.userData?.featureId) target = target.parent
+    if (!target || target === campus || !target.userData?.featureId) return clearSelection()
+    selectObject(target.userData.featureId)
+  }
+
+  function restoreSelectionHighlight() {
+    if (!selectedFeatureObject) return
+    selectedFeatureObject.traverse((object) => {
+      const originals = object.userData?.selectionOriginalMaterials
+      if (!originals || !object.material) return
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      materials.forEach((material, index) => {
+        const original = originals[index]
+        if (original && material.emissive) { material.emissive.setHex(original.color); material.emissiveIntensity = original.intensity }
+      })
+      delete object.userData.selectionOriginalMaterials
+    })
+    selectedFeatureObject = null
+  }
+
+  function selectObject(featureId) {
+    const target = campus?.children?.find((item) => String(item.userData?.featureId) === String(featureId))
+    if (!target) return clearSelection()
+    if (selectedFeatureObject === target) return
+    restoreSelectionHighlight()
+    selectedFeatureObject = target
+    target.traverse((object) => {
+      if (!object.isMesh || !object.material) return
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      object.userData.selectionOriginalMaterials = materials.map((material) => ({ color: material.emissive?.getHex?.() ?? 0, intensity: material.emissiveIntensity ?? 1 }))
+      materials.forEach((material) => { if (material.emissive) { material.emissive.set('#f0b84d'); material.emissiveIntensity = 0.65 } })
+    })
+    callbacks.onObjectSelected?.({ featureId: String(target.userData.featureId), sceneObjectId: target.userData.sceneObjectId || null, objectType: target.userData.objectType || null, name: target.name })
+  }
+
+  function clearSelection() {
+    if (!selectedFeatureObject) return
+    restoreSelectionHighlight()
+    callbacks.onObjectSelected?.(null)
+  }
   function onKeyDown(event) {
     if (event.key === 'Escape') input?.exitPointerLock()
   }
@@ -143,6 +205,9 @@ export function createCampusEngine(container, callbacks = {}) {
     cancelAnimationFrame(frameId)
     resizeObserver?.disconnect()
     window.removeEventListener('keydown', onKeyDown)
+    renderer?.domElement?.removeEventListener('pointerdown', onScenePointerDown)
+    renderer?.domElement?.removeEventListener('pointerup', onScenePointerUp)
+    clearSelection()
     input?.dispose()
     cameraRig?.dispose()
     scene?.traverse((object) => {
@@ -155,5 +220,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, dispose, get initialized() { return initialized } }
 }

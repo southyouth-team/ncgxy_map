@@ -182,8 +182,8 @@ export class ScenesService {
       throw new BadRequestException('底图校准参数无效');
     }
     const referenceImage = document.referenceImage as Record<string, unknown> | null;
-    if (referenceImage && (typeof referenceImage.assetId !== 'string' || !/^\\d+$/.test(referenceImage.assetId))) {
-      throw new BadRequestException('持久化底图必须引用当前地图资源 ID');
+    if (referenceImage && (typeof referenceImage.assetId !== 'string' || referenceImage.assetId.trim().length === 0 || referenceImage.assetId.length > 128)) {
+      throw new BadRequestException('持久化底图必须引用有效的地图资源 ID');
     }
   }
 

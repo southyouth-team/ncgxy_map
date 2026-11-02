@@ -74,52 +74,66 @@ export function createIndoorFloor(THREE, floor) {
   addBox(THREE, group, 'indoor-floor-slab', 0, -0.18, 0, floor.width, 0.36, floor.depth, floorMaterial)
 
   const doors = Array.isArray(floor.doors) ? floor.doors : []
-  const wallSegments = (axis, fixed, length, name) => {
-    const openings = doors.filter(door => door.wall === name).map(door => ({
-      start: Math.max(-length / 2, Number(door.offset || 0) - Math.max(0.6, Number(door.width || 1.6)) / 2),
-      end: Math.min(length / 2, Number(door.offset || 0) + Math.max(0.6, Number(door.width || 1.6)) / 2),
-    })).sort((a, b) => a.start - b.start)
-    let cursor = -length / 2
+  const collision = []
+
+  // 统一按墙段生成几何与碰撞体，门洞不会再出现“看得见入口但走不过去”的问题。
+  const addWallSegments = ({ axis, fixed, length, wallName, centerX, centerZ, wallHeight = h, thickness = t, openings = [] }) => {
+    const normalized = openings
+      .map((opening) => {
+        const width = Math.max(0.7, Number(opening.width) || 1.6)
+        const offset = Number(opening.offset) || 0
+        return {
+          start: Math.max(-length / 2, offset - width / 2),
+          end: Math.min(length / 2, offset + width / 2),
+        }
+      })
+      .filter((opening) => opening.end > opening.start)
+      .sort((a, b) => a.start - b.start)
+    const merged = []
+    for (const opening of normalized) {
+      const previous = merged[merged.length - 1]
+      if (previous && opening.start <= previous.end) previous.end = Math.max(previous.end, opening.end)
+      else merged.push({ ...opening })
+    }
     const segments = []
-    for (const opening of openings) {
+    let cursor = -length / 2
+    for (const opening of merged) {
       if (opening.start > cursor) segments.push([cursor, opening.start])
       cursor = Math.max(cursor, opening.end)
     }
     if (cursor < length / 2) segments.push([cursor, length / 2])
-    for (const [start, end] of segments) {
-      const span = end - start
-      if (span <= 0) continue
-      const x = axis === 'x' ? (start + end) / 2 : fixed
-      const z = axis === 'z' ? (start + end) / 2 : fixed
-      addBox(THREE, group, `indoor-wall-${name}`, x, 0, z,
-        axis === 'x' ? span : t, h, axis === 'z' ? span : t, wall)
+    for (const [from, to] of segments) {
+      const span = to - from
+      if (span <= 0.05) continue
+      const x = axis === 'x' ? centerX + (from + to) / 2 : centerX
+      const z = axis === 'z' ? centerZ + (from + to) / 2 : centerZ
+      addBox(THREE, group, `indoor-wall-${wallName}`, x, 0, z,
+        axis === 'x' ? span : thickness, wallHeight, axis === 'z' ? span : thickness, wall)
+      collision.push(axis === 'x'
+        ? { minX: x - span / 2, maxX: x + span / 2, minZ: z - thickness / 2, maxZ: z + thickness / 2 }
+        : { minX: x - thickness / 2, maxX: x + thickness / 2, minZ: z - span / 2, maxZ: z + span / 2 })
     }
   }
-  wallSegments('x', -halfD, floor.width, 'north')
-  wallSegments('x', halfD, floor.width, 'south')
-  wallSegments('z', -halfW, floor.depth, 'west')
-  wallSegments('z', halfW, floor.depth, 'east')
 
-  const collision = [
-    { minX: -halfW, maxX: halfW, minZ: -halfD - t / 2, maxZ: -halfD + t / 2 },
-    { minX: -halfW, maxX: halfW, minZ: halfD - t / 2, maxZ: halfD + t / 2 },
-    { minX: -halfW - t / 2, maxX: -halfW + t / 2, minZ: -halfD, maxZ: halfD },
-    { minX: halfW - t / 2, maxX: halfW + t / 2, minZ: -halfD, maxZ: halfD },
-  ]
+  addWallSegments({ axis: 'x', centerX: 0, centerZ: -halfD, length: floor.width, wallName: 'north', openings: doors.filter(door => door.wall === 'north') })
+  addWallSegments({ axis: 'x', centerX: 0, centerZ: halfD, length: floor.width, wallName: 'south', openings: doors.filter(door => door.wall === 'south') })
+  addWallSegments({ axis: 'z', centerX: -halfW, centerZ: 0, length: floor.depth, wallName: 'west', openings: doors.filter(door => door.wall === 'west') })
+  addWallSegments({ axis: 'z', centerX: halfW, centerZ: 0, length: floor.depth, wallName: 'east', openings: doors.filter(door => door.wall === 'east') })
+
   for (const room of floor.rooms) {
     const x = room.x, z = room.z, w = room.width, d = room.depth
-    addBox(THREE, group, `room-partition-${room.id}-north`, x, 0, z - d / 2, w, h * 0.82, t, wall)
-    addBox(THREE, group, `room-partition-${room.id}-south`, x, 0, z + d / 2, w, h * 0.82, t, wall)
-    addBox(THREE, group, `room-partition-${room.id}-west`, x - w / 2, 0, z, t, h * 0.82, d, wall)
-    addBox(THREE, group, `room-partition-${room.id}-east`, x + w / 2, 0, z, t, h * 0.82, d, wall)
+    const roomWallHeight = h * 0.82
+    const roomThickness = t
+    const roomDoorWall = room.doorWall || 'south'
+    const roomDoor = room.doorWidth > 0
+      ? [{ offset: Number(room.doorOffset) || 0, width: room.doorWidth }]
+      : []
+    addWallSegments({ axis: 'x', centerX: x, centerZ: z - d / 2, length: w, wallName: `${room.id}-north`, wallHeight: roomWallHeight, thickness: roomThickness })
+    addWallSegments({ axis: 'x', centerX: x, centerZ: z + d / 2, length: w, wallName: `${room.id}-south`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'south' ? roomDoor : [] })
+    addWallSegments({ axis: 'z', centerX: x - w / 2, centerZ: z, length: d, wallName: `${room.id}-west`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'west' ? roomDoor : [] })
+    addWallSegments({ axis: 'z', centerX: x + w / 2, centerZ: z, length: d, wallName: `${room.id}-east`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'east' ? roomDoor : [] })
     addBox(THREE, group, `room-floor-${room.id}`, x, 0.01, z, w - t, 0.04, d - t, trim)
     addLabel(THREE, group, room.name, x, z)
-    collision.push(
-      { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2 - t / 2, maxZ: z - d / 2 + t / 2 },
-      { minX: x - w / 2, maxX: x + w / 2, minZ: z + d / 2 - t / 2, maxZ: z + d / 2 + t / 2 },
-      { minX: x - w / 2 - t / 2, maxX: x - w / 2 + t / 2, minZ: z - d / 2, maxZ: z + d / 2 },
-      { minX: x + w / 2 - t / 2, maxX: x + w / 2 + t / 2, minZ: z - d / 2, maxZ: z + d / 2 },
-    )
   }
   group.userData.collisionObstacles = collision
   group.userData.spawnPoint = floor.spawnPoint || { x: 0, y: 1.7, z: 0 }

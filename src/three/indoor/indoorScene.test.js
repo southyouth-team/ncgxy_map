@@ -3,7 +3,7 @@ import { validateIndoorFloor } from './indoorScene.js'
 
 const sample = {
   level: 1, width: 24, depth: 18, wallHeight: 3.4,
-  rooms: [{ id: 'classroom-101', name: '教室 101', x: -5, z: 0, width: 8, depth: 6 }],
+  rooms: [{ id: 'classroom-101', name: '教室 101', x: -5, z: 0, width: 8, depth: 6, doorWall: 'south', doorWidth: 1.4 }],
   doors: [{ wall: 'south', offset: 0, width: 2 }],
 }
 

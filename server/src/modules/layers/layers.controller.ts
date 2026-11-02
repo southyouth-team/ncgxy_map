@@ -14,7 +14,7 @@ export class LayersController {
   @Get() @ApiOperation({summary:'获取地图图层'})
   findAll(@Req() req:Request&{user:{id:string}},@Param('campusId',ParseBigIntIdPipe)c:string,@Param('mapId',ParseBigIntIdPipe)m:string) { return this.service.findAll(req.user.id,c,m); }
   @Put(':layerId') @ApiOperation({summary:'更新地图图层'})
-  update(@Req() req:Request&{user:{id:string}},@Param('campusId',ParseIntPipe)c:number,@Param('mapId',ParseIntPipe)m:number,@Param('layerId',ParseBigIntIdPipe)l:string,@Body()dto:UpdateLayerDto) { return this.service.update(req.user.id,String(c),String(m),l,dto); }
+  update(@Req() req:Request&{user:{id:string}},@Param('campusId',ParseBigIntIdPipe)c:string,@Param('mapId',ParseBigIntIdPipe)m:string,@Param('layerId',ParseBigIntIdPipe)l:string,@Body()dto:UpdateLayerDto) { return this.service.update(req.user.id,c,m,l,dto); }
   @Delete(':layerId') @ApiOperation({summary:'删除地图图层'})
-  remove(@Req() req:Request&{user:{id:string}},@Param('campusId',ParseIntPipe)c:number,@Param('mapId',ParseIntPipe)m:number,@Param('layerId',ParseBigIntIdPipe)l:string) { return this.service.remove(req.user.id,String(c),String(m),l); }
+  remove(@Req() req:Request&{user:{id:string}},@Param('campusId',ParseBigIntIdPipe)c:string,@Param('mapId',ParseBigIntIdPipe)m:string,@Param('layerId',ParseBigIntIdPipe)l:string) { return this.service.remove(req.user.id,c,m,l); }
 }

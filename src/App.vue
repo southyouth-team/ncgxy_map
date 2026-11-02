@@ -3,6 +3,9 @@ import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
 
 const viewport = ref(null)
+const appShell = ref(null)
+const isMobile = ref(false)
+const isPortrait = ref(false)
 const activeMode = ref('overview')
 const loading = ref(true)
 const errorMessage = ref('')
@@ -16,9 +19,24 @@ const modes = [
   { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
 ]
 
-function switchMode(mode) {
+async function switchMode(mode) {
   activeMode.value = mode
   engine?.setMode(mode)
+  if (isMobile.value && mode !== 'overview') {
+    try {
+      if (!document.fullscreenElement && appShell.value?.requestFullscreen) await appShell.value.requestFullscreen()
+    } catch { /* 全屏被拒绝时继续普通网页模式 */ }
+    try { await screen.orientation?.lock?.('landscape') } catch { /* 部分移动浏览器不支持网页锁定方向 */ }
+  } else if (mode === 'overview') {
+    try { screen.orientation?.unlock?.() } catch { /* 忽略不支持的环境 */ }
+    if (document.fullscreenElement) { try { await document.exitFullscreen() } catch { /* 忽略 */ } }
+  }
+}
+
+function setMoveKey(key, pressed) { engine?.setVirtualKey(key, pressed) }
+function updateViewportState() {
+  isMobile.value = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 760
+  isPortrait.value = window.innerHeight > window.innerWidth
 }
 
 function focusCampus() {
@@ -31,6 +49,9 @@ function toggleHelp() {
 }
 
 onMounted(async () => {
+  updateViewportState()
+  window.addEventListener('resize', updateViewportState)
+  window.addEventListener('orientationchange', updateViewportState)
   try {
     engine = createCampusEngine(viewport.value, {
       onReady: () => {
@@ -50,12 +71,14 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateViewportState)
+  window.removeEventListener('orientationchange', updateViewportState)
   engine?.dispose()
 })
 </script>
 
 <template>
-  <main :class="['app-shell', { 'is-overview': activeMode === 'overview' }]">
+  <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
     <div ref="viewport" class="scene-viewport"></div>
 
     <header class="topbar">
@@ -88,6 +111,23 @@ onBeforeUnmount(() => {
         <span class="mode-hint">{{ mode.hint }}</span>
       </button>
     </nav>
+
+    <div v-if="isMobile && activeMode !== 'overview'" class="mobile-controls" aria-label="触屏移动控制">
+      <div class="virtual-pad">
+        <button class="virtual-key key-up" aria-label="向前移动" @pointerdown.prevent="setMoveKey('w', true)" @pointerup="setMoveKey('w', false)" @pointercancel="setMoveKey('w', false)" @pointerleave="setMoveKey('w', false)">▲</button>
+        <button class="virtual-key key-left" aria-label="向左移动" @pointerdown.prevent="setMoveKey('a', true)" @pointerup="setMoveKey('a', false)" @pointercancel="setMoveKey('a', false)" @pointerleave="setMoveKey('a', false)">◀</button>
+        <button class="virtual-key key-down" aria-label="向后移动" @pointerdown.prevent="setMoveKey('s', true)" @pointerup="setMoveKey('s', false)" @pointercancel="setMoveKey('s', false)" @pointerleave="setMoveKey('s', false)">▼</button>
+        <button class="virtual-key key-right" aria-label="向右移动" @pointerdown.prevent="setMoveKey('d', true)" @pointerup="setMoveKey('d', false)" @pointercancel="setMoveKey('d', false)" @pointerleave="setMoveKey('d', false)">▶</button>
+      </div>
+      <button class="virtual-key sprint-key" aria-label="加速移动" @pointerdown.prevent="setMoveKey('shift', true)" @pointerup="setMoveKey('shift', false)" @pointercancel="setMoveKey('shift', false)" @pointerleave="setMoveKey('shift', false)">加速</button>
+      <div class="look-hint">滑动右侧区域转动视角</div>
+    </div>
+
+    <div v-if="isMobile && activeMode !== 'overview' && isPortrait" class="rotate-device-hint">
+      <div class="rotate-icon">↻</div>
+      <strong>请将手机横向放置</strong>
+      <span>横屏可获得完整校园视野与操作空间</span>
+    </div>
 
     <aside class="control-card">
       <div class="control-heading">

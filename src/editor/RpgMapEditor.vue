@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { createRpgMapDocument, TILE_PALETTE, RPG_OBJECT_PALETTE, paintTile } from './rpgMapDocument.js'
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'switch-view'])
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
 const map = ref(createRpgMapDocument())
@@ -163,7 +163,8 @@ onMounted(loadMapDocument)
         <span class="rpg-status">{{ status }}</span>
         <button :disabled="saving || loading" @click="saveMapDocument">{{ saving ? '保存中…' : '保存地图' }}</button>
         <button @click="saveDraft">导出 JSON</button>
-        <button class="rpg-close" @click="emit('close')">切换三维视图</button>
+        <button @click="emit('switch-view', '3d')">三维预览</button>
+        <button class="rpg-close" @click="emit('close')">退出编辑模式</button>
       </div>
     </header>
     <div class="rpg-workspace">

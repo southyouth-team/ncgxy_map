@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
+import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
@@ -32,6 +33,9 @@ export function createCampusEngine(container, callbacks = {}) {
 
     const campus = createCampusScene(THREE)
     scene.add(campus)
+    loadCampusBuildingModels(scene)
+      .then((result) => callbacks.onAssetsLoaded?.(result))
+      .catch((error) => callbacks.onAssetError?.(error))
     cameraRig = new CameraRig(THREE, renderer.domElement)
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds)
     input.attach()

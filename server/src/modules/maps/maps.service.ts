@@ -24,11 +24,13 @@ export class MapsService {
   }
   async updateConfig(userId:string,campusId:string,mapId:string,dto:UpdateMapConfigDto) {
     await this.requireRole(userId,campusId,['owner','admin','editor']);
-    const rows=await this.db.query(
+    const result=await this.db.query(
       `UPDATE campus_map SET coordinate_config=$1::jsonb,revision=revision+1,updated_at=now()
        WHERE id=$2 AND campus_id=$3 AND revision=$4
        RETURNING id,campus_id,coordinate_config,revision,updated_at`,
       [JSON.stringify(dto.coordinateConfig??{}),mapId,campusId,dto.revision]);
+    // 兼容 PostgreSQL 驱动返回 rows 或 [rows, rowCount] 的两种结果形态。
+    const rows=Array.isArray(result?.[0]) ? result[0] : result;
     if(!rows.length) {
       const exists=await this.db.query('SELECT id FROM campus_map WHERE id=$1 AND campus_id=$2',[mapId,campusId]);
       if(!exists.length) throw new NotFoundException('地图项目不存在');

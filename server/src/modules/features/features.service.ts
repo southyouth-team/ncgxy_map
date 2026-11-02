@@ -50,7 +50,7 @@ export class FeaturesService {
     await this.requireMap(campusId,mapId);
     if (dto.geometry) await this.validateGeometry(dto.geometry);
 
-    const rows = await this.dataSource.query(
+    const result = await this.dataSource.query(
       `UPDATE campus_feature SET
          name=CASE WHEN $5::boolean THEN $6 ELSE name END,
          geometry=CASE WHEN $7::boolean THEN ST_SetSRID(ST_GeomFromGeoJSON($8),0) ELSE geometry END,
@@ -63,6 +63,8 @@ export class FeaturesService {
        dto.geometry ? JSON.stringify(dto.geometry) : null,dto.properties !== undefined,
        dto.properties !== undefined ? JSON.stringify(dto.properties) : null,dto.revision],
     );
+    // TypeORM QueryRunner 在不同驱动/返回模式下可能返回 rows 或 [rows, affected]。
+    const rows = Array.isArray(result?.[0]) ? result[0] : result;
     if (rows.length) return rows[0];
 
     const exists = await this.dataSource.query(

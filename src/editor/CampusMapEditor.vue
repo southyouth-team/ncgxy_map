@@ -256,7 +256,9 @@ async function refreshData() {
 }
 
 async function loadBaseMapAsset(asset) {
-  const response = await fetch(`${API}${asset.contentPath}`, { headers: { 'X-Dev-User-Id': USER_ID } })
+  const response = await fetch(new URL(asset.contentPath, API).toString(), {
+    headers: { 'X-Dev-User-Id': USER_ID },
+  })
   if (!response.ok) throw new Error('底图文件读取失败：HTTP ' + response.status)
   const blob = await response.blob()
   if (backgroundUrl.value) URL.revokeObjectURL(backgroundUrl.value)

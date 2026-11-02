@@ -79,17 +79,19 @@ function movePointer(event) {
   }
 }
 function endPointer() { drag.value = null }
-function addBuilding() {
+function addBuilding(event) {
   snapshot()
+  const position = event?.clientX != null ? point(event) : { x: 305, y: 232 }
   const id = `placed-building-${Date.now()}`
-  buildings.value.push({ id, label: newBuilding.value, rect: [280, 220, 330, 245], floors: null, confidence: 'unverified' })
+  buildings.value.push({ id, label: newBuilding.value, rect: [position.x - 25, position.y - 12, position.x + 25, position.y + 12], floors: null, confidence: 'unverified' })
   selected.value = { type: 'building', id }
   tool.value = 'select'
 }
-function addRoad() {
+function addRoad(event) {
   snapshot()
+  const position = event?.clientX != null ? point(event) : { x: 300, y: 265 }
   const id = `road-custom-${Date.now()}`
-  roads.value.push({ id, confidence: 'unverified', points: [[250,260],[300,270],[350,260]], width: roadWidth.value })
+  roads.value.push({ id, confidence: 'unverified', points: [[position.x - 45, position.y],[position.x, position.y + 8],[position.x + 45, position.y]], width: roadWidth.value })
   selected.value = { type: 'road', id }
   tool.value = 'select'
 }
@@ -146,7 +148,7 @@ function exportDocument() {
       <main class="map-stage">
         <div class="stage-label"><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>示意坐标 · 非米制</em></div>
         <div class="map-scroll">
-          <svg class="campus-map" :style="{ transform: `scale(${scale})` }" viewBox="0 0 640 480" @pointermove="movePointer" @pointerup="endPointer" @pointercancel="endPointer" @click="tool==='building' ? addBuilding() : tool==='road' ? addRoad() : null">
+          <svg class="campus-map" :style="{ transform: `scale(${scale})` }" viewBox="0 0 640 480" @pointermove="movePointer" @pointerup="endPointer" @pointercancel="endPointer" @click="tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="4" cy="5" r="1" fill="#66865b" opacity=".3"/><circle cx="18" cy="17" r="1" fill="#66865b" opacity=".3"/></pattern>

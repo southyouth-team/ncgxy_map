@@ -11,5 +11,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/database/schema.sql ./src/database/schema.sql
 EXPOSE 3001
 CMD ["node", "dist/main"]

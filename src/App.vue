@@ -327,10 +327,15 @@ onBeforeUnmount(() => {
       <span>INITIALIZING SCENE</span>
     </div>
     <aside v-if="selectedObject && !showEditor" style="position:absolute;right:24px;top:110px;z-index:12;min-width:190px;padding:14px 16px;background:rgba(255,255,255,.94);border:1px solid #d7ded7;border-radius:6px;color:#34443b;box-shadow:0 8px 24px rgba(30,50,40,.12)">
-      <div style="font-size:10px;letter-spacing:1px;color:#7a887e">已选中 GIS 对象</div>
+      <div style="font-size:10px;letter-spacing:1px;color:#7a887e">{{ selectedObject.interaction ? '已选中室内交互对象' : '已选中 GIS 对象' }}</div>
       <strong style="display:block;margin-top:8px;font-size:13px">{{ selectedObject.name }}</strong>
       <div style="margin-top:7px;font-size:10px;color:#6d7b71">类型：{{ selectedObject.objectType || '未分类' }}</div>
-      <div style="margin-top:4px;font-size:10px;color:#6d7b71">Feature ID：{{ selectedObject.featureId }}</div>
+      <template v-if="selectedObject.interaction">
+        <div style="margin-top:7px;font-size:10px;color:#6d7b71">所属房间：{{ selectedObject.interaction.roomName }}</div>
+        <div style="margin-top:4px;font-size:10px;color:#6d7b71">对象 ID：{{ selectedObject.interaction.id }}</div>
+        <p style="margin:9px 0 0;font-size:11px;line-height:1.6;color:#526257">{{ selectedObject.interaction.description }}</p>
+      </template>
+      <div v-else style="margin-top:4px;font-size:10px;color:#6d7b71">Feature ID：{{ selectedObject.featureId }}</div>
       <template v-if="selectedSceneObject?.type === 'building'">
         <label style="display:block;margin-top:12px;font-size:10px;color:#6d7b71">建筑楼层</label>
         <input v-model.number="selectedSceneObject.properties.floors" type="number" min="1" max="200" step="1" @change="engine?.updateSceneObject(selectedSceneObject)" style="width:100%;margin-top:5px;padding:6px;border:1px solid #d7ded7;border-radius:4px">
@@ -339,7 +344,7 @@ onBeforeUnmount(() => {
         <button :disabled="sceneSaving || sceneSource !== 'postgis'" style="width:100%;margin-top:10px;padding:7px 9px;border:1px solid #315f49;background:#315f49;color:white;border-radius:4px;font-size:10px;cursor:pointer" @click="saveSceneProperties">{{ sceneSaving ? '保存中…' : '保存三维属性' }}</button>
         <div v-if="sceneSaveMessage" style="margin-top:7px;font-size:10px;color:#9a6037">{{ sceneSaveMessage }}</div>
       </template>
-      <div v-else style="margin-top:9px;font-size:10px;color:#7a887e">该类型暂不支持三维属性编辑</div>
+      <div v-else-if="!selectedObject.interaction" style="margin-top:9px;font-size:10px;color:#7a887e">该类型暂不支持三维属性编辑</div>
       <button style="margin-top:10px;padding:5px 9px;border:1px solid #d7ded7;background:#fff;border-radius:4px;font-size:10px;cursor:pointer" @click="engine?.clearSelection()">取消选择</button>
     </aside>
     <div v-if="errorMessage" class="error-toast">{{ errorMessage }}</div>

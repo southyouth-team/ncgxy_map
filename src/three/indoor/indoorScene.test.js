@@ -71,7 +71,9 @@ describe('indoor floor contract', () => {
       { id: 'board-1', type: 'board', x: 0, z: -2.5, width: 3, depth: 0.12, height: 1.1 },
     ] }] }
     const group = createIndoorFloor(THREE, furnished)
-    expect(group.children.some(child => child.name === 'indoor-furniture-classroom-101-desk-1')).toBe(true)
+    const desk = group.children.find(child => child.name === 'indoor-furniture-classroom-101-desk-1')
+    expect(desk).toBeTruthy()
+    expect(desk.userData.interactionData).toMatchObject({ id: 'desk-1', objectType: 'desk', roomId: 'classroom-101', roomName: '教室 101' })
     expect(group.children.some(child => child.name === 'indoor-furniture-classroom-101-board-1')).toBe(true)
     expect(group.userData.collisionObstacles.some(item => item.minX === -5.7 && item.maxX === -4.3)).toBe(true)
     expect(validateIndoorFloor({ ...sample, rooms: [{ ...sample.rooms[0], furniture: [{ id: 'bad', type: 'desk', x: 5, z: 0, width: 2, depth: 1, height: 1 }] }] }))

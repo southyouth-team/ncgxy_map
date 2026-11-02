@@ -204,7 +204,15 @@ export function createIndoorFloor(THREE, floor) {
     for (const item of room.furniture || []) {
       const itemX = x + item.x
       const itemZ = z + item.z
-      addBox(THREE, group, `indoor-furniture-${room.id}-${item.id}`, itemX, 0, itemZ, item.width, item.height, item.depth, furnitureMaterials[item.type])
+      const furniture = addBox(THREE, group, `indoor-furniture-${room.id}-${item.id}`, itemX, 0, itemZ, item.width, item.height, item.depth, furnitureMaterials[item.type])
+      furniture.userData.interactionData = {
+        id: item.id,
+        name: item.name || ({ desk: '课桌', table: '桌子', chair: '座椅', cabinet: '储物柜', podium: '讲台', board: '教学板' }[item.type]),
+        objectType: item.type,
+        roomId: room.id,
+        roomName: room.name,
+        description: item.description || `${room.name}内的${item.name || item.type}`,
+      }
       if (item.type !== 'board') {
         collision.push({ minX: itemX - item.width / 2, maxX: itemX + item.width / 2, minZ: itemZ - item.depth / 2, maxZ: itemZ + item.depth / 2 })
       }

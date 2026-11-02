@@ -35,6 +35,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let previousTime = 0
   let initialized = false
   let selectedFeatureObject = null
+  let selectedIndoorObject = null
   let loadedSceneData = null
   let rpgPreviewGroup = null
   const raycaster = new THREE.Raycaster()
@@ -362,11 +363,31 @@ export function createCampusEngine(container, callbacks = {}) {
     if (!rect.width || !rect.height) return
     pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
     raycaster.setFromCamera(pointerNdc, cameraRig.camera)
+    if (indoorGroup) {
+      const indoorHits = raycaster.intersectObjects(indoorGroup.children, true)
+      const indoorTarget = indoorHits.find(hit => hit.object.userData?.interactionData)?.object
+      if (indoorTarget?.userData?.interactionData) {
+        selectIndoorObject(indoorTarget)
+        return
+      }
+    }
     const hits = raycaster.intersectObjects(campus.children, true)
     let target = hits[0]?.object || null
     while (target && target !== campus && !target.userData?.featureId) target = target.parent
     if (!target || target === campus || !target.userData?.featureId) return clearSelection()
     selectObject(target.userData.featureId)
+  }
+
+  function selectIndoorObject(target) {
+    if (selectedFeatureObject) restoreSelectionHighlight()
+    selectedIndoorObject = target
+    callbacks.onObjectSelected?.({
+      featureId: null,
+      sceneObjectId: null,
+      objectType: target.userData.interactionData.objectType,
+      name: target.userData.interactionData.name,
+      interaction: { ...target.userData.interactionData },
+    })
   }
 
   function restoreSelectionHighlight() {
@@ -400,8 +421,9 @@ export function createCampusEngine(container, callbacks = {}) {
   }
 
   function clearSelection() {
-    if (!selectedFeatureObject) return
-    restoreSelectionHighlight()
+    if (!selectedFeatureObject && !selectedIndoorObject) return
+    if (selectedFeatureObject) restoreSelectionHighlight()
+    selectedIndoorObject = null
     callbacks.onObjectSelected?.(null)
   }
   function onKeyDown(event) {

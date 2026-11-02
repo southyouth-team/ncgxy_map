@@ -5,6 +5,7 @@ import { InputController } from '../controls/InputController.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld, mapRectToWorld } from '../../data/campus/campusLayout.js'
+import { roadToPolygon } from '../../editor/campusEditorDocument.js'
 
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
@@ -206,18 +207,24 @@ export function createCampusEngine(container, callbacks = {}) {
 
     for (const road of document.roads) {
       if (!Array.isArray(road.points) || road.points.length < 2) continue
-      const points = road.points.map(([x, y]) => {
-        const p = mapPixelToWorld(x, y)
-        return new THREE.Vector3(p.x, 0.09, p.z)
-      })
-      const curve = new THREE.CatmullRomCurve3(points)
       const width = Math.max(0.7, Number(road.width || 13) * 150 / 576)
+      const footprint = roadToPolygon(road.points, Number(road.width || 13))
+      if (footprint.length < 4) continue
+      const shapePoints = footprint.map(([x, y]) => {
+        const p = mapPixelToWorld(x, y)
+        return new THREE.Vector2(p.x, -p.z)
+      })
+      const shape = new THREE.Shape(shapePoints)
+      const geometry = new THREE.ShapeGeometry(shape)
+      geometry.rotateX(-Math.PI / 2)
       const mesh = new THREE.Mesh(
-        new THREE.TubeGeometry(curve, Math.max(16, points.length * 10), width / 2, 7, false),
-        new THREE.MeshStandardMaterial({ color: '#777b73', roughness: 1 }),
+        geometry,
+        new THREE.MeshStandardMaterial({ color: '#777b73', roughness: 1, side: THREE.DoubleSide }),
       )
+      mesh.position.y = 0.075
       mesh.name = road.id
       mesh.receiveShadow = true
+      mesh.userData.roadWidthWorld = width
       rpgPreviewGroup.add(mesh)
     }
 

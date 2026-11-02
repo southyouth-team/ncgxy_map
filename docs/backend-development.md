@@ -14,8 +14,10 @@
 2. 安装 PostGIS 扩展包，并确认执行 `CREATE EXTENSION postgis` 可用。
 3. 复制 `.env.example` 为 `.env`，配置连接参数。
 4. 执行 `npm install`。
-5. 执行 `npm run db:migrate`。
+5. 执行 `npm run db:migrate`（可重复执行，只会应用尚未记录的 migration）。
 6. 执行 `npm run start:dev`。
+
+开发环境默认在 NestJS 启动时自动应用未执行的 TypeORM migration（`DB_MIGRATIONS_RUN=true`）；生产环境默认关闭，必须由发布流程在应用启动前执行 `npm run db:migrate`。可通过 `DB_MIGRATIONS_RUN` 显式覆盖。数据库结构仍由版本化 migration 管理，`synchronize` 始终为 false。
 
 健康检查：`GET /health`、`GET /ready`。开发环境 Swagger：`/api/docs`。业务 API 前缀为 `/api/v1`。
 
@@ -47,6 +49,11 @@
 - `GET /api/v1/campuses/:campusId/maps/:mapId/features`：读取要素及 GeoJSON。
 - `PATCH /api/v1/campuses/:campusId/maps/:mapId/features/:featureId`：更新要素，必须携带 revision。
 - `DELETE /api/v1/campuses/:campusId/maps/:mapId/features/:featureId?revision=N`：按 revision 删除。
+
+### Scenes
+- `GET /api/v1/campuses/:campusId/maps/:mapId/scene`：读取三维场景文档；尚未保存时返回 revision=0、document=null。
+- `PUT /api/v1/campuses/:campusId/maps/:mapId/scene`：按 revision 乐观锁保存三维表现参数，并校验 Scene Object 对应当前地图的 GIS Feature。
+- 场景表由 `1762200000000-CreateCampusScene` migration 创建；旧数据库升级时必须应用该 migration。开发环境启动会自动应用，生产环境由发布流程执行迁移。
 
 ## 开发身份与生产认证边界
 

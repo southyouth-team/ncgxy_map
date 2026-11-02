@@ -4,7 +4,7 @@ import {
 } from '../../../data/campus/campusLayout.js'
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
-  addPixelBench, addPixelLamp,
+  addPixelBench, addPixelLamp, createPixelBuilding,
 } from './campusAssetLibrary.js'
 
 // 星露谷式 2.5D 校园原型。空间轮廓来自示意图，程序化建筑不代表真实楼体测绘。
@@ -108,67 +108,25 @@ export function createCampusScene(THREE) {
     const width = Math.max(4.2, bounds.width)
     const depth = Math.max(2.4, bounds.depth)
     const height = item.confidence === 'medium' ? 4.2 : 3.4
-    const group = new THREE.Group()
-    group.name = item.id
+    const group = createPixelBuilding(THREE, {
+      width, depth, height, materials: mats,
+      wallMaterial: wallPalette[index % wallPalette.length],
+      label: item.label || item.id,
+      confidence: item.confidence || 'unverified',
+    })
     group.position.set(bounds.x, 0.16, bounds.z)
     group.userData.buildingId = item.id
     group.userData.displayName = item.label
-    group.userData.confidence = item.confidence
-    group.userData.assetStyle = 'stardew-pixel-campus'
-
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), wallPalette[index % wallPalette.length])
-    wall.position.y = height / 2
-    wall.castShadow = true
-    wall.receiveShadow = true
-    group.add(wall)
-
-    const roofWidth = width + 0.42
-    const roofDepth = depth + 0.42
-    const roofShape = new THREE.Shape()
-    roofShape.moveTo(-roofWidth / 2, 0)
-    roofShape.lineTo(0, 1.45)
-    roofShape.lineTo(roofWidth / 2, 0)
-    roofShape.closePath()
-    const roofGeometry = new THREE.ExtrudeGeometry(roofShape, { depth: roofDepth, bevelEnabled: false, steps: 1 })
-    roofGeometry.translate(0, height - 0.08, -roofDepth / 2)
-    const roof = new THREE.Mesh(roofGeometry, mats.roof)
-    roof.castShadow = true
-    roof.receiveShadow = true
-    group.add(roof)
-
-    const eave = new THREE.Mesh(new THREE.BoxGeometry(roofWidth + 0.18, 0.16, roofDepth + 0.2), mats.roofDark)
-    eave.position.y = height - 0.05
-    group.add(eave)
-
-    const windowCount = Math.max(2, Math.min(6, Math.floor(width / 2.5)))
-    for (let i = 0; i < windowCount; i += 1) {
-      const x = -width / 2 + (i + 1) * width / (windowCount + 1)
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.92, 0.12), mats.windowTrim)
-      frame.position.set(x, 1.95, depth / 2 + 0.075)
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.68, 0.06), mats.window)
-      glass.position.set(x, 1.95, depth / 2 + 0.15)
-      const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.68, 0.04), mats.windowTrim)
-      mullion.position.set(x, 1.95, depth / 2 + 0.19)
-      group.add(frame, glass, mullion)
-    }
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.55, 0.16), mats.door)
-    door.position.set(0, 0.78, depth / 2 + 0.09)
     const doorStep = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.18, 0.62), mats.stoneLight)
     doorStep.position.set(0, 0.09, depth / 2 + 0.32)
-    group.add(door, doorStep)
-
     const sign = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.8, width * 0.55), 0.38, 0.12), mats.wood)
     sign.position.set(0, height - 0.82, depth / 2 + 0.12)
-    group.add(sign)
     const outline = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(width, height, depth)),
       new THREE.LineBasicMaterial({ color: '#6c5947' }),
     )
     outline.position.y = height / 2
-    group.add(outline)
-    group.traverse((object) => {
-      if (object.isMesh) { object.castShadow = true; object.receiveShadow = true }
-    })
+    group.add(doorStep, sign, outline)
     root.add(group)
   }
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)

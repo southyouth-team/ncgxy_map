@@ -1,0 +1,11 @@
+{
+  "name": "南昌工学院三维校园",
+  "short_name": "校园地图",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#101b20",
+  "theme_color": "#101b20",
+  "lang": "zh-CN"
+}

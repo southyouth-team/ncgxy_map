@@ -86,3 +86,27 @@ docs/
 - M4：LOD2/LOD3 重点建筑、Three.js 集成和验收报告。
 
 工期取决于建筑总数、现场测量投入、地图可用性和资料许可情况。完成 M1 盘点后再给出可信排期，不以未经盘点的建筑数量承诺工期。
+
+## 八、建筑 GLB 清单字段约定
+
+每条 `buildings.json` 记录在数据采集完成后至少应包含：
+
+```json
+{
+  "buildingId": "B001",
+  "name": "经核实的建筑名称",
+  "position": [0, 0, 0],
+  "rotationY": 0,
+  "modelUrl": "/models/buildings/B001/lod1.glb",
+  "floors": null,
+  "heightMeters": null,
+  "confidence": "low",
+  "sourceRefs": []
+}
+```
+
+- `position` 是校园本地米制坐标，数组顺序为 [x, y, z]；模型原点统一放在 footprint 中心的地面位置。
+- `rotationY` 为绕 Y 轴旋转的弧度值。
+- `modelUrl` 仅指向站点本地 `/models/buildings/` 下的 GLB 资产。
+- `floors`、`heightMeters` 等未知字段保持 null，不得填入猜测的精确值。
+- 工程中的 `loadCampusBuildingModels.js` 已提供按清单异步加载 GLB 的基础能力；空清单是正常状态，不会生成虚构建筑。

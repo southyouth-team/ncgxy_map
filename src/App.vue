@@ -16,7 +16,7 @@ const activeMode = ref('overview')
 const loading = ref(true)
 const errorMessage = ref('')
 const engineReady = ref(false)
-const showEditor = ref(false)
+const showEditor = ref(new URLSearchParams(window.location.search).get('view') === 'editor')
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
 const sceneRevision = ref(0)
@@ -107,6 +107,22 @@ function focusCampus() {
   engine?.focusCampus()
 }
 
+function openEditor() {
+  showEditor.value = true
+  const url = new URL(window.location.href)
+  url.searchParams.set('view', 'editor')
+  window.history.replaceState({}, '', url)
+}
+
+function closeEditor() {
+  showEditor.value = false
+  const url = new URL(window.location.href)
+  url.searchParams.delete('view')
+  window.history.replaceState({}, '', url)
+  activeMode.value = 'overview'
+  engine?.setMode('overview')
+}
+
 function toggleHelp() {
   const panel = document.querySelector('.help-panel')
   panel?.classList.toggle('is-visible')
@@ -147,7 +163,7 @@ onBeforeUnmount(() => {
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
     <div ref="viewport" class="scene-viewport" v-show="!showEditor"></div>
-    <RpgMapEditor v-if="showEditor" @close="showEditor = false" />
+    <RpgMapEditor v-if="showEditor" @close="closeEditor" />
 
     <header class="topbar">
       <div class="brand-lockup">
@@ -178,7 +194,7 @@ onBeforeUnmount(() => {
         <span class="mode-label">{{ mode.label }}</span>
         <span class="mode-hint">{{ mode.hint }}</span>
       </button>
-      <button class="mode-button editor-mode-button" :class="{ active: showEditor }" @click="showEditor = true">
+      <button class="mode-button editor-mode-button" :class="{ active: showEditor }" @click="openEditor">
         <span class="mode-label">底图编辑</span>
         <span class="mode-hint">二维矢量化</span>
       </button>

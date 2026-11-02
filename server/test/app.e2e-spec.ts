@@ -56,6 +56,10 @@ describe('Campus map API (PostGIS integration)', () => {
       })
       .expect(201);
     featureId = String(feature.body.id);
+    const persisted = await db.query('SELECT id,layer_id,revision FROM campus_feature WHERE id=$1',[featureId]);
+    expect(persisted).toHaveLength(1);
+    expect(String(persisted[0].layer_id)).toBe(layerId);
+    expect(Number(persisted[0].revision)).toBe(1);
   });
 
   afterAll(async () => {
@@ -104,6 +108,8 @@ describe('Campus map API (PostGIS integration)', () => {
       .set(auth)
       .send({ revision: 1, name: '第一次更新' })
       .expect(200);
+    const updated = await db.query('SELECT revision FROM campus_feature WHERE id=$1',[featureId]);
+    expect(Number(updated[0].revision)).toBe(2);
     await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/features/${featureId}`)
       .set(auth)

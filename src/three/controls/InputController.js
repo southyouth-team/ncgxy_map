@@ -79,7 +79,8 @@ export class InputController {
     const strafe = (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0)
     if (!forward && !strafe) return
     const speed = (this.keys.has('shift') ? 18 : 9) * delta
-    const yaw = this.mode === 'firstPerson' ? this.cameraRig.firstYaw : this.cameraRig.thirdYaw
+    // 第三人称 yaw 描述的是相机相对角色的偏移方向，角色前进方向与其相反。
+    const yaw = this.mode === 'firstPerson' ? this.cameraRig.firstYaw : this.cameraRig.thirdYaw + Math.PI
     const length = Math.hypot(forward, strafe) || 1
     const f = forward / length
     const s = strafe / length

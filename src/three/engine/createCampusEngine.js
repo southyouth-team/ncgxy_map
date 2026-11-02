@@ -477,7 +477,7 @@ export function createCampusEngine(container, callbacks = {}) {
     }
     campus.visible = false
     collisionWorld = new CollisionWorld(
-      { minX: -11.4, maxX: 11.4, minZ: -8.4, maxZ: 8.4 },
+      { minX: -12, maxX: 12, minZ: -12, maxZ: 12 },
       indoorGroup.userData.collisionObstacles,
       0.48,
     )

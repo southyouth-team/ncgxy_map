@@ -26,11 +26,11 @@ describe('indoor floor contract', () => {
   it('keeps configured exterior and room doorways passable in collision geometry', () => {
     const group = createIndoorFloor(THREE, sample)
     const collision = new CollisionWorld(
-      { minX: -12, maxX: 12, minZ: -9, maxZ: 9 },
+      { minX: -12, maxX: 12, minZ: -12, maxZ: 12 },
       group.userData.collisionObstacles,
       0.35,
     )
-    const exit = collision.move({ x: 0, z: 5.2 }, 0, 3.2)
+    const exit = collision.move({ x: 0, z: 5.2 }, 0, 5)
     expect(exit.z).toBeGreaterThan(8)
     expect(exit.blockedZ).toBe(false)
     const roomDoor = collision.move({ x: -5, z: 4.2 }, 0, -2.5)

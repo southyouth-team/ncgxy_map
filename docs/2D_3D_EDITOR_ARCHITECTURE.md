@@ -101,3 +101,12 @@ VISION_MODEL=vision-capable-model
 ```
 
 - 识别依赖模型本身支持图像输入和 JSON 输出；非视觉模型、仅文本模型或不支持 `response_format=json_object` 的兼容服务无法正常工作。
+
+
+## 第十四阶段：异步 AI 识图任务
+
+- `POST /campuses/:campusId/maps/:mapId/assets/:assetId/recognize` 创建持久化任务，返回任务 ID 和 queued 状态，不再占用上传请求等待视觉模型。
+- `GET /campuses/:campusId/maps/:mapId/assets/recognition/:jobId` 查询 queued / processing / completed / failed 状态与识别结果。
+- 任务队列存储在 PostgreSQL，API 实例通过 `FOR UPDATE SKIP LOCKED` 抢占任务；服务重启后 queued 任务可继续执行。
+- 前端每 2 秒轮询一次，最多等待 6 分钟；超时仅停止当前页面轮询，不删除服务端任务。
+- 当前 worker 与 API 同进程运行，适合单机 MVP；生产多副本应将 worker 拆成独立进程，并增加任务重试、租约超时回收、限流和死信队列。

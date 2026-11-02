@@ -350,7 +350,7 @@ export function createCampusEngine(container, callbacks = {}) {
   }
 
   function onScenePointerDown(event) {
-    if (event.button !== 0 || cameraRig?.mode !== 'overview') { pointerStart = null; return }
+    if (event.button !== 0 || (cameraRig?.mode !== 'overview' && !indoorGroup)) { pointerStart = null; return }
     pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
   }
 
@@ -358,7 +358,7 @@ export function createCampusEngine(container, callbacks = {}) {
     if (!pointerStart || pointerStart.pointerId !== event.pointerId) return
     const moved = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y)
     pointerStart = null
-    if (moved > 5 || cameraRig?.mode !== 'overview') return
+    if (moved > 5 || (cameraRig?.mode !== 'overview' && !indoorGroup)) return
     const rect = renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return
     pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
@@ -410,6 +410,7 @@ export function createCampusEngine(container, callbacks = {}) {
     if (!target) return clearSelection()
     if (selectedFeatureObject === target) return
     restoreSelectionHighlight()
+    selectedIndoorObject = null
     selectedFeatureObject = target
     target.traverse((object) => {
       if (!object.isMesh || !object.material) return

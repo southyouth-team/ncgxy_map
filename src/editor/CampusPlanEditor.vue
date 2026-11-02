@@ -118,6 +118,11 @@ const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 const tool = ref('select')
 const scale = ref(1)
 const pan = ref({ x: 0, y: 0 })
+// 视口尺寸使用真实 CSS 像素，SVG 世界坐标随视口宽高比动态计算，避免固定 640×480 导致画布挤压。
+const canvasViewport = ref(null)
+const viewportSize = ref({ width: 640, height: 480 })
+let canvasResizeObserver = null
+let canvasViewInitialized = false
 const canvasPan = ref(null)
 const spacePressed = ref(false)
 const suppressCanvasClick = ref(false)
@@ -286,8 +291,8 @@ const roadNetwork = computed(() => roadNetworkToMultiPolygon(roads.value))
 const workspaceBounds = computed(() => calculateWorkspaceBounds({ buildings: buildings.value, areas: areas.value, roads: roads.value }))
 // 可视化范围由“当前视口 + 已有要素范围”共同决定；视口移动到原始校园图外时，网格和底色继续延伸。
 const canvasRenderBounds = computed(() => {
-  const viewportWidth = 640 / scale.value
-  const viewportHeight = 480 / scale.value
+  const viewportWidth = viewportSize.value.width / scale.value
+  const viewportHeight = viewportSize.value.height / scale.value
   const margin = Math.max(500, viewportWidth * 0.5, viewportHeight * 0.5)
   const visible = {
     minX: pan.value.x - margin,
@@ -341,15 +346,14 @@ function redo() {
   restore(future.value.pop())
 }
 function canvasViewBox() {
-  return [pan.value.x, pan.value.y, 640 / scale.value, 480 / scale.value].join(' ')
+  return [pan.value.x, pan.value.y, viewportSize.value.width / scale.value, viewportSize.value.height / scale.value].join(' ')
 }
 function startCanvasPan(event) {
   const panGesture = event.button === 1 || (event.button === 0 && spacePressed.value)
   if ((!panGesture && event.button !== 0) || (event.button === 0 && !spacePressed.value && event.target.closest?.('.map-feature'))) return
   if (event.button === 2) return
   const svg = event.currentTarget
-  const width = 640 / scale.value, height = 480 / scale.value
-  canvasPan.value = { clientX: event.clientX, clientY: event.clientY, x: pan.value.x, y: pan.value.y, width, height, rect: svg.getBoundingClientRect(), moved: false }
+  canvasPan.value = { clientX: event.clientX, clientY: event.clientY, x: pan.value.x, y: pan.value.y, moved: false }
   svg.setPointerCapture?.(event.pointerId)
   if (panGesture) event.preventDefault()
 }
@@ -358,7 +362,7 @@ function moveCanvasPan(event) {
   const state = canvasPan.value
   const dx = event.clientX - state.clientX, dy = event.clientY - state.clientY
   if (Math.hypot(dx, dy) > 3) state.moved = true
-  pan.value = { x: state.x - dx / Math.max(Math.min(state.rect.width / state.width, state.rect.height / state.height), 0.0001), y: state.y - dy / Math.max(Math.min(state.rect.width / state.width, state.rect.height / state.height), 0.0001) }
+  pan.value = { x: state.x - dx / scale.value, y: state.y - dy / scale.value }
   suppressCanvasClick.value = state.moved
 }
 function endCanvasPan() {
@@ -374,11 +378,12 @@ function zoomAt(next, clientX, clientY) {
   cursor.x = clientX ?? rect.left + rect.width / 2
   cursor.y = clientY ?? rect.top + rect.height / 2
   const anchor = cursor.matrixTransform(svg.getScreenCTM().inverse())
-  const oldWidth = 640 / scale.value, oldHeight = 480 / scale.value
+  const oldWidth = viewportSize.value.width / scale.value
+  const oldHeight = viewportSize.value.height / scale.value
   const rx = (anchor.x - pan.value.x) / oldWidth
   const ry = (anchor.y - pan.value.y) / oldHeight
   scale.value = next
-  pan.value = { x: anchor.x - rx * 640 / next, y: anchor.y - ry * 480 / next }
+  pan.value = { x: anchor.x - rx * viewportSize.value.width / next, y: anchor.y - ry * viewportSize.value.height / next }
 }
 function zoomCanvas(event) {
   const next = Math.min(8, Math.max(0.05, scale.value * (event.deltaY < 0 ? 1.12 : 1 / 1.12)))
@@ -386,8 +391,8 @@ function zoomCanvas(event) {
 }
 function resetCanvasView() {
   const bounds = workspaceBounds.value
-  scale.value = Math.min(8, Math.max(0.05, Math.min(640 / (bounds.width * 1.08), 480 / (bounds.height * 1.08))))
-  pan.value = { x: (bounds.minX + bounds.maxX) / 2 - 320 / scale.value, y: (bounds.minY + bounds.maxY) / 2 - 240 / scale.value }
+  scale.value = Math.min(8, Math.max(0.05, Math.min(viewportSize.value.width / (bounds.width * 1.12), viewportSize.value.height / (bounds.height * 1.12))))
+  pan.value = { x: (bounds.minX + bounds.maxX) / 2 - viewportSize.value.width / (2 * scale.value), y: (bounds.minY + bounds.maxY) / 2 - viewportSize.value.height / (2 * scale.value) }
 }
 function zoomToSelection() {
   const item = selectedBuilding.value || selectedArea.value
@@ -399,9 +404,9 @@ function zoomToSelection() {
   }
   if (!bounds) return
   const width = Math.max(bounds[2] - bounds[0], 24), height = Math.max(bounds[3] - bounds[1], 24)
-  const next = Math.min(8, Math.max(0.05, Math.min(640 / (width * 2.2), 480 / (height * 2.2))))
+  const next = Math.min(8, Math.max(0.05, Math.min(viewportSize.value.width / (width * 2.2), viewportSize.value.height / (height * 2.2))))
   scale.value = next
-  pan.value = { x: (bounds[0] + bounds[2]) / 2 - 320 / next, y: (bounds[1] + bounds[3]) / 2 - 240 / next }
+  pan.value = { x: (bounds[0] + bounds[2]) / 2 - viewportSize.value.width / (2 * next), y: (bounds[1] + bounds[3]) / 2 - viewportSize.value.height / (2 * next) }
 }
 function onWindowKeyDown(event) {
   if (event.target?.matches?.('input, textarea, select, [contenteditable="true"]')) return
@@ -417,9 +422,32 @@ onMounted(() => {
   window.addEventListener('keydown', onWindowKeyDown)
   loadEditorDocument()
   window.addEventListener('keyup', onWindowKeyUp)
+  if (canvasViewport.value && typeof ResizeObserver !== 'undefined') {
+    canvasResizeObserver = new ResizeObserver(([entry]) => {
+      const width = Math.max(1, entry.contentRect.width)
+      const height = Math.max(1, entry.contentRect.height)
+      const previous = viewportSize.value
+      if (canvasViewInitialized) {
+        // 面板尺寸变化时保持当前世界坐标中心不变，不重置用户的浏览位置。
+        const centerX = pan.value.x + previous.width / (2 * scale.value)
+        const centerY = pan.value.y + previous.height / (2 * scale.value)
+        viewportSize.value = { width, height }
+        pan.value = { x: centerX - width / (2 * scale.value), y: centerY - height / (2 * scale.value) }
+      } else {
+        viewportSize.value = { width, height }
+        canvasViewInitialized = true
+        resetCanvasView()
+      }
+    })
+    canvasResizeObserver.observe(canvasViewport.value)
+  } else {
+    canvasViewInitialized = true
+    resetCanvasView()
+  }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onWindowKeyDown)
+  canvasResizeObserver?.disconnect()
   if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
   if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
   window.removeEventListener('keyup', onWindowKeyUp)
@@ -644,7 +672,7 @@ function exportDocument() {
       </aside>
       <main class="map-stage">
         <div class="stage-label"><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>示意坐标 · 非米制</em></div>
-        <div class="map-scroll">
+        <div ref="canvasViewport" class="map-scroll">
           <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan($event); movePointer($event)" @pointerup="endCanvasPan(); endPointer()" @pointercancel="endCanvasPan(); endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>

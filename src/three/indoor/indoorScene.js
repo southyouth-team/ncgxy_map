@@ -11,10 +11,27 @@ export function validateIndoorFloor(floor) {
   if (!Number.isFinite(floor.depth) || floor.depth < 6) errors.push('楼层 depth 必须大于等于 6')
   if (!Number.isFinite(floor.wallHeight) || floor.wallHeight < 2) errors.push('墙体高度必须大于等于 2')
   if (!Array.isArray(floor.rooms)) errors.push('rooms 必须是数组')
+  if (floor.doors !== undefined && !Array.isArray(floor.doors)) errors.push('doors 必须是数组')
+  for (const door of Array.isArray(floor.doors) ? floor.doors : []) {
+    if (!['north', 'south', 'east', 'west'].includes(door.wall)) errors.push('门洞 wall 必须是 north/south/east/west')
+    const wallLength = ['north', 'south'].includes(door.wall) ? floor.width : floor.depth
+    if (!Number.isFinite(door.width) || door.width < 0.7 || door.width > wallLength) errors.push('门洞 width 超出有效范围')
+    if (!Number.isFinite(door.offset) || Math.abs(door.offset) + (Number(door.width) || 0) / 2 > wallLength / 2) errors.push('门洞 offset 超出墙体范围')
+  }
   for (const room of Array.isArray(floor.rooms) ? floor.rooms : []) {
     if (!room.id || !room.name) errors.push('房间必须包含 id 和 name')
     if (![room.x, room.z, room.width, room.depth].every(Number.isFinite) || room.width <= 0 || room.depth <= 0) {
       errors.push(`房间 ${room.id || '(unknown)'} 的平面尺寸无效`)
+    } else if (Number.isFinite(floor.width) && Number.isFinite(floor.depth) &&
+      (room.x - room.width / 2 < -floor.width / 2 || room.x + room.width / 2 > floor.width / 2 ||
+       room.z - room.depth / 2 < -floor.depth / 2 || room.z + room.depth / 2 > floor.depth / 2)) {
+      errors.push(`房间 ${room.id} 超出楼层边界`)
+    }
+    if (room.doorWidth !== undefined && room.doorWidth > 0) {
+      if (!['north', 'south', 'east', 'west'].includes(room.doorWall || 'south')) errors.push(`房间 ${room.id} 的 doorWall 无效`)
+      const wallLength = ['north', 'south'].includes(room.doorWall || 'south') ? room.width : room.depth
+      if (!Number.isFinite(room.doorWidth) || room.doorWidth < 0.7 || room.doorWidth > wallLength) errors.push(`房间 ${room.id} 的 doorWidth 无效`)
+      if (Math.abs(Number(room.doorOffset) || 0) + room.doorWidth / 2 > wallLength / 2) errors.push(`房间 ${room.id} 的 doorOffset 超出墙体`)
     }
   }
   return errors
@@ -31,6 +48,8 @@ function addBox(THREE, parent, name, x, y, z, width, height, depth, material) {
 }
 
 function addLabel(THREE, parent, text, x, z) {
+  // Node/Vitest 等无 DOM 环境只跳过视觉标签，空间几何与碰撞仍可正常构建。
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 64

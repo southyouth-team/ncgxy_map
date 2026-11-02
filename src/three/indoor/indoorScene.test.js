@@ -38,6 +38,13 @@ describe('indoor floor contract', () => {
     expect(roomDoor.blockedZ).toBe(false)
   })
 
+  it('rejects doors outside the floor wall and rooms outside floor bounds', () => {
+    expect(validateIndoorFloor({ ...sample, doors: [{ wall: 'south', offset: 20, width: 2 }] }))
+      .toContain('门洞 offset 超出墙体范围')
+    expect(validateIndoorFloor({ ...sample, rooms: [{ id: 'r2', name: '越界房间', x: 10, z: 0, width: 8, depth: 4 }] }))
+      .toContain('房间 r2 超出楼层边界')
+  })
+
   it('requires integer floor levels', () => {
     expect(validateIndoorFloor({ ...sample, level: 1.5 })).toContain('楼层 level 必须是整数')
   })

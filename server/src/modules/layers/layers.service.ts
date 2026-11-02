@@ -52,11 +52,20 @@ export class LayersService {
   async remove(userId: string, campusId: string, mapId: string, layerId: string) {
     await this.requireRole(userId,campusId,['owner','admin','editor']);
     await this.requireMap(campusId,mapId);
-    const rows = await this.dataSource.query(
-      `DELETE FROM campus_layer l WHERE l.id=$1 AND l.campus_id=$2 AND l.map_id=$3
-       AND NOT EXISTS (SELECT 1 FROM campus_feature f WHERE f.layer_id=l.id) RETURNING l.id`,
-      [layerId,campusId,mapId],
-    );
+    let rows: Array<{ id: string }>;
+    try {
+      rows = await this.dataSource.query(
+        `DELETE FROM campus_layer l WHERE l.id=$1 AND l.campus_id=$2 AND l.map_id=$3
+         AND NOT EXISTS (SELECT 1 FROM campus_feature f WHERE f.layer_id=l.id) RETURNING l.id`,
+        [layerId,campusId,mapId],
+      );
+    } catch (error) {
+      // 外键 RESTRICT 是最终并发保护；将数据库约束冲突转换为稳定的业务响应。
+      if (this.isForeignKeyViolation(error)) {
+        throw new ConflictException('该图层仍包含地图要素，请先迁移或删除要素后再删除图层');
+      }
+      throw error;
+    }
     if (rows.length) return { id: rows[0].id, deleted: true };
     const existing = await this.dataSource.query('SELECT id FROM campus_layer WHERE id=$1 AND campus_id=$2 AND map_id=$3',[layerId,campusId,mapId]);
     if (!existing.length) throw new NotFoundException('图层不存在');
@@ -76,5 +85,9 @@ export class LayersService {
 
   private isUniqueViolation(error: unknown) {
     return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
+  }
+
+  private isForeignKeyViolation(error: unknown) {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23503';
   }
 }

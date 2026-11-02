@@ -6,6 +6,7 @@ import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingM
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld, mapRectToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
+import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
 import { createCampusMaterials, createPixelBuilding } from '../world/campus/campusAssetLibrary.js'
 
 export function createCampusEngine(container, callbacks = {}) {
@@ -184,6 +185,13 @@ export function createCampusEngine(container, callbacks = {}) {
       previewPlayer.visible = true
       rpgPreviewGroup.add(previewPlayer)
     }
+    const calibratedPoint = (x, y) => mapEditorPointToCalibratedWorld(
+      [x, y],
+      document.calibration,
+      document.referenceImage,
+      Number(document.worldUnitsPerCampusUnit || 1),
+    ) || mapPixelToWorld(x, y)
+
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(150, 96),
       new THREE.MeshStandardMaterial({ color: '#8eae69', roughness: 1 }),
@@ -196,7 +204,7 @@ export function createCampusEngine(container, callbacks = {}) {
     for (const area of document.areas || []) {
       if (area.polygon?.length >= 3) {
         const points = area.polygon.map(([x, y]) => {
-          const p = mapPixelToWorld(x, y)
+          const p = calibratedPoint(x, y)
           return new THREE.Vector2(p.x, -p.z)
         })
         const shape = new THREE.Shape(points)
@@ -224,7 +232,7 @@ export function createCampusEngine(container, callbacks = {}) {
       const outer = polygon[0]
       if (!outer || outer.length < 4) return
       const toShapePoint = ([x, y]) => {
-        const point = mapPixelToWorld(x, y)
+        const point = calibratedPoint(x, y)
         return new THREE.Vector2(point.x, -point.z)
       }
       const shape = new THREE.Shape(outer.slice(0, -1).map(toShapePoint))
@@ -286,7 +294,12 @@ export function createCampusEngine(container, callbacks = {}) {
     scene.add(rpgPreviewGroup)
     if (campus) campus.visible = false
     cameraRig?.setMode('overview')
-    cameraRig?.focusBounds(150, 96)
+    if (document.calibration && document.referenceImage) {
+      const mapped = (document.buildings || []).flatMap((building) => (building.footprint || []).map(([x, y]) => calibratedPoint(x, y)))
+      const xs = mapped.map((point) => point.x), zs = mapped.map((point) => point.z)
+      if (xs.length && zs.length) cameraRig?.focusBounds(Math.max(20, Math.max(...xs) - Math.min(...xs)), Math.max(20, Math.max(...zs) - Math.min(...zs)))
+      else cameraRig?.focusBounds(150, 96)
+    } else cameraRig?.focusBounds(150, 96)
     return true
   }
 

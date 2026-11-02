@@ -22,6 +22,8 @@ const drag = ref(null)
 const history = ref([])
 const future = ref([])
 const roadWidth = ref(10)
+const snapEnabled = ref(true)
+const snapTolerance = 7
 const newBuilding = ref('教学楼')
 const selectedBuilding = computed(() => buildings.value.find((item) => item.id === selected.value.id))
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
@@ -75,6 +77,13 @@ function startAreaDrag(event, area) {
   drag.value = { type: 'area', id: area.id, start: p, footprint: area.footprint.map((vertex) => [...vertex]) }
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
+function startPolygonVertexDrag(event, type, item, index) {
+  event.stopPropagation()
+  selected.value = { type, id: item.id }
+  snapshot()
+  drag.value = { type: 'vertex', featureType: type, id: item.id, index }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
 function startRoadNodeDrag(event, road, index) {
   event.stopPropagation()
   selected.value = { type: 'road', id: road.id }
@@ -85,7 +94,15 @@ function startRoadNodeDrag(event, road, index) {
 function movePointer(event) {
   if (!drag.value) return
   const p = point(event)
-  if (drag.value.type === 'building') {
+  if (drag.value.type === 'vertex') {
+    const collection = drag.value.featureType === 'building' ? buildings.value : areas.value
+    const item = collection.find((entry) => entry.id === drag.value.id)
+    if (item) {
+      const candidate = snapEnabled.value ? snapPoint(p, drag.value.index) : p
+      item.footprint[drag.value.index] = [candidate.x, candidate.y]
+      if (drag.value.featureType === 'building') item.rect = polygonBounds(item.footprint)
+    }
+  } else if (drag.value.type === 'building') {
     const item = buildings.value.find((entry) => entry.id === drag.value.id)
     const dx = p.x - drag.value.start.x, dy = p.y - drag.value.start.y
     item.footprint = movePolygon(drag.value.footprint, dx, dy)
@@ -97,6 +114,33 @@ function movePointer(event) {
     const road = roads.value.find((entry) => entry.id === drag.value.id)
     if (road) road.points[drag.value.index] = [p.x, p.y]
   }
+}
+function snapPoint(position, excludedIndex = -1) {
+  const candidates = []
+  for (const building of buildings.value) building.footprint.forEach((vertex, index) => { if (building.id !== selected.value.id || index !== excludedIndex) candidates.push(vertex) })
+  for (const area of areas.value) area.footprint.forEach((vertex, index) => { if (area.id !== selected.value.id || index !== excludedIndex) candidates.push(vertex) })
+  for (const road of roads.value) road.points.forEach((vertex) => candidates.push(vertex))
+  let nearest = null, distance = snapTolerance
+  for (const vertex of candidates) { const next = Math.hypot(position.x - vertex[0], position.y - vertex[1]); if (next < distance) { distance = next; nearest = { x: vertex[0], y: vertex[1] } } }
+  return nearest || position
+}
+function addPolygonVertex() {
+  const item = selectedBuilding.value || selectedArea.value
+  if (!item) return
+  snapshot()
+  const ring = item.footprint
+  let bestIndex = 0, bestLength = -Infinity
+  for (let i = 0; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; const length = Math.hypot(b[0]-a[0], b[1]-a[1]); if (length > bestLength) { bestLength = length; bestIndex = i } }
+  const a = ring[bestIndex], b = ring[(bestIndex + 1) % ring.length]
+  ring.splice(bestIndex + 1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
+  if (selectedBuilding.value) item.rect = polygonBounds(ring)
+}
+function removePolygonVertex(index) {
+  const item = selectedBuilding.value || selectedArea.value
+  if (!item || item.footprint.length <= 3) return
+  snapshot()
+  item.footprint.splice(index, 1)
+  if (selectedBuilding.value) item.rect = polygonBounds(item.footprint)
 }
 function endPointer() { drag.value = null }
 function addBuilding(event) {
@@ -149,7 +193,7 @@ function exportDocument() {
       <div class="brand"><span class="brand-mark">NC</span><div><strong>南昌工学院 · 场景编辑器</strong><small>CAMPUS PLAN EDITOR / TOP-DOWN WORKSPACE</small></div></div>
       <div class="header-actions">
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
-        <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button>
+        <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
         <button @click="scale = Math.max(.65, scale - .1)">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="scale = Math.min(1.8, scale + .1)">＋</button>
         <button @click="preview3d">三维预览</button><button class="primary" @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
@@ -180,6 +224,7 @@ function exportDocument() {
             <rect width="640" height="480" fill="#91a77b"/><rect x="36" y="92" width="576" height="368" fill="#9db28a"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
             <g v-for="area in areas" :key="area.id" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
+              <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @click.stop="removePolygonVertex(index)"/></g>
             </g>
             <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
             <g v-for="road in roads" :key="road.id">
@@ -193,6 +238,7 @@ function exportDocument() {
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#f0e5ce" stroke-width="2" stroke-dasharray="4 3"/>
               <text :x="(item.rect[0]+item.rect[2])/2" :y="(item.rect[1]+item.rect[3])/2+3" text-anchor="middle" font-size="8" fill="#514634">{{ item.label }}</text>
               <polygon v-if="selected.id===item.id" :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#e6a84c" stroke-width="2" stroke-dasharray="5 3"/>
+              <g v-if="selected.type==='building' && selected.id===item.id"><circle v-for="(vertex,index) in item.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'building',item,index)" @click.stop="removePolygonVertex(index)"/></g>
             </g>
             <g fill="#3f724c" stroke="#d8dfc6" stroke-width="1.5"><g v-for="(tree,index) in [[202,215],[305,210],[355,280],[190,360],[520,275],[565,355],[225,420],[330,430],[485,435],[75,220],[85,260],[570,180]]" :key="index"><circle :cx="tree[0]" :cy="tree[1]" r="7"/><circle :cx="tree[0]-4" :cy="tree[1]+2" r="4"/></g></g>
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>
@@ -207,12 +253,12 @@ function exportDocument() {
           <label>建筑名称</label><input v-model="selectedBuilding.label">
           <label>空间范围（像素坐标）</label><div class="coordinate-grid"><span>X₁ {{ Math.round(selectedBuilding.rect[0]) }}</span><span>Y₁ {{ Math.round(selectedBuilding.rect[1]) }}</span><span>X₂ {{ Math.round(selectedBuilding.rect[2]) }}</span><span>Y₂ {{ Math.round(selectedBuilding.rect[3]) }}</span></div>
           <label>数据可信度</label><span class="confidence">{{ selectedBuilding.confidence || 'unverified' }}</span>
-          <button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
+          <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。</p><button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
         </template>
         <template v-else-if="selectedArea">
           <label>区域名称</label><input v-model="selectedArea.name">
           <label>区域类型</label><span class="confidence">{{ selectedArea.type }}</span>
-          <p class="hint">拖动区域轮廓可调整整体位置。区域轮廓以 Polygon 顶点保存。</p>
+          <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。支持顶点吸附。</p>
           <button class="danger-button" @click="snapshot(); areas = areas.filter(item => item.id !== selectedArea.id); selected = {type:'',id:''}">删除区域</button>
         </template>
         <template v-else-if="selectedRoad">

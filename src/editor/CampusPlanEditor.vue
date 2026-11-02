@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon } from './campusEditorDocument.js'
+import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
@@ -30,6 +30,7 @@ const snapEnabled = ref(true)
 const snapTolerance = 7
 const newBuilding = ref('教学楼')
 const roadNetwork = computed(() => roadNetworkToMultiPolygon(roads.value))
+const workspaceBounds = computed(() => calculateWorkspaceBounds({ buildings: buildings.value, areas: areas.value, roads: roads.value }))
 const selectedBuilding = computed(() => buildings.value.find((item) => item.id === selected.value.id))
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
 const selectedArea = computed(() => areas.value.find((item) => item.id === selected.value.id))
@@ -114,8 +115,9 @@ function zoomCanvas(event) {
   zoomAt(next, event.clientX, event.clientY)
 }
 function resetCanvasView() {
-  scale.value = 1
-  pan.value = { x: 0, y: 0 }
+  const bounds = workspaceBounds.value
+  scale.value = Math.min(4, Math.max(0.35, Math.min(640 / (bounds.width * 1.08), 480 / (bounds.height * 1.08))))
+  pan.value = { x: (bounds.minX + bounds.maxX) / 2 - 320 / scale.value, y: (bounds.minY + bounds.maxY) / 2 - 240 / scale.value }
 }
 function zoomToSelection() {
   const item = selectedBuilding.value || selectedArea.value
@@ -309,7 +311,7 @@ function exportDocument() {
       <div class="header-actions">
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
-        <button title="缩小（-）" @click="zoomAt(Math.max(.35, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配画布</button><button title="放大（+）" @click="zoomAt(Math.min(4, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
+        <button title="缩小（-）" @click="zoomAt(Math.max(.35, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配工作区</button><button title="放大（+）" @click="zoomAt(Math.min(4, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
         <button @click="preview3d">三维预览</button><button class="primary" @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
     </header>
@@ -336,12 +338,12 @@ function exportDocument() {
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
-            <rect width="640" height="480" fill="#86a765"/><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
+            <rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="#86a765"/><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/>
             <g v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
-            <g v-if="showGrid"><rect x="36" y="92" width="576" height="368" fill="url(#map-grid)"/></g>
+            <g v-if="showGrid"><rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="url(#map-grid)"/></g>
             <path :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
             <g v-for="road in roads" :key="road.id" class="map-feature">
               <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="selected={type:'road',id:road.id}"/>
@@ -364,7 +366,7 @@ function exportDocument() {
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>
           </svg>
         </div>
-        <footer class="stage-footer"><span>画布：校园平面示意图 640 × 480 · 滚轮缩放 / 中键或空格拖动 / +/-/0 快捷键</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路 · {{ areas.length }} 个区域</span><span>坐标来源：校园原图标注</span></footer>
+        <footer class="stage-footer"><span>工作区 {{ workspaceBounds.width }} × {{ workspaceBounds.height }} · 原图 640 × 480 仅作参考底图 · 滚轮缩放 / 中键或空格拖动 / +/-/0 快捷键</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路 · {{ areas.length }} 个区域</span><span>坐标：可超出原图范围的编辑单位</span></footer>
       </main>
       <aside class="inspector">
         <div class="panel-title">属性检查器</div>

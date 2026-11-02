@@ -29,17 +29,20 @@ export class CameraRig {
     this.orbit.maxDistance = 190
     this.orbit.target.set(0, 0, 0)
     this.orbit.enabled = true
+    this.orbit.mouseButtons.LEFT = THREE.MOUSE.PAN
+    this.orbit.mouseButtons.RIGHT = THREE.MOUSE.ROTATE
+    this.transitioningToOverview = false
   }
 
   setMode(mode) {
     if (!['overview', 'thirdPerson', 'firstPerson'].includes(mode)) return
     if (mode === this.mode) return
     this.mode = mode
-    this.orbit.enabled = mode === 'overview'
+    this.orbit.enabled = false
     if (mode === 'overview') {
+      this.transitioningToOverview = true
       this.desiredPosition.set(0, 105, 112)
       this.desiredTarget.set(0, 0, 0)
-      this.orbit.target.copy(this.desiredTarget)
     } else if (mode === 'thirdPerson') {
       this.orbit.enabled = false
       this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
@@ -51,7 +54,7 @@ export class CameraRig {
       this.camera.getWorldDirection(direction)
       this.firstYaw = Math.atan2(direction.x, direction.z)
       this.firstPitch = Math.asin(direction.y)
-      this.player.set(this.camera.position.x, 1.7, this.camera.position.z)
+      // 保留当前漫游坐标，避免从第三人称切换时把角色瞬移到相机后方。
       this.updateFirstPersonDesired()
     }
     this.currentPosition.copy(this.camera.position)
@@ -96,7 +99,7 @@ export class CameraRig {
   }
 
   update(delta) {
-    if (this.mode === 'overview') {
+    if (this.mode === 'overview' && !this.transitioningToOverview) {
       this.orbit.update()
       return
     }
@@ -104,6 +107,13 @@ export class CameraRig {
     this.camera.position.lerp(this.desiredPosition, alpha)
     this.currentTarget.lerp(this.desiredTarget, alpha)
     this.camera.lookAt(this.currentTarget)
+    if (this.mode === 'overview' && this.transitioningToOverview && this.camera.position.distanceTo(this.desiredPosition) < 0.12) {
+      this.camera.position.copy(this.desiredPosition)
+      this.currentTarget.copy(this.desiredTarget)
+      this.orbit.target.copy(this.desiredTarget)
+      this.orbit.enabled = true
+      this.transitioningToOverview = false
+    }
   }
 
   resize(aspect) {
@@ -113,7 +123,8 @@ export class CameraRig {
 
   focusCampus() {
     this.mode = 'overview'
-    this.orbit.enabled = true
+    this.orbit.enabled = false
+    this.transitioningToOverview = true
     this.orbit.target.set(0, 0, 0)
     this.camera.position.set(0, 105, 112)
     this.camera.lookAt(0, 0, 0)

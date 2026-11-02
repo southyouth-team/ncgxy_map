@@ -16,7 +16,7 @@ const activeMode = ref('overview')
 const loading = ref(true)
 const errorMessage = ref('')
 const engineReady = ref(false)
-const showEditor = ref(new URLSearchParams(window.location.search).get('view') === 'editor')
+const showEditor = ref(false)
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
 const sceneRevision = ref(0)
@@ -146,7 +146,7 @@ onMounted(async () => {
         loading.value = false
       },
     })
-    await engine.init()
+    await engine.init()\n    if (new URLSearchParams(window.location.search).get('view') === 'editor') showEditor.value = true
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'
     loading.value = false

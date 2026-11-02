@@ -50,11 +50,14 @@ function draw() {
     context.beginPath(); context.moveTo(0, y * tileSize + .5); context.lineTo(width * tileSize, y * tileSize + .5); context.stroke()
   }
   for (const object of map.value.objects) {
-    context.fillStyle = object.color || '#285c3b'
-    context.font = 'bold 14px monospace'
-    context.textAlign = 'center'
-    context.textBaseline = 'middle'
-    context.fillText(object.glyph || '◆', (object.x + .5) * tileSize, (object.y + .5) * tileSize)
+    const asset = RPG_OBJECT_PALETTE.find(item => item.id === object.assetId)
+    const w = Number(object.width || asset?.width || 1), h = Number(object.height || asset?.height || 1)
+    context.fillStyle = object.color || asset?.color || '#285c3b'; context.globalAlpha = .24
+    context.fillRect(object.x*tileSize,object.y*tileSize,w*tileSize,h*tileSize); context.globalAlpha=1
+    context.strokeStyle=object.color||asset?.color||'#285c3b'; context.lineWidth=2
+    context.strokeRect(object.x*tileSize+1,object.y*tileSize+1,w*tileSize-2,h*tileSize-2)
+    context.font='bold 14px monospace'; context.textAlign='center'; context.textBaseline='middle'
+    context.fillText(object.glyph||'◆',(object.x+w/2)*tileSize,(object.y+h/2)*tileSize)
   }
 }
 function getCell(event) {
@@ -68,8 +71,8 @@ function applyAt(event) {
   const { x, y } = getCell(event)
   if (tool.value === 'object' && selectedObject.value) {
     const item = RPG_OBJECT_PALETTE.find(entry => entry.id === selectedObject.value)
-    if (item && x >= 0 && y >= 0 && x < map.value.grid.width && y < map.value.grid.height) {
-      map.value.objects.push({ id: `obj-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, kind: 'decoration', assetId: item.id, x, y, glyph: item.glyph, color: item.color })
+    if (item && x >= 0 && y >= 0 && x + item.width <= map.value.grid.width && y + item.height <= map.value.grid.height) {
+      map.value.objects.push({ id: `obj-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, kind: 'decoration', assetId: item.id, x, y, width: item.width, height: item.height, rotation: 0, glyph: item.glyph, color: item.color })
       draw()
     }
     return
@@ -163,7 +166,7 @@ onMounted(loadMapDocument)
         <span class="rpg-status">{{ status }}</span>
         <button :disabled="saving || loading" @click="saveMapDocument">{{ saving ? '保存中…' : '保存地图' }}</button>
         <button @click="saveDraft">导出 JSON</button>
-        <button @click="emit('switch-view', '3d')">三维预览</button>
+        <button @click="emit('switch-view', '3d', map)">三维预览</button>
         <button class="rpg-close" @click="emit('close')">退出编辑模式</button>
       </div>
     </header>

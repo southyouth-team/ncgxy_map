@@ -102,6 +102,79 @@ export class ScenesService {
   }
 
 
+  async findPlan(userId: string, campusId: string, mapId: string) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor','viewer']);
+    await this.requireMap(campusId, mapId);
+    const rows = await this.db.query(
+      `SELECT id,campus_id,map_id,schema_version,document,revision,created_at,updated_at
+       FROM campus_plan_document WHERE campus_id=$1 AND map_id=$2`,
+      [campusId,mapId],
+    );
+    if (!rows.length) return { campusId, mapId, schemaVersion: 2, revision: 0, document: null };
+    return rows[0];
+  }
+
+  async savePlan(userId: string, campusId: string, mapId: string, revision: number, document: Record<string, unknown>) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor']);
+    this.validatePlanDocument(document, mapId);
+    return this.db.transaction(async (manager) => {
+      const maps = await manager.query(
+        'SELECT id FROM campus_map WHERE id=$1 AND campus_id=$2 FOR UPDATE',
+        [mapId,campusId],
+      );
+      if (!maps.length) throw new NotFoundException('地图项目不存在');
+      const current = await manager.query(
+        'SELECT id,revision FROM campus_plan_document WHERE campus_id=$1 AND map_id=$2 FOR UPDATE',
+        [campusId,mapId],
+      );
+      const currentRevision = current.length ? Number(current[0].revision) : 0;
+      if (currentRevision !== revision) {
+        throw new ConflictException({ message: '二维平面编辑文档版本冲突，请重新加载后再保存', currentRevision });
+      }
+      const nextRevision = currentRevision + 1;
+      const nextDocument = { ...document, revision: nextRevision, mapId };
+      let id: string;
+      if (current.length) {
+        id = String(current[0].id);
+        await manager.query(
+          `UPDATE campus_plan_document SET schema_version=2,document=$1::jsonb,
+           revision=$2,updated_by=$3,updated_at=now() WHERE id=$4`,
+          [JSON.stringify(nextDocument),nextRevision,userId,id],
+        );
+      } else {
+        const inserted = await manager.query(
+          `INSERT INTO campus_plan_document
+           (campus_id,map_id,schema_version,document,revision,created_by,updated_by)
+           VALUES ($1,$2,2,$3::jsonb,$4,$5,$5) RETURNING id`,
+          [campusId,mapId,JSON.stringify(nextDocument),nextRevision,userId],
+        );
+        id = String(inserted[0].id);
+      }
+      return { id, campusId, mapId, schemaVersion: 2, revision: nextRevision, document: nextDocument };
+    });
+  }
+
+  private validatePlanDocument(document: Record<string, unknown>, mapId: string) {
+    if (Number(document.schemaVersion) !== 2) throw new BadRequestException('仅支持 schemaVersion 2 的二维平面编辑文档');
+    if (String(document.mapId) !== mapId) throw new BadRequestException('平面编辑文档 mapId 与请求地图不一致');
+    if (document.coordinateSystem !== 'campus-plan-pixel') throw new BadRequestException('平面编辑文档坐标系无效');
+    const collections = ['buildings', 'areas', 'roads', 'objects'];
+    for (const key of collections) {
+      const value = document[key];
+      if (value !== undefined && !Array.isArray(value)) throw new BadRequestException(`${key} 必须是数组`);
+      if (Array.isArray(value) && value.length > 20000) throw new BadRequestException(`${key} 数量超限`);
+    }
+    const calibration = document.calibration as Record<string, unknown> | null;
+    if (calibration && (!Number.isFinite(Number(calibration.a)) || !Number.isFinite(Number(calibration.b)) ||
+      !Number.isFinite(Number(calibration.tx)) || !Number.isFinite(Number(calibration.ty)))) {
+      throw new BadRequestException('底图校准参数无效');
+    }
+    const referenceImage = document.referenceImage as Record<string, unknown> | null;
+    if (referenceImage && (typeof referenceImage.assetId !== 'string' || !/^\\d+$/.test(referenceImage.assetId))) {
+      throw new BadRequestException('持久化底图必须引用当前地图资源 ID');
+    }
+  }
+
   async findRpgMap(userId: string, campusId: string, mapId: string) {
     await this.requireRole(userId, campusId, ['owner','admin','editor','viewer']);
     await this.requireMap(campusId, mapId);

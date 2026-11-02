@@ -97,7 +97,7 @@ onMounted(draw)
       <div class="rpg-actions">
         <span class="rpg-status">{{ status }}</span>
         <button @click="saveDraft">导出草稿</button>
-        <button class="rpg-close" @click="emit('close')">返回校园</button>
+        <button class="rpg-close" @click="emit('close')">切换三维视图</button>
       </div>
     </header>
     <div class="rpg-workspace">

@@ -170,6 +170,19 @@ export function createCampusEngine(container, callbacks = {}) {
     clearRpgPreview()
     rpgPreviewGroup = new THREE.Group()
     rpgPreviewGroup.name = 'CampusPlanLivePreview'
+
+    // 保留校园漫游人物：从原始校园场景复制 Sprite 到编辑预览层，
+    // 使二维编辑切换到三维预览时仍能看到人物尺度参照。
+    const sourcePlayer = campus?.getObjectByName('PixelExplorerSprite')
+    if (sourcePlayer?.isSprite) {
+      const previewPlayer = sourcePlayer.clone()
+      previewPlayer.name = 'CampusPlanPlayerSprite'
+      previewPlayer.material = sourcePlayer.material.clone()
+      previewPlayer.position.copy(sourcePlayer.position)
+      previewPlayer.scale.copy(sourcePlayer.scale)
+      previewPlayer.visible = true
+      rpgPreviewGroup.add(previewPlayer)
+    }
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(150, 96),
       new THREE.MeshStandardMaterial({ color: '#91a77b', roughness: 1 }),
@@ -346,7 +359,7 @@ export function createCampusEngine(container, callbacks = {}) {
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     input?.update(delta)
-    const playerSprite = scene?.getObjectByName('PixelExplorerSprite')
+    const playerSprite = scene?.getObjectByName('PixelExplorerSprite') || scene?.getObjectByName('CampusPlanPlayerSprite')
     if (playerSprite && cameraRig?.player) {
       // 第一人称相机位于角色眼部，隐藏自身 Sprite，避免角色贴图遮挡视野。
       playerSprite.visible = cameraRig.mode !== 'firstPerson'

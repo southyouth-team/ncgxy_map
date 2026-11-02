@@ -5,7 +5,7 @@ import { InputController } from '../controls/InputController.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld, mapRectToWorld } from '../../data/campus/campusLayout.js'
-import { roadToPolygon } from '../../editor/campusEditorDocument.js'
+import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
@@ -205,16 +205,20 @@ export function createCampusEngine(container, callbacks = {}) {
       }
     }
 
-    for (const road of document.roads) {
-      if (!Array.isArray(road.points) || road.points.length < 2) continue
-      const width = Math.max(0.7, Number(road.width || 13) * 150 / 576)
-      const footprint = roadToPolygon(road.points, Number(road.width || 13))
-      if (footprint.length < 4) continue
-      const shapePoints = footprint.map(([x, y]) => {
-        const p = mapPixelToWorld(x, y)
-        return new THREE.Vector2(p.x, -p.z)
-      })
-      const shape = new THREE.Shape(shapePoints)
+    const roadNetwork = roadNetworkToMultiPolygon(document.roads)
+    roadNetwork.forEach((polygon, polygonIndex) => {
+      const outer = polygon[0]
+      if (!outer || outer.length < 4) return
+      const toShapePoint = ([x, y]) => {
+        const point = mapPixelToWorld(x, y)
+        return new THREE.Vector2(point.x, -point.z)
+      }
+      const shape = new THREE.Shape(outer.slice(0, -1).map(toShapePoint))
+      for (const hole of polygon.slice(1)) {
+        if (hole.length < 4) continue
+        const path = new THREE.Path(hole.slice(0, -1).map(toShapePoint))
+        shape.holes.push(path)
+      }
       const geometry = new THREE.ShapeGeometry(shape)
       geometry.rotateX(-Math.PI / 2)
       const mesh = new THREE.Mesh(
@@ -222,11 +226,10 @@ export function createCampusEngine(container, callbacks = {}) {
         new THREE.MeshStandardMaterial({ color: '#777b73', roughness: 1, side: THREE.DoubleSide }),
       )
       mesh.position.y = 0.075
-      mesh.name = road.id
+      mesh.name = `RoadNetworkUnion-${polygonIndex + 1}`
       mesh.receiveShadow = true
-      mesh.userData.roadWidthWorld = width
       rpgPreviewGroup.add(mesh)
-    }
+    })
 
     for (const building of document.buildings) {
       const footprint = Array.isArray(building.footprint) && building.footprint.length >= 3

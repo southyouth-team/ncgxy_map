@@ -7,10 +7,21 @@ export class InitialPostgisSchema1730500000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('CREATE EXTENSION IF NOT EXISTS postgis');
-    // __dirname 在 ts-node 和编译后的 dist 目录中均指向 migrations；
-    // schema.sql 作为数据库模块资产随源码/构建产物部署。
-    const schemaPath = resolve(__dirname, '../schema.sql');
-    const sql = await readFile(schemaPath, 'utf8');
+    // 开发环境从 src 执行，生产环境可能从 dist 执行；Docker runtime 将 schema.sql 保留在 src/database。
+    const candidates = [
+      resolve(__dirname, '../schema.sql'),
+      resolve(process.cwd(), 'src/database/schema.sql'),
+    ];
+    let sql: string | undefined;
+    for (const schemaPath of candidates) {
+      try {
+        sql = await readFile(schemaPath, 'utf8');
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    if (!sql) throw new Error('找不到数据库初始化文件 schema.sql，请检查部署产物是否包含 server/src/database/schema.sql');
     await queryRunner.query(sql);
   }
 

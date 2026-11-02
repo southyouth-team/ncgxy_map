@@ -82,3 +82,22 @@
 - 二维编辑文档与三维 GIS 场景文档（`campus_scene`）隔离，避免编辑器保存时覆盖三维场景对象及其 Feature 关联。
 - 文档通过 revision 乐观锁避免并发覆盖；底图文件通过地图资源接口上传，编辑文档仅保存资源 ID 和受控 contentPath。
 - 当前资源存储由 `ASSET_STORAGE_DIR` 指定的本地文件系统提供，部署时必须挂载持久化卷；尚未实现对象存储适配。
+
+
+## 第十三阶段：底图 AI 识图 MVP（模型适配层）
+
+- 底图上传完成后自动调用 `POST /campuses/:campusId/maps/:mapId/assets/:assetId/recognize`，识别建筑、道路、绿地、水体、运动场、广场、停车场和设施。
+- 视觉模型使用 OpenAI Chat Completions 兼容接口，支持通过 `VISION_API_BASE_URL` 接入兼容服务；`VISION_API_KEY` 和 `VISION_MODEL` 必须由部署环境配置，密钥不得写入前端。
+- 识别结果使用原始图片像素坐标，返回 Polygon / LineString、类型、名称、置信度和来源标记；低于 0.75 的结果标记为待人工复核。
+- 识别结果先导入二维编辑器草稿并触发自动保存，不直接写入正式 GIS Feature，避免模型误判污染权威空间数据。
+- 编辑器提供“同时生成场景素材”选项。当前开关为建筑分配已有内置像素风建筑模板；独立 AI 模型生成、素材库持久化和树木/路灯等装饰资产生成尚未接入，不能视为已交付。
+- 当前识图接口为同步请求，最长等待 180 秒；大图、慢模型或高并发场景应升级为持久化异步任务队列。图片按原图像素输出，暂不进行分块推理；超大底图建议先切片或降低分辨率。
+- 配置示例（写入服务端环境变量）：
+
+```env
+VISION_API_BASE_URL=https://api.openai.com/v1
+VISION_API_KEY=replace-with-server-side-key
+VISION_MODEL=vision-capable-model
+```
+
+- 识别依赖模型本身支持图像输入和 JSON 输出；非视觉模型、仅文本模型或不支持 `response_format=json_object` 的兼容服务无法正常工作。

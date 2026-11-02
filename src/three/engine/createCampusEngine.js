@@ -7,6 +7,9 @@ import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingM
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
   let scene
+  let campus
+  let lastPlayerX = 0
+  let lastPlayerZ = 24
   let cameraRig
   let input
   let frameId = 0
@@ -32,7 +35,7 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer.toneMapping = THREE.NoToneMapping
     container.appendChild(renderer.domElement)
 
-    const campus = createCampusScene(THREE)
+    campus = createCampusScene(THREE)
     scene.add(campus)
     loadCampusBuildingModels(scene)
       .then((result) => callbacks.onAssetsLoaded?.(result))
@@ -81,7 +84,15 @@ export function createCampusEngine(container, callbacks = {}) {
     previousTime = time
     input?.update(delta)
     const playerSprite = scene?.getObjectByName('PixelExplorerSprite')
-    if (playerSprite && cameraRig?.player) playerSprite.position.set(cameraRig.player.x, 2.1, cameraRig.player.z)
+    if (playerSprite && cameraRig?.player) {
+      playerSprite.position.set(cameraRig.player.x, 2.1, cameraRig.player.z)
+      const dx = cameraRig.player.x - lastPlayerX
+      const dz = cameraRig.player.z - lastPlayerZ
+      const moving = dx * dx + dz * dz > 0.000001
+      campus?.userData.updatePlayerAnimation?.(moving, time / 1000)
+      lastPlayerX = cameraRig.player.x
+      lastPlayerZ = cameraRig.player.z
+    }
     cameraRig?.update(delta)
     renderer.render(scene, cameraRig.camera)
   }

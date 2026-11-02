@@ -20,10 +20,10 @@ export const TILE_PALETTE = Object.freeze([
 ])
 
 export const RPG_OBJECT_PALETTE = Object.freeze([
-  { id: 'tree', label: '树木', width: 1, height: 1, glyph: '♣', color: '#285c3b' },
-  { id: 'flower', label: '花坛', width: 1, height: 1, glyph: '✿', color: '#e8b75c' },
+  { id: 'tree', label: '树木', width: 2, height: 2, glyph: '♣', color: '#285c3b' },
+  { id: 'flower', label: '花坛', width: 2, height: 1, glyph: '✿', color: '#e8b75c' },
   { id: 'lamp', label: '路灯', width: 1, height: 1, glyph: '†', color: '#f2d98a' },
-  { id: 'bridge', label: '桥梁', width: 3, height: 1, glyph: '▤', color: '#b98b55' },
+  { id: 'bridge', label: '桥梁', width: 3, height: 2, glyph: '▤', color: '#b98b55' },
 ])
 
 export function createRpgMapDocument(options = {}) {

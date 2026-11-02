@@ -4,6 +4,7 @@ import {
   createReferenceImageMetadata,
   fitCampusSimilarityTransform,
   invertCampusCalibration,
+  mapEditorPointToCalibratedWorld,
 } from './campusMapCalibration.js'
 
 describe('campus map similarity calibration', () => {
@@ -60,5 +61,26 @@ describe('campus map similarity calibration', () => {
     expect(metadata.coordinateSpace).toBe('image-pixel')
     expect(metadata).not.toHaveProperty('data')
     expect(() => createReferenceImageMetadata({ uri: '', width: 100, height: 100 })).toThrow()
+  })
+})
+
+describe('editor to calibrated Three.js coordinate mapping', () => {
+  it('maps editor coordinates through source image pixels into campus-local XZ', () => {
+    const calibration = fitCampusSimilarityTransform([
+      { source: [0, 0], target: [10, 20] },
+      { source: [1600, 0], target: [110, 20] },
+    ])
+    expect(mapEditorPointToCalibratedWorld([320, 240], calibration, { width: 1600, height: 1200 }))
+      .toEqual({ x: 60, z: 20 })
+  })
+
+  it('supports an explicit world-units scale and leaves legacy documents uncalibrated', () => {
+    const calibration = fitCampusSimilarityTransform([
+      { source: [0, 0], target: [0, 0] },
+      { source: [640, 0], target: [640, 0] },
+    ])
+    expect(mapEditorPointToCalibratedWorld([320, 240], calibration, { width: 640, height: 480 }, 0.5))
+      .toEqual({ x: 160, z: 120 })
+    expect(mapEditorPointToCalibratedWorld([10, 10], null, null)).toBeNull()
   })
 })

@@ -265,7 +265,7 @@ function exportDocument() {
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#f0e5ce" stroke-width="2" stroke-dasharray="4 3"/>
               <text :x="(item.rect[0]+item.rect[2])/2" :y="(item.rect[1]+item.rect[3])/2+3" text-anchor="middle" font-size="8" fill="#514634">{{ item.label }}</text>
               <polygon v-if="selected.id===item.id" :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#e6a84c" stroke-width="2" stroke-dasharray="5 3"/>
-              <g v-if="selected.type==='building' && selected.id===item.id"><circle v-for="(vertex,index) in item.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'building',item,index)" @click.stop="removePolygonVertex(index)"/></g>
+              <g v-if="selected.type==='building' && selected.id===item.id"><circle v-for="(vertex,index) in item.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'building',item,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
             <g fill="#3f724c" stroke="#d8dfc6" stroke-width="1.5"><g v-for="(tree,index) in [[202,215],[305,210],[355,280],[190,360],[520,275],[565,355],[225,420],[330,430],[485,435],[75,220],[85,260],[570,180]]" :key="index"><circle :cx="tree[0]" :cy="tree[1]" r="7"/><circle :cx="tree[0]-4" :cy="tree[1]+2" r="4"/></g></g>
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>

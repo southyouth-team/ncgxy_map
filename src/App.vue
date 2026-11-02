@@ -218,7 +218,7 @@ onBeforeUnmount(() => {
     </section>
 
     <nav class="mode-switcher" aria-label="视角切换">
-      <div v-if="indoorPrototypeActive && nearIndoorStairs" class="indoor-interaction-hint">靠近楼梯 · 按 E 切换楼层</div>
+      <div v-if="indoorPrototypeActive && nearIndoorStairs" class="indoor-interaction-hint" style="position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:20;padding:10px 16px;border-radius:10px;background:#28251fe8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none">靠近楼梯 · 按 E 切换楼层</div>
       <button v-if="!indoorPrototypeActive" class="mode-button" @click="engine?.enterIndoorPrototype()">
         <span class="mode-label">室内原型</span>
         <span class="mode-hint">体验楼层空间</span>

@@ -474,7 +474,7 @@ export function createCampusEngine(container, callbacks = {}) {
     return true
   }
 
-  function buildIndoorFloor(level) {
+  function buildIndoorFloor(level, transitionPosition = null) {
     const floor = indoorBuilding?.floors.find(item => item.level === level)
     if (!floor) return false
     const group = createIndoorFloor(THREE, floor)
@@ -485,7 +485,7 @@ export function createCampusEngine(container, callbacks = {}) {
     currentIndoorFloor = level
     collisionWorld = new CollisionWorld(indoorBuilding.bounds, group.userData.collisionObstacles, 0.48)
     input.collisionWorld = collisionWorld
-    cameraRig.player.set(floor.spawnPoint.x, group.position.y + floor.spawnPoint.y, floor.spawnPoint.z)
+    cameraRig.player.set(transitionPosition?.x ?? floor.spawnPoint.x, group.position.y + floor.spawnPoint.y, transitionPosition?.z ?? floor.spawnPoint.z)
     cameraRig.updateThirdPersonDesired()
     stairInteractionActive = false
     callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false })
@@ -510,7 +510,8 @@ export function createCampusEngine(container, callbacks = {}) {
 
   function switchIndoorFloor(level) {
     if (!indoorGroup || !indoorBuilding || !Number.isInteger(level) || level === currentIndoorFloor) return false
-    return buildIndoorFloor(level)
+    const transitionPosition = { x: cameraRig.player.x, z: cameraRig.player.z }
+    return buildIndoorFloor(level, transitionPosition)
   }
 
   function exitIndoorPrototype() {

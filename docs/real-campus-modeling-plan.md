@@ -1,0 +1,112 @@
+# 南昌工学院真实建筑还原实施方案
+
+## 一、范围与验收目标
+
+首期范围：校园范围内全部地上建筑外形，以及支撑定位的道路、校园边界、水体、操场和主要绿化区域。
+
+首期不包含：室内建模、地下管网、结构 BIM、精细施工构造、实时人流。
+
+验收目标：
+- 全部可识别建筑均有唯一 buildingId。
+- 全部建筑在校园底图上的位置、朝向和 footprint 有来源或现场核验依据。
+- 建筑长宽、层数和整体高度有记录；无法确认的字段标注 unknown/estimated。
+- 重点建筑的主要立面轮廓与现场照片一致。
+- 所有模型可在 Three.js 场景中独立加载、隐藏和替换。
+
+## 二、资料基线
+
+优先使用以下公开资料作为采集线索，不把网页抓取结果直接视为测绘成果：
+
+- 南昌工学院招生网“美丽校园”：https://zsb.ncpu.edu.cn/xiaoyuansh/meilixiaoyuan/
+- 南昌工学院招生网“教学设施”：https://zsb.ncpu.edu.cn/xiaoyuansh/jiaoxuesheshi/
+- 南昌工学院官网：https://www.ncpu.edu.cn/
+- 南昌工学院党政办公室官网（常用查询含校园地图）：https://dbxb.ncpu.edu.cn/
+- 2026级新生报到指南（含校园平面图）：https://app.gaokaozhitongche.com/newsguide/h/Rg1KJO0N
+- 南昌市自然资源和规划局东大门设计方案公示：https://bnr.nc.gov.cn/ncszrzyj/jsxmphgb/201608/07da3143ff7443079756c62d6a45ffc6.shtml
+
+使用公开地图影像前，核对其许可、坐标系、成图日期和可否用于衍生模型。官网照片用于外观参考，需保留来源与使用授权记录。
+
+## 三、技术工作流
+
+1. 底图配准：选择一份版本明确的校园平面图/正射影像，确定坐标基准、北向和比例尺；以现场可复测控制点做校准。
+2. 矢量化：在 QGIS 中绘制校园边界、道路中心线/边界、水体、操场和建筑 footprint。
+3. 实地核验：按 docs/field-survey.md 逐栋采集四向照片、建筑角点、长宽、层数、屋顶与入口信息。
+4. 模型制作：使用 Blender 按建筑编号制作基础体块，统一米制单位、原点和命名，导出 GLB/glTF。
+5. 场景集成：Three.js 通过 GLTFLoader 按 manifest 加载模型；坐标与模型资产分离，避免把坐标写入模型顶点。
+6. 质量验收：俯视叠加检查 footprint；地面视角检查立面；逐项核对建筑编号、尺寸、朝向和模型文件。
+
+## 四、建模精度分级
+
+- LOD1（全覆盖）：建筑 footprint、檐口/屋顶高度、主体体量。
+- LOD2（一般建筑）：增加楼层分割、主要窗带、入口凹凸、屋顶女儿墙。
+- LOD3（标志建筑）：增加主要立面分段、门厅、显著装饰和屋顶构件。
+
+首期所有建筑达到 LOD1；资料完整且具有识别价值的建筑提升至 LOD2/LOD3。
+
+## 五、建议资产结构
+
+```text
+public/
+  data/
+    campus.json
+    buildings.json
+  models/
+    buildings/
+      B001/
+        lod1.glb
+        lod2.glb
+  references/
+    README.md
+    photos/
+src/
+  three/
+    loaders/
+    world/
+      campus/
+      buildings/
+docs/
+  field-survey.md
+  real-campus-modeling-plan.md
+```
+
+## 六、数据质量与风险
+
+- 地图影像存在坐标偏移、年份差异和建筑更新滞后，必须通过现场控制点校准。
+- 手机 GNSS 的定位误差通常不足以支持建筑角点级精度；关键尺寸使用测距工具复核。
+- 不同楼栋的照片必须关联建筑编号和拍摄方向。
+- 未核验的名称、坐标、尺寸、高度不能伪装成真实数据。
+- 校园拍摄需遵守校方管理规定；无人机飞行需事先取得必要许可。
+- 公开照片和地图可能受版权、平台许可和测绘数据使用规则约束；保留来源，不默认拥有再分发权。
+
+## 七、阶段交付
+
+- M1：建筑台账、地图配准说明、校园矢量底图。
+- M2：全校建筑现场采集数据与照片索引。
+- M3：全校 LOD1 建筑 GLB 资产。
+- M4：LOD2/LOD3 重点建筑、Three.js 集成和验收报告。
+
+工期取决于建筑总数、现场测量投入、地图可用性和资料许可情况。完成 M1 盘点后再给出可信排期，不以未经盘点的建筑数量承诺工期。
+
+## 八、建筑 GLB 清单字段约定
+
+每条 `buildings.json` 记录在数据采集完成后至少应包含：
+
+```json
+{
+  "buildingId": "B001",
+  "name": "经核实的建筑名称",
+  "position": [0, 0, 0],
+  "rotationY": 0,
+  "modelUrl": "/models/buildings/B001/lod1.glb",
+  "floors": null,
+  "heightMeters": null,
+  "confidence": "low",
+  "sourceRefs": []
+}
+```
+
+- `position` 是校园本地米制坐标，数组顺序为 [x, y, z]；模型原点统一放在 footprint 中心的地面位置。
+- `rotationY` 为绕 Y 轴旋转的弧度值。
+- `modelUrl` 仅指向站点本地 `/models/buildings/` 下的 GLB 资产。
+- `floors`、`heightMeters` 等未知字段保持 null，不得填入猜测的精确值。
+- 工程中的 `loadCampusBuildingModels.js` 已提供按清单异步加载 GLB 的基础能力；空清单是正常状态，不会生成虚构建筑。

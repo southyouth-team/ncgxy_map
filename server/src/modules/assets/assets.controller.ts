@@ -16,6 +16,16 @@ import { AssetsService, UploadedAsset } from './assets.service';
 export class AssetsController {
   constructor(private readonly service: AssetsService) {}
 
+  @Get()
+  @ApiOperation({ summary: '获取地图底图资源列表' })
+  findAll(
+    @Req() req: Request & { user: { id: string } },
+    @Param('campusId', ParseBigIntIdPipe) campusId: string,
+    @Param('mapId', ParseBigIntIdPipe) mapId: string,
+  ) {
+    return this.service.findAll(req.user.id, campusId, mapId);
+  }
+
   @Post('base-map')
   @ApiOperation({ summary: '上传并持久化校园底图' })
   @ApiConsumes('multipart/form-data')

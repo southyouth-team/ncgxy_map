@@ -3,6 +3,13 @@
  * 坐标约定：建筑中心为 (0, 0)，平面使用 XZ，Y 为高度；尺寸单位沿用校园场景单位。
  * 这是可替换的空间构建器，不包含未经测绘的南昌工学院真实房间数据。
  */
+/** 室内交互对象统一数据契约，供拾取、提示和后续服务端数据映射复用。 */
+export function createIndoorInteractionData({ id, name, objectType, interactionType = 'inspect', action = 'inspect', operationHint = '点击查看详情', roomId = null, roomName = null, description = '' }) {
+  if (!id || !name || !objectType) throw new TypeError('室内交互对象必须包含 id、name 和 objectType')
+  if (!['inspect', 'use', 'navigate'].includes(interactionType)) throw new TypeError('室内交互类型必须是 inspect/use/navigate')
+  return { id, name, objectType, interactionType, action, operationHint, roomId, roomName, description }
+}
+
 export function validateIndoorFloor(floor) {
   const errors = []
   if (!floor || typeof floor !== 'object') return ['楼层配置必须是对象']
@@ -205,19 +212,27 @@ export function createIndoorFloor(THREE, floor) {
       const itemX = x + item.x
       const itemZ = z + item.z
       const furniture = addBox(THREE, group, `indoor-furniture-${room.id}-${item.id}`, itemX, 0, itemZ, item.width, item.height, item.depth, furnitureMaterials[item.type])
-      furniture.userData.interactionData = {
-        id: item.id,
-        name: item.name || ({ desk: '课桌', table: '桌子', chair: '座椅', cabinet: '储物柜', podium: '讲台', board: '教学板' }[item.type]),
-        objectType: item.type,
-        roomId: room.id,
-        roomName: room.name,
-        description: item.description || `${room.name}内的${item.name || item.type}`,
-      }
+      furniture.userData.interactionData = createIndoorInteractionData({
+        id: item.id, name: item.name || ({ desk: '课桌', table: '桌子', chair: '座椅', cabinet: '储物柜', podium: '讲台', board: '教学板' }[item.type]),
+        objectType: item.type, interactionType: 'inspect', action: 'inspect', operationHint: '点击查看设施信息',
+        roomId: room.id, roomName: room.name, description: item.description || `${room.name}内的${item.name || item.type}`,
+      })
       if (item.type !== 'board') {
         collision.push({ minX: itemX - item.width / 2, maxX: itemX + item.width / 2, minZ: itemZ - item.depth / 2, maxZ: itemZ + item.depth / 2 })
       }
     }
   }
+  // 房间入口标记可拾取查看；实际进入仍由门口近距离 E 键逻辑负责。
+  for (const point of getRoomInteractionPoints(floor)) {
+    const room = floor.rooms.find(item => item.id === point.roomId)
+    const marker = addBox(THREE, group, `indoor-room-door-${point.roomId}`, point.approach.x, 0.025, point.approach.z, 1.05, 0.05, 0.22, trim)
+    marker.userData.interactionData = createIndoorInteractionData({
+      id: `door-${point.roomId}`, name: `${point.roomName}入口`, objectType: 'door', interactionType: 'navigate',
+      action: 'enter-room', operationHint: '靠近入口后按 E 进入房间', roomId: point.roomId, roomName: point.roomName,
+      description: `通往${room?.name || point.roomName}的入口；进入操作由门口 E 键触发`,
+    })
+  }
+
   // 楼梯视觉模型；上下楼由近距离交互触发，不冒充完整楼梯物理。
   const stairPoint = floor.stairPoint || { x: 9, z: 0 }
   const stairMaterial = new THREE.MeshStandardMaterial({ color: '#9a7958', roughness: 1 })
@@ -226,7 +241,11 @@ export function createIndoorFloor(THREE, floor) {
   const stairDepth = 4.2 / stairCount
   for (let index = 0; index < stairCount; index += 1) {
     const z = stairPoint.z - 2.1 + (index + 0.5) * stairDepth
-    addBox(THREE, group, 'indoor-stair-step', stairPoint.x, index * stairRise, z, 1.7, stairRise, stairDepth, stairMaterial)
+    const step = addBox(THREE, group, 'indoor-stair-step', stairPoint.x, index * stairRise, z, 1.7, stairRise, stairDepth, stairMaterial)
+    if (index === 5) step.userData.interactionData = createIndoorInteractionData({
+      id: `stair-${floor.level}`, name: '楼层楼梯', objectType: 'stairs', interactionType: 'navigate', action: 'change-floor',
+      operationHint: '靠近楼梯后按 E 切换楼层', description: '连接相邻楼层；楼层切换由楼梯区域近距离 E 键触发',
+    })
   }
   const railMaterial = new THREE.MeshStandardMaterial({ color: '#6d5842', roughness: 1 })
   for (const offset of [-0.95, 0.95]) {

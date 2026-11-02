@@ -333,6 +333,8 @@ onBeforeUnmount(() => {
       <template v-if="selectedObject.interaction">
         <div style="margin-top:7px;font-size:10px;color:#6d7b71">所属房间：{{ selectedObject.interaction.roomName }}</div>
         <div style="margin-top:4px;font-size:10px;color:#6d7b71">对象 ID：{{ selectedObject.interaction.id }}</div>
+        <div style="margin-top:4px;font-size:10px;color:#6d7b71">交互类型：{{ selectedObject.interaction.interactionType }} · {{ selectedObject.interaction.action }}</div>
+        <div style="margin-top:4px;font-size:10px;color:#315f49">操作提示：{{ selectedObject.interaction.operationHint }}</div>
         <p style="margin:9px 0 0;font-size:11px;line-height:1.6;color:#526257">{{ selectedObject.interaction.description }}</p>
       </template>
       <div v-else style="margin-top:4px;font-size:10px;color:#6d7b71">Feature ID：{{ selectedObject.featureId }}</div>

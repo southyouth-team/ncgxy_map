@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -10,6 +10,13 @@ const sample = {
   rooms: [{ id: 'classroom-101', name: '教室 101', x: -5, z: 0, width: 8, depth: 6, doorWall: 'south', doorWidth: 1.4 }],
   doors: [{ wall: 'south', offset: 0, width: 2 }],
 }
+
+describe('indoor interaction contract', () => {
+  it('normalizes inspect and navigation interaction metadata', () => {
+    expect(createIndoorInteractionData({ id: 'door-101', name: '教室入口', objectType: 'door', interactionType: 'navigate', action: 'enter-room', operationHint: '按 E 进入' })).toMatchObject({ id: 'door-101', interactionType: 'navigate', action: 'enter-room', operationHint: '按 E 进入' })
+    expect(() => createIndoorInteractionData({ id: 'x', name: '对象', objectType: 'fixture', interactionType: 'teleport' })).toThrow('室内交互类型必须是 inspect/use/navigate')
+  })
+})
 
 describe('indoor floor contract', () => {
   it('accepts a configured floor with rooms and an entrance opening', () => {
@@ -111,6 +118,8 @@ describe('indoor stair construction', () => {
     expect(group.userData.stairPath.end).toEqual({ x: 10.5, z: 2.1 })
     expect(group.userData.stairPath.rise).toBe(4.2)
     expect(group.children.filter(child => child.name === 'indoor-stair-step')).toHaveLength(12)
+    expect(group.children.find(child => child.name === 'indoor-stair-step' && child.userData.interactionData)?.userData.interactionData).toMatchObject({ objectType: 'stairs', interactionType: 'navigate', action: 'change-floor' })
+    expect(group.children.find(child => child.name === 'indoor-room-door-classroom-101')?.userData.interactionData).toMatchObject({ objectType: 'door', interactionType: 'navigate', action: 'enter-room' })
     expect(group.children.filter(child => child.name === 'indoor-stair-rail')).toHaveLength(2)
     const collision = new CollisionWorld({ minX: -12, maxX: 12, minZ: -12, maxZ: 12 }, group.userData.collisionObstacles, 0.48)
     const throughCenter = collision.move({ x: 10.5, z: -2.5 }, 0, 4.8)

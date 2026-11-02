@@ -8,7 +8,71 @@ import {
   CAMPUS_AREAS,
 } from '../data/campus/campusLayout.js'
 
+const props = defineProps({
+  campusId: { type: [String, Number], default: '' },
+  mapId: { type: [String, Number], default: '' },
+  apiBase: { type: String, default: 'http://localhost:3001/api/v1' },
+  devUserId: { type: String, default: 'map-editor-local' },
+})
 const emit = defineEmits(['close', 'preview'])
+const documentRevision = ref(0)
+const persistenceBusy = ref(false)
+const persistenceMessage = ref('')
+const savedAssetId = ref(null)
+const authHeaders = () => ({ 'X-Dev-User-Id': props.devUserId })
+const mapApiPath = () => `/campuses/${props.campusId}/maps/${props.mapId}`
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${props.apiBase}${path}`, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } })
+  const payload = options.raw ? await response.blob() : await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload?.message || `地图服务请求失败：HTTP ${response.status}`)
+  return payload
+}
+async function loadEditorDocument() {
+  if (!props.campusId || !props.mapId) return
+  try {
+    const saved = await apiRequest(`${mapApiPath()}/scene`)
+    documentRevision.value = Number(saved.revision || 0)
+    const document = saved.document
+    if (document?.coordinateSystem === 'campus-plan-pixel') {
+      if (Array.isArray(document.buildings)) buildings.value = document.buildings.map(normalizeBuilding)
+      if (Array.isArray(document.areas)) areas.value = document.areas.map((area) => ({ ...area, footprint: area.polygon || area.footprint || [] }))
+      if (Array.isArray(document.roads)) roads.value = document.roads
+      if (document.calibration?.controlPoints) calibrationPoints.value = document.calibration.controlPoints
+      if (document.referenceImage) {
+        referenceImage.value = document.referenceImage
+        referenceImageOpacity.value = Number(document.referenceImage.opacity ?? 0.55)
+        if (document.referenceImage.assetId) await loadAssetPreview(document.referenceImage.assetId)
+      }
+    }
+  } catch (error) {
+    persistenceMessage.value = `读取已保存编辑文档失败：${error.message}`
+  }
+}
+async function loadAssetPreview(assetId) {
+  const asset = await apiRequest(`${mapApiPath()}/assets/${assetId}/content`, { raw: true })
+  if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
+  referenceImagePreview.value = URL.createObjectURL(asset)
+  savedAssetId.value = assetId
+}
+async function saveEditorDocument() {
+  if (!props.campusId || !props.mapId) { persistenceMessage.value = '缺少校园或地图 ID，无法持久化'; return }
+  persistenceBusy.value = true
+  persistenceMessage.value = ''
+  try {
+    const document = { ...buildDocument(), mapId: String(props.mapId), objects: [] }
+    const saved = await apiRequest(`${mapApiPath()}/scene`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ revision: documentRevision.value, document }),
+    })
+    documentRevision.value = Number(saved.revision || documentRevision.value + 1)
+    persistenceMessage.value = `已保存 · 版本 ${documentRevision.value}`
+  } catch (error) {
+    persistenceMessage.value = error.message
+  } finally {
+    persistenceBusy.value = false
+  }
+}
 const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => ({ ...normalizeBuilding(item), template: item.template || item.label || '教学楼' })))
 const areas = ref(CAMPUS_AREAS.map((item) => ({
   ...item,
@@ -47,24 +111,40 @@ const calibrationTransform = computed(() => {
     return null
   }
 })
-function uploadReferenceImage(event) {
+async function uploadReferenceImage(event) {
   const file = event.target.files?.[0]
   if (!file) return
-  if (!file.type.startsWith('image/')) { calibrationError.value = '请选择 PNG、JPG 或 WebP 图片'; return }
-  const reader = new FileReader()
-  reader.onload = () => {
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { calibrationError.value = '请选择 PNG、JPG 或 WebP 图片'; return }
+  if (file.size > 15 * 1024 * 1024) { calibrationError.value = '底图不能超过 15 MB'; return }
+  if (!props.campusId || !props.mapId) { calibrationError.value = '当前地图未连接服务端，无法上传持久化底图'; return }
+  persistenceBusy.value = true
+  try {
+    const body = new FormData()
+    body.append('file', file)
+    const asset = await apiRequest(`${mapApiPath()}/assets/base-map`, { method: 'POST', body })
+    const preview = await apiRequest(`${mapApiPath()}/assets/${asset.id}/content`, { raw: true })
+    if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
+    referenceImagePreview.value = URL.createObjectURL(preview)
     const image = new Image()
     image.onload = () => {
-      referenceImagePreview.value = String(reader.result)
-      referenceImage.value = { name: file.name, width: image.naturalWidth, height: image.naturalHeight, uri: 'local-preview-only', coordinateSpace: 'image-pixel', status: 'unverified' }
+      referenceImage.value = {
+        assetId: String(asset.id), name: asset.original_name || file.name,
+        width: image.naturalWidth, height: image.naturalHeight, uri: asset.contentPath,
+        coordinateSpace: 'image-pixel', status: 'unverified',
+      }
       calibrationPoints.value = []
       calibrationError.value = ''
+      persistenceMessage.value = '底图已上传至地图资源库'
     }
-    image.onerror = () => { calibrationError.value = '图片解码失败' }
-    image.src = String(reader.result)
+    image.onerror = () => { calibrationError.value = '服务端底图读取成功，但图片解码失败' }
+    image.src = referenceImagePreview.value
+    savedAssetId.value = String(asset.id)
+  } catch (error) {
+    calibrationError.value = error.message
+  } finally {
+    persistenceBusy.value = false
+    event.target.value = ''
   }
-  reader.onerror = () => { calibrationError.value = '读取图片失败' }
-  reader.readAsDataURL(file)
 }
 function captureCalibrationPoint(event) {
   if (!calibrationMode.value || !referenceImagePreview.value) return
@@ -74,6 +154,7 @@ function captureCalibrationPoint(event) {
 }
 function removeCalibrationPoint(index) { calibrationPoints.value.splice(index, 1) }
 function clearReferenceImage() {
+  if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
   referenceImage.value = null
   referenceImagePreview.value = ''
   calibrationPoints.value = []
@@ -196,10 +277,12 @@ function onWindowKeyUp(event) { if (event.code === 'Space') spacePressed.value =
 function preventCanvasContextMenu(event) { event.preventDefault() }
 onMounted(() => {
   window.addEventListener('keydown', onWindowKeyDown)
+  loadEditorDocument()
   window.addEventListener('keyup', onWindowKeyUp)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onWindowKeyDown)
+  if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
   window.removeEventListener('keyup', onWindowKeyUp)
 })
 function point(event) {
@@ -363,12 +446,27 @@ function exportDocument() {
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
         <button title="缩小（-）" @click="zoomAt(Math.max(.35, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配工作区</button><button title="放大（+）" @click="zoomAt(Math.min(4, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
-        <button @click="preview3d">三维预览</button><button class="primary" @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
+        <button @click="preview3d">三维预览</button><button class="primary" :disabled="persistenceBusy" @click="saveEditorDocument">{{ persistenceBusy ? "保存中…" : "保存到服务端" }}</button><button @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
     </header>
     <div class="workspace">
       <aside class="tool-panel">
         <div class="panel-title">场景工具</div>
+        <div class="panel-title">底图与校准</div>
+        <label class="upload-control">上传校园底图（PNG/JPG/WebP，≤15MB）<input type="file" accept="image/png,image/jpeg,image/webp" @change="uploadReferenceImage" /></label>
+        <template v-if="referenceImage">
+          <small class="hint">{{ referenceImage.name }} · {{ referenceImage.width }} × {{ referenceImage.height }}</small>
+          <label>底图透明度 <b>{{ Math.round(referenceImageOpacity * 100) }}%</b></label>
+          <input v-model.number="referenceImageOpacity" type="range" min="0" max="1" step="0.05" />
+          <label class="upload-control"><input type="checkbox" v-model="calibrationMode" /> 开始控制点选取</label>
+          <div class="coordinate-grid"><label>目标 X<input v-model.number="targetX" type="number" /></label><label>目标 Y<input v-model.number="targetY" type="number" /></label></div>
+          <small class="hint">点击地图添加控制点；至少两个点生成相似变换。</small>
+          <div v-for="(item,index) in calibrationPoints" :key="index" class="calibration-row">P{{ index+1 }} · {{ item.target.join(', ') }} <button @click="removeCalibrationPoint(index)">移除</button></div>
+          <small v-if="calibrationTransform" class="hint">比例 {{ calibrationTransform.scale.toFixed(5) }} · 旋转 {{ calibrationTransform.rotationDegrees.toFixed(2) }}° · RMS {{ calibrationTransform.rmsError.toFixed(3) }}</small>
+          <button class="add-button" @click="clearReferenceImage">移除底图</button>
+        </template>
+        <small v-if="calibrationError" class="hint">{{ calibrationError }}</small>
+        <small v-if="persistenceMessage" class="hint">{{ persistenceMessage }}</small>
         <button :class="{active:tool==='select'}" @click="tool='select'"><span>↖</span>选择 / 移动</button>
         <button :class="{active:tool==='building'}" @click="tool='building'"><span>▰</span>建筑摆放</button>
         <button :class="{active:tool==='road'}" @click="tool='road'"><span>⌁</span>道路编辑</button>

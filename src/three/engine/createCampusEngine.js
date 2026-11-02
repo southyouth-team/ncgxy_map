@@ -21,8 +21,8 @@ export function createCampusEngine(container, callbacks = {}) {
     scene.background = new THREE.Color('#aebfbd')
     scene.fog = new THREE.Fog('#aebfbd', 90, 260)
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false })
+    // 关闭抗锯齿并限制渲染倍率，保持像素边缘清晰并控制 GPU 开销。\n    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap

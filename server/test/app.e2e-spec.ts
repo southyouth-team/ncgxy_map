@@ -77,12 +77,22 @@ describe('Campus map API (PostGIS integration)', () => {
   });
 
   it('does not delete a layer that still contains features', async () => {
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .delete(`${base}/campuses/${campusId}/maps/${mapId}/layers/${layerId}`)
-      .set(auth)
-      .expect(409);
-    const rows = await db.query('SELECT id FROM campus_feature WHERE id=$1', [featureId]);
-    expect(rows).toHaveLength(1);
+      .set(auth);
+    const layerRows = await db.query('SELECT id FROM campus_layer WHERE id=$1', [layerId]);
+    const featureRows = await db.query('SELECT id,layer_id FROM campus_feature WHERE id=$1', [featureId]);
+    expect({
+      status: response.status,
+      body: response.body,
+      remainingLayers: layerRows.length,
+      remainingFeatures: featureRows,
+    }).toEqual({
+      status: 409,
+      body: expect.any(Object),
+      remainingLayers: 1,
+      remainingFeatures: [expect.objectContaining({ id: featureId, layer_id: layerId })],
+    });
   });
 
   it('enforces viewer read-only permissions', async () => {
@@ -110,11 +120,20 @@ describe('Campus map API (PostGIS integration)', () => {
       .expect(200);
     const updated = await db.query('SELECT revision FROM campus_feature WHERE id=$1',[featureId]);
     expect(Number(updated[0].revision)).toBe(2);
-    await request(app.getHttpServer())
+    const staleResponse = await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/features/${featureId}`)
       .set(auth)
-      .send({ revision: 1, name: '过期更新' })
-      .expect(409);
+      .send({ revision: 1, name: '过期更新' });
+    const afterStale = await db.query('SELECT revision,name FROM campus_feature WHERE id=$1', [featureId]);
+    expect({
+      status: staleResponse.status,
+      body: staleResponse.body,
+      persisted: afterStale,
+    }).toEqual({
+      status: 409,
+      body: expect.any(Object),
+      persisted: [expect.objectContaining({ revision: '2', name: '第一次更新' })],
+    });
   });
 
   it('rejects invalid GeoJSON geometry', async () => {

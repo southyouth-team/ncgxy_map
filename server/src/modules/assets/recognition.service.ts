@@ -46,7 +46,7 @@ export class RecognitionService implements OnModuleInit, OnModuleDestroy {
     if (this.busy) return;
     this.busy = true;
     try {
-      const claimed = await this.db.query(`UPDATE campus_recognition_result SET status='processing',started_at=now() WHERE id=(SELECT id FROM campus_recognition_result WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,campus_id,map_id,asset_id`);
+      const claimed = await this.db.query(`UPDATE campus_recognition_result SET status='processing',started_at=now() WHERE id=(SELECT id FROM campus_recognition_result WHERE status='queued' OR (status='processing' AND started_at < now() - interval '10 minutes') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,campus_id,map_id,asset_id`);
       if (claimed.length) await this.processJob(claimed[0]);
     } catch (error) {
       this.logger.error('识图队列执行失败', error instanceof Error ? error.stack : String(error));

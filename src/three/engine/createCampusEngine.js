@@ -4,6 +4,7 @@ import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { buildFeatureObject } from '../world/buildFeatureObject.js'
+import { mapPixelToWorld, mapRectToWorld } from '../../data/campus/campusLayout.js'
 
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
@@ -163,6 +164,95 @@ export function createCampusEngine(container, callbacks = {}) {
     return true
   }
 
+  function previewCampusPlan(document) {
+    if (!scene || !document || !Array.isArray(document.buildings) || !Array.isArray(document.roads)) return false
+    clearRpgPreview()
+    rpgPreviewGroup = new THREE.Group()
+    rpgPreviewGroup.name = 'CampusPlanLivePreview'
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(150, 96),
+      new THREE.MeshStandardMaterial({ color: '#91a77b', roughness: 1 }),
+    )
+    ground.rotation.x = -Math.PI / 2
+    ground.position.y = -0.12
+    ground.receiveShadow = true
+    rpgPreviewGroup.add(ground)
+
+    for (const area of document.areas || []) {
+      if (area.polygon?.length >= 3) {
+        const points = area.polygon.map(([x, y]) => {
+          const p = mapPixelToWorld(x, y)
+          return new THREE.Vector2(p.x, -p.z)
+        })
+        const shape = new THREE.Shape(points)
+        const mesh = new THREE.Mesh(
+          new THREE.ShapeGeometry(shape),
+          new THREE.MeshStandardMaterial({ color: area.type === 'water' ? '#6bb8b4' : '#9eaa83', roughness: 1 }),
+        )
+        mesh.rotation.x = -Math.PI / 2
+        mesh.position.y = 0.015
+        mesh.receiveShadow = true
+        rpgPreviewGroup.add(mesh)
+      } else if (area.rect) {
+        const bounds = mapRectToWorld(area.rect)
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(bounds.width, 0.08, bounds.depth),
+          new THREE.MeshStandardMaterial({ color: area.type === 'sports' ? '#b9b69f' : '#829a70', roughness: 1 }),
+        )
+        mesh.position.set(bounds.x, 0.02, bounds.z)
+        rpgPreviewGroup.add(mesh)
+      }
+    }
+
+    for (const road of document.roads) {
+      if (!Array.isArray(road.points) || road.points.length < 2) continue
+      const points = road.points.map(([x, y]) => {
+        const p = mapPixelToWorld(x, y)
+        return new THREE.Vector3(p.x, 0.09, p.z)
+      })
+      const curve = new THREE.CatmullRomCurve3(points)
+      const width = Math.max(0.7, Number(road.width || 13) * 150 / 576)
+      const mesh = new THREE.Mesh(
+        new THREE.TubeGeometry(curve, Math.max(16, points.length * 10), width / 2, 7, false),
+        new THREE.MeshStandardMaterial({ color: '#777b73', roughness: 1 }),
+      )
+      mesh.name = road.id
+      mesh.receiveShadow = true
+      rpgPreviewGroup.add(mesh)
+    }
+
+    for (const building of document.buildings) {
+      if (!Array.isArray(building.rect) || building.rect.length !== 4) continue
+      const bounds = mapRectToWorld(building.rect)
+      const height = Math.max(1.8, Number(building.height || building.floors * 0.45 || 3.2))
+      const group = new THREE.Group()
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(bounds.width, height, bounds.depth),
+        new THREE.MeshStandardMaterial({ color: building.color || '#c8a66e', roughness: 0.9 }),
+      )
+      body.position.y = height / 2
+      body.castShadow = true
+      body.receiveShadow = true
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(bounds.width * 1.04, 0.22, bounds.depth * 1.04),
+        new THREE.MeshStandardMaterial({ color: '#8e7657', roughness: 0.95 }),
+      )
+      roof.position.y = height + 0.11
+      roof.castShadow = true
+      group.add(body, roof)
+      group.position.set(bounds.x, 0, bounds.z)
+      group.name = building.label || building.id
+      group.userData.campusBuildingId = building.id
+      rpgPreviewGroup.add(group)
+    }
+
+    scene.add(rpgPreviewGroup)
+    if (campus) campus.visible = false
+    cameraRig?.setMode('overview')
+    cameraRig?.focusBounds(150, 96)
+    return true
+  }
+
   function onScenePointerDown(event) {
     if (event.button !== 0 || cameraRig?.mode !== 'overview') { pointerStart = null; return }
     pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
@@ -312,5 +402,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, updateSceneObject, previewRpgMap, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

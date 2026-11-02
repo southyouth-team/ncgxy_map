@@ -164,7 +164,7 @@ export function createPixelBuilding(THREE, options = {}) {
   ])
   const wall = new THREE.Mesh(
     new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 1 }),
-    materials.wall,
+    wallMaterial,
   )
   wall.geometry.rotateX(-Math.PI / 2)
   wall.castShadow = true

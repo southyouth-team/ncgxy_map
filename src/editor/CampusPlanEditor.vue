@@ -83,7 +83,7 @@ function moveCanvasPan(event) {
   const state = canvasPan.value
   const dx = event.clientX - state.clientX, dy = event.clientY - state.clientY
   if (Math.hypot(dx, dy) > 3) state.moved = true
-  pan.value = { x: state.x - dx / Math.max(state.rect.width, 1) * state.width, y: state.y - dy / Math.max(state.rect.height, 1) * state.height }
+  pan.value = { x: state.x - dx / Math.max(Math.min(state.rect.width / state.width, state.rect.height / state.height), 0.0001), y: state.y - dy / Math.max(Math.min(state.rect.width / state.width, state.rect.height / state.height), 0.0001) }
   suppressCanvasClick.value = state.moved
 }
 function endCanvasPan() {
@@ -92,14 +92,17 @@ function endCanvasPan() {
   if (suppressCanvasClick.value) window.setTimeout(() => { suppressCanvasClick.value = false }, 0)
 }
 function zoomCanvas(event) {
-  const rect = event.currentTarget.getBoundingClientRect()
+  const svg = event.currentTarget
+  const cursor = svg.createSVGPoint()
+  cursor.x = event.clientX
+  cursor.y = event.clientY
+  const anchor = cursor.matrixTransform(svg.getScreenCTM().inverse())
   const oldWidth = 640 / scale.value, oldHeight = 480 / scale.value
-  const rx = (event.clientX - rect.left) / Math.max(rect.width, 1)
-  const ry = (event.clientY - rect.top) / Math.max(rect.height, 1)
-  const cursorX = pan.value.x + rx * oldWidth, cursorY = pan.value.y + ry * oldHeight
+  const rx = (anchor.x - pan.value.x) / oldWidth
+  const ry = (anchor.y - pan.value.y) / oldHeight
   const next = Math.min(4, Math.max(0.35, scale.value * (event.deltaY < 0 ? 1.12 : 1 / 1.12)))
   scale.value = next
-  pan.value = { x: cursorX - rx * 640 / next, y: cursorY - ry * 480 / next }
+  pan.value = { x: anchor.x - rx * 640 / next, y: anchor.y - ry * 480 / next }
 }
 function resetCanvasView() {
   scale.value = 1

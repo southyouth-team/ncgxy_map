@@ -141,3 +141,70 @@ export function addPixelLamp(THREE, parent, x, z, mats) {
   parent.add(group)
   return group
 }
+
+/**
+ * 统一的星露谷风格建筑生成器。
+ * footprint 使用建筑局部 X/Z 平面坐标，shape 的 Y 轴代表 -Z。
+ * 仅负责视觉资产，不代表真实建筑测绘尺寸。
+ */
+export function createPixelBuilding(THREE, options = {}) {
+  const {
+    footprint, width = 8, depth = 5, height = 3.4,
+    materials, label = 'Campus Building', confidence = 'unverified',
+  } = options
+  const group = new THREE.Group()
+  group.name = label
+  group.userData.assetStyle = 'stardew-pixel-campus'
+  group.userData.confidence = confidence
+  const shape = footprint?.isShape ? footprint : new THREE.Shape([
+    new THREE.Vector2(-width / 2, -depth / 2),
+    new THREE.Vector2(width / 2, -depth / 2),
+    new THREE.Vector2(width / 2, depth / 2),
+    new THREE.Vector2(-width / 2, depth / 2),
+  ])
+  const wall = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 1 }),
+    materials.wall,
+  )
+  wall.geometry.rotateX(-Math.PI / 2)
+  wall.castShadow = true
+  wall.receiveShadow = true
+  group.add(wall)
+
+  const roofWidth = width + 0.42
+  const roofDepth = depth + 0.42
+  const roofShape = new THREE.Shape()
+  roofShape.moveTo(-roofWidth / 2, 0)
+  roofShape.lineTo(0, 1.35)
+  roofShape.lineTo(roofWidth / 2, 0)
+  roofShape.closePath()
+  const roofGeometry = new THREE.ExtrudeGeometry(roofShape, { depth: roofDepth, bevelEnabled: false, steps: 1 })
+  roofGeometry.translate(0, height - 0.08, -roofDepth / 2)
+  const roof = new THREE.Mesh(roofGeometry, materials.roof)
+  roof.castShadow = true
+  roof.receiveShadow = true
+  group.add(roof)
+
+  const eave = new THREE.Mesh(new THREE.BoxGeometry(roofWidth + 0.18, 0.16, roofDepth + 0.2), materials.roofDark)
+  eave.position.y = height - 0.05
+  group.add(eave)
+
+  const windows = Math.max(2, Math.min(6, Math.floor(width / 2.5)))
+  for (let i = 0; i < windows; i += 1) {
+    const x = -width / 2 + (i + 1) * width / (windows + 1)
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.92, 0.12), materials.windowTrim)
+    frame.position.set(x, 1.95, depth / 2 + 0.075)
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.68, 0.06), materials.window)
+    glass.position.set(x, 1.95, depth / 2 + 0.15)
+    const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.68, 0.04), materials.windowTrim)
+    mullion.position.set(x, 1.95, depth / 2 + 0.19)
+    group.add(frame, glass, mullion)
+  }
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.55, 0.16), materials.door)
+  door.position.set(0, 0.78, depth / 2 + 0.09)
+  group.add(door)
+  group.traverse((object) => {
+    if (object.isMesh) { object.castShadow = true; object.receiveShadow = true }
+  })
+  return group
+}

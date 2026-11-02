@@ -171,7 +171,11 @@ export function createIndoorFloor(THREE, floor) {
     addBox(THREE, group, 'indoor-stair-step', stairPoint.x, index * stairRise, z, 1.7, stairRise, stairDepth, stairMaterial)
   }
   const railMaterial = new THREE.MeshStandardMaterial({ color: '#6d5842', roughness: 1 })
-  for (const offset of [-0.95, 0.95]) addBox(THREE, group, 'indoor-stair-rail', stairPoint.x + offset, 0.25, stairPoint.z, 0.12, 4.2, 4.4, railMaterial)
+  for (const offset of [-0.95, 0.95]) {
+    const railX = stairPoint.x + offset
+    addBox(THREE, group, 'indoor-stair-rail', railX, 0.25, stairPoint.z, 0.12, 4.2, 4.4, railMaterial)
+    collision.push({ minX: railX - 0.06, maxX: railX + 0.06, minZ: stairPoint.z - 2.2, maxZ: stairPoint.z + 2.2 })
+  }
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
   group.userData.stairPath = { start: { x: stairPoint.x, z: stairPoint.z - 2.1 }, end: { x: stairPoint.x, z: stairPoint.z + 2.1 }, rise: 4.2 }
   group.userData.collisionObstacles = collision

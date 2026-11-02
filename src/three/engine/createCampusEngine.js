@@ -528,9 +528,9 @@ export function createCampusEngine(container, callbacks = {}) {
     stairTransition = {
       targetLevel,
       fromX: cameraRig.player.x,
-      toX: indoorGroup.userData.stairPoint.x,
-      fromZ: indoorGroup.userData.stairPoint.z - direction * 2.1,
-      toZ: indoorGroup.userData.stairPoint.z + direction * 2.1,
+      toX: stairPoint.x,
+      fromZ: cameraRig.player.z,
+      toZ: stairPoint.z + direction * 2.1,
       fromY,
       toY: fromY + direction * indoorBuilding.floorHeight,
       elapsed: 0, duration: 2.8,

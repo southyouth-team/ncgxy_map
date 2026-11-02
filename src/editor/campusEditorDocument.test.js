@@ -20,3 +20,25 @@ describe('roadToPolygon', () => {
     expect(roadToPolygon([[0, 0], [10, 0]], 0)).toEqual([])
   })
 })
+
+
+describe('roadNetworkToMultiPolygon', () => {
+  it('unions crossing road surfaces into one connected polygon', async () => {
+    const { roadNetworkToMultiPolygon } = await import('./campusEditorDocument.js')
+    const result = roadNetworkToMultiPolygon([
+      { id: 'horizontal', width: 10, points: [[0, 0], [100, 0]] },
+      { id: 'vertical', width: 10, points: [[50, -50], [50, 50]] },
+    ])
+    expect(result).toHaveLength(1)
+    expect(result[0][0].length).toBeGreaterThan(4)
+  })
+
+  it('keeps disconnected road segments as separate polygons', async () => {
+    const { roadNetworkToMultiPolygon } = await import('./campusEditorDocument.js')
+    const result = roadNetworkToMultiPolygon([
+      { id: 'west', width: 8, points: [[0, 0], [20, 0]] },
+      { id: 'east', width: 8, points: [[80, 0], [100, 0]] },
+    ])
+    expect(result).toHaveLength(2)
+  })
+})

@@ -157,7 +157,7 @@ function point(event) {
   return { x: local.x, y: local.y }
 }
 function startBuildingDrag(event, item) {
-  if (tool.value !== 'select') return
+  if (event.button !== 0 || tool.value !== 'select') return
   event.stopPropagation()
   selected.value = { type: 'building', id: item.id }
   snapshot()
@@ -166,7 +166,7 @@ function startBuildingDrag(event, item) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function startAreaDrag(event, area) {
-  if (tool.value !== 'select') return
+  if (event.button !== 0 || tool.value !== 'select') return
   event.stopPropagation()
   selected.value = { type: 'area', id: area.id }
   snapshot()
@@ -175,6 +175,7 @@ function startAreaDrag(event, area) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function startPolygonVertexDrag(event, type, item, index) {
+  if (event.button !== 0) return
   event.stopPropagation()
   selected.value = { type, id: item.id }
   snapshot()
@@ -182,6 +183,7 @@ function startPolygonVertexDrag(event, type, item, index) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function startRoadNodeDrag(event, road, index) {
+  if (event.button !== 0) return
   event.stopPropagation()
   selected.value = { type: 'road', id: road.id }
   snapshot()

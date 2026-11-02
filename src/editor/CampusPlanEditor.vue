@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding } from './campusEditorDocument.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
@@ -7,7 +8,7 @@ import {
 } from '../data/campus/campusLayout.js'
 
 const emit = defineEmits(['close', 'preview'])
-const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => ({ ...item, rect: [...item.rect] })))
+const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => normalizeBuilding(item)))
 const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item.points.map((point) => [...point]) })))
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 const tool = ref('select')
@@ -56,7 +57,7 @@ function startBuildingDrag(event, item) {
   selected.value = { type: 'building', id: item.id }
   snapshot()
   const p = point(event)
-  drag.value = { type: 'building', id: item.id, start: p, rect: [...item.rect] }
+  drag.value = { type: 'building', id: item.id, start: p, footprint: item.footprint.map((point) => [...point]) }
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function startRoadNodeDrag(event, road, index) {
@@ -72,7 +73,8 @@ function movePointer(event) {
   if (drag.value.type === 'building') {
     const item = buildings.value.find((entry) => entry.id === drag.value.id)
     const dx = p.x - drag.value.start.x, dy = p.y - drag.value.start.y
-    item.rect = drag.value.rect.map((value, index) => value + (index % 2 === 0 ? dx : dy))
+    item.footprint = movePolygon(drag.value.footprint, dx, dy)
+    item.rect = polygonBounds(item.footprint)
   } else {
     const road = roads.value.find((entry) => entry.id === drag.value.id)
     if (road) road.points[drag.value.index] = [p.x, p.y]
@@ -83,7 +85,8 @@ function addBuilding(event) {
   snapshot()
   const position = event?.clientX != null ? point(event) : { x: 305, y: 232 }
   const id = `placed-building-${Date.now()}`
-  buildings.value.push({ id, label: newBuilding.value, rect: [position.x - 25, position.y - 12, position.x + 25, position.y + 12], floors: null, confidence: 'unverified' })
+  const rect = [position.x - 25, position.y - 12, position.x + 25, position.y + 12]
+  buildings.value.push({ id, label: newBuilding.value, rect, footprint: rectToPolygon(rect), floors: null, confidence: 'unverified' })
   selected.value = { type: 'building', id }
   tool.value = 'select'
 }
@@ -99,9 +102,8 @@ function rotateBuilding() {
   const item = selectedBuilding.value
   if (!item) return
   snapshot()
-  const [l,t,r,b] = item.rect
-  const cx=(l+r)/2, cy=(t+b)/2, w=b-t, h=r-l
-  item.rect=[cx-w/2,cy-h/2,cx+w/2,cy+h/2]
+  item.footprint = rotatePolygon(item.footprint, 90)
+  item.rect = polygonBounds(item.footprint)
 }
 function deleteSelected() {
   snapshot()
@@ -110,7 +112,7 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
-  return { schemaVersion: 1, coordinateSystem: 'campus-plan-pixel', source: 'campusLayout.js', areas: CAMPUS_AREAS, buildings: buildings.value, roads: roads.value }
+  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', source: 'campusLayout.js', areas: CAMPUS_AREAS, buildings: buildings.value, roads: roads.value, objects: [] }
 }
 function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {
@@ -169,11 +171,11 @@ function exportDocument() {
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)"/></g>
             </g>
             <g v-for="item in buildings" :key="item.id" class="building" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">
-              <rect :x="item.rect[0]" :y="item.rect[1]" :width="item.rect[2]-item.rect[0]" :height="item.rect[3]-item.rect[1]" rx="2" fill="#bca27c" stroke="#665744" stroke-width="2"/>
-              <rect :x="item.rect[0]+3" :y="item.rect[1]+3" :width="item.rect[2]-item.rect[0]-6" :height="item.rect[3]-item.rect[1]-6" fill="#d6c19b" stroke="#8f7859"/>
-              <path :d="`M${item.rect[0]+5} ${item.rect[1]+5} L${item.rect[2]-5} ${item.rect[1]+5} L${item.rect[2]-5} ${item.rect[3]-5} L${item.rect[0]+5} ${item.rect[3]-5} Z`" fill="none" stroke="#f0e5ce" stroke-width="2"/>
+              <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="#bca27c" stroke="#665744" stroke-width="2"/>
+              <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="#d6c19b" stroke="#8f7859" stroke-width="1"/>
+              <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#f0e5ce" stroke-width="2" stroke-dasharray="4 3"/>
               <text :x="(item.rect[0]+item.rect[2])/2" :y="(item.rect[1]+item.rect[3])/2+3" text-anchor="middle" font-size="8" fill="#514634">{{ item.label }}</text>
-              <rect v-if="selected.id===item.id" :x="item.rect[0]-3" :y="item.rect[1]-3" :width="item.rect[2]-item.rect[0]+6" :height="item.rect[3]-item.rect[1]+6" fill="none" stroke="#e6a84c" stroke-width="2" stroke-dasharray="5 3"/>
+              <polygon v-if="selected.id===item.id" :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#e6a84c" stroke-width="2" stroke-dasharray="5 3"/>
             </g>
             <g fill="#3f724c" stroke="#d8dfc6" stroke-width="1.5"><g v-for="(tree,index) in [[202,215],[305,210],[355,280],[190,360],[520,275],[565,355],[225,420],[330,430],[485,435],[75,220],[85,260],[570,180]]" :key="index"><circle :cx="tree[0]" :cy="tree[1]" r="7"/><circle :cx="tree[0]-4" :cy="tree[1]+2" r="4"/></g></g>
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>
@@ -186,7 +188,7 @@ function exportDocument() {
         <div class="selected-card"><small>当前选中</small><strong>{{ selectedLabel }}</strong><span>{{ selected.type==='road' ? '道路 / LineString' : selected.type==='building' ? '建筑 / Footprint' : '请选择场景对象' }}</span></div>
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input v-model="selectedBuilding.label">
-          <label>空间范围</label><div class="coordinate-grid"><span>X₁ {{ Math.round(selectedBuilding.rect[0]) }}</span><span>Y₁ {{ Math.round(selectedBuilding.rect[1]) }}</span><span>X₂ {{ Math.round(selectedBuilding.rect[2]) }}</span><span>Y₂ {{ Math.round(selectedBuilding.rect[3]) }}</span></div>
+          <label>空间范围（像素坐标）</label><div class="coordinate-grid"><span>X₁ {{ Math.round(selectedBuilding.rect[0]) }}</span><span>Y₁ {{ Math.round(selectedBuilding.rect[1]) }}</span><span>X₂ {{ Math.round(selectedBuilding.rect[2]) }}</span><span>Y₂ {{ Math.round(selectedBuilding.rect[3]) }}</span></div>
           <label>数据可信度</label><span class="confidence">{{ selectedBuilding.confidence || 'unverified' }}</span>
           <button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
         </template>

@@ -7,6 +7,8 @@ import { LayersModule } from '../src/modules/layers/layers.module';
 import { LayersService } from '../src/modules/layers/layers.service';
 import { FeaturesModule } from '../src/modules/features/features.module';
 import { FeaturesService } from '../src/modules/features/features.service';
+import { MapsModule } from '../src/modules/maps/maps.module';
+import { MapsService } from '../src/modules/maps/maps.service';
 
 describe('Campus map API (PostGIS integration)', () => {
   let app: INestApplication;
@@ -166,9 +168,25 @@ describe('Campus map API (PostGIS integration)', () => {
     expect(persistedConfig[0].coordinate_config).toEqual(config);
     expect(Number(persistedConfig[0].revision)).toBe(Number(map.revision) + 1);
 
-    await request(app.getHttpServer())
+    const mapsService = app.select(MapsModule).get(MapsService);
+    await expect(mapsService.updateConfig(ownerId, campusId, mapId, {
+      revision: Number(map.revision),
+      coordinateConfig: {},
+    })).rejects.toMatchObject({ status: 409 });
+
+    const staleResponse = await request(app.getHttpServer())
       .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
-      .set(auth).send({ revision: Number(persistedConfig[0].revision) - 1, coordinateConfig: {} }).expect(409);
+      .set(auth).send({ revision: Number(map.revision), coordinateConfig: {} });
+    const afterStaleConfig = await db.query('SELECT coordinate_config,revision FROM campus_map WHERE id=$1 AND campus_id=$2',[mapId,campusId]);
+    expect({
+      status: staleResponse.status,
+      revision: Number(afterStaleConfig[0].revision),
+      coordinateConfig: afterStaleConfig[0].coordinate_config,
+    }).toEqual({
+      status: 409,
+      revision: Number(persistedConfig[0].revision),
+      coordinateConfig: config,
+    });
 
     const viewerId = `e2e-config-viewer-${Date.now()}`;
     await db.query("INSERT INTO campus_member (campus_id,user_id,role) VALUES ($1,$2,'viewer')", [campusId, viewerId]);

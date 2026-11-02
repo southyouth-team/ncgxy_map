@@ -14,7 +14,7 @@ function auth(req, res, next) {
   if (req.user?.id) return next()
   if (env.nodeEnv !== 'production' && env.authMode === 'development') {
     const id = req.get('X-Dev-User-Id')
-    if (id && /^\\d+$/.test(id) && BigInt(id) > 0n) {
+    if (id && /^\d+$/.test(id) && BigInt(id) > 0n) {
       req.user = { id }
       return next()
     }
@@ -23,13 +23,13 @@ function auth(req, res, next) {
 }
 const positiveId = name => (req, res, next) => {
   const value = req.params[name]
-  if (!/^\\d+$/.test(String(value)) || BigInt(value) <= 0n) {
+  if (!/^\d+$/.test(String(value)) || BigInt(value) <= 0n) {
     return res.status(400).json({ code: 40001, message: `参数 ${name} 必须为正整数`, data: null })
   }
   next()
 }
 const slugify = value => String(value || '').trim().toLowerCase()
-  .replace(/[^a-z0-9\\u4e00-\\u9fa5]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80)
+  .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80)
 
 app.disable('x-powered-by')
 app.use(helmet())

@@ -198,6 +198,23 @@ function clearReferenceImage() {
 
 const roadNetwork = computed(() => roadNetworkToMultiPolygon(roads.value))
 const workspaceBounds = computed(() => calculateWorkspaceBounds({ buildings: buildings.value, areas: areas.value, roads: roads.value }))
+// 可视化范围由“当前视口 + 已有要素范围”共同决定；视口移动到原始校园图外时，网格和底色继续延伸。
+const canvasRenderBounds = computed(() => {
+  const viewportWidth = 640 / scale.value
+  const viewportHeight = 480 / scale.value
+  const margin = Math.max(500, viewportWidth * 0.5, viewportHeight * 0.5)
+  const visible = {
+    minX: pan.value.x - margin,
+    minY: pan.value.y - margin,
+    maxX: pan.value.x + viewportWidth + margin,
+    maxY: pan.value.y + viewportHeight + margin,
+  }
+  const minX = Math.min(workspaceBounds.value.minX, visible.minX)
+  const minY = Math.min(workspaceBounds.value.minY, visible.minY)
+  const maxX = Math.max(workspaceBounds.value.maxX, visible.maxX)
+  const maxY = Math.max(workspaceBounds.value.maxY, visible.maxY)
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
+})
 const selectedBuilding = computed(() => buildings.value.find((item) => item.id === selected.value.id))
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
 const selectedArea = computed(() => areas.value.find((item) => item.id === selected.value.id))
@@ -278,12 +295,12 @@ function zoomAt(next, clientX, clientY) {
   pan.value = { x: anchor.x - rx * 640 / next, y: anchor.y - ry * 480 / next }
 }
 function zoomCanvas(event) {
-  const next = Math.min(4, Math.max(0.35, scale.value * (event.deltaY < 0 ? 1.12 : 1 / 1.12)))
+  const next = Math.min(8, Math.max(0.05, scale.value * (event.deltaY < 0 ? 1.12 : 1 / 1.12)))
   zoomAt(next, event.clientX, event.clientY)
 }
 function resetCanvasView() {
   const bounds = workspaceBounds.value
-  scale.value = Math.min(4, Math.max(0.35, Math.min(640 / (bounds.width * 1.08), 480 / (bounds.height * 1.08))))
+  scale.value = Math.min(8, Math.max(0.05, Math.min(640 / (bounds.width * 1.08), 480 / (bounds.height * 1.08))))
   pan.value = { x: (bounds.minX + bounds.maxX) / 2 - 320 / scale.value, y: (bounds.minY + bounds.maxY) / 2 - 240 / scale.value }
 }
 function zoomToSelection() {
@@ -296,15 +313,15 @@ function zoomToSelection() {
   }
   if (!bounds) return
   const width = Math.max(bounds[2] - bounds[0], 24), height = Math.max(bounds[3] - bounds[1], 24)
-  const next = Math.min(4, Math.max(0.35, Math.min(640 / (width * 2.2), 480 / (height * 2.2))))
+  const next = Math.min(8, Math.max(0.05, Math.min(640 / (width * 2.2), 480 / (height * 2.2))))
   scale.value = next
   pan.value = { x: (bounds[0] + bounds[2]) / 2 - 320 / next, y: (bounds[1] + bounds[3]) / 2 - 240 / next }
 }
 function onWindowKeyDown(event) {
   if (event.target?.matches?.('input, textarea, select, [contenteditable="true"]')) return
   if (event.code === 'Space') { spacePressed.value = true; event.preventDefault() }
-  if (event.key === '+' || event.key === '=') zoomAt(Math.min(4, scale.value * 1.12))
-  if (event.key === '-') zoomAt(Math.max(0.35, scale.value / 1.12))
+  if (event.key === '+' || event.key === '=') zoomAt(Math.min(8, scale.value * 1.12))
+  if (event.key === '-') zoomAt(Math.max(0.05, scale.value / 1.12))
   if (event.key === '0') resetCanvasView()
   if ((event.key === 'Delete' || event.key === 'Backspace') && selected.value.id) deleteSelected()
 }
@@ -493,7 +510,7 @@ function exportDocument() {
       <div class="header-actions">
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
-        <button title="缩小（-）" @click="zoomAt(Math.max(.35, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配工作区</button><button title="放大（+）" @click="zoomAt(Math.min(4, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
+        <button title="缩小（-）" @click="zoomAt(Math.max(.05, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配工作区</button><button title="放大（+）" @click="zoomAt(Math.min(8, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
         <button @click="preview3d">三维预览</button><span class="save-indicator" :class="persistenceState">{{ persistenceBusy ? '正在保存…' : persistenceState === 'saved' ? '已自动保存' : persistenceState === 'conflict' ? '版本冲突' : persistenceState === 'error' ? '保存失败' : '自动保存已开启' }}</span><button @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
     </header>
@@ -538,12 +555,12 @@ function exportDocument() {
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
-            <rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="#86a765"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
+            <rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="#86a765"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect x="36" y="92" width="576" height="368" fill="#9ab978"/><rect x="36" y="92" width="576" height="368" fill="url(#grass-pattern)"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
             <g v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
-            <g v-if="showGrid"><rect :x="workspaceBounds.minX" :y="workspaceBounds.minY" :width="workspaceBounds.width" :height="workspaceBounds.height" fill="url(#map-grid)"/></g>
+            <g v-if="showGrid"><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#map-grid)"/></g>
             <path :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
             <g v-for="road in roads" :key="road.id" class="map-feature">
               <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="selected={type:'road',id:road.id}"/>

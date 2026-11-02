@@ -109,7 +109,7 @@ export function createCampusScene(THREE) {
     const depth = Math.max(2.4, bounds.depth)
     const height = item.confidence === 'medium' ? 4.2 : 3.4
     const group = createPixelBuilding(THREE, {
-      width, depth, height, materials: mats,
+      width, depth, height: item.height || (item.confidence === 'medium' ? 4.2 : undefined), template: item.template || item.label, materials: mats,
       wallMaterial: wallPalette[index % wallPalette.length],
       label: item.label || item.id,
       confidence: item.confidence || 'unverified',

@@ -2,7 +2,7 @@ import { IsInt, IsObject, IsOptional, IsString, MaxLength, Min } from 'class-val
 
 export class SaveSceneDto {
   @IsInt()
-  @Min(1)
+  @Min(0)
   revision: number;
 
   @IsString()

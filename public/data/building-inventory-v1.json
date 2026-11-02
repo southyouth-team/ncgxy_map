@@ -34,6 +34,12 @@
       "title": "学校官网",
       "url": "https://www.ncpu.edu.cn/",
       "type": "official-website"
+    },
+    {
+      "id": "S006",
+      "title": "招生网-住宿介绍",
+      "url": "https://zsb.ncpu.edu.cn/zhaoshengdaohang/zhu/",
+      "type": "official-dormitory-description"
     }
   ],
   "assets": [
@@ -443,6 +449,25 @@
       "source": "美丽校园",
       "status": "environment-asset",
       "notes": "以道路网络矢量化，不作为建筑资产",
+      "position": null,
+      "footprint": null,
+      "lengthMeters": null,
+      "widthMeters": null,
+      "floors": null,
+      "heightMeters": null,
+      "rotationY": null,
+      "modelUrl": null,
+      "photoRefs": [],
+      "confidence": "unverified",
+      "fieldSurveyStatus": "not-started"
+    },
+    {
+      "buildingId": "B017",
+      "name": "美术大师博物馆",
+      "assetType": "building-or-museum-venue",
+      "source": "教学设施",
+      "status": "official-mentioned",
+      "notes": "待确认是否独立建筑或位于其他建筑内部；核对入口、外立面与空间边界",
       "position": null,
       "footprint": null,
       "lengthMeters": null,

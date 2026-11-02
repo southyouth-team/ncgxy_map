@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 export class CameraRig {
   constructor(THREE, domElement) {
     this.THREE = THREE
-    this.camera = new THREE.PerspectiveCamera(48, 1, 0.1, 700)
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 700)
     this.camera.position.set(0, 105, 112)
     this.target = new THREE.Vector3(0, 0, 0)
     this.currentPosition = this.camera.position.clone()

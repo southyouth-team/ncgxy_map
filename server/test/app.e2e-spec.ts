@@ -152,6 +152,31 @@ describe('Campus map API (PostGIS integration)', () => {
     });
   });
 
+
+  it('persists map coordinate configuration with optimistic revision checks', async () => {
+    const current = await request(app.getHttpServer())
+      .get(`${base}/campuses/${campusId}/maps`).set(auth).expect(200);
+    const map = current.body.find((item: any) => String(item.id) === mapId);
+    expect(map).toBeTruthy();
+    const config = { baseMapTransform: { x: 12, y: -8, scale: 1.25, rotation: 3, opacity: 0.7 } };
+    const saved = await request(app.getHttpServer())
+      .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
+      .set(auth).send({ revision: Number(map.revision), coordinateConfig: config }).expect(200);
+    expect(saved.body.coordinate_config).toEqual(config);
+    expect(Number(saved.body.revision)).toBe(Number(map.revision) + 1);
+
+    await request(app.getHttpServer())
+      .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
+      .set(auth).send({ revision: Number(map.revision), coordinateConfig: {} }).expect(409);
+
+    const viewerId = `e2e-config-viewer-${Date.now()}`;
+    await db.query("INSERT INTO campus_member (campus_id,user_id,role) VALUES ($1,$2,'viewer')", [campusId, viewerId]);
+    await request(app.getHttpServer())
+      .put(`${base}/campuses/${campusId}/maps/${mapId}/config`)
+      .set('X-Dev-User-Id', viewerId)
+      .send({ revision: Number(saved.body.revision), coordinateConfig: {} }).expect(403);
+  });
+
   it('rejects invalid GeoJSON geometry', async () => {
     await request(app.getHttpServer())
       .post(`${base}/campuses/${campusId}/maps/${mapId}/features`)

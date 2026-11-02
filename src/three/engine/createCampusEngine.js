@@ -99,6 +99,10 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer.render(scene, cameraRig.camera)
   }
 
+  function setVirtualKey(key, pressed) {
+    input?.setVirtualKey(key, pressed)
+  }
+
   function setMode(mode) {
     cameraRig?.setMode(mode)
     input?.setMode(mode)
@@ -125,5 +129,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, focusCampus, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, dispose, get initialized() { return initialized } }
 }

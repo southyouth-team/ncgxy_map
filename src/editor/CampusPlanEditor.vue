@@ -291,7 +291,7 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
-  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', source: 'campusLayout.js', areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: [] }
+  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', source: 'campusLayout.js', workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: [] }
 }
 function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {

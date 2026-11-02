@@ -20,6 +20,7 @@ const indoorPrototypeActive = ref(false)
 const indoorFloor = ref(1)
 const indoorFloors = ref([1])
 const indoorBuildingName = ref('室内空间样板')
+const nearIndoorStairs = ref(false)
 const showEditor = ref(false)
 const editorViewMode = ref('2d')
 const selectedObject = ref(null)
@@ -163,8 +164,8 @@ onMounted(async () => {
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorStateChange: (state) => {
         indoorPrototypeActive.value = Boolean(state.active)
-        if (state.active) { indoorFloor.value = state.floor; indoorFloors.value = state.floors || [state.floor]; indoorBuildingName.value = state.buildingName || '室内空间样板' }
-        else { indoorFloor.value = 1; indoorFloors.value = [1] }
+        if (state.active) { indoorFloor.value = state.floor; indoorFloors.value = state.floors || [state.floor]; indoorBuildingName.value = state.buildingName || '室内空间样板'; nearIndoorStairs.value = Boolean(state.nearStairs) }
+        else { indoorFloor.value = 1; indoorFloors.value = [1]; nearIndoorStairs.value = false }
       },
       onReady: () => {
         loading.value = false
@@ -217,6 +218,7 @@ onBeforeUnmount(() => {
     </section>
 
     <nav class="mode-switcher" aria-label="视角切换">
+      <div v-if="indoorPrototypeActive && nearIndoorStairs" class="indoor-interaction-hint">靠近楼梯 · 按 E 切换楼层</div>
       <button v-if="!indoorPrototypeActive" class="mode-button" @click="engine?.enterIndoorPrototype()">
         <span class="mode-label">室内原型</span>
         <span class="mode-hint">体验楼层空间</span>

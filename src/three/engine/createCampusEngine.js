@@ -24,6 +24,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let indoorGroup = null
   let indoorBuilding = null
   let currentIndoorFloor = null
+  let stairInteractionActive = false
   let outdoorState = null
   let frameId = 0
   let resizeObserver
@@ -401,6 +402,13 @@ export function createCampusEngine(container, callbacks = {}) {
   }
   function onKeyDown(event) {
     if (event.key === 'Escape') input?.exitPointerLock()
+    if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
+    if (event.key.toLowerCase() === 'e' && stairInteractionActive && indoorBuilding) {
+      const levels = indoorBuilding.floors.map(floor => floor.level).sort((a, b) => a - b)
+      const index = levels.indexOf(currentIndoorFloor)
+      const target = levels[index + 1] ?? levels[index - 1]
+      if (target !== undefined) switchIndoorFloor(target)
+    }
   }
 
   function resize() {
@@ -416,6 +424,14 @@ export function createCampusEngine(container, callbacks = {}) {
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     input?.update(delta)
+    if (indoorGroup?.userData.stairPoint && cameraRig?.player) {
+      const point = indoorGroup.userData.stairPoint
+      const near = Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z) <= 2.4
+      if (near !== stairInteractionActive) {
+        stairInteractionActive = near
+        callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: near })
+      }
+    }
     const playerSprite = scene?.getObjectByName('CampusPlanPlayerSprite') || scene?.getObjectByName('PixelExplorerSprite')
     if (playerSprite && cameraRig?.player) {
       // 第一人称相机位于角色眼部，隐藏自身 Sprite，避免角色贴图遮挡视野。
@@ -471,7 +487,8 @@ export function createCampusEngine(container, callbacks = {}) {
     input.collisionWorld = collisionWorld
     cameraRig.player.set(floor.spawnPoint.x, group.position.y + floor.spawnPoint.y, floor.spawnPoint.z)
     cameraRig.updateThirdPersonDesired()
-    callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true })
+    stairInteractionActive = false
+    callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false })
     return true
   }
 
@@ -501,6 +518,7 @@ export function createCampusEngine(container, callbacks = {}) {
     scene.remove(indoorGroup)
     disposeObjectGroup(indoorGroup)
     indoorGroup = null
+    stairInteractionActive = false
     indoorBuilding = null
     currentIndoorFloor = null
     campus.visible = outdoorState.visible

@@ -8,7 +8,7 @@ export const indoorBuildingDefinitions = {
         rooms: [
           { id: 'classroom-101', name: '教室 101', x: -5.4, z: -1.2, width: 7.2, depth: 6.2, doorWall: 'south', doorWidth: 1.5 },
           { id: 'classroom-102', name: '教室 102', x: 5.4, z: -1.2, width: 7.2, depth: 6.2, doorWall: 'south', doorWidth: 1.5 },
-        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 } },
+        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 }, stairPoint: { x: 9, z: 0 } },
       { level: 2, width: 24, depth: 18, wallHeight: 3.4, doors: [],
         rooms: [
           { id: 'classroom-201', name: '教室 201', x: -5.4, z: -1.2, width: 7.2, depth: 6.2, doorWall: 'south', doorWidth: 1.5 },

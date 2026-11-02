@@ -1,0 +1,2 @@
+buildingId,officialName,fieldName,areaOrZone,latitude,longitude,coordinateMethod,cornerPoints,footprintLengthM,footprintWidthM,floorCount,estimatedHeightM,heightMethod,mainEntranceDirection,buildingOrientation,roofType,facadeMaterial,facadeColor,photoNorth,photoEast,photoSouth,photoWest,photoEntrance,photoRoof,photoCorners,photoOther,observedStatus,surveyDate,surveyor,confidence,issuesToVerify,reviewer,reviewDate,notes
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

@@ -7,6 +7,7 @@ import { HealthModule } from './modules/health/health.module';
 import { LayersModule } from './modules/layers/layers.module';
 import { MapsModule } from './modules/maps/maps.module';
 import { AssetsModule } from './modules/assets/assets.module';
+import { ScenesModule } from './modules/scenes/scenes.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { AssetsModule } from './modules/assets/assets.module';
     LayersModule,
     FeaturesModule,
     AssetsModule,
+    ScenesModule,
   ],
 })
 export class AppModule {}

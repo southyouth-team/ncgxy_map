@@ -204,11 +204,15 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
   const entrance = options.entrancePoint
     ? resolveIndoorEntrance({ minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 }, options.entrancePoint)
     : { wall: 'south', offset: 0, landing: { x: 0, z: depth / 2 - 2.2 } }
+  const entranceDoorWidth = Math.max(0.7, Math.min(
+    Number(options.doorWidth) > 0 ? Number(options.doorWidth) : Math.min(2.4, width * 0.18),
+    width * 0.8,
+  ))
   const floors = Array.from({ length: floorCount }, (_, index) => {
     const level = index + 1
     return {
       level, width, depth, wallHeight: floorHeight - 0.45,
-      doors: level === 1 ? [{ wall: entrance.wall, offset: entrance.offset, width: Math.min(2.4, width * 0.18) }] : [],
+      doors: level === 1 ? [{ wall: entrance.wall, offset: entrance.offset, width: entranceDoorWidth }] : [],
       rooms: [
         { id: `${footprint.id}-${level}-room-a`, name: `空间 ${level}A`, x: -roomWidth / 2 - 0.5, z: -depth / 2 + roomDepth / 2 + 0.6, width: roomWidth, depth: roomDepth, doorWall: 'south', doorWidth: Math.min(1.5, roomWidth * 0.35), furniture: [] },
         { id: `${footprint.id}-${level}-room-b`, name: `空间 ${level}B`, x: roomWidth / 2 + 0.5, z: -depth / 2 + roomDepth / 2 + 0.6, width: roomWidth, depth: roomDepth, doorWall: 'south', doorWidth: Math.min(1.5, roomWidth * 0.35), furniture: [] },

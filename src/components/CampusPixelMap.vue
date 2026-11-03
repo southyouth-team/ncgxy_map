@@ -141,18 +141,27 @@ function drawAreas(ctx) {
     }
     if (area.type === 'sports' && area.rect) {
       const [x1, y1, x2, y2] = area.rect
-      ctx.fillStyle = '#c77e69'
+      // 运动场采用塑胶跑道 + 人工草坪的现代校园视觉表达。
+      ctx.fillStyle = '#a86f61'
       ctx.fillRect(x1, y1, x2 - x1, y2 - y1)
-      ctx.strokeStyle = '#f1d6a9'
-      ctx.lineWidth = 1.5
+      ctx.fillStyle = '#648a68'
+      ctx.fillRect(x1 + 7, y1 + 7, x2 - x1 - 14, y2 - y1 - 14)
+      ctx.strokeStyle = '#e7e9d8'
+      ctx.lineWidth = 1
       ctx.strokeRect(x1 + 4, y1 + 4, x2 - x1 - 8, y2 - y1 - 8)
+      ctx.strokeRect(x1 + 10, y1 + 10, x2 - x1 - 20, y2 - y1 - 20)
       ctx.beginPath()
-      ctx.moveTo((x1 + x2) / 2, y1 + 4)
-      ctx.lineTo((x1 + x2) / 2, y2 - 4)
+      ctx.moveTo((x1 + x2) / 2, y1 + 10)
+      ctx.lineTo((x1 + x2) / 2, y2 - 10)
       ctx.stroke()
       ctx.beginPath()
-      ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, (x2 - x1) * .13, (y2 - y1) * .1, 0, 0, Math.PI * 2)
+      ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, (x2 - x1) * .12, (y2 - y1) * .1, 0, 0, Math.PI * 2)
       ctx.stroke()
+      // 跑道分道线只绘制在外圈，避免压到草坪区域。
+      ctx.strokeStyle = 'rgba(246, 226, 211, .72)'
+      for (let lane = 0; lane < 2; lane++) {
+        ctx.strokeRect(x1 + 2 + lane * 2, y1 + 2 + lane * 2, x2 - x1 - 4 - lane * 4, y2 - y1 - 4 - lane * 4)
+      }
     }
   }
 }
@@ -296,19 +305,34 @@ function drawBuilding(ctx, building, index) {
 
     // 采用浅灰混凝土立面与蓝灰玻璃窗；朝向不明确时不虚构入口方向。
     const facadeY = y1 + roofHeight
+    // 右侧阴影面压在 footprint 内部，强化楼体厚度但不改变可通行边界。
+    if (w >= 16) {
+      ctx.fillStyle = '#52666b'
+      ctx.fillRect(x2 - 4, y1 + 2, 4, h - 2)
+      ctx.fillStyle = '#70858a'
+      ctx.fillRect(x2 - 4, facadeY, 2, facadeHeight)
+    }
     ctx.fillStyle = '#829694'
-    ctx.fillRect(x1, facadeY, w, facadeHeight)
+    ctx.fillRect(x1, facadeY, w - (w >= 16 ? 4 : 0), facadeHeight)
     ctx.fillStyle = '#d1dbd3'
     ctx.fillRect(x1, facadeY, 2, facadeHeight)
-    ctx.fillStyle = '#91a39f'
-    ctx.fillRect(x1 + w - 2, facadeY, 2, facadeHeight)
-    const windowCount = Math.max(2, Math.floor(w / 13))
+    const facadeWidth = w - (w >= 16 ? 4 : 0)
+    const windowCount = Math.max(2, Math.floor(facadeWidth / 13))
     for (let col = 0; col < windowCount; col++) {
-      const wx = x1 + 4 + col * ((w - 8) / windowCount)
+      const wx = x1 + 4 + col * ((facadeWidth - 8) / windowCount)
       ctx.fillStyle = '#355b68'
       ctx.fillRect(wx, facadeY + 1, 3, Math.max(1, facadeHeight - 2))
       ctx.fillStyle = '#d2e7d9'
       ctx.fillRect(wx + 1, facadeY + 1, 1, 1)
+      if (facadeHeight >= 5) {
+        ctx.fillStyle = '#52666b'
+        ctx.fillRect(wx, facadeY + facadeHeight - 1, 3, 1)
+      }
+    }
+    // 楼层水平分隔线，给低矮教学楼增加可读的立面尺度。
+    if (facadeHeight >= 5) {
+      ctx.fillStyle = '#a9bbb4'
+      ctx.fillRect(x1 + 2, facadeY + Math.floor(facadeHeight / 2), facadeWidth - 4, 1)
     }
     ctx.strokeStyle = roof.dark
     ctx.lineWidth = 1
@@ -432,14 +456,26 @@ function render() {
   ctx.scale(scale, scale)
   ctx.imageSmoothingEnabled = false
   if (baseMapCanvas) ctx.drawImage(baseMapCanvas, 0, 0)
-  // 树木与角色使用同一条 Y 深度队列，按脚底锚点排序，避免角色始终浮在树冠上方。
-  const depthQueue = TREE_SPOTS.map(([treeX, treeY], index) => ({
-    depth: treeY + 2,
-    draw: () => drawTree(ctx, treeX, treeY, index),
-  }))
+  // 只构建当前视口可见对象的深度队列，减少缩放/移动时的无效绘制。
+  const visibleBounds = {
+    left: Math.max(0, -x / scale - 16),
+    top: Math.max(0, -y / scale - 16),
+    right: Math.min(1000, (width - x) / scale + 16),
+    bottom: Math.min(500, (height - y) / scale + 16),
+  }
+  const depthQueue = []
+  TREE_SPOTS.forEach(([treeX, treeY], index) => {
+    if (treeX < visibleBounds.left || treeX > visibleBounds.right
+      || treeY < visibleBounds.top || treeY > visibleBounds.bottom) return
+    depthQueue.push({
+      depth: treeY + 2,
+      draw: () => drawTree(ctx, treeX, treeY, index),
+    })
+  })
   CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
     const bounds = getCampusFootprintBounds(building)
-    if (!bounds) return
+    if (!bounds || bounds[2] < visibleBounds.left || bounds[0] > visibleBounds.right
+      || bounds[3] < visibleBounds.top || bounds[1] > visibleBounds.bottom) return
     // 建筑以 footprint 最南侧作为深度锚点；绘制整个建筑单元，保持屋顶与立面完整。
     depthQueue.push({
       depth: bounds[3] + 1,

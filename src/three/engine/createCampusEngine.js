@@ -752,6 +752,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const errors = validateIndoorBuilding(definition)
     if (errors.length) throw new TypeError(errors.join('；'))
     indoorBuilding = definition
+    callbacks.onIndoorPromptChange?.({ visible: false })
+    nearOutdoorEntrance = false
     outdoorState = { visible: campus.visible, player: cameraRig.player.clone(), mode: cameraRig.mode, collisionWorld }
     campus.visible = false
     cameraRig.setMode('thirdPerson')

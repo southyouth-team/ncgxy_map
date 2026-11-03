@@ -791,6 +791,11 @@ onMounted(() => {
   window.addEventListener('keyup', onExplorerKeyup)
   window.addEventListener('blur', clearMovementInput)
   resize()
+  // 从室内返回时先恢复角色坐标，再将镜头定位到该坐标；避免角色落在视口边缘之外。
+  if (props.initialPlayerPosition) {
+    followPlayerCamera()
+    render()
+  }
 })
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()

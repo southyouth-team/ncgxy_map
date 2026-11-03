@@ -24,8 +24,9 @@ const indoorBuildingName = ref('室内空间样板')
 const nearIndoorStairs = ref(false)
 const nearIndoorRoom = ref(null)
 const activeIndoorRoom = ref(null)
-const showEditor = ref(false)
-const editorViewMode = ref('2d')
+const initialView = new URLSearchParams(window.location.search).get('view')
+const showEditor = ref(initialView === 'editor' || initialView === 'showcase')
+const editorViewMode = ref(initialView === 'showcase' ? '3d' : '2d')
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
 const sceneRevision = ref(0)
@@ -225,7 +226,10 @@ onBeforeUnmount(() => {
           <div class="brand-subtitle">NANCHANG INSTITUTE OF TECHNOLOGY · 3D CAMPUS</div>
         </div>
       </div>
-      <div class="topbar-status"><span class="status-dot"></span> 像素校园</div>
+      <div class="showcase-actions">
+        <span class="topbar-status"><span class="status-dot"></span> 等距 2.5D 场景原型</span>
+        <button class="showcase-back" @click="closeEditor">返回 2D 地图</button>
+      </div>
     </header>
 
     <section class="intro-card">

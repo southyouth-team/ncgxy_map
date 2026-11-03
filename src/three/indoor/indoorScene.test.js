@@ -855,3 +855,17 @@ describe('indoor navigation connectivity validation', () => {
     })
   })
 })
+
+
+describe('generated teaching block navigation acceptance', () => {
+  it('keeps every generated floor spawn, classroom doorway and stair landing reachable', () => {
+    const building = indoorBuildingDefinitions.teachingBlockPrototype
+    for (const floor of building.floors) {
+      const group = createIndoorFloor(THREE, floor, building.floorHeight)
+      const validation = validateIndoorNavigationGraph(group.userData.navigationGraph)
+      expect(validation.valid, `楼层 ${floor.level}: ${validation.errors.join('；')}`).toBe(true)
+      expect(group.userData.navigationValidation).toEqual(validation)
+      expect(group.userData.navigationSummary.disconnectedPoints).toEqual([])
+    }
+  })
+})

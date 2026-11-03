@@ -65,6 +65,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let stairTransition = null
   let outdoorState = null
   let nearOutdoorEntrance = false
+  let nearOutdoorBuildingId = null
   let frameId = 0
   let resizeObserver
   let previousTime = 0
@@ -114,6 +115,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     campus.updateMatrixWorld(true)
     const buildingObstacles = []
     const circularObstacles = []
+    const buildingWallSets = []
     const cameraObstacleRoots = []
     campus.traverse((object) => {
       if (!(object.userData?.buildingId || object.userData?.objectType === 'building')) return
@@ -138,8 +140,22 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           { minX: bounds.max.x - sideWidth, maxX: bounds.max.x, minZ: backZ, maxZ: frontZ },
         )
         object.userData.collisionObstacleCount = 5
+      } else if (Array.isArray(object.userData?.collisionSegments) && object.userData.collisionSegments.length) {
+        // 按建筑生成器的墙体分段数据注册碰撞，门洞本身不生成障碍。
+        const polygons = object.userData.collisionSegments.map(segment => {
+          const start = object.localToWorld(new THREE.Vector3(segment.start.x, 0, -segment.start.y))
+          const end = object.localToWorld(new THREE.Vector3(segment.end.x, 0, -segment.end.y))
+          const dx = end.x - start.x, dz = end.z - start.z
+          const length = Math.hypot(dx, dz) || 1
+          const half = Math.max(0.12, Number(segment.thickness) || 0.28) / 2
+          const nx = -dz / length * half, nz = dx / length * half
+          return [
+            [start.x + nx, start.z + nz], [end.x + nx, end.z + nz],
+            [end.x - nx, end.z - nz], [start.x - nx, start.z - nz],
+          ]
+        })
+        buildingWallSets.push({ object, polygons })
       } else if (Array.isArray(object.userData?.collisionPolygon) && object.userData.collisionPolygon.length >= 3) {
-        // 多边形建筑按真实 footprint 轮廓碰撞，避免外接矩形封死凹角和周边通道。
         const polygon = object.userData.collisionPolygon
         const xs = polygon.map(point => point[0])
         const zs = polygon.map(point => point[1])
@@ -164,6 +180,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       circularObstacles.push({ x: position.x, z: position.z, radius })
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    for (const { object, polygons } of buildingWallSets) {
+      object.userData.collisionObstacleStart = collisionWorld.obstacles.length
+      polygons.forEach(polygon => collisionWorld.addPolygonObstacle({ outer: polygon }))
+      object.userData.collisionObstacleCount = collisionWorld.obstacles.length - object.userData.collisionObstacleStart
+    }
     // 树木、长椅和路灯使用圆形碰撞体，避免 AABB 方形外扩占用过多步行空间。
     for (const obstacle of circularObstacles) collisionWorld.addCircleObstacle(obstacle)
     // 湖水不可通行；中央湖区保留 holes 中定义的岛屿步行区域。
@@ -740,7 +761,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (event.key.toLowerCase() !== 'e') return
     // 室外靠近教学楼正门按 E 进入；室内交互继续由同一按键处理。
     if (!indoorGroup) {
-      if (nearOutdoorEntrance) enterIndoorPrototype()
+      if (nearOutdoorBuildingId) enterIndoorBuilding(nearOutdoorBuildingId)
+      else if (nearOutdoorEntrance) enterIndoorPrototype()
       return
     }
     if (stairTransition) return
@@ -807,6 +829,26 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         }
       }
     }
+    if (!indoorGroup && cameraRig?.player && !isRpgSample) {
+      let nearest = null
+      campus?.traverse(object => {
+        if (!object.userData?.buildingId || !object.userData?.indoorEntrance) return
+        const entrance = object.userData.indoorEntrance
+        const point = object.localToWorld(new THREE.Vector3(entrance.x, 0, entrance.z))
+        const distance = Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z)
+        if (distance <= (entrance.radius || 2.25) && (!nearest || distance < nearest.distance)) {
+          nearest = { id: String(object.userData.buildingId), name: object.userData.displayName || object.name, distance }
+        }
+      })
+      const nextId = nearest?.id || null
+      if (nextId !== nearOutdoorBuildingId) {
+        nearOutdoorBuildingId = nextId
+        callbacks.onIndoorPromptChange?.(nearest
+          ? { visible: true, text: '按 E 进入' + nearest.name }
+          : { visible: false })
+      }
+    }
+
     if (indoorGroup && cameraRig?.player && !stairTransition && pendingIndoorFloorTarget !== null && !activeIndoorRoom) {
       if (input?.keys?.size) pendingIndoorFloorTarget = null
       const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, pendingIndoorFloorTarget)
@@ -1034,15 +1076,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorOutdoorTarget.updateMatrixWorld(true)
 
     // 室外碰撞体与重建后的建筑轮廓同步；样板楼保留入口缺口，不能用整栋多边形封死门洞。
-    if (isRpgSample && indoorOutdoorTarget.userData?.buildingId === 'sample-teaching-building' &&
-        Number.isInteger(indoorOutdoorBase.collisionStart) && indoorOutdoorBase.collisionCount > 0 && outdoorCollisionWorld) {
+    if (Number.isInteger(indoorOutdoorBase.collisionStart) && indoorOutdoorBase.collisionCount > 0 && outdoorCollisionWorld && rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
       const worldPolygon = polygon.map(point => {
         const worldPoint = indoorOutdoorTarget.localToWorld(new THREE.Vector3(point.x, 0, point.z))
         return { x: worldPoint.x, z: worldPoint.z }
       })
-      const wallThickness = 0.55
+      const wallThickness = 0.28
       const entranceEdgeIndex = Number(rebuildOptions?.entranceEdgeIndex ?? 0)
-      const entranceGapHalf = Math.max(1.05, Number(rebuildOptions?.doorWidth || 1.28) / 2 + 0.55)
       const wallObstacles = []
       const appendWallSegment = (start, end) => {
         const dx = end.x - start.x, dz = end.z - start.z
@@ -1051,12 +1091,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         const nx = -dz / length * wallThickness / 2
         const nz = dx / length * wallThickness / 2
         const corners = [
-          { x: start.x + nx, z: start.z + nz }, { x: start.x - nx, z: start.z - nz },
-          { x: end.x + nx, z: end.z + nz }, { x: end.x - nx, z: end.z - nz },
+          [start.x + nx, start.z + nz], [end.x + nx, end.z + nz],
+          [end.x - nx, end.z - nz], [start.x - nx, start.z - nz],
         ]
+        const xs = corners.map(point => point[0]), zs = corners.map(point => point[1])
         wallObstacles.push({
-          minX: Math.min(...corners.map(point => point.x)), maxX: Math.max(...corners.map(point => point.x)),
-          minZ: Math.min(...corners.map(point => point.z)), maxZ: Math.max(...corners.map(point => point.z)),
+          polygon: corners.map(([x, z]) => ({ x, z })),
+          holes: [],
+          minX: Math.min(...xs), maxX: Math.max(...xs),
+          minZ: Math.min(...zs), maxZ: Math.max(...zs),
         })
       }
       worldPolygon.forEach((start, index) => {
@@ -1326,6 +1369,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     currentIndoorFloor = null
     campus.visible = outdoorState.visible
     nearOutdoorEntrance = false
+    nearOutdoorBuildingId = null
     callbacks.onIndoorPromptChange?.({ visible: false })
     collisionWorld = outdoorState.collisionWorld
     input.collisionWorld = collisionWorld

@@ -6,7 +6,6 @@ import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
-import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
@@ -37,7 +36,6 @@ export function createCampusEngine(container, callbacks = {}) {
   let initialized = false
   let selectedFeatureObject = null
   let selectedIndoorObject = null
-  let loadedSceneData = null
   let rpgPreviewGroup = null
   let editorPreviewActive = false
   let loadedBuildingModels = []
@@ -63,31 +61,8 @@ export function createCampusEngine(container, callbacks = {}) {
     renderer.toneMapping = THREE.NoToneMapping
     container.appendChild(renderer.domElement)
 
-    if (typeof callbacks.loadSceneData === 'function') {
-      try {
-        const sceneData = await callbacks.loadSceneData()
-        loadedSceneData = sceneData
-        if (sceneData?.objects?.length) {
-          campus = new THREE.Group()
-          campus.name = 'GISDrivenCampusScene'
-          campus.userData.isGISDriven = true
-          campus.userData.coordinateSystem = 'campus-local'
-          campus.userData.walkableBounds = {
-            minX: -75, maxX: 75, minZ: -52.5, maxZ: 52.5,
-          }
-          for (const item of sceneData.objects) {
-            campus.add(buildFeatureObject(item.feature, item.sceneObject, {
-              mapCoordinateToWorld: sceneData.mapCoordinateToWorld,
-            }))
-          }
-          callbacks.onSceneDataLoaded?.(sceneData)
-        }
-      } catch (error) {
-        callbacks.onSceneDataError?.(error)
-      }
-    }
-    // API 暂无可渲染要素或加载失败时，保留示意场景作为回退。
-    if (!campus) campus = createCampusScene(THREE)
+    // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
+    campus = createCampusScene(THREE)
     scene.add(campus)
     cameraRig = new CameraRig(THREE, renderer.domElement)
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
@@ -95,17 +70,6 @@ export function createCampusEngine(container, callbacks = {}) {
     if (playerSprite) cameraRig.player.set(playerSprite.position.x, 1.7, playerSprite.position.z)
     // 从明确标记为建筑的场景对象提取世界包围盒，避免把道路、树木等误判为墙体。
     campus.updateMatrixWorld(true)
-    // GIS 场景按实际地面/要素包围盒计算漫游边界，避免固定 150×105 范围把可走区域截断。
-    if (campus.userData.isGISDriven) {
-      const campusBounds = new THREE.Box3().setFromObject(campus)
-      if (!campusBounds.isEmpty()) {
-        const padding = 6
-        campus.userData.walkableBounds = {
-          minX: campusBounds.min.x - padding, maxX: campusBounds.max.x + padding,
-          minZ: campusBounds.min.z - padding, maxZ: campusBounds.max.z + padding,
-        }
-      }
-    }
     const buildingObstacles = []
     const cameraObstacleRoots = []
     campus.traverse((object) => {
@@ -122,7 +86,7 @@ export function createCampusEngine(container, callbacks = {}) {
     outdoorCollisionWorld = collisionWorld
     cameraRig.setObstructionObjects(cameraObstacleRoots)
     // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
-    if (!campus.userData.isGISDriven) {
+    {
       loadCampusBuildingModels(scene)
         .then((result) => {
           loadedBuildingModels = result.models || []

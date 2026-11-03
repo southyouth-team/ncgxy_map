@@ -72,12 +72,26 @@ export function pointInCampusArea(point, area) {
   return !(area.holes || []).some(hole => pointInCampusPolygon(point, hole))
 }
 
+/** 获取建筑 footprint 的图像坐标包围盒，兼容旧 rect 与新 polygon。 */
+export function getCampusFootprintBounds(footprint) {
+  if (Array.isArray(footprint?.rect) && footprint.rect.length === 4) return [...footprint.rect]
+  if (!Array.isArray(footprint?.polygon) || footprint.polygon.length < 3) return null
+  const xs = footprint.polygon.map(point => point[0])
+  const ys = footprint.polygon.map(point => point[1])
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+}
+
 /** 原图像素坐标 -> Three.js 地面坐标（X、Z）。 */
 export function mapPixelToWorld(pixelX, pixelY) {
   return {
     x: (pixelX - (bounds.left + bounds.right) / 2) * scale,
     z: (pixelY - (bounds.top + bounds.bottom) / 2) * scale,
   }
+}
+
+/** 图像坐标多边形 -> Three.js 地面 X/Z 坐标点列。 */
+export function mapPolygonToWorld(polygon) {
+  return mapPolylineToWorld(polygon)
 }
 
 /** 像素矩形 -> 世界中心点、宽度和深度。 */

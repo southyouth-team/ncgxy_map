@@ -919,7 +919,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         minZ: bounds.min.z, maxZ: bounds.max.z,
       },
     }
-    const generated = createIndoorBuildingFromFootprint(footprint, options)
+    // 默认室内楼层数和层高优先继承室外建筑生成器参数，避免第一次编辑就把原建筑压扁。
+    const generationOptions = {
+      ...options,
+      floors: options.floors ?? options.floorsData?.length ?? target.userData?.floorCount ?? 1,
+      floorHeight: options.floorHeight ?? target.userData?.floorHeight ?? 3.6,
+    }
+    const generated = createIndoorBuildingFromFootprint(footprint, generationOptions)
     const definition = options.definition || (Array.isArray(options.floorsData) && options.floorsData.length
       ? { ...generated, floors: options.floorsData, floorHeight: Number(options.floorHeight) || generated.floorHeight }
       : generated)

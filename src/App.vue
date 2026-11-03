@@ -29,6 +29,10 @@ const indoorPrompt = ref(null)
 const selectedBuildingId = ref(CAMPUS_BUILDING_FOOTPRINTS[0]?.id || '')
 const indoorFloorCount = ref(3)
 const indoorEntryBusy = ref(false)
+const indoorEditorOpen = ref(false)
+const indoorDefinition = ref(null)
+const indoorEditorMessage = ref('')
+const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
 const initialView = new URLSearchParams(window.location.search).get('view')
 const isRpgSample = initialView === 'showcase'
 const showEditor = ref(initialView === 'editor' || initialView === 'showcase')
@@ -66,10 +70,15 @@ function enterSelectedBuilding() {
   indoorEntryBusy.value = true
   try {
     const building = CAMPUS_BUILDING_FOOTPRINTS.find(item => item.id === selectedBuildingId.value)
+    const stored = localStorage.getItem('ncgxy-indoor-layout:' + selectedBuildingId.value + ':v1')
+    const saved = stored ? JSON.parse(stored) : null
     const opened = engine.enterIndoorBuilding(selectedBuildingId.value, {
       name: building?.label || selectedBuildingId.value,
       floors: indoorFloorCount.value,
+      floorsData: saved?.floors,
+      floorHeight: saved?.floorHeight,
     })
+    if (opened) { indoorDefinition.value = saved || null; indoorEditorOpen.value = false; indoorEditorMessage.value = saved ? '已加载本地保存布局' : '自动生成模板，可开始编辑' }
     if (!opened) errorMessage.value = '未能定位该建筑模型，请先加载校园真实底图场景'
   } catch (error) {
     errorMessage.value = error?.message || '室内空间生成失败'
@@ -77,6 +86,41 @@ function enterSelectedBuilding() {
     indoorEntryBusy.value = false
   }
 }
+
+function ensureIndoorDefinition() {
+  if (indoorDefinition.value) return indoorDefinition.value
+  indoorDefinition.value = engine?.getIndoorBuildingDefinition?.() || null
+  return indoorDefinition.value
+}
+
+function refreshIndoorLayout() {
+  try { engine?.updateIndoorBuildingDefinition(indoorDefinition.value); indoorFloors.value = indoorDefinition.value.floors.map(floor => floor.level).sort((a,b) => a-b); indoorEditorMessage.value = '布局已更新，记得保存' }
+  catch (error) { indoorEditorMessage.value = error?.message || '布局校验失败' }
+}
+
+function addIndoorRoom() {
+  const floor = activeEditableFloor.value; if (!floor) return
+  const index = floor.rooms.length + 1
+  floor.rooms.push({ id: indoorDefinition.value.id + '-' + floor.level + '-room-' + Date.now(), name: '新空间 ' + index, x: 0, z: -floor.depth / 2 + 4, width: Math.min(5, floor.width - 2), depth: Math.min(4, floor.depth / 2), doorWall: 'south', doorWidth: 1.2, furniture: [] })
+  refreshIndoorLayout()
+}
+
+function removeIndoorRoom(roomId) { const floor = activeEditableFloor.value; if (!floor) return; floor.rooms = floor.rooms.filter(room => room.id !== roomId); refreshIndoorLayout() }
+
+function addIndoorFloor() {
+  const definition = indoorDefinition.value; if (!definition || definition.floors.length >= 30) return
+  const level = Math.max(...definition.floors.map(floor => floor.level)) + 1; const source = definition.floors[0]
+  const next = JSON.parse(JSON.stringify(source)); next.level = level; next.doors = []; next.rooms = next.rooms.map((room,index) => ({ ...room, id: definition.id + '-' + level + '-room-' + (index+1), name: room.name.replace(/\\d+/g, String(level)) }))
+  definition.floors.push(next); indoorFloors.value = definition.floors.map(floor => floor.level).sort((a,b) => a-b); engine?.updateIndoorBuildingDefinition(definition); engine?.switchIndoorFloor(level)
+}
+
+function removeIndoorFloor() {
+  const definition = indoorDefinition.value; if (!definition || definition.floors.length <= 1) return
+  definition.floors = definition.floors.filter(floor => floor.level !== indoorFloor.value); indoorFloors.value = definition.floors.map(floor => floor.level).sort((a,b) => a-b)
+  engine?.updateIndoorBuildingDefinition(definition); engine?.switchIndoorFloor(indoorFloors.value[0])
+}
+
+function saveIndoorLayout() { if (!indoorDefinition.value) return; try { localStorage.setItem('ncgxy-indoor-layout:' + indoorDefinition.value.id + ':v1', JSON.stringify(indoorDefinition.value)); indoorEditorMessage.value = '已保存到当前浏览器，本机重新进入仍会保留' } catch (error) { indoorEditorMessage.value = error?.message || '保存失败' } }
 
 function switchIndoorFloor(direction) {
   const target = adjacentIndoorFloor(direction)
@@ -218,6 +262,7 @@ onMounted(async () => {
           indoorFloor.value = state.floor
           indoorFloors.value = state.floors || [state.floor]
           indoorBuildingName.value = state.buildingName || '教学楼'
+          if (indoorDefinition.value) indoorDefinition.value.floors = indoorDefinition.value.floors.filter(floor => state.floors.includes(floor.level))
           nearIndoorStairs.value = Boolean(state.nearStairs)
           nearIndoorRoom.value = state.nearRoom || null
           activeIndoorRoom.value = state.activeRoom || null
@@ -227,6 +272,7 @@ onMounted(async () => {
           else indoorPrompt.value = null
         } else {
           indoorFloor.value = 1; indoorFloors.value = [1]; nearIndoorStairs.value = false
+          indoorEditorOpen.value = false
           nearIndoorRoom.value = null; activeIndoorRoom.value = null; indoorPrompt.value = null
         }
       },

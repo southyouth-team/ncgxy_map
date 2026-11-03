@@ -19,6 +19,37 @@ export function getStairLandingPoint(stairPath, direction) {
   return { x: point.x, z: point.z }
 }
 
+/**
+ * 生成建筑内跨楼层导航计划。楼层按编号排序，每次只跨越一个相邻楼层，
+ * 由运行时在每层分别执行平面寻路，避免把不同高度的网格错误地投影到同一平面。
+ */
+export function planIndoorFloorRoute(building, startLevel, targetLevel) {
+  if (!building || !Array.isArray(building.floors) ||
+    !Number.isInteger(startLevel) || !Number.isInteger(targetLevel)) return null
+  const floors = [...building.floors].sort((a, b) => a.level - b.level)
+  const levels = floors.map(floor => floor.level)
+  const startIndex = levels.indexOf(startLevel)
+  const targetIndex = levels.indexOf(targetLevel)
+  if (startIndex < 0 || targetIndex < 0) return null
+  if (startIndex === targetIndex) return { levels: [startLevel], transitions: [] }
+  const transitions = []
+  const direction = targetIndex > startIndex ? 1 : -1
+  for (let index = startIndex; index !== targetIndex; index += direction) {
+    const from = floors[index]
+    const to = floors[index + direction]
+    if (!from.stairPoint || !to.stairPoint) return null
+    const aligned = Math.hypot(from.stairPoint.x - to.stairPoint.x, from.stairPoint.z - to.stairPoint.z) <= 0.05
+    if (!aligned) return null
+    transitions.push({
+      fromLevel: from.level,
+      toLevel: to.level,
+      direction,
+      stairPoint: { x: from.stairPoint.x, z: from.stairPoint.z },
+    })
+  }
+  return { levels: transitions.length ? [startLevel, ...transitions.map(item => item.toLevel)] : [startLevel], transitions }
+}
+
 export function validateIndoorFloor(floor) {
   const errors = []
   if (!floor || typeof floor !== 'object') return ['楼层配置必须是对象']

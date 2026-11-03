@@ -255,7 +255,6 @@ function removeRoom(id) {
   emit('change')
 }
 function addFurniture(room) {
-  checkpoint()
   if (!Array.isArray(room.furniture)) room.furniture = []
   if (room.furniture.length >= 6) return
   const types = {

@@ -45,6 +45,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let rpgPreviewGroup = null
   let editorPreviewActive = false
   let loadedBuildingModels = []
+  const outdoorBuildingBaselines = new WeakMap()
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
   let pointerStart = null
@@ -787,13 +788,27 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const target = campus.getObjectByName(String(buildingId)) || campus.children.find(object =>
       String(object.userData?.buildingId || object.userData?.featureId || object.userData?.sceneObjectId || '') === String(buildingId))
     if (!target) return false
+    let baseline = outdoorBuildingBaselines.get(target)
+    if (!baseline) {
+      const originalBounds = new THREE.Box3().setFromObject(target)
+      baseline = {
+        width: originalBounds.max.x - originalBounds.min.x,
+        depth: originalBounds.max.z - originalBounds.min.z,
+        position: target.position.clone(),
+        scale: target.scale.clone(),
+      }
+      outdoorBuildingBaselines.set(target, baseline)
+    }
+    target.position.copy(baseline.position)
+    target.scale.copy(baseline.scale)
+    target.updateMatrixWorld(true)
     const bounds = new THREE.Box3().setFromObject(target)
     indoorOutdoorTarget = target
     indoorOutdoorBase = {
-      width: bounds.max.x - bounds.min.x,
-      depth: bounds.max.z - bounds.min.z,
-      position: target.position.clone(),
-      scale: target.scale.clone(),
+      width: baseline.width,
+      depth: baseline.depth,
+      position: baseline.position.clone(),
+      scale: baseline.scale.clone(),
     }
     const footprint = {
       id: String(buildingId),

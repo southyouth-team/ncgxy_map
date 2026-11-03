@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, getStairStepHeight, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -51,6 +51,26 @@ describe('stair path geometry', () => {
   it('rejects invalid stair configuration', () => {
     expect(createStairPath({ x: 1, z: 2, direction: 'diagonal' })).toBeNull()
     expect(createStairPath({ x: NaN, z: 2 })).toBeNull()
+  })
+})
+
+describe('stair step elevation profile', () => {
+  it('keeps the player on each tread and raises smoothly at each riser', () => {
+    expect(getStairStepHeight(0, 4.2)).toBe(0)
+    expect(getStairStepHeight(0.05, 4.2)).toBe(0)
+    expect(getStairStepHeight(0.08, 4.2)).toBeCloseTo(0.35)
+    expect(getStairStepHeight(0.5, 4.2)).toBeCloseTo(2.1)
+    expect(getStairStepHeight(1, 4.2)).toBe(4.2)
+    expect(getStairStepHeight(1.2, 4.2)).toBe(4.2)
+  })
+
+  it('is monotonic, supports variable floor heights and rejects invalid inputs', () => {
+    const samples = Array.from({ length: 101 }, (_, index) => getStairStepHeight(index / 100, 3.6))
+    expect(samples.every((height, index) => index === 0 || height >= samples[index - 1])).toBe(true)
+    expect(samples[100]).toBeCloseTo(3.6)
+    expect(getStairStepHeight(0.5, 3.6)).toBeCloseTo(1.8)
+    expect(getStairStepHeight(Number.NaN, 4.2)).toBeNull()
+    expect(getStairStepHeight(0.5, -1)).toBeNull()
   })
 })
 

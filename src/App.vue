@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
+import CampusPixelMap from './components/CampusPixelMap.vue'
 import CampusPlanEditor from './editor/CampusPlanEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
@@ -170,6 +171,13 @@ onMounted(async () => {
   window.addEventListener('resize', updateViewportState)
   window.addEventListener('orientationchange', updateViewportState)
   window.addEventListener('keydown', onExplorerHotkey)
+  // 当前默认入口使用轻量 Canvas 2D 像素地图；Three.js 不再随首页启动。
+  // 保留原三维引擎代码，后续作为独立预览能力按需启用。
+  if (!showEditor.value) {
+    loading.value = false
+    engineReady.value = false
+    return
+  }
   try {
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
@@ -204,10 +212,11 @@ onBeforeUnmount(() => {
 
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
-    <div ref="viewport" class="scene-viewport" v-show="!showEditor || editorViewMode === '3d'"></div>
+    <CampusPixelMap v-if="!showEditor" />
+    <div ref="viewport" class="scene-viewport" v-show="showEditor && editorViewMode === '3d'"></div>
     <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 
-    <template v-if="!showEditor || editorViewMode === '3d'">
+    <template v-if="showEditor && editorViewMode === '3d'">
     <header class="topbar">
       <div class="brand-lockup">
         <div class="brand-mark">NC</div>

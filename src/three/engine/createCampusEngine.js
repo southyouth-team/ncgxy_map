@@ -4,7 +4,7 @@ import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, planIndoorFloorRoute } from '../indoor/indoorScene.js'
+import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -884,15 +884,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const levels = indoorBuilding?.floors.map(item => item.level).sort((a, b) => a - b) || []
       const floorIndex = levels.indexOf(currentIndoorFloor)
       const stairTarget = levels[floorIndex + 1] ?? levels[floorIndex - 1]
-      const prompt = activeIndoorRoom
-        ? { key: 'room-return', text: '按 E 返回走廊' }
-        : nearExit
-          ? { key: 'exit', text: '按 E 离开' + (indoorBuilding?.name || '建筑') }
-          : nearStairs && stairTarget !== undefined
-            ? { key: 'stairs-' + stairTarget, text: '按 E ' + (stairTarget > currentIndoorFloor ? '上楼至' : '下楼至') + ' ' + stairTarget + ' 层' }
-            : nearestRoom
-              ? { key: 'room-' + nearestRoom.roomId, text: '按 E 进入' + nearestRoom.roomName }
-              : null
+      const prompt = getIndoorInteractionPrompt({
+        activeRoom: activeIndoorRoom,
+        nearExit: Boolean(nearExit),
+        nearStairs: Boolean(nearStairs),
+        stairTarget: stairTarget === undefined ? null : (stairTarget > currentIndoorFloor ? stairTarget : -stairTarget),
+        nearRoom: nearestRoom,
+        buildingName: indoorBuilding?.name || '建筑',
+      })
       const nextPromptKey = prompt?.key || ''
       if (nextPromptKey !== indoorPromptKey) {
         indoorPromptKey = nextPromptKey

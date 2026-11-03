@@ -34,10 +34,10 @@ describe('stair path geometry', () => {
       start: { x: 3, z: 7.1 }, end: { x: 3, z: 2.9 }, rise: 4.2, direction: 'north',
     })
     expect(createStairPath({ x: 3, z: 5, direction: 'east' })).toEqual({
-      start: { x: 5.1, z: 5 }, end: { x: 0.9, z: 5 }, rise: 4.2, direction: 'east',
+      start: { x: 0.9, z: 5 }, end: { x: 5.1, z: 5 }, rise: 4.2, direction: 'east',
     })
     expect(createStairPath({ x: 3, z: 5, direction: 'west' })).toEqual({
-      start: { x: 0.9, z: 5 }, end: { x: 5.1, z: 5 }, rise: 4.2, direction: 'west',
+      start: { x: 5.1, z: 5 }, end: { x: 0.9, z: 5 }, rise: 4.2, direction: 'west',
     })
   })
 

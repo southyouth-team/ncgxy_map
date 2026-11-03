@@ -193,10 +193,10 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 }
 .pixel-map-legend span { display: flex; align-items: center; gap: 5px; }
 .pixel-map-legend i { width: 10px; height: 10px; display: inline-block; border: 1px solid rgba(57,76,57,.25); }
-.legend-building { background: #d99b70; }
+.legend-building { background: #89999b; }
 .legend-water { background: #76b8c0; }
-.legend-road { background: #d9c99f; }
-.legend-sports { background: #c77e69; }
+.legend-road { background: #687579; }
+.legend-sports { background: #7fa477; }
 .pixel-selection {
   position: absolute; z-index: 5; top: 94px; right: 24px; width: 218px;
   display: flex; flex-direction: column; gap: 7px; padding: 16px 17px;

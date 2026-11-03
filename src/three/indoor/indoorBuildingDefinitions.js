@@ -50,10 +50,22 @@ export function validateIndoorBuilding(building) {
   if (!Number.isFinite(building.floorHeight) || building.floorHeight < 2.5) errors.push('floorHeight 必须大于等于 2.5')
   if (!Array.isArray(building.floors) || building.floors.length === 0) errors.push('建筑必须至少包含一个楼层')
   const levels = new Set()
-  for (const floor of Array.isArray(building.floors) ? building.floors : []) {
+  const floors = Array.isArray(building.floors) ? building.floors : []
+  for (const floor of floors) {
     if (levels.has(floor.level)) errors.push('楼层编号重复：' + floor.level)
     levels.add(floor.level)
     for (const error of validateIndoorFloor(floor)) errors.push('楼层 ' + floor.level + '：' + error)
+  }
+  const linkedStairs = floors.filter(floor => floor.stairPoint)
+  if (floors.length > 1 && linkedStairs.length !== floors.length) errors.push('多层建筑的每个楼层都必须配置楼梯连接点')
+  if (linkedStairs.length > 1) {
+    const reference = linkedStairs[0].stairPoint
+    for (const floor of linkedStairs.slice(1)) {
+      const point = floor.stairPoint
+      if (Math.hypot(point.x - reference.x, point.z - reference.z) > 0.25) {
+        errors.push('楼层 ' + floor.level + ' 的楼梯连接点未与其他楼层对齐')
+      }
+    }
   }
   return errors
 }

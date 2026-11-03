@@ -78,6 +78,7 @@ export function planIndoorFloorRoute(building, startLevel, targetLevel) {
       connector: {
         from: { level: from.level, point: fromLanding },
         to: { level: to.level, point: toLanding },
+        rise: fromPath.rise,
       },
     })
   }
@@ -619,7 +620,7 @@ export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
     const railCenter = rotateStairPoint(offset, 0)
     const handrail = addBox(THREE, group, 'indoor-stair-rail', railCenter.x, floorHeight / 2 + 0.82, railCenter.z,
       0.12, 0.12, 4.55, railMaterial)
-    handrail.rotation.x = railAngle
+    handrail.rotation.set(railAngle, stairRotation, 0, 'YXZ')
     const postPositions = [-1.95, -0.65, 0.65, 1.95]
     for (const localZ of postPositions) {
       const postPoint = rotateStairPoint(offset, localZ)

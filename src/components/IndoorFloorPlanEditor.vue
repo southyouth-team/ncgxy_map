@@ -64,7 +64,7 @@ function moveDrag(event) {
       const axisLimit = (wall.axis === 'x' ? props.floor.width : props.floor.depth) / 2
       const anchor = state.endpoint === 'end' ? (wall.axis === 'x' ? state.x - state.length / 2 : state.z - state.length / 2)
         : (wall.axis === 'x' ? state.x + state.length / 2 : state.z + state.length / 2)
-      const maxLength = state.endpoint === 'end' ? axisLimit - anchor + axisLimit : anchor + axisLimit
+      const maxLength = state.endpoint === 'end' ? axisLimit - anchor : anchor + axisLimit
       const length = Math.max(1, Math.min(state.length + signedDelta, maxLength))
       const actualDelta = length - state.length
       wall.length = round(length)

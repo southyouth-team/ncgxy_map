@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, getGableRoofLayout, normalizeBuildingParameters, validateBuildingFootprint, getFacadeWindowPositions, createCampusMaterials, createPixelBuilding } from './campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, getGableRoofLayout, normalizeBuildingParameters, validateBuildingFootprint, getFacadeWindowPositions, createPixelBuilding } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
   it('creates a ridge-based gable roof for a convex rectangular footprint', () => {
@@ -95,7 +95,8 @@ describe('shared campus building assets', () => {
 
 
   it('rebuilds concave building walls, facade and roof from the exact polygon footprint', () => {
-    const materials = createCampusMaterials(THREE)
+    const sharedMaterial = new THREE.MeshStandardMaterial({ color: '#b9c6c2' })
+    const materials = new Proxy({}, { get: () => sharedMaterial })
     const shape = new THREE.Shape([
       new THREE.Vector2(-6, -5),
       new THREE.Vector2(6, -5),

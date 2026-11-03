@@ -607,7 +607,7 @@ export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
   for (let index = 0; index < stairCount; index += 1) {
     const localZ = -2.1 + (index + 0.5) * stairDepth
     const point = rotateStairPoint(0, localZ)
-    const step = addBox(THREE, group, 'indoor-stair-step', point.x, (index + 0.5) * stairRise, point.z,
+    const step = addBox(THREE, group, 'indoor-stair-step', point.x, 0.18 + index * stairRise, point.z,
       rotated ? stairDepth : 1.7, stairRise, rotated ? 1.7 : stairDepth, stairMaterial)
     if (index === 5) step.userData.interactionData = createIndoorInteractionData({
       id: `stair-${floor.level}`, name: '楼层楼梯', objectType: 'stairs', interactionType: 'navigate', action: 'change-floor',
@@ -640,10 +640,10 @@ export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
 
   // 上下平台分别与本层楼板、上一层楼板齐平，避免台阶悬空或嵌入。
   const landingMaterial = new THREE.MeshStandardMaterial({ color: '#b7a98e', roughness: 1 })
-  for (const [localZ, centerY] of [[-2.55, -0.1], [2.55, floorHeight - 0.1]]) {
+  for (const [localZ, baseY] of [[-2.55, 0], [2.55, floorHeight]]) {
     const landingPoint = rotateStairPoint(0, localZ)
-    addBox(THREE, group, 'indoor-stair-landing', landingPoint.x, centerY, landingPoint.z,
-      rotated ? 0.9 : 1.7, 0.2, rotated ? 1.7 : 0.9, landingMaterial)
+    addBox(THREE, group, 'indoor-stair-landing', landingPoint.x, baseY, landingPoint.z,
+      rotated ? 0.9 : 1.7, 0.18, rotated ? 1.7 : 0.9, landingMaterial)
   }
   group.userData.roomInteractions = getRoomInteractionPoints(floor)
   group.userData.exitInteractions = doors.map(door => {

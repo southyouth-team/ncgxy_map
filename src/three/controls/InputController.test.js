@@ -71,5 +71,6 @@ describe('InputController navigation path', () => {
     controller.update(0.1)
 
     expect(controller.navigationPath).toBeNull()
+    expect(controller.consumeNavigationPathCompletion()).toBe(false)
   })
 })

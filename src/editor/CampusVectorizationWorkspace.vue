@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { validateCampusFeature, validateCampusGeometry } from '../data/campus/campusLayoutV2.js'
+import { CAMPUS_LAYOUT_V2, validateCampusFeature, validateCampusGeometry } from '../data/campus/campusLayoutV2.js'
 
 const emit = defineEmits(['close'])
 const imageUrl = ref('')
@@ -144,11 +144,11 @@ function buildV2Document() {
       type: 'image-pixel', origin: 'top-left', xAxis: 'right', yAxis: 'down', unit: 'px',
       calibrationStatus: 'uncalibrated',
       referenceImage: {
+        ...CAMPUS_LAYOUT_V2.coordinateSystem.referenceImage,
         id: sourceRef.value.trim() || 'user-supplied-reference',
         title: imageName.value,
         width: imageWidth.value,
         height: imageHeight.value,
-        rightsStatus: 'reference-only',
       },
     },
     calibration: null,

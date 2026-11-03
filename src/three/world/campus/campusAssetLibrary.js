@@ -148,12 +148,12 @@ export function addPixelLamp(THREE, parent, x, z, mats) {
  * 仅负责视觉资产，不代表真实建筑测绘尺寸。
  */
 export const CAMPUS_BUILDING_TEMPLATES = Object.freeze({
-  '教学楼': { height: 4.2, windowDensity: 1, roofRise: 1.35, wall: 'wallCream', doorWidth: 0.9 },
-  '宿舍楼': { height: 4.8, windowDensity: 1.45, roofRise: 1.2, wall: 'wallPeach', doorWidth: 0.86 },
-  '办公楼': { height: 3.8, windowDensity: 1.15, roofRise: 1.25, wall: 'wall', doorWidth: 0.86 },
-  '实验楼': { height: 4.5, windowDensity: 0.9, roofRise: 1.4, wall: 'wallMint', doorWidth: 0.92 },
-  '图书馆': { height: 4.6, windowDensity: 0.7, roofRise: 1.55, wall: 'wallCream', doorWidth: 1.2 },
-  '体育馆': { height: 3.2, windowDensity: 0.35, roofRise: 1.8, wall: 'wallPeach', doorWidth: 1.5 },
+  '教学楼': { height: 4.2, windowDensity: 1, roofRise: 1.35, wall: 'wallCream', doorWidth: 0.9, windowWidth: 0.48, windowHeight: 0.62 },
+  '宿舍楼': { height: 4.8, windowDensity: 1.45, roofRise: 1.2, wall: 'wallPeach', doorWidth: 0.86, windowWidth: 0.42, windowHeight: 0.58 },
+  '办公楼': { height: 3.8, windowDensity: 1.15, roofRise: 1.25, wall: 'wall', doorWidth: 0.86, windowWidth: 0.58, windowHeight: 0.72 },
+  '实验楼': { height: 4.5, windowDensity: 0.9, roofRise: 1.4, wall: 'wallMint', doorWidth: 0.92, windowWidth: 0.52, windowHeight: 0.68 },
+  '图书馆': { height: 4.6, windowDensity: 0.7, roofRise: 1.55, wall: 'wallCream', doorWidth: 1.2, windowWidth: 0.82, windowHeight: 1.12 },
+  '体育馆': { height: 3.2, windowDensity: 0.35, roofRise: 1.8, wall: 'wallPeach', doorWidth: 1.5, windowWidth: 0.9, windowHeight: 0.42 },
 })
 
 /**
@@ -252,8 +252,50 @@ export function createPixelBuilding(THREE, options = {}) {
   roof.userData.objectType = 'building-roof'
   group.add(roof)
 
-  // 门窗暂不按外接矩形布置，避免不规则 footprint 下装饰件脱离真实墙面。
-  // 后续可根据 footprint 边段法线，在真实立面上参数化生成门窗。
+  // 沿 footprint 的真实边段生成窗户，绝不使用外接矩形布置。
+  // 先统一为不重复闭合点，避免最后一条边长度为 0。
+  const outline = shape.getPoints(1).filter((point, index, points) => (
+    index === 0 || point.distanceTo(points[index - 1]) > 0.001
+  ))
+  if (outline.length > 2 && outline[0].distanceTo(outline[outline.length - 1]) < 0.001) outline.pop()
+  const windowWidth = Math.max(0.28, Number(preset.windowWidth || 0.48))
+  const windowHeight = Math.max(0.28, Number(preset.windowHeight || 0.62))
+  const sillHeight = Math.min(buildingHeight * 0.72, Math.max(1.15, buildingHeight * 0.48))
+  const area = outline.reduce((sum, point, index) => {
+    const next = outline[(index + 1) % outline.length]
+    return sum + point.x * next.y - next.x * point.y
+  }, 0) / 2
+  outline.forEach((point, index) => {
+    const next = outline[(index + 1) % outline.length]
+    const dx = next.x - point.x
+    const dy = next.y - point.y
+    const edgeLength = Math.hypot(dx, dy)
+    if (edgeLength < windowWidth * 1.8) return
+    const count = Math.min(12, Math.floor(edgeLength / (windowWidth * 2.2)))
+    if (!count) return
+    // shape 坐标的 Y 对应世界 -Z；根据多边形绕序计算外法线。
+    const normalX = area >= 0 ? dy / edgeLength : -dy / edgeLength
+    const normalZ = area >= 0 ? dx / edgeLength : -dx / edgeLength
+    const angle = Math.atan2(dy, dx)
+    for (let i = 0; i < count; i += 1) {
+      const t = (i + 1) / (count + 1)
+      const centerX = point.x + dx * t + normalX * 0.055
+      const centerZ = -(point.y + dy * t) + normalZ * 0.055
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(windowWidth + 0.12, windowHeight + 0.12, 0.075),
+        materials.windowTrim,
+      )
+      frame.position.set(centerX, sillHeight, centerZ)
+      frame.rotation.y = angle
+      const glass = new THREE.Mesh(
+        new THREE.BoxGeometry(windowWidth, windowHeight, 0.085),
+        materials.window,
+      )
+      glass.position.copy(frame.position)
+      glass.rotation.y = angle
+      group.add(frame, glass)
+    }
+  })
   group.traverse((object) => {
     if (object.isMesh) { object.castShadow = true; object.receiveShadow = true }
   })

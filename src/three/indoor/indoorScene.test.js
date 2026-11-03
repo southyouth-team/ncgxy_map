@@ -36,6 +36,7 @@ describe('multi-floor navigation planning', () => {
 
   it('rejects unknown floors and misaligned stair connections', () => {
     expect(planIndoorFloorRoute(building, 0, 3)).toBeNull()
+    expect(planIndoorFloorRoute({ floors: [building.floors[0], { ...building.floors[2], level: 3 }] }, 1, 3)).toBeNull()
     expect(planIndoorFloorRoute({ floors: [{ level: 1 }, { level: 2 }] }, 1, 2)).toBeNull()
     const misaligned = { floors: [building.floors[0], { level: 2, stairPoint: { x: 8.2, z: 0 } }] }
     expect(planIndoorFloorRoute(misaligned, 1, 2)).toBeNull()

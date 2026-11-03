@@ -171,6 +171,29 @@ describe('campus footprint indoor generation', () => {
     expect(validateIndoorBuilding(building).some(error => error.includes('墙体 bad-wall 超出楼层边界'))).toBe(true)
   })
 
+  it('creates and validates editable polygon building footprints', () => {
+    const definition = createIndoorBuildingFromFootprint({
+      id: 'polygon-campus-building',
+      bounds: { minX: -8, maxX: 8, minZ: -6, maxZ: 6 },
+    }, { floors: 2 })
+    expect(definition.footprint.type).toBe('polygon')
+    expect(definition.footprint.polygon).toHaveLength(4)
+    expect(validateIndoorBuilding(definition)).toEqual([])
+
+    const concave = JSON.parse(JSON.stringify(definition))
+    concave.footprint.polygon = [
+      { x: -8, z: -6 }, { x: 8, z: -6 }, { x: 1, z: 0 },
+      { x: 8, z: 6 }, { x: -8, z: 6 },
+    ]
+    expect(validateIndoorBuilding(concave)).toEqual([])
+
+    const selfIntersecting = JSON.parse(JSON.stringify(definition))
+    selfIntersecting.footprint.polygon = [
+      { x: -8, z: -6 }, { x: 8, z: 6 }, { x: -8, z: 6 }, { x: 8, z: -6 },
+    ]
+    expect(validateIndoorBuilding(selfIntersecting).join(' ')).toContain('自相交')
+  })
+
   it('expands the shared footprint and all floors while preserving existing room world positions', () => {
     const original = createIndoorBuildingFromFootprint({
       id: 'expandable-building',

@@ -1163,10 +1163,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       position: baseline.position.clone(),
       scale: baseline.scale.clone(),
     }
+    const localEntrancePoint = options.entrancePoint || target.userData?.indoorEntrance || null
     const transformedFootprint = transformIndoorFootprint({
       minX: localBounds.min.x, maxX: localBounds.max.x,
       minZ: localBounds.min.z, maxZ: localBounds.max.z,
-    }, target.scale, options.entrancePoint || target.userData?.indoorEntrance || null)
+    }, target.scale, localEntrancePoint)
+    const rebuildOptions = target.userData?.rebuildOptions
+    const entranceEdgeIndex = Number(rebuildOptions?.entranceEdgeIndex ?? 0)
+    const entranceEdgeStart = localBounds.isEmpty() ? null : (() => {
+      const points = [
+        { x: localBounds.min.x, z: localBounds.min.z },
+        { x: localBounds.max.x, z: localBounds.min.z },
+        { x: localBounds.max.x, z: localBounds.max.z },
+        { x: localBounds.min.x, z: localBounds.max.z },
+      ]
+      const start = points[entranceEdgeIndex % points.length]
+      const end = points[(entranceEdgeIndex + 1) % points.length]
+      const edgeLength = Math.hypot(end.x - start.x, end.z - start.z) || 1
+      return Math.hypot((end.x - start.x) * target.scale.x, (end.z - start.z) * target.scale.z) / edgeLength
+    })()
     const footprint = {
       id: String(buildingId),
       name: options.name || target.userData?.name || target.name || '校园建筑',
@@ -1176,8 +1191,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const generationOptions = {
       ...options,
       floors: options.floors ?? options.floorsData?.length ?? target.userData?.floorCount ?? 1,
-      floorHeight: options.floorHeight ?? target.userData?.floorHeight ?? 3.6,
-      doorWidth: options.doorWidth ?? target.userData?.rebuildOptions?.doorWidth,
+      floorHeight: options.floorHeight ?? (target.userData?.floorHeight ?? 3.6) * Math.abs(target.scale.y),
+      doorWidth: options.doorWidth ?? ((rebuildOptions?.doorWidth || 1.28) * (entranceEdgeStart || Math.abs(target.scale.x))),
       entrancePoint: transformedFootprint.entrancePoint,
     }
     const generated = createIndoorBuildingFromFootprint(footprint, generationOptions)

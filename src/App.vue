@@ -193,8 +193,21 @@ onMounted(async () => {
       onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },
       onIndoorStateChange: (state) => {
         indoorPrototypeActive.value = Boolean(state.active)
-        if (state.active) { indoorFloor.value = state.floor; indoorFloors.value = state.floors || [state.floor]; indoorBuildingName.value = state.buildingName || '室内空间样板'; nearIndoorStairs.value = Boolean(state.nearStairs); nearIndoorRoom.value = state.nearRoom || null; activeIndoorRoom.value = state.activeRoom || null }
-        else { indoorFloor.value = 1; indoorFloors.value = [1]; nearIndoorStairs.value = false; nearIndoorRoom.value = null; activeIndoorRoom.value = null }
+        if (state.active) {
+          indoorFloor.value = state.floor
+          indoorFloors.value = state.floors || [state.floor]
+          indoorBuildingName.value = state.buildingName || '教学楼'
+          nearIndoorStairs.value = Boolean(state.nearStairs)
+          nearIndoorRoom.value = state.nearRoom || null
+          activeIndoorRoom.value = state.activeRoom || null
+          if (state.activeRoom) indoorPrompt.value = { visible: true, text: '按 E 返回走廊' }
+          else if (state.nearRoom) indoorPrompt.value = { visible: true, text: `按 E 进入 ${state.nearRoom.roomName}` }
+          else if (state.nearStairs) indoorPrompt.value = { visible: true, text: '按 E 沿楼梯上下楼' }
+          else indoorPrompt.value = null
+        } else {
+          indoorFloor.value = 1; indoorFloors.value = [1]; nearIndoorStairs.value = false
+          nearIndoorRoom.value = null; activeIndoorRoom.value = null; indoorPrompt.value = null
+        }
       },
       onReady: () => {
         loading.value = false
@@ -311,6 +324,7 @@ onBeforeUnmount(() => {
       <button class="reset-button" @click="focusCampus"><span>↗</span> 重置视角</button>
     </div>
 
+    <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }}F / {{ indoorFloors.length }} 层</span></div>
     <div v-if="indoorPrompt" class="indoor-interaction-prompt">{{ indoorPrompt.text }}</div>
     <div v-if="loading" class="loading-screen">
       <div class="loader"></div>

@@ -980,8 +980,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     clearNavigationVisuals()
     const floor = indoorBuilding?.floors.find(item => item.level === level)
     if (!floor) return false
-    const floorDefinition = indoorBuilding.footprint?.polygon?.length >= 3
-      ? { ...floor, footprintPolygon: indoorBuilding.footprint.polygon.map(point => ({ x: point.x, z: point.z })) }
+    const interiorPolygon = indoorBuilding.interiorFootprint?.polygon || (
+      !indoorBuilding.interiorNormalized ? indoorBuilding.footprint?.polygon : null
+    )
+    const floorDefinition = interiorPolygon?.length >= 3
+      ? { ...floor, footprintPolygon: interiorPolygon.map(point => ({ x: point.x, z: point.z })) }
       : floor
     const group = createIndoorFloor(THREE, floorDefinition, indoorBuilding.floorHeight)
     group.position.y = (level - 1) * indoorBuilding.floorHeight

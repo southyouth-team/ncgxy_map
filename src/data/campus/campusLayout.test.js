@@ -10,6 +10,8 @@ import {
   mapRectToWorld,
   mapPolylineToWorld,
   mapRoadToWorld,
+  getCampusFootprintBounds,
+  mapPolygonToWorld,
   pointInCampusArea,
   pointInCampusPolygon,
 } from './campusLayout.js'
@@ -59,6 +61,20 @@ describe('南昌工学院像素校园主空间底图', () => {
       const [left, top, right, bottom] = field.rect
       expect(spawnX > left && spawnX < right && spawnY > top && spawnY < bottom).toBe(false)
     }
+  })
+
+  it('建筑 footprint 包围盒兼容矩形与多边形数据', () => {
+    expect(getCampusFootprintBounds({ rect: [10, 20, 40, 60] })).toEqual([10, 20, 40, 60])
+    expect(getCampusFootprintBounds({ polygon: [[12, 8], [30, 10], [26, 35], [8, 24]] })).toEqual([8, 8, 30, 35])
+    expect(getCampusFootprintBounds({ id: 'invalid' })).toBeNull()
+  })
+
+  it('建筑多边形可转换到世界空间且保留顶点顺序', () => {
+    const polygon = [[153, 49], [200, 49], [190, 90], [153, 80]]
+    const mapped = mapPolygonToWorld(polygon)
+    expect(mapped).toHaveLength(4)
+    expect(mapped[0]).toEqual(mapPixelToWorld(153, 49))
+    expect(mapped[2]).toEqual(mapPixelToWorld(190, 90))
   })
 
   it('道路中心线和宽度可转换为统一的 Three.js 世界空间数据', () => {

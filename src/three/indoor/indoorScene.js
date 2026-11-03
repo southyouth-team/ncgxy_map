@@ -26,7 +26,7 @@ export function getStairTraversalPoints(stairPath, direction) {
   const exit = getStairLandingPoint(stairPath, direction)
   if (!entry || !exit) return null
   return { entry, exit }
-
+}
 
 /**
  * 生成建筑内跨楼层导航计划。楼层按编号排序，每次只跨越一个相邻楼层，

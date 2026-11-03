@@ -14,6 +14,7 @@ import {
   circleIntersectsCampusPolygon,
 } from '../data/campus/campusLayout.js'
 import { getCampusSpatialLayers } from '../data/campus/campusGeoJSON.js'
+import { getReferenceImageContainRect } from '../data/campus/campusReferenceImage.js'
 
 // Canvas 2D 与 Three.js 共用同一组从统一 FeatureCollection 派生的空间图层。
 const { boundary: CAMPUS_BOUNDARY, gates: CAMPUS_GATES, areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS } = getCampusSpatialLayers()
@@ -242,10 +243,18 @@ function drawGround(ctx) {
   ctx.fillStyle = '#eeeee7'
   ctx.fillRect(0, 0, 1000, 500)
   if (showReferenceImage.value && referenceMapReady.value && referenceMapImage.naturalWidth > 0) {
-    ctx.save()
-    ctx.globalAlpha = referenceOpacity.value
-    ctx.drawImage(referenceMapImage, 0, 0, 1000, 500)
-    ctx.restore()
+    const imageRect = getReferenceImageContainRect(
+      referenceMapImage.naturalWidth,
+      referenceMapImage.naturalHeight,
+      1000,
+      500,
+    )
+    if (imageRect) {
+      ctx.save()
+      ctx.globalAlpha = referenceOpacity.value
+      ctx.drawImage(referenceMapImage, imageRect.x, imageRect.y, imageRect.width, imageRect.height)
+      ctx.restore()
+    }
   }
   ctx.strokeStyle = '#c8c9bd'
   ctx.lineWidth = 1

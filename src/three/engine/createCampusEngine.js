@@ -21,6 +21,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let cameraRig
   let input
   let collisionWorld
+  let outdoorCollisionWorld = null
   let indoorGroup = null
   let indoorBuilding = null
   let currentIndoorFloor = null
@@ -114,7 +115,7 @@ export function createCampusEngine(container, callbacks = {}) {
       })
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
-    const outdoorCollisionWorld = collisionWorld
+    outdoorCollisionWorld = collisionWorld
     // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
     if (!campus.userData.isGISDriven) {
       loadCampusBuildingModels(scene)
@@ -173,6 +174,10 @@ export function createCampusEngine(container, callbacks = {}) {
     disposeObjectGroup(rpgPreviewGroup)
     rpgPreviewGroup = null
     if (campus) campus.visible = true
+    if (outdoorCollisionWorld && !indoorGroup) {
+      collisionWorld = outdoorCollisionWorld
+      if (input) input.collisionWorld = collisionWorld
+    }
   }
 
   function previewRpgMap(document) {

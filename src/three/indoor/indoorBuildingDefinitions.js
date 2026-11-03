@@ -1,4 +1,4 @@
-import { validateIndoorFloor } from './indoorScene.js'
+import { validateIndoorFloor, createStairPath, getStairTraversalPoints } from './indoorScene.js'
 /** 室内建筑数据定义（演示样板），未经测绘不得标注为真实校园数据。 */
 export const indoorBuildingDefinitions = {
   teachingBlockPrototype: {
@@ -117,6 +117,25 @@ export function validateIndoorBuilding(building) {
         errors.push('楼层 ' + floor.level + ' 的楼梯连接点未与其他楼层对齐')
       }
     }
+
+    // 不仅校验楼梯中心重合，还要校验上一层的出梯平台与下一层的入梯平台一致。
+    const orderedFloors = [...floors].filter(floor => floor.stairPoint).sort((a, b) => a.level - b.level)
+    for (let index = 0; index < orderedFloors.length - 1; index++) {
+      const lowerFloor = orderedFloors[index]
+      const upperFloor = orderedFloors[index + 1]
+      if (upperFloor.level !== lowerFloor.level + 1) continue
+      const lowerPath = createStairPath(lowerFloor.stairPoint, building.floorHeight || 4.2)
+      const upperPath = createStairPath(upperFloor.stairPoint, building.floorHeight || 4.2)
+      const lowerAscending = getStairTraversalPoints(lowerPath, 1)
+      const upperAscending = getStairTraversalPoints(upperPath, 1)
+      const upperDescending = getStairTraversalPoints(upperPath, -1)
+      const lowerDescending = getStairTraversalPoints(lowerPath, -1)
+      if (!lowerAscending || !upperAscending || !upperDescending || !lowerDescending ||
+        Math.hypot(lowerAscending.exit.x - upperAscending.entry.x, lowerAscending.exit.z - upperAscending.entry.z) > 0.05 ||
+        Math.hypot(upperDescending.exit.x - lowerDescending.entry.x, upperDescending.exit.z - lowerDescending.entry.z) > 0.05) {
+        errors.push('楼层 ' + lowerFloor.level + ' 与 ' + upperFloor.level + ' 的楼梯平台未连续衔接')
+      }
+    }
   }
   return errors
 }
@@ -218,7 +237,7 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
         { id: `${footprint.id}-${level}-room-b`, name: `空间 ${level}B`, x: roomWidth / 2 + 0.5, z: -depth / 2 + roomDepth / 2 + 0.6, width: roomWidth, depth: roomDepth, doorWall: 'south', doorWidth: Math.min(1.5, roomWidth * 0.35), furniture: [] },
       ],
       spawnPoint: { ...entrance.landing, y: 1.7 },
-      stairPoint: { x: width / 2 - 1.5, z: 0 },
+      stairPoint: { x: width / 2 - 1.5, z: 0, direction: level % 2 === 1 ? 'south' : 'north' },
     }
   })
   return {

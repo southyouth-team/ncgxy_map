@@ -320,7 +320,13 @@ const layerItems = computed(() => [
 ])
 function layerKey(type) { return type === 'building' ? 'buildings' : type === 'road' ? 'roads' : 'areas' }
 function isLayerLocked(type) { return Boolean(layerStates.value[layerKey(type)]?.locked) }
-function toggleLayerVisibility(key) { layerStates.value[key].visible = !layerStates.value[key].visible }
+function toggleLayerVisibility(key) {
+  layerStates.value[key].visible = !layerStates.value[key].visible
+  if (!layerStates.value[key].visible && selected.value.type && layerKey(selected.value.type) === key) {
+    selected.value = { type: '', id: '' }
+    drag.value = null
+  }
+}
 function toggleLayerLock(key) {
   layerStates.value[key].locked = !layerStates.value[key].locked
   if (layerStates.value[key].locked && selected.value.type && layerKey(selected.value.type) === key) {
@@ -747,18 +753,18 @@ function exportDocument() {
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
             <rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="#86a765"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#grass-pattern)" opacity=".42"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
-            <g v-if="layerStates.areas.visible" v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
+            <g v-if="layerStates.areas.visible" v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="!isLayerLocked('area') && (selected={type:'area',id:area.id})">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
             <g v-if="showGrid"><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#map-grid)"/></g>
             <path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
             <g v-if="layerStates.roads.visible" v-for="road in roads" :key="road.id" class="map-feature">
-              <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="selected={type:'road',id:road.id}"/>
+              <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="!isLayerLocked('road') && (selected={type:'road',id:road.id})"/>
               <path v-if="selected.id===road.id" :d="roadPath(road.points)" fill="none" stroke="#d59a43" :stroke-width="Math.max(2,(road.width || 13)*0.18)" stroke-linecap="round" pointer-events="none"/>
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
-            <g v-if="layerStates.buildings.visible" v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">
+            <g v-if="layerStates.buildings.visible" v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)" @click.stop="!isLayerLocked('building') && (selected={type:'building',id:item.id})">
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" :fill="buildingWallColor(item)" stroke="#75473e" stroke-width="2"/>
               <path :d="'M '+(item.rect[0]+3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))+' L '+((item.rect[0]+item.rect[2])/2)+' '+(item.rect[1]-Math.max(3,(item.rect[3]-item.rect[1])*(buildingPreset(item).roofRise/10)))+' L '+(item.rect[2]-3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))" fill="none" stroke="#a85f4e" stroke-width="5" stroke-linejoin="round"/>
               <g fill="#8bc3c5" stroke="#f3dfb5" stroke-width="1">
@@ -797,7 +803,7 @@ function exportDocument() {
           <label>区域名称</label><input v-model="selectedArea.name">
           <label>区域类型</label><span class="confidence">{{ selectedArea.type }}</span>
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。支持顶点吸附。</p>
-          <button class="danger-button" @click="snapshot(); areas = areas.filter(item => item.id !== selectedArea.id); selected = {type:'',id:''}">删除区域</button>
+          <button class="danger-button" @click="!isLayerLocked('area') && (snapshot(), areas = areas.filter(item => item.id !== selectedArea.id), selected = {type:'',id:''})">删除区域</button>
         </template>
         <template v-else-if="selectedRoad">
           <label>道路宽度</label><input v-model.number="selectedRoad.width" type="range" min="4" max="24">

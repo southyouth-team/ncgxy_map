@@ -28,6 +28,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let currentIndoorFloor = null
   let stairInteractionActive = false
   let nearIndoorRoom = null
+  let nearIndoorExit = false
   let activeIndoorRoom = null
   let roomReturnPosition = null
   let stairTransition = null
@@ -601,6 +602,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       return
     }
     if (stairTransition) return
+    if (nearIndoorExit) {
+      exitIndoorPrototype()
+      return
+    }
     if (activeIndoorRoom && roomReturnPosition) {
       cameraRig.player.set(roomReturnPosition.x, roomReturnPosition.y, roomReturnPosition.z)
       activeIndoorRoom = null
@@ -658,6 +663,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     if (indoorGroup && cameraRig?.player && !stairTransition) {
       const point = indoorGroup.userData.stairPoint
+      const exitPoint = indoorGroup.userData.exitInteractions?.[0]
+      const nearExit = !activeIndoorRoom && exitPoint && Math.hypot(cameraRig.player.x - exitPoint.x, cameraRig.player.z - exitPoint.z) <= 1.7
+      if (Boolean(nearExit) !== nearIndoorExit) {
+        nearIndoorExit = Boolean(nearExit)
+        callbacks.onIndoorPromptChange?.(nearExit ? { visible: true, text: '按 E 离开教学楼' } : { visible: false })
+      }
       const nearStairs = !activeIndoorRoom && point && Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z) <= 2.4
       const nearestRoom = activeIndoorRoom ? null : (indoorGroup.userData.roomInteractions || [])
         .map(item => ({ item, distance: Math.hypot(cameraRig.player.x - item.approach.x, cameraRig.player.z - item.approach.z) }))
@@ -804,6 +815,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorGroup = null
     stairInteractionActive = false
     nearIndoorRoom = null
+    nearIndoorExit = false
+    callbacks.onIndoorPromptChange?.({ visible: false })
     activeIndoorRoom = null
     roomReturnPosition = null
     stairTransition = null

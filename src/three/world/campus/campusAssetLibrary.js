@@ -436,14 +436,52 @@ export function createPixelBuilding(THREE, options = {}) {
   if (!footprintValidation.valid) {
     throw new TypeError(`建筑“${label}”轮廓无效：${footprintValidation.errors.join('；')}`)
   }
-  const wall = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(shape, { depth: buildingHeight, bevelEnabled: false, curveSegments: 1 }),
-    facadeMaterial,
-  )
-  wall.geometry.rotateX(-Math.PI / 2)
-  wall.castShadow = true
-  wall.receiveShadow = true
-  group.add(wall)
+  // 外墙按轮廓边逐段生成，保留真实室内空间；入口边拆成左右墙段和门楣，不再用实心挤出体封死门洞。
+  const wallPoints = shape.extractPoints(1).shape.filter((point, index, points) => (
+    index === 0 || point.distanceTo(points[index - 1]) > 0.001
+  ))
+  if (wallPoints.length > 2 && wallPoints[0].distanceTo(wallPoints[wallPoints.length - 1]) < 0.001) wallPoints.pop()
+  const wallArea = wallPoints.reduce((sum, point, index) => {
+    const next = wallPoints[(index + 1) % wallPoints.length]
+    return sum + point.x * next.y - next.x * point.y
+  }, 0) / 2
+  const wallEdges = wallPoints.map((point, index) => {
+    const next = wallPoints[(index + 1) % wallPoints.length]
+    return { point, next, dx: next.x - point.x, dy: next.y - point.y, length: point.distanceTo(next), index }
+  })
+  const wallEntrance = selectBuildingEntranceEdge(wallEdges, entranceEdgeIndex)
+  const wallDoorWidth = Math.min(Number(preset.doorWidth || 0.9), Math.max(0.5, (wallEntrance?.length || 0) * 0.42))
+  const wallDoorHeight = Math.min(2.05, buildingHeight * 0.58)
+  const wallThickness = 0.28
+  const addWallSegment = (edge, from, to, height = buildingHeight, centerY = buildingHeight / 2) => {
+    const segmentLength = Math.hypot(to.x - from.x, to.y - from.y)
+    if (segmentLength < 0.08 || height < 0.08) return
+    const wallSegment = new THREE.Mesh(
+      new THREE.BoxGeometry(segmentLength, height, wallThickness),
+      facadeMaterial,
+    )
+    wallSegment.position.set((from.x + to.x) / 2, centerY, -(from.y + to.y) / 2)
+    wallSegment.rotation.y = Math.atan2(edge.dy, edge.dx)
+    wallSegment.castShadow = true
+    wallSegment.receiveShadow = true
+    wallSegment.userData.objectType = 'building-wall'
+    wallSegment.userData.edgeIndex = edge.index
+    group.add(wallSegment)
+  }
+  wallEdges.forEach(edge => {
+    if (edge.index !== wallEntrance?.index || edge.length < wallDoorWidth * 1.6) {
+      addWallSegment(edge, edge.point, edge.next)
+      return
+    }
+    const gapWidth = wallDoorWidth + 0.18
+    const halfGap = gapWidth / 2
+    const midpoint = { x: (edge.point.x + edge.next.x) / 2, y: (edge.point.y + edge.next.y) / 2 }
+    const before = { x: midpoint.x - edge.dx / edge.length * halfGap, y: midpoint.y - edge.dy / edge.length * halfGap }
+    const after = { x: midpoint.x + edge.dx / edge.length * halfGap, y: midpoint.y + edge.dy / edge.length * halfGap }
+    addWallSegment(edge, edge.point, before)
+    addWallSegment(edge, after, edge.next)
+    addWallSegment(edge, before, after, buildingHeight - wallDoorHeight, (buildingHeight + wallDoorHeight) / 2)
+  })
 
   // 屋面始终从 footprint 三角剖分生成：边界顶点严格落在墙顶，凹多边形不会被外接矩形填平。
   const roofStyle = preset.roofStyle || 'flat'

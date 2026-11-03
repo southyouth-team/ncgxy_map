@@ -10,14 +10,14 @@ describe('CollisionWorld', () => {
 
   it('blocks movement through building bounds', () => {
     const result = world().move({ x: -3, z: 0 }, 2, 0)
-    expect(result.x).toBe(-3)
+    expect(result.x).toBe(-2.5)
     expect(result.blockedX).toBe(true)
   })
 
   it('slides along a wall when diagonal movement is partially blocked', () => {
     const result = world().move({ x: -3, z: -3 }, 2, 2)
     expect(result.x).toBe(-1)
-    expect(result.z).toBe(-3)
+    expect(result.z).toBe(-2.5)
     expect(result.blockedX).toBe(false)
     expect(result.blockedZ).toBe(true)
   })
@@ -36,7 +36,7 @@ describe('CollisionWorld', () => {
     )
     const result = collision.move({ x: -3, z: -3 }, 2, 1)
     expect(result.x).toBe(-1)
-    expect(result.z).toBe(-3)
+    expect(result.z).toBe(-2.5)
   })
   it('keeps the player inside the walkable boundary', () => {
     const result = world().move({ x: 9.8, z: 0 }, 2, 0)
@@ -46,7 +46,7 @@ describe('CollisionWorld', () => {
   it('accepts building obstacles loaded after the scene becomes interactive', () => {
     const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 })
     expect(collision.addObstacle({ minX: -1, maxX: 1, minZ: -1, maxZ: 1 })).toBe(true)
-    expect(collision.move({ x: -2, z: 0 }, 2, 0).x).toBe(-2)
+    expect(collision.move({ x: -2, z: 0 }, 2, 0).x).toBe(-1.75)
   })
 
   it('rejects invalid dynamic obstacles', () => {

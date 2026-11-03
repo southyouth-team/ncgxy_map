@@ -315,6 +315,22 @@ function render() {
     right: Math.min(1000, (width - x) / scale + 16),
     bottom: Math.min(500, (height - y) / scale + 16),
   }
+  // 将视口范围反算回未变换的校园坐标，确保平移/缩放矢量层后建筑仍正确参与视口裁剪。
+  const alignment = vectorAlignment.value
+  const inversePoint = (px, py) => ({
+    x: (px - 500 - alignment.x) / alignment.scale + 500,
+    y: (py - 250 - alignment.y) / alignment.scale + 250,
+  })
+  const visibleCorners = [
+    inversePoint(visibleBounds.left, visibleBounds.top),
+    inversePoint(visibleBounds.right, visibleBounds.top),
+    inversePoint(visibleBounds.right, visibleBounds.bottom),
+    inversePoint(visibleBounds.left, visibleBounds.bottom),
+  ]
+  visibleBounds.left = Math.max(0, Math.min(...visibleCorners.map(point => point.x)))
+  visibleBounds.top = Math.max(0, Math.min(...visibleCorners.map(point => point.y)))
+  visibleBounds.right = Math.min(1000, Math.max(...visibleCorners.map(point => point.x)))
+  visibleBounds.bottom = Math.min(500, Math.max(...visibleCorners.map(point => point.y)))
   const depthQueue = []
   ctx.save()
   ctx.translate(500 + vectorAlignment.value.x, 250 + vectorAlignment.value.y)

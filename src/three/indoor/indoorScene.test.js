@@ -52,7 +52,7 @@ describe('indoor floor contract', () => {
     expect(validateIndoorFloor(floor)).toEqual([])
     expect(validateIndoorFloor({ ...sample, walls: [{ id: 'wall-b', axis: 'x', x: 0, z: 10, length: 10, thickness: 0.2 }] }))
       .toContain('墙体 wall-b 超出楼层边界')
-    expect(validateIndoorFloor({ ...sample, walls: [{ id: 'wall-c', axis: 'x', x: 0, z: 0, length: 10, doorWidth: 3, doorOffset: 0 }] }))
+    expect(validateIndoorFloor({ ...sample, walls: [{ id: 'wall-c', axis: 'x', x: 0, z: 0, length: 10, doorWidth: 3, doorOffset: 4.5 }] }))
       .toContain('墙体 wall-c 的门洞尺寸无效')
   })
 

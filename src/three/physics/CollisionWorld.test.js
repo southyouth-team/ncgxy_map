@@ -55,6 +55,39 @@ describe('CollisionWorld', () => {
     expect(collision.obstacles).toHaveLength(0)
   })
 
+  it('prevents tunneling through a thin building during a fast movement step', () => {
+    const collision = new CollisionWorld(
+      { minX: -12, maxX: 12, minZ: -5, maxZ: 5 },
+      [{ minX: -0.2, maxX: 0.2, minZ: -2, maxZ: 2 }],
+      0.5,
+    )
+    const result = collision.move({ x: -8, z: 0 }, 16, 0)
+    expect(result.x).toBeLessThanOrEqual(-0.7)
+    expect(collision.isBlocked(result.x, result.z)).toBe(false)
+  })
+
+  it('blocks lake water while preserving the island hole as walkable', () => {
+    const collision = new CollisionWorld(
+      { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
+      [],
+      0.5,
+    )
+    expect(collision.addPolygonObstacle({
+      outer: [[-8, -8], [8, -8], [8, 8], [-8, 8]],
+      holes: [[[-2, -2], [2, -2], [2, 2], [-2, 2]]],
+    })).toBe(true)
+    expect(collision.isBlocked(5, 0)).toBe(true)
+    expect(collision.isBlocked(0, 0)).toBe(false)
+    expect(collision.isBlocked(2.2, 0)).toBe(true)
+    expect(collision.isBlocked(9, 0)).toBe(false)
+  })
+
+  it('rejects invalid polygon obstacles', () => {
+    const collision = new CollisionWorld({ minX: -5, maxX: 5, minZ: -5, maxZ: 5 })
+    expect(collision.addPolygonObstacle({ outer: [[0, 0], [1, 1]] })).toBe(false)
+    expect(collision.obstacles).toHaveLength(0)
+  })
+
   it('ignores invalid obstacle bounds', () => {
     const collision = new CollisionWorld(
       { minX: -5, maxX: 5, minZ: -5, maxZ: 5 },

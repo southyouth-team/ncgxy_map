@@ -33,6 +33,28 @@ export const CAMPUS_PLAN_REFERENCE = {
 const bounds = CAMPUS_PLAN_REFERENCE.mapBounds
 const scale = CAMPUS_PLAN_REFERENCE.worldWidth / (bounds.right - bounds.left)
 
+/** 判断图像坐标点是否落在闭合环内（射线法）。 */
+export function pointInCampusPolygon(point, ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return false
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j]
+    const crosses = (yi > point[1]) !== (yj > point[1])
+    if (crosses && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+/** 判断点是否位于区域主体内；holes 表示主体内部的可通行洞区/岛屿。 */
+export function pointInCampusArea(point, area) {
+  if (area?.rect) {
+    const [left, top, right, bottom] = area.rect
+    return point[0] >= left && point[0] <= right && point[1] >= top && point[1] <= bottom
+  }
+  if (!area?.polygon || !pointInCampusPolygon(point, area.polygon)) return false
+  return !(area.holes || []).some(hole => pointInCampusPolygon(point, hole))
+}
+
 /** 原图像素坐标 -> Three.js 地面坐标（X、Z）。 */
 export function mapPixelToWorld(pixelX, pixelY) {
   return {

@@ -123,23 +123,6 @@ export function addPixelBench(THREE, parent, x, z, mats) {
     return leg
   })
   group.add(seat, back, ...legs)
-  // 层间线沿建筑每条真实边段生成，避免用矩形轮廓覆盖不规则建筑。
-  floorLayout.bandHeights.forEach((bandY) => {
-    edges.forEach((edge) => {
-      if (edge.length < 0.2) return
-      const centerX = (edge.point.x + edge.next.x) / 2
-      const centerZ = -(edge.point.y + edge.next.y) / 2
-      const band = new THREE.Mesh(
-        new THREE.BoxGeometry(edge.length, 0.055, 0.09),
-        materials.windowTrim,
-      )
-      band.position.set(centerX, bandY, centerZ)
-      band.rotation.y = Math.atan2(edge.dy, edge.dx)
-      band.userData.objectType = 'building-floor-band'
-      group.add(band)
-    })
-  })
-
   group.traverse((object) => { if (object.isMesh) object.castShadow = true })
   parent.add(group)
   return group
@@ -407,6 +390,22 @@ export function createPixelBuilding(THREE, options = {}) {
         group.add(frame, glass)
       })
     }
+  })
+  // 层间线沿建筑每条真实边段生成，避免用矩形轮廓覆盖不规则建筑。
+  floorLayout.bandHeights.forEach((bandY) => {
+    edges.forEach((edge) => {
+      if (edge.length < 0.2) return
+      const centerX = (edge.point.x + edge.next.x) / 2
+      const centerZ = -(edge.point.y + edge.next.y) / 2
+      const band = new THREE.Mesh(
+        new THREE.BoxGeometry(edge.length, 0.055, 0.09),
+        materials.windowTrim,
+      )
+      band.position.set(centerX, bandY, centerZ)
+      band.rotation.y = Math.atan2(edge.dy, edge.dx)
+      band.userData.objectType = 'building-floor-band'
+      group.add(band)
+    })
   })
   group.traverse((object) => {
     if (object.isMesh) { object.castShadow = true; object.receiveShadow = true }

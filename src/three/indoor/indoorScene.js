@@ -67,6 +67,26 @@ export function validateIndoorFloor(floor) {
       if (overlapX > 0.05 && overlapZ > 0.05) errors.push('房间 ' + room.id + ' 与 ' + other.id + ' 存在重叠')
     }
     const items = Array.isArray(room.furniture) ? room.furniture : []
+    // 门洞内侧保留连续通行带，避免家具虽未越界却堵住实际入口。
+    if (Number(room.doorWidth) > 0 && [room.x, room.z, room.width, room.depth, room.doorWidth].every(Number.isFinite)) {
+      const wall = room.doorWall || 'south'
+      const offset = Number(room.doorOffset) || 0
+      const clearanceDepth = 1.5
+      const clearance = wall === 'south'
+        ? { x: offset, z: room.depth / 2 - clearanceDepth / 2, width: room.doorWidth, depth: clearanceDepth }
+        : wall === 'north'
+          ? { x: offset, z: -room.depth / 2 + clearanceDepth / 2, width: room.doorWidth, depth: clearanceDepth }
+          : wall === 'east'
+            ? { x: room.width / 2 - clearanceDepth / 2, z: offset, width: clearanceDepth, depth: room.doorWidth }
+            : { x: -room.width / 2 + clearanceDepth / 2, z: offset, width: clearanceDepth, depth: room.doorWidth }
+      for (const item of items) {
+        if (![item.x, item.z, item.width, item.depth].every(Number.isFinite)) continue
+        if (Math.abs(item.x - clearance.x) < (item.width + clearance.width) / 2 - 0.02 &&
+            Math.abs(item.z - clearance.z) < (item.depth + clearance.depth) / 2 - 0.02) {
+          errors.push('房间 ' + room.id + ' 的家具 ' + item.id + ' 堵塞门口通道')
+        }
+      }
+    }
     for (let j = 0; j < items.length; j += 1) {
       const item = items[j]
       for (const other of items.slice(j + 1)) {
@@ -96,6 +116,23 @@ export function validateIndoorFloor(floor) {
       const wallLength = ['north', 'south'].includes(room.doorWall || 'south') ? room.width : room.depth
       if (!Number.isFinite(room.doorWidth) || room.doorWidth < 0.7 || room.doorWidth > wallLength) errors.push(`房间 ${room.id} 的 doorWidth 无效`)
       if (Math.abs(Number(room.doorOffset) || 0) + room.doorWidth / 2 > wallLength / 2) errors.push(`房间 ${room.id} 的 doorOffset 超出墙体`)
+    }
+  }
+  // 楼梯主体占用约 1.7 × 4.4 单位；禁止家具侵入楼梯及上下楼落脚区域。
+  if (stair && Number.isFinite(stair.x) && Number.isFinite(stair.z)) {
+    const rotated = ['east', 'west'].includes(stair.direction || 'south')
+    const stairWidth = rotated ? 4.4 : 1.7
+    const stairDepth = rotated ? 1.7 : 4.4
+    for (const room of roomList) {
+      for (const item of Array.isArray(room.furniture) ? room.furniture : []) {
+        if (![room.x, room.z, item.x, item.z, item.width, item.depth].every(Number.isFinite)) continue
+        const worldX = room.x + item.x
+        const worldZ = room.z + item.z
+        if (Math.abs(worldX - stair.x) < (item.width + stairWidth) / 2 - 0.02 &&
+            Math.abs(worldZ - stair.z) < (item.depth + stairDepth) / 2 - 0.02) {
+          errors.push('房间 ' + room.id + ' 的家具 ' + item.id + ' 占用楼梯通行区域')
+        }
+      }
     }
   }
   return errors

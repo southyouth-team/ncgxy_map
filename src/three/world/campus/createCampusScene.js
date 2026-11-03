@@ -1,6 +1,6 @@
 import {
   CAMPUS_PLAN_REFERENCE, CAMPUS_AREAS, CAMPUS_ROAD_CENTERLINES,
-  CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld, mapRectToWorld,
+  CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
@@ -217,31 +217,54 @@ export function createCampusScene(THREE) {
 
   const wallPalette = [mats.wall, mats.wallPeach, mats.wallMint, mats.wallCream]
   function addCampusBuilding(item, index) {
-    const bounds = mapRectToWorld(item.rect)
+    const footprintBounds = getCampusFootprintBounds(item)
+    if (!footprintBounds) return
+    const bounds = mapRectToWorld(footprintBounds)
     const width = Math.max(4.2, bounds.width)
     const depth = Math.max(2.4, bounds.depth)
     const template = item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4]
+    const localFootprint = item.polygon
+      ? new THREE.Shape(item.polygon.map(([px, py]) => new THREE.Vector2(
+        (px - (footprintBounds[0] + footprintBounds[2]) / 2) * (CAMPUS_PLAN_REFERENCE.worldWidth / (CAMPUS_PLAN_REFERENCE.mapBounds.right - CAMPUS_PLAN_REFERENCE.mapBounds.left)),
+        -(py - (footprintBounds[1] + footprintBounds[3]) / 2) * (CAMPUS_PLAN_REFERENCE.worldWidth / (CAMPUS_PLAN_REFERENCE.mapBounds.right - CAMPUS_PLAN_REFERENCE.mapBounds.left)),
+      )))
+      : undefined
     const group = createPixelBuilding(THREE, {
-      width, depth, height: item.height, template, materials: mats,
+      width, depth, footprint: localFootprint, height: item.height, template, materials: mats,
       wallMaterial: wallPalette[index % wallPalette.length],
       label: item.label || item.id,
       confidence: item.confidence || 'unverified',
+      entranceEdgeIndex: item.entranceEdgeIndex,
+      floors: item.floors,
+      roofStyle: item.roofStyle,
+      roofRise: item.roofRise,
+      windowDensity: item.windowDensity,
+      windowWidth: item.windowWidth,
+      windowHeight: item.windowHeight,
+      doorWidth: item.doorWidth,
     })
     const buildingHeight = group.userData.buildingHeight || 3.8
-    // 建筑底部增加浅色基座，明确建筑与地面的接触关系，避免模型像直接插在草地里。
-    const foundation = new THREE.Mesh(
-      new THREE.BoxGeometry(width + 0.55, 0.16, depth + 0.55),
-      mats.stone,
-    )
+    let foundation
+    if (localFootprint) {
+      const foundationGeometry = new THREE.ShapeGeometry(localFootprint)
+      foundationGeometry.rotateX(-Math.PI / 2)
+      foundation = new THREE.Mesh(foundationGeometry, mats.stone)
+      foundation.position.set(bounds.x, 0.08, bounds.z)
+    } else {
+      foundation = new THREE.Mesh(
+        new THREE.BoxGeometry(width + 0.55, 0.16, depth + 0.55),
+        mats.stone,
+      )
+      foundation.position.set(bounds.x, 0.08, bounds.z)
+    }
     foundation.name = 'building-foundation-' + item.id
-    foundation.position.set(bounds.x, 0.08, bounds.z)
     foundation.receiveShadow = true
     root.add(foundation)
     group.position.set(bounds.x, 0.16, bounds.z)
     group.userData.buildingId = item.id
     group.userData.objectType = 'building'
     group.userData.displayName = item.label
-    // 保存运行时生成参数，后续建筑轮廓编辑可直接重建外墙、门窗和屋顶。
+    group.userData.footprintType = item.polygon ? 'polygon' : 'rect'
     group.userData.rebuildOptions = {
       materials: mats,
       wallMaterial: wallPalette[index % wallPalette.length],
@@ -257,15 +280,23 @@ export function createCampusScene(THREE) {
       windowHeight: item.windowHeight,
       doorWidth: item.doorWidth,
       entranceEdgeIndex: item.entranceEdgeIndex,
+      footprint: localFootprint,
     }
     group.userData.foundationMesh = foundation
-    // 外轮廓与生成器最终采用的建筑高度一致，不再覆盖屋顶或门窗。
-    const outline = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(width, buildingHeight, depth)),
-      new THREE.LineBasicMaterial({ color: '#6c5947' }),
-    )
-    outline.position.y = buildingHeight / 2
-    group.add(outline)
+    if (localFootprint) {
+      const outlinePoints = localFootprint.getPoints(1).map(point => new THREE.Vector3(point.x, 0.01, -point.y))
+      const outlineGeometry = new THREE.BufferGeometry().setFromPoints(outlinePoints)
+      const outline = new THREE.LineLoop(outlineGeometry, new THREE.LineBasicMaterial({ color: '#6c5947' }))
+      outline.position.y = buildingHeight
+      group.add(outline)
+    } else {
+      const outline = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(width, buildingHeight, depth)),
+        new THREE.LineBasicMaterial({ color: '#6c5947' }),
+      )
+      outline.position.y = buildingHeight / 2
+      group.add(outline)
+    }
     root.add(group)
   }
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)

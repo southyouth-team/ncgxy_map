@@ -75,10 +75,11 @@
 
 ## 6. 当前代码基线与待替换项
 
-- `src/data/campus/campusLayout.js`：当前 640×480 第一版粗略标注，包含少量区域、道路中心线和 15 个建筑占位矩形。它不是本次 2026 参考图的完整数字化结果，暂时保留用于兼容，后续在完成坐标映射和数据核验后分批替换。
-- `src/three/world/campus/createCampusScene.js`：当前像素校园场景生成器，包含程序化建筑、道路、树木、花坛、长椅、路灯和玩家 Sprite；其中固定坐标和资产仍有明显原型/占位性质。
+- `src/data/campus/campusLayout.js`：已切换到 2026 级新生报到指南平面图的 1000×500 图像坐标基准，人工近似标注中央/西侧湖区、环湖路、校园连接道路、运动场及 53 个建筑轮廓候选。它们是像素场景空间骨架，不是测绘成果，也不代表学校建筑总数。
+- `src/three/world/campus/createCampusScene.js`：像素校园主场景生成器，基于上述主空间底图生成建筑、湖区、环湖道路、运动场线、树木、花坛、长椅、路灯和玩家 Sprite。建筑视觉类型仍为程序化表达，具体楼栋名称、真实尺寸和外观尚待核验。
 - `public/data/building-inventory-v1.json`：建筑候选台账，名称来源于公开资料，但位置、footprint、尺寸、层数多数尚未核验。
-- `public/data/buildings.json`：正式建筑空间数据目前为空，保持为空优于写入未经核实的假数据。
+- `public/data/buildings.json`：正式 GLB 建筑资产清单目前为空，保持为空优于写入未经核实的模型定位数据。
+- `src/three/engine/createCampusEngine.js`：默认直接启动像素校园，不再等待 GIS 场景接口或用 GIS 空数据替换主场景。
 
 ## 7. 当前阶段明确不做
 

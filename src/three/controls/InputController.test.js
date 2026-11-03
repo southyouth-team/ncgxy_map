@@ -29,6 +29,28 @@ describe('InputController navigation path', () => {
     expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
   })
 
+  it('reports completion only after the final navigation waypoint is reached', () => {
+    const { controller, cameraRig } = createController()
+    controller.setNavigationPath([{ x: 0, z: 0 }, { x: 0, z: 0.1 }])
+
+    controller.update(0.1)
+
+    expect(controller.navigationPath).toBeNull()
+    expect(controller.consumeNavigationPathCompletion()).toBe(true)
+    expect(controller.consumeNavigationPathCompletion()).toBe(false)
+    expect(cameraRig.player).toMatchObject({ x: 0, z: 0 })
+  })
+
+  it('does not report completion when navigation is cancelled by manual input', () => {
+    const { controller } = createController()
+    controller.setNavigationPath([{ x: 0, z: 0 }, { x: 0, z: 3 }])
+    controller.keys.add('d')
+
+    controller.update(0.1)
+
+    expect(controller.consumeNavigationPathCompletion()).toBe(false)
+  })
+
   it('cancels auto movement when a manual direction key is pressed', () => {
     const { controller, cameraRig, collisionWorld } = createController()
     controller.setNavigationPath([{ x: 0, z: 0 }, { x: 0, z: 3 }])

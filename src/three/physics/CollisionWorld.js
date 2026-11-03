@@ -25,6 +25,15 @@ export class CollisionWorld {
     return true
   }
 
+  addCircleObstacle({ x, z, radius } = {}) {
+    const centerX = Number(x), centerZ = Number(z), obstacleRadius = Number(radius)
+    if (!Number.isFinite(centerX) || !Number.isFinite(centerZ) || !Number.isFinite(obstacleRadius) || obstacleRadius <= 0) return false
+    this.obstacles.push({ circle: true, x: centerX, z: centerZ, radius: obstacleRadius,
+      minX: centerX - obstacleRadius, maxX: centerX + obstacleRadius,
+      minZ: centerZ - obstacleRadius, maxZ: centerZ + obstacleRadius })
+    return true
+  }
+
   addPolygonObstacle({ outer = [], holes = [] } = {}) {
     const normalizeRing = ring => Array.isArray(ring)
       ? ring.map(point => Array.isArray(point) ? { x: Number(point[0]), z: Number(point[1]) } : { x: Number(point?.x), z: Number(point?.z) })
@@ -79,6 +88,7 @@ export class CollisionWorld {
   isObstacleBlocked(x, z, obstacle) {
     const r = this.radius
     if (obstacle.polygon) return this.isPolygonBlocked(x, z, obstacle)
+    if (obstacle.circle) return Math.hypot(x - obstacle.x, z - obstacle.z) < obstacle.radius + r
     return x > obstacle.minX - r && x < obstacle.maxX + r &&
       z > obstacle.minZ - r && z < obstacle.maxZ + r
   }

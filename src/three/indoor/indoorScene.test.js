@@ -154,6 +154,27 @@ describe('indoor floor contract', () => {
     expect(validateIndoorFloor(overlappingFurniture).some(error => error.includes('desk-a 与 desk-b 存在重叠'))).toBe(true)
   })
 
+  it('keeps room entrance circulation clear of furniture', () => {
+    const blocked = {
+      ...sample,
+      rooms: [{ ...sample.rooms[0], furniture: [
+        { id: 'door-blocker', type: 'cabinet', x: 0, z: 2.2, width: 1, depth: 0.5, height: 1.8 },
+      ] }],
+    }
+    expect(validateIndoorFloor(blocked).some(error => error.includes('door-blocker 堵塞门口通道'))).toBe(true)
+  })
+
+  it('keeps stair circulation and landing area clear of furniture', () => {
+    const blocked = {
+      ...sample,
+      rooms: [{ id: 'stair-room', name: '楼梯间', x: 0, z: 0, width: 8, depth: 8, furniture: [
+        { id: 'stair-blocker', type: 'cabinet', x: 0, z: 0, width: 1, depth: 1, height: 1.8 },
+      ] }],
+      stairPoint: { x: 0, z: 0, direction: 'south' },
+    }
+    expect(validateIndoorFloor(blocked).some(error => error.includes('stair-blocker 占用楼梯通行区域'))).toBe(true)
+  })
+
   it('requires integer floor levels', () => {
     expect(validateIndoorFloor({ ...sample, level: 1.5 })).toContain('楼层 level 必须是整数')
   })

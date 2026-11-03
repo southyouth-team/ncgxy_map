@@ -12,6 +12,48 @@ html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 button { font: inherit; }
 .app-shell { position: relative; width: 100%; height: 100%; overflow: hidden; background: #101b20; }
 .scene-viewport { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+
+/* RPG 样板独立占满当前浏览器视口；不受通用页面流式布局高度影响。 */
+.app-shell.is-rpg-sample {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+.app-shell.is-rpg-sample .scene-viewport {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.app-shell.is-rpg-sample .scene-viewport canvas {
+  width: 100%;
+  height: 100%;
+}
+.app-shell.is-rpg-sample .bottom-bar {
+  display: none;
+}
+.app-shell.is-rpg-sample .mode-switcher {
+  bottom: max(16px, env(safe-area-inset-bottom));
+}
+@media (pointer: coarse), (max-width: 760px) {
+  .app-shell.is-rpg-sample {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .app-shell.is-rpg-sample .mode-switcher {
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
+}
+
 .scene-viewport canvas { display: block; width: 100%; height: 100%; outline: none; }
 .topbar { position: absolute; z-index: 3; top: 0; left: 0; right: 0; height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 0 42px; background: linear-gradient(180deg, rgba(9,18,21,.82), transparent); pointer-events: none; }
 .brand-lockup { display: flex; align-items: center; gap: 13px; }

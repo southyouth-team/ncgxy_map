@@ -441,10 +441,6 @@ export function createPixelBuilding(THREE, options = {}) {
     index === 0 || point.distanceTo(points[index - 1]) > 0.001
   ))
   if (wallPoints.length > 2 && wallPoints[0].distanceTo(wallPoints[wallPoints.length - 1]) < 0.001) wallPoints.pop()
-  const wallArea = wallPoints.reduce((sum, point, index) => {
-    const next = wallPoints[(index + 1) % wallPoints.length]
-    return sum + point.x * next.y - next.x * point.y
-  }, 0) / 2
   const wallEdges = wallPoints.map((point, index) => {
     const next = wallPoints[(index + 1) % wallPoints.length]
     return { point, next, dx: next.x - point.x, dy: next.y - point.y, length: point.distanceTo(next), index }

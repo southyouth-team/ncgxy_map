@@ -159,11 +159,11 @@ export function createIndoorFloor(THREE, floor) {
     ? floor.footprintPolygon : null
   if (footprintPolygon) {
     const shape = new THREE.Shape()
-    shape.moveTo(footprintPolygon[0].x, footprintPolygon[0].z)
-    footprintPolygon.slice(1).forEach(point => shape.lineTo(point.x, point.z))
+    shape.moveTo(footprintPolygon[0].x, -footprintPolygon[0].z)
+    footprintPolygon.slice(1).forEach(point => shape.lineTo(point.x, -point.z))
     shape.closePath()
     const geometry = new THREE.ShapeGeometry(shape)
-    geometry.rotateX(Math.PI / 2)
+    geometry.rotateX(-Math.PI / 2)
     const slab = new THREE.Mesh(geometry, floorMaterial)
     slab.name = 'indoor-floor-slab'
     slab.position.y = -0.18

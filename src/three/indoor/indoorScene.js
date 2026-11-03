@@ -10,6 +10,15 @@ export function createIndoorInteractionData({ id, name, objectType, interactionT
   return { id, name, objectType, interactionType, action, operationHint, roomId, roomName, description }
 }
 
+
+/** 根据楼层切换方向返回楼梯的实际落脚端点，避免旋转楼梯仍沿世界 Z 轴移动。 */
+export function getStairLandingPoint(stairPath, direction) {
+  if (!stairPath || ![-1, 1].includes(direction)) return null
+  const point = direction > 0 ? stairPath.end : stairPath.start
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.z)) return null
+  return { x: point.x, z: point.z }
+}
+
 export function validateIndoorFloor(floor) {
   const errors = []
   if (!floor || typeof floor !== 'object') return ['楼层配置必须是对象']

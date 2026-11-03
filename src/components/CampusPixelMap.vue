@@ -127,90 +127,79 @@ function drawGround(ctx) {
 }
 function drawBuildings(ctx) {
   const roofSets = [
-    { base: '#b86f58', light: '#e5a47a', dark: '#925844' },
-    { base: '#a96f59', light: '#d99a70', dark: '#805442' },
-    { base: '#b77d55', light: '#e7b77c', dark: '#8f5e43' },
-    { base: '#98745d', light: '#d2a47a', dark: '#765846' },
+    { base: '#c17a5d', light: '#e9ad80', dark: '#925844' },
+    { base: '#ae765c', light: '#dfaa7d', dark: '#805442' },
+    { base: '#bd875c', light: '#edbd86', dark: '#8f5e43' },
+    { base: '#a27a61', light: '#d9ad82', dark: '#765846' },
   ]
   CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
     const [x1, y1, x2, y2] = building.rect
     const w = x2 - x1, h = y2 - y1
     const roof = roofSets[index % roofSets.length]
     const variant = index % 4
-    const wallHeight = Math.max(3, Math.min(5, h * .22))
+    const facadeHeight = Math.max(3, Math.min(5, h * .24))
+    const roofHeight = h - facadeHeight
 
-    // 投影与建筑侧墙：统一光照方向，建立清晰的像素层级。
+    // 轻量投影与建筑主体，统一从左上方受光。
     ctx.fillStyle = 'rgba(48,65,48,.22)'
-    ctx.fillRect(x1 + 3, y1 + 5, w + 1, h + 1)
-    ctx.fillStyle = '#9b684f'
-    ctx.fillRect(x1, y1 + wallHeight, w, h - wallHeight)
-    ctx.fillStyle = '#e0aa7e'
-    ctx.fillRect(x1, y1 + wallHeight, 2, h - wallHeight)
-    ctx.fillStyle = '#c58a67'
-    ctx.fillRect(x1 + w - 2, y1 + wallHeight, 2, h - wallHeight)
-
-    // 屋顶采用不同的檐口和分区细节，避免所有楼栋完全同形。
+    ctx.fillRect(x1 + 3, y1 + 4, w + 1, h + 1)
     ctx.fillStyle = roof.dark
-    ctx.fillRect(x1 - 2, y1 - 2, w + 4, h + 5)
+    ctx.fillRect(x1 - 1, y1 - 1, w + 2, h + 2)
     ctx.fillStyle = roof.base
-    ctx.fillRect(x1 - 1, y1 - 3, w + 2, h + 2)
+    ctx.fillRect(x1, y1, w, roofHeight)
     ctx.fillStyle = roof.light
-    ctx.fillRect(x1, y1 - 2, w, 2)
+    ctx.fillRect(x1 + 1, y1 + 1, Math.max(2, w - 2), 1)
     ctx.fillStyle = roof.dark
-    ctx.fillRect(x1, y1 + 1, w, 1)
+    ctx.fillRect(x1, y1 + roofHeight - 1, w, 1)
 
+    // 屋顶纹理按楼栋轮换，保持像素语言一致但避免复制粘贴感。
     if (variant === 0) {
-      // 平屋顶：分区屋面与设备小方块。
       ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + 5, y1 + 4, Math.max(6, w * .32), 2)
+      ctx.fillRect(x1 + 5, y1 + 3, Math.max(6, w * .32), 2)
       ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + w - 9, y1 + 4, 4, 3)
+      ctx.fillRect(x1 + w - 9, y1 + 3, 4, 3)
       ctx.fillStyle = '#ead0a0'
-      ctx.fillRect(x1 + w - 8, y1 + 4, 2, 1)
+      ctx.fillRect(x1 + w - 8, y1 + 3, 2, 1)
     } else if (variant === 1) {
-      // 双坡屋面视觉：中央屋脊与两侧瓦片分区。
       ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + 3, y1 + 3, w - 6, 2)
+      for (let stripeY = y1 + 3; stripeY < y1 + roofHeight - 1; stripeY += 4) {
+        ctx.fillRect(x1 + 3, stripeY, w - 6, 1)
+      }
       ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + 3, y1 + 6, w - 6, 1)
-      ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + 3, y1 + 9, w - 6, 1)
+      ctx.fillRect(x1 + w * .48, y1 + 3, 2, Math.max(3, roofHeight - 5))
     } else if (variant === 2) {
-      // 屋顶天窗与分段檐口。
       ctx.fillStyle = '#6e7770'
-      ctx.fillRect(x1 + w * .55, y1 + 4, Math.max(4, w * .2), 3)
+      ctx.fillRect(x1 + w * .55, y1 + 3, Math.max(4, w * .2), Math.max(3, roofHeight - 5))
       ctx.fillStyle = '#b9d1c1'
-      ctx.fillRect(x1 + w * .55 + 1, y1 + 5, Math.max(2, w * .2 - 2), 1)
+      ctx.fillRect(x1 + w * .55 + 1, y1 + 4, Math.max(2, w * .2 - 2), 1)
       ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + 4, y1 + h - 5, w - 8, 2)
+      ctx.fillRect(x1 + 4, y1 + roofHeight - 4, w - 8, 1)
     } else {
-      // 中央屋顶平台。
       ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + w * .3, y1 + 3, w * .4, h - 7)
+      ctx.fillRect(x1 + w * .3, y1 + 3, w * .4, Math.max(3, roofHeight - 6))
       ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + w * .3 + 2, y1 + 4, w * .4 - 4, 2)
+      ctx.fillRect(x1 + w * .3 + 2, y1 + 4, w * .4 - 4, 1)
     }
 
-    // 立面窗户：保持小尺寸和统一间距，不堆叠高成本装饰。
-    const cols = Math.max(2, Math.floor(w / 10))
-    const rows = Math.max(1, Math.floor((h - wallHeight) / 8))
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const wx = x1 + 4 + col * ((w - 8) / cols)
-        const wy = y1 + wallHeight + 2 + row * ((h - wallHeight - 4) / rows)
-        ctx.fillStyle = '#536d70'
-        ctx.fillRect(wx, wy, 3, Math.min(4, Math.max(2, (h - wallHeight) / (rows + 2))))
-        ctx.fillStyle = '#d7d7a0'
-        ctx.fillRect(wx + 1, wy, 1, 1)
-        ctx.fillStyle = 'rgba(255,239,185,.35)'
-        ctx.fillRect(wx, wy + 1, 1, 1)
-      }
+    // 朝向不明确时只表达统一的下沿立面，不虚构入口方向。
+    const facadeY = y1 + roofHeight
+    ctx.fillStyle = '#9b684f'
+    ctx.fillRect(x1, facadeY, w, facadeHeight)
+    ctx.fillStyle = '#e0aa7e'
+    ctx.fillRect(x1, facadeY, 2, facadeHeight)
+    ctx.fillStyle = '#c58a67'
+    ctx.fillRect(x1 + w - 2, facadeY, 2, facadeHeight)
+    const windowCount = Math.max(2, Math.floor(w / 13))
+    for (let col = 0; col < windowCount; col++) {
+      const wx = x1 + 4 + col * ((w - 8) / windowCount)
+      ctx.fillStyle = '#536d70'
+      ctx.fillRect(wx, facadeY + 1, 3, Math.max(1, facadeHeight - 2))
+      ctx.fillStyle = '#d7d7a0'
+      ctx.fillRect(wx + 1, facadeY + 1, 1, 1)
     }
-    ctx.fillStyle = '#f0d2a0'
-    ctx.fillRect(x1 + w * .46, y1 + wallHeight + 1, Math.max(3, w * .08), Math.max(2, h - wallHeight - 2))
     ctx.strokeStyle = roof.dark
     ctx.lineWidth = 1
-    ctx.strokeRect(x1 - 1.5, y1 - 2.5, w + 3, h + 3)
+    ctx.strokeRect(x1 - 1.5, y1 - 1.5, w + 3, h + 3)
   })
 }
 function drawTrees(ctx) {

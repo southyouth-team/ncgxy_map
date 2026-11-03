@@ -228,8 +228,6 @@ onBeforeUnmount(() => {
     </section>
 
     <nav class="mode-switcher" aria-label="视角切换">
-            <div v-else-if="indoorPrototypeActive && nearIndoorRoom" class="indoor-interaction-hint" style="position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:20;padding:10px 16px;border-radius:10px;background:#28251fe8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none">进入 {{ nearIndoorRoom.roomName }} · 按 E</div>
-      <div v-else-if="indoorPrototypeActive && nearIndoorStairs" class="indoor-interaction-hint" style="position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:20;padding:10px 16px;border-radius:10px;background:#28251fe8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none">靠近楼梯 · 按 E 切换楼层</div>
       <button
         v-for="mode in modes"
         :key="mode.id"
@@ -238,14 +236,6 @@ onBeforeUnmount(() => {
       >
         <span class="mode-label">{{ mode.label }}</span>
         <span class="mode-hint">{{ mode.hint }}</span>
-      </button>
-      <button v-if="showEditor" class="mode-button editor-mode-button active" @click="switchEditorView('2d')">
-        <span class="mode-label">返回二维编辑</span>
-        <span class="mode-hint">继续搭建地图</span>
-      </button>
-      <button v-if="showEditor" class="mode-button" @click="closeEditor">
-        <span class="mode-label">退出编辑模式</span>
-        <span class="mode-hint">返回普通浏览</span>
       </button>
     </nav>
 

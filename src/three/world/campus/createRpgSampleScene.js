@@ -118,6 +118,42 @@ export function createRpgSampleScene(THREE) {
   for (let z = -2.2; z < 6; z += 1.35) {
     addBox('walkway-joint', 0, 0.043, z, 5.1, 0.006, 0.055, materials.pathDark)
   }
+  // 主路像素铺装：用实例化小砖块构成低频色彩变化与横向拼缝。
+  const roadTiles = []
+  for (let x = -22; x <= 22; x += 2.2) {
+    for (const z of [6.35, 7.55, 8.75, 9.65]) {
+      const seed = Math.round((x + 22) * 3 + z * 7)
+      roadTiles.push({ x, z, tone: Math.abs(seed) % 4 })
+    }
+  }
+  const roadTileMesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1.92, 0.012, 0.82),
+    materials.pathLight,
+    roadTiles.length,
+  )
+  const roadTileTransform = new THREE.Object3D()
+  const roadTileTones = ['#ead7aa', '#dfc99b', '#e4d0a5', '#d8c18f'].map(color => new THREE.Color(color))
+  roadTiles.forEach((tile, index) => {
+    roadTileTransform.position.set(tile.x, 0.044, tile.z)
+    roadTileTransform.updateMatrix()
+    roadTileMesh.setMatrixAt(index, roadTileTransform.matrix)
+    roadTileMesh.setColorAt(index, roadTileTones[tile.tone])
+  })
+  roadTileMesh.name = 'main-road-pixel-paving'
+  roadTileMesh.castShadow = false
+  roadTileMesh.receiveShadow = true
+  root.add(roadTileMesh)
+  // 道路两侧压边与断续草沿，强化道路边界但不形成厚重马路牙子。
+  for (const z of [5.28, 10.72]) {
+    addBox('main-road-curb', 0, 0.035, z, 48, 0.07, 0.16, materials.pathDark)
+    for (let x = -22; x <= 22; x += 4.4) {
+      addBox('road-edge-grass-chip', x, 0.045, z + (z < 8 ? -0.14 : 0.14), 1.25, 0.035, 0.12, materials.grassLight)
+    }
+  }
+  // 支路边缘增加石块节奏，和主路使用同一套色板。
+  for (const x of [-2.78, 2.78]) {
+    addBox('walkway-side-border', x, 0.038, 1.7, 0.12, 0.045, 9.2, materials.pathDark)
+  }
   // 教学楼：墙体、分层窗户、门廊与双坡屋顶组成完整体块。
   const building = new THREE.Group()
   building.name = 'sample-teaching-building'
@@ -162,6 +198,8 @@ export function createRpgSampleScene(THREE) {
     tree.scale.setScalar(scale)
     tree.userData.objectType = 'tree'
     tree.userData.collisionRadius = 0.62 * scale
+    tree.userData.occlusionMode = 'depth-tested-canopy'
+    tree.userData.canopyHeight = 3.6 * scale
     const shadow = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.035, 2.5), materials.shadow)
     shadow.position.set(0.35, 0.04, 0.45)
     tree.add(shadow)

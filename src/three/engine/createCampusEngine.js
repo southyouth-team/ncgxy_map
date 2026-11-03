@@ -1139,6 +1139,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       ...options,
       floors: options.floors ?? options.floorsData?.length ?? target.userData?.floorCount ?? 1,
       floorHeight: options.floorHeight ?? target.userData?.floorHeight ?? 3.6,
+      // 建筑本地坐标中的入口点决定室内门墙与门内出生位置。
+      entrancePoint: options.entrancePoint || target.userData?.indoorEntrance || null,
     }
     const generated = createIndoorBuildingFromFootprint(footprint, generationOptions)
     const definition = options.definition || (Array.isArray(options.floorsData) && options.floorsData.length

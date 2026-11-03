@@ -276,6 +276,12 @@ describe('Campus map API (PostGIS integration)', () => {
       name: '西北组团 01',
       floorHeight: 3.6,
       footprintSize: { width: 12, depth: 8 },
+      footprint: {
+        type: 'rect',
+        source: 'campus-plan',
+        bounds: { minX: -6, maxX: 6, minZ: -4, maxZ: 4 },
+        expansion: { north: 0, south: 0, east: 2, west: 0 },
+      },
       layoutStatus: 'procedural-template',
       floors: [{
         level: 1, width: 12, depth: 12, rooms: [], walls: [], doors: [],

@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge } from './campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
+  it('calculates consistent floor heights, window levels and floor bands', () => {
+    const layout = getBuildingFloorLayout(12, 4, 0.8)
+    expect(layout.floors).toBe(4)
+    expect(layout.floorHeight).toBe(3)
+    expect(layout.windowCenters).toEqual([1.68, 4.68, 7.68, 10.68])
+    expect(layout.bandHeights).toEqual([3, 6, 9])
+    expect(layout.windowHeight).toBeLessThanOrEqual(1.26)
+  })
+  it('rejects non-positive building height', () => {
+    expect(() => getBuildingFloorLayout(0, 3)).toThrow('建筑总高度必须大于 0')
+  })
   it('uses a configured entrance edge and falls back to the longest edge', () => {
     const edges = [{ index: 0, length: 4 }, { index: 1, length: 9 }, { index: 2, length: 6 }]
     expect(selectBuildingEntranceEdge(edges, 2)).toBe(edges[2])

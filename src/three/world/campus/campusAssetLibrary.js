@@ -123,6 +123,23 @@ export function addPixelBench(THREE, parent, x, z, mats) {
     return leg
   })
   group.add(seat, back, ...legs)
+  // 层间线沿建筑每条真实边段生成，避免用矩形轮廓覆盖不规则建筑。
+  floorLayout.bandHeights.forEach((bandY) => {
+    edges.forEach((edge) => {
+      if (edge.length < 0.2) return
+      const centerX = (edge.point.x + edge.next.x) / 2
+      const centerZ = -(edge.point.y + edge.next.y) / 2
+      const band = new THREE.Mesh(
+        new THREE.BoxGeometry(edge.length, 0.055, 0.09),
+        materials.windowTrim,
+      )
+      band.position.set(centerX, bandY, centerZ)
+      band.rotation.y = Math.atan2(edge.dy, edge.dx)
+      band.userData.objectType = 'building-floor-band'
+      group.add(band)
+    })
+  })
+
   group.traverse((object) => { if (object.isMesh) object.castShadow = true })
   parent.add(group)
   return group
@@ -148,12 +165,12 @@ export function addPixelLamp(THREE, parent, x, z, mats) {
  * 仅负责视觉资产，不代表真实建筑测绘尺寸。
  */
 export const CAMPUS_BUILDING_TEMPLATES = Object.freeze({
-  '教学楼': { height: 4.2, windowDensity: 1, roofRise: 0.82, roofStyle: 'pitched', wall: 'wallCream', doorWidth: 0.9, windowWidth: 0.48, windowHeight: 0.62 },
-  '宿舍楼': { height: 4.8, windowDensity: 1.45, roofRise: 0.22, roofStyle: 'flat', wall: 'wallPeach', doorWidth: 0.86, windowWidth: 0.42, windowHeight: 0.58 },
-  '办公楼': { height: 3.8, windowDensity: 1.15, roofRise: 0.28, roofStyle: 'flat', wall: 'wall', doorWidth: 0.86, windowWidth: 0.58, windowHeight: 0.72 },
-  '实验楼': { height: 4.5, windowDensity: 0.9, roofRise: 0.5, roofStyle: 'pitched', wall: 'wallMint', doorWidth: 0.92, windowWidth: 0.52, windowHeight: 0.68 },
-  '图书馆': { height: 4.6, windowDensity: 0.7, roofRise: 0.18, roofStyle: 'glass', wall: 'wallCream', doorWidth: 1.2, windowWidth: 0.82, windowHeight: 1.12 },
-  '体育馆': { height: 3.2, windowDensity: 0.35, roofRise: 0.95, roofStyle: 'span', wall: 'wallPeach', doorWidth: 1.5, windowWidth: 0.9, windowHeight: 0.42 },
+  '教学楼': { height: 4.2, floors: 3, windowDensity: 1, roofRise: 0.82, roofStyle: 'pitched', wall: 'wallCream', doorWidth: 0.9, windowWidth: 0.48, windowHeight: 0.62 },
+  '宿舍楼': { height: 4.8, floors: 4, windowDensity: 1.45, roofRise: 0.22, roofStyle: 'flat', wall: 'wallPeach', doorWidth: 0.86, windowWidth: 0.42, windowHeight: 0.58 },
+  '办公楼': { height: 3.8, floors: 3, windowDensity: 1.15, roofRise: 0.28, roofStyle: 'flat', wall: 'wall', doorWidth: 0.86, windowWidth: 0.58, windowHeight: 0.72 },
+  '实验楼': { height: 4.5, floors: 3, windowDensity: 0.9, roofRise: 0.5, roofStyle: 'pitched', wall: 'wallMint', doorWidth: 0.92, windowWidth: 0.52, windowHeight: 0.68 },
+  '图书馆': { height: 4.6, floors: 3, windowDensity: 0.7, roofRise: 0.18, roofStyle: 'glass', wall: 'wallCream', doorWidth: 1.2, windowWidth: 0.82, windowHeight: 1.12 },
+  '体育馆': { height: 3.2, floors: 1, windowDensity: 0.35, roofRise: 0.95, roofStyle: 'span', wall: 'wallPeach', doorWidth: 1.5, windowWidth: 0.9, windowHeight: 0.42 },
 })
 
 /**
@@ -203,6 +220,20 @@ export function drawPixelBuildingPreview(context, options = {}) {
   context.restore()
 }
 
+export function getBuildingFloorLayout(totalHeight, requestedFloors = 1, windowHeight = 0.6) {
+  const height = Number(totalHeight)
+  const floors = Math.max(1, Math.min(30, Math.floor(Number(requestedFloors) || 1)))
+  if (!Number.isFinite(height) || height <= 0) throw new TypeError('建筑总高度必须大于 0')
+  const floorHeight = height / floors
+  return {
+    floors,
+    floorHeight,
+    windowHeight: Math.min(Math.max(0.2, Number(windowHeight) || 0.6), floorHeight * 0.42),
+    windowCenters: Array.from({ length: floors }, (_, index) => index * floorHeight + floorHeight * 0.56),
+    bandHeights: Array.from({ length: Math.max(0, floors - 1) }, (_, index) => (index + 1) * floorHeight),
+  }
+}
+
 export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
   if (!Array.isArray(edges) || !edges.length) return null
   const hasRequestedIndex = requestedIndex !== null && requestedIndex !== undefined && requestedIndex !== ''
@@ -215,7 +246,7 @@ export function createPixelBuilding(THREE, options = {}) {
   const {
     footprint, width = 8, depth = 5, height,
     materials, wallMaterial, template = '教学楼',
-    label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null,
+    label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null, floors,
   } = options
   const preset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
   const buildingHeight = Number(height || preset.height)
@@ -299,8 +330,10 @@ export function createPixelBuilding(THREE, options = {}) {
   ))
   if (outline.length > 2 && outline[0].distanceTo(outline[outline.length - 1]) < 0.001) outline.pop()
   const windowWidth = Math.max(0.28, Number(preset.windowWidth || 0.48))
-  const windowHeight = Math.max(0.28, Number(preset.windowHeight || 0.62))
-  const sillHeight = Math.min(buildingHeight * 0.72, Math.max(1.15, buildingHeight * 0.48))
+  const floorLayout = getBuildingFloorLayout(buildingHeight, floors ?? preset.floors ?? 1, preset.windowHeight)
+  group.userData.floorCount = floorLayout.floors
+  group.userData.floorHeight = floorLayout.floorHeight
+  const windowHeight = floorLayout.windowHeight
   const area = outline.reduce((sum, point, index) => {
     const next = outline[(index + 1) % outline.length]
     return sum + point.x * next.y - next.x * point.y
@@ -351,23 +384,28 @@ export function createPixelBuilding(THREE, options = {}) {
     const angle = Math.atan2(dy, dx)
     for (let i = 0; i < count; i += 1) {
       const t = (i + 1) / (count + 1)
-      // 主入口两侧留出门洞净空，避免窗户与门框重叠。
+      // 主入口两侧留出门洞净空，避免首层窗户与门框重叠。
       if (index === entranceEdge.index && Math.abs(t - 0.5) * edgeLength < doorWidth / 2 + windowWidth * 0.65) continue
       const centerX = point.x + dx * t + normalX * 0.055
       const centerZ = -(point.y + dy * t) + normalZ * 0.055
-      const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(windowWidth + 0.12, windowHeight + 0.12, 0.075),
-        materials.windowTrim,
-      )
-      frame.position.set(centerX, sillHeight, centerZ)
-      frame.rotation.y = angle
-      const glass = new THREE.Mesh(
-        new THREE.BoxGeometry(windowWidth, windowHeight, 0.085),
-        materials.window,
-      )
-      glass.position.copy(frame.position)
-      glass.rotation.y = angle
-      group.add(frame, glass)
+      floorLayout.windowCenters.forEach((centerY, floorIndex) => {
+        if (floorIndex === 0 && index === entranceEdge.index && Math.abs(t - 0.5) * edgeLength < doorWidth / 2 + windowWidth * 0.65) return
+        const frame = new THREE.Mesh(
+          new THREE.BoxGeometry(windowWidth + 0.12, windowHeight + 0.12, 0.075),
+          materials.windowTrim,
+        )
+        frame.position.set(centerX, centerY, centerZ)
+        frame.rotation.y = angle
+        const glass = new THREE.Mesh(
+          new THREE.BoxGeometry(windowWidth, windowHeight, 0.085),
+          materials.window,
+        )
+        glass.position.copy(frame.position)
+        glass.rotation.y = angle
+        frame.userData.floor = floorIndex + 1
+        glass.userData.floor = floorIndex + 1
+        group.add(frame, glass)
+      })
     }
   })
   group.traverse((object) => {

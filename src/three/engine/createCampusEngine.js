@@ -98,9 +98,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。
     renderer.setPixelRatio(1)
     renderer.setSize(container.clientWidth, container.clientHeight)
-    // RPG 样板诊断：暂时关闭阴影贴图，排除 DirectionalLight shadow camera
-    // 固定 ±100 范围在大面积地面上形成的阴影投影边界；验证后再恢复/校准阴影范围。
-    renderer.shadowMap.enabled = !isRpgSample
+    renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
     // 保留像素美术标准色板，避免电影色调映射改变颜色。

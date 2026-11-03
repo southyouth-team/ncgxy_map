@@ -16,6 +16,7 @@ export class InputController {
     this.touchLookPointerId = null
     this.navigationPath = null
     this.navigationPathIndex = 0
+    this.navigationPathCompleted = false
     this.lastTouchLook = { x: 0, y: 0 }
     this.onKeyDown = (event) => {
       const key = event.key.toLowerCase()
@@ -96,6 +97,7 @@ export class InputController {
     this.keys.clear()
     this.navigationPath = null
     this.navigationPathIndex = 0
+    this.navigationPathCompleted = false
     this.pointerDown = false
     if (mode !== 'firstPerson') this.exitPointerLock()
   }
@@ -114,7 +116,14 @@ export class InputController {
       ? path.map(point => ({ x: Number(point.x), z: Number(point.z) })).filter(point => Number.isFinite(point.x) && Number.isFinite(point.z))
       : null
     this.navigationPathIndex = this.navigationPath ? 1 : 0
+    this.navigationPathCompleted = false
     return Boolean(this.navigationPath)
+  }
+
+  consumeNavigationPathCompletion() {
+    const completed = this.navigationPathCompleted
+    this.navigationPathCompleted = false
+    return completed
   }
 
   setMovementEnabled(enabled) {
@@ -129,19 +138,22 @@ export class InputController {
     if (forward || strafe) this.navigationPath = null
     if (!forward && !strafe && this.navigationPath) {
       const target = this.navigationPath[this.navigationPathIndex]
-      if (!target) { this.navigationPath = null; return }
+      if (!target) { this.navigationPath = null; this.navigationPathCompleted = true; return }
       const player = this.cameraRig.player
       const dx = target.x - player.x, dz = target.z - player.z
       const distance = Math.hypot(dx, dz)
       if (distance <= 0.16) {
         this.navigationPathIndex += 1
-        if (this.navigationPathIndex >= this.navigationPath.length) this.navigationPath = null
+        if (this.navigationPathIndex >= this.navigationPath.length) {
+          this.navigationPath = null
+          this.navigationPathCompleted = true
+        }
         return
       }
       const travel = Math.min(distance, 5.5 * delta)
       const movement = this.collisionWorld.move(player, dx / distance * travel, dz / distance * travel)
       const moved = Math.hypot(movement.x - player.x, movement.z - player.z)
-      if (moved < 0.002) { this.navigationPath = null; return }
+      if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
       player.x = movement.x
       player.z = movement.z
       if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()

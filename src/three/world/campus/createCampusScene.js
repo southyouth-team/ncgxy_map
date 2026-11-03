@@ -64,9 +64,9 @@ export function createCampusScene(THREE) {
   root.add(border)
 
   for (const area of CAMPUS_AREAS) {
-    if (area.id === 'central-lake' && area.polygon?.length) {
-      addPolygon('campus-central-lake-bed', area.polygon, mats.waterEdge, 0.065)
-      addPolygon('campus-central-lake-water', area.polygon, mats.water, 0.13)
+    if (area.type === 'water' && area.polygon?.length) {
+      addPolygon('campus-' + area.id + '-bed', area.polygon, mats.waterEdge, 0.065)
+      addPolygon('campus-' + area.id + '-water', area.polygon, mats.water, 0.13)
       continue
     }
     if (!area.rect) continue
@@ -168,32 +168,35 @@ export function createCampusScene(THREE) {
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)
 
   const treePositions = [
-    [202,215,1.05],[305,210,0.95],[355,280,1.05],[190,360,0.9],[520,275,1],[565,355,1.1],
-    [225,420,0.92],[330,430,1.05],[485,435,0.9],[75,220,1],[85,260,0.95],[570,180,0.9],
-    [155,205,0.78],[315,335,0.82],[405,245,0.88],[460,360,0.9],[125,385,0.78],[545,420,0.82],
-    [350,115,0.75],[205,120,0.78],
-    [185,215,0.82],[205,175,0.78],[235,170,0.88],[265,180,0.82],[300,225,0.78],
-    [315,245,0.9],[345,260,0.86],[355,300,0.92],[335,340,0.88],[290,365,0.82],
-    [205,380,0.86],[245,395,0.9],[285,410,0.82],[365,405,0.88],[405,420,0.92],
-    [445,430,0.82],[475,410,0.9],[515,385,0.86],[555,385,0.92],[575,320,0.82],
-    [560,245,0.9],[535,205,0.86],[500,185,0.82],[460,185,0.9],[420,185,0.82],
-    [380,155,0.88],[345,145,0.82],[305,145,0.9],[270,135,0.82],[235,145,0.88],
-    [155,285,0.82],[135,315,0.88],[120,350,0.82],[90,375,0.9],[70,405,0.82],
+    // 西侧湖岸与西南绿化带
+    [176,82,0.9],[205,52,0.82],[244,75,0.88],[286,105,0.82],[285,145,0.9],
+    [285,180,0.82],[292,210,0.9],[286,250,0.82],[282,290,0.9],[285,340,0.82],
+    [175,300,0.88],[190,330,0.82],[220,355,0.9],[245,390,0.82],[275,425,0.9],
+    // 中央湖区外围景观树
+    [445,118,0.82],[470,92,0.9],[520,82,0.82],[575,92,0.9],[620,125,0.82],
+    [650,170,0.9],[660,225,0.82],[645,285,0.9],[610,330,0.82],[565,355,0.9],
+    [510,360,0.82],[465,335,0.9],[435,290,0.82],[420,235,0.9],[425,180,0.82],
+    // 东侧与南部绿化
+    [650,155,0.9],[700,155,0.82],[755,160,0.9],[800,165,0.82],
+    [810,300,0.9],[790,330,0.82],[760,335,0.9],[720,330,0.82],
+    [500,445,0.9],[550,440,0.82],[610,440,0.9],[670,440,0.82],[730,440,0.9],
+    [785,430,0.82],[330,160,0.9],[300,185,0.82],[300,310,0.9],[320,340,0.82],
+    [380,340,0.9],[400,365,0.82],[365,430,0.9],[320,440,0.82],
   ]
   treePositions.forEach(([px, py, scale], index) => {
     const point = mapPixelToWorld(px, py)
     addPixelTree(THREE, root, point.x, point.z, scale, index, mats)
   })
-  const flowerPositions = [[150,245],[300,190],[340,315],[465,205],[500,390],[205,395],[90,185],[220,205],[275,175],[320,300],[360,355],[430,365],[485,235],[540,285],[165,345],[250,420],[390,430],[520,430]]
+  const flowerPositions = [[295,160],[310,190],[300,270],[300,370],[350,155],[405,160],[445,350],[470,365],[525,365],[585,350],[640,330],[655,160],[690,160],[745,165],[800,165],[810,330],[770,340],[725,340],[520,445],[600,445],[680,445],[745,445],[240,435],[190,420]]
   flowerPositions.forEach(([px, py], index) => {
     const point = mapPixelToWorld(px, py)
     addPixelFlowerPatch(THREE, root, point.x, point.z, mats, index % 2 ? 4 : 6)
   })
-  ;[[260,175],[430,390],[115,275],[315,355],[475,365],[215,420]].forEach(([px, py]) => {
+  ;[[300,175],[420,350],[185,330],[545,365],[650,345],[740,340],[250,420],[690,445]].forEach(([px, py]) => {
     const point = mapPixelToWorld(px, py)
     addPixelBench(THREE, root, point.x, point.z, mats)
   })
-  ;[[175,180],[390,185],[510,320],[275,405],[245,205],[330,245],[365,330],[445,410],[550,365],[135,350],[205,415]].forEach(([px, py]) => {
+  ;[[295,175],[405,165],[445,350],[640,345],[700,335],[785,315],[520,445],[610,445],[730,435],[185,330],[245,415],[800,175]].forEach(([px, py]) => {
     const point = mapPixelToWorld(px, py)
     addPixelLamp(THREE, root, point.x, point.z, mats)
   })
@@ -229,7 +232,7 @@ export function createCampusScene(THREE) {
   texture.colorSpace = THREE.SRGBColorSpace
   const character = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }))
   character.name = 'PixelExplorerSprite'
-  const spawn = mapPixelToWorld(320, 370)
+  const spawn = mapPixelToWorld(455, 365)
   character.position.set(spawn.x, 2.1, spawn.z)
   character.scale.set(2.4, 3.6, 1)
   root.add(character)

@@ -311,6 +311,11 @@ export class ScenesService {
     if (!Number.isFinite(Number(definition.floorHeight)) || Number(definition.floorHeight) < 2.5 || Number(definition.floorHeight) > 10) {
       throw new BadRequestException('建筑层高必须在 2.5 至 10 之间');
     }
+    const exterior = definition.exterior as Record<string, unknown> | undefined;
+    if (exterior && (typeof exterior !== 'object' ||
+        !['flat', 'glass', 'pitched', 'span'].includes(String(exterior.roofStyle)))) {
+      throw new BadRequestException('建筑屋顶样式无效');
+    }
     const floors = definition.floors;
     if (!Array.isArray(floors) || floors.length < 1 || floors.length > 30) {
       throw new BadRequestException('建筑楼层数量必须在 1 至 30 之间');

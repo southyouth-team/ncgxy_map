@@ -778,12 +778,61 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const expansion = definition.footprint?.expansion || {}
     const shiftX = (Number(expansion.east) - Number(expansion.west)) / 2
     const shiftZ = (Number(expansion.south) - Number(expansion.north)) / 2
-    indoorOutdoorTarget.scale.x = indoorOutdoorBase.scale.x * width / indoorOutdoorBase.width
-    indoorOutdoorTarget.scale.z = indoorOutdoorBase.scale.z * depth / indoorOutdoorBase.depth
-    indoorOutdoorTarget.position.x = indoorOutdoorBase.position.x + shiftX
-    indoorOutdoorTarget.position.z = indoorOutdoorBase.position.z + shiftZ
+    const polygon = definition.footprint?.polygon
+    const rebuildOptions = indoorOutdoorTarget.userData?.rebuildOptions
+
+    // 对程序化校园建筑按真实多边形重新生成建筑实体，不再用 scale 把矩形模型硬拉伸。
+    if (rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
+      const shape = new THREE.Shape()
+      shape.moveTo(polygon[0].x, -polygon[0].z)
+      polygon.slice(1).forEach(point => shape.lineTo(point.x, -point.z))
+      shape.closePath()
+      const rebuilt = createPixelBuilding(THREE, {
+        ...rebuildOptions,
+        footprint: shape,
+        width,
+        depth,
+        height: Number(definition.floorHeight) * definition.floors.length,
+        floors: definition.floors.length,
+        label: rebuildOptions.label || indoorOutdoorTarget.name,
+      })
+      const target = indoorOutdoorTarget
+      target.children.slice().forEach(child => {
+        child.geometry?.dispose?.()
+        target.remove(child)
+      })
+      while (rebuilt.children.length) target.add(rebuilt.children[0])
+      rebuilt.clear()
+
+      // 基座使用同一轮廓挤出，避免扩建后出现矩形底座露边。
+      const foundation = target.userData.foundationMesh
+      if (foundation) {
+        foundation.geometry?.dispose?.()
+        const foundationGeometry = new THREE.ExtrudeGeometry(shape, { depth: 0.16, bevelEnabled: false, curveSegments: 1 })
+        foundationGeometry.rotateX(-Math.PI / 2)
+        foundation.geometry = foundationGeometry
+        foundation.position.set(
+          indoorOutdoorBase.position.x + shiftX,
+          0,
+          indoorOutdoorBase.position.z + shiftZ,
+        )
+      }
+      target.scale.copy(indoorOutdoorBase.scale)
+      target.position.set(
+        indoorOutdoorBase.position.x + shiftX,
+        indoorOutdoorBase.position.y,
+        indoorOutdoorBase.position.z + shiftZ,
+      )
+    } else {
+      // 非程序化模型（含 RPG 样板手工建筑）暂保留原有包围盒缩放路径。
+      indoorOutdoorTarget.scale.x = indoorOutdoorBase.scale.x * width / indoorOutdoorBase.width
+      indoorOutdoorTarget.scale.z = indoorOutdoorBase.scale.z * depth / indoorOutdoorBase.depth
+      indoorOutdoorTarget.position.x = indoorOutdoorBase.position.x + shiftX
+      indoorOutdoorTarget.position.z = indoorOutdoorBase.position.z + shiftZ
+    }
     indoorOutdoorTarget.updateMatrixWorld(true)
-    // 室外碰撞体与建筑包围盒同步，避免扩建后角色仍按旧占地碰撞。
+
+    // 室外碰撞体与重建后的建筑包围盒同步。
     if (!(isRpgSample && indoorOutdoorTarget.userData?.buildingId === 'sample-teaching-building') &&
         indoorOutdoorBase.collisionIndex >= 0 && outdoorCollisionWorld?.obstacles[indoorOutdoorBase.collisionIndex]) {
       const bounds = new THREE.Box3().setFromObject(indoorOutdoorTarget)
@@ -792,6 +841,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         minZ: bounds.min.z, maxZ: bounds.max.z,
       }
     }
+    cameraRig?.setObstructionObjects([
+      ...(() => { const roots = []; campus?.traverse(object => { if (object.userData?.buildingId || object.userData?.objectType === 'building') roots.push(object) }); return roots })(),
+      ...loadedBuildingModels,
+    ])
     return true
   }
 

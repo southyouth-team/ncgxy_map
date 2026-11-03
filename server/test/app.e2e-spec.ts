@@ -264,4 +264,47 @@ describe('Campus map API (PostGIS integration)', () => {
       .expect(409);
   });
 
+  it('persists indoor building layouts with revision history and access control', async () => {
+    const buildingId = 'west-north-01';
+    const url = `${base}/campuses/${campusId}/maps/${mapId}/scene/indoor-buildings/${buildingId}`;
+    const empty = await request(app.getHttpServer()).get(url).set(auth).expect(200);
+    expect(Number(empty.body.revision)).toBe(0);
+    expect(empty.body.definition).toBeNull();
+
+    const definition = {
+      id: buildingId,
+      name: '西北组团 01',
+      floorHeight: 3.6,
+      footprintSize: { width: 12, depth: 8 },
+      layoutStatus: 'procedural-template',
+      floors: [{
+        level: 1, width: 12, depth: 12, rooms: [], walls: [], doors: [],
+        stairPoint: { x: 4, z: 0, direction: 'south' },
+      }],
+    };
+    const saved = await request(app.getHttpServer())
+      .put(url).set(auth).send({ revision: 0, definition }).expect(200);
+    expect(Number(saved.body.revision)).toBe(1);
+    expect(saved.body.definition.id).toBe(buildingId);
+
+    const loaded = await request(app.getHttpServer()).get(url).set(auth).expect(200);
+    expect(Number(loaded.body.revision)).toBe(1);
+    expect(loaded.body.definition.floors[0].stairPoint.x).toBe(4);
+
+    const versions = await request(app.getHttpServer())
+      .get(url + '/versions').set(auth).expect(200);
+    expect(versions.body).toHaveLength(1);
+    expect(Number(versions.body[0].revision)).toBe(1);
+
+    await request(app.getHttpServer())
+      .put(url).set(auth).send({ revision: 0, definition }).expect(409);
+
+    const viewerId = `e2e-indoor-viewer-${Date.now()}`;
+    await db.query("INSERT INTO campus_member (campus_id,user_id,role) VALUES ($1,$2,'viewer')", [campusId, viewerId]);
+    await request(app.getHttpServer()).get(url).set('X-Dev-User-Id', viewerId).expect(200);
+    await request(app.getHttpServer())
+      .put(url).set('X-Dev-User-Id', viewerId)
+      .send({ revision: 1, definition }).expect(403);
+  });
+
 });

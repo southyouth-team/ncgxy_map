@@ -197,7 +197,9 @@ export function createRpgSampleScene(THREE) {
     doorWidth: 1.28,
   })
   generatedBuilding.position.y = 0.73
-  while (generatedBuilding.children.length) building.add(generatedBuilding.children[0])
+  building.add(generatedBuilding)
+  building.userData.generatedBuildingShell = generatedBuilding
+  building.userData.generatedBuildingBaseY = 0.73
   building.userData.foundationMesh = foundation
   building.userData.rebuildOptions = {
     materials: buildingMaterials,

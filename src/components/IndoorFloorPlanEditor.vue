@@ -257,6 +257,7 @@ function removeRoom(id) {
 function addFurniture(room) {
   checkpoint()
   if (!Array.isArray(room.furniture)) room.furniture = []
+  if (room.furniture.length >= 6) return
   const types = {
     desk: { name: '课桌', width: 1.2, depth: 0.7, height: 0.8 },
     table: { name: '桌子', width: 1.4, depth: 0.8, height: 0.8 },
@@ -270,7 +271,8 @@ function addFurniture(room) {
   const spec = types[type]
   room.furniture.push({
     id: `furniture-${Date.now()}-${count}`, type, name: spec.name,
-    x: 0, z: 0,
+    x: round(-room.width / 2 + spec.width / 2 + 0.4 + (count % 3) * Math.min(1.5, (room.width - spec.width - 0.8) / 2)),
+    z: round(-room.depth / 2 + spec.depth / 2 + 0.4 + Math.floor(count / 3) * Math.min(1.2, (room.depth - spec.depth - 0.8) / 1)),
     ...spec,
   })
   selectedRoomId.value = room.id
@@ -346,7 +348,7 @@ function roomLabel(room) { return room.name || '未命名空间' }
           <label>门所在墙<select v-model="room.doorWall" @focus="checkpoint" @change="emit('change')"><option value="north">北侧</option><option value="south">南侧</option><option value="east">东侧</option><option value="west">西侧</option></select></label>
           <label>门宽<input v-model.number="room.doorWidth" type="number" min="0" step="0.1" @focus="checkpoint" @change="emit('change')"></label>
         </div>
-        <div class="construction-title furniture-heading"><b>家具（{{ (room.furniture || []).length }}）</b><select v-model="selectedFurnitureType" @click.stop><option value="desk">课桌</option><option value="table">桌子</option><option value="chair">座椅</option><option value="cabinet">储物柜</option><option value="podium">讲台</option><option value="board">教学板</option></select><button @click.stop="addFurniture(room)">＋ 添加家具</button></div>
+        <div class="construction-title furniture-heading"><b>家具（{{ (room.furniture || []).length }}）</b><select v-model="selectedFurnitureType" @click.stop><option value="desk">课桌</option><option value="table">桌子</option><option value="chair">座椅</option><option value="cabinet">储物柜</option><option value="podium">讲台</option><option value="board">教学板</option></select><button :disabled="(room.furniture || []).length >= 6" @click.stop="addFurniture(room)">＋ 添加家具</button></div>
         <div v-for="item in room.furniture || []" :key="item.id" class="furniture-row">
           <span>{{ item.name || item.type }} · {{ item.width }} × {{ item.depth }}</span>
           <button @click.stop="removeFurniture(room, item.id)">移除</button>

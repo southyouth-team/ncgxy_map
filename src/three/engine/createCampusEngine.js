@@ -5,7 +5,7 @@ import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, planIndoorFloorRoute } from '../indoor/indoorScene.js'
-import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from '../indoor/indoorBuildingDefinitions.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
@@ -1158,25 +1158,21 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       position: baseline.position.clone(),
       scale: baseline.scale.clone(),
     }
+    const transformedFootprint = transformIndoorFootprint({
+      minX: localBounds.min.x, maxX: localBounds.max.x,
+      minZ: localBounds.min.z, maxZ: localBounds.max.z,
+    }, target.scale, options.entrancePoint || target.userData?.indoorEntrance || null)
     const footprint = {
       id: String(buildingId),
       name: options.name || target.userData?.name || target.name || '校园建筑',
-      bounds: {
-        minX: localBounds.min.x, maxX: localBounds.max.x,
-        minZ: localBounds.min.z, maxZ: localBounds.max.z,
-      },
+      bounds: transformedFootprint.bounds,
     }
-    // 默认室内楼层数和层高优先继承室外建筑生成器参数，避免第一次编辑就把原建筑压扁。
+    // 室内尺寸按建筑根节点缩放同步；室内生成坐标仍以建筑局部中心为原点。
     const generationOptions = {
       ...options,
       floors: options.floors ?? options.floorsData?.length ?? target.userData?.floorCount ?? 1,
       floorHeight: options.floorHeight ?? target.userData?.floorHeight ?? 3.6,
-      // 建筑本地坐标中的入口点决定室内门墙与门内出生位置。
-      entrancePoint: options.entrancePoint || (target.userData?.indoorEntrance ? {
-        // 生成室内模板以局部包围盒中心为原点，入口点需同步平移到该坐标系。
-        x: target.userData.indoorEntrance.x - (localBounds.min.x + localBounds.max.x) / 2,
-        z: target.userData.indoorEntrance.z - (localBounds.min.z + localBounds.max.z) / 2,
-      } : null),
+      entrancePoint: transformedFootprint.entrancePoint,
     }
     const generated = createIndoorBuildingFromFootprint(footprint, generationOptions)
     const definition = options.definition || (Array.isArray(options.floorsData) && options.floorsData.length

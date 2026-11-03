@@ -117,7 +117,7 @@ export function createCampusScene(THREE) {
     const material = new THREE.LineBasicMaterial({ color: '#f1e8cf', transparent: true, opacity: 0.82 })
     const addLine = (points, loop = false) => {
       const geometry = new THREE.BufferGeometry().setFromPoints(points.map(toVector))
-      const line = new THREE.Line(geometry, material)
+      const line = loop ? new THREE.LineLoop(geometry, material) : new THREE.Line(geometry, material)
       line.name = 'sports-marking-' + id
       line.userData.objectType = 'sports-marking'
       root.add(line)

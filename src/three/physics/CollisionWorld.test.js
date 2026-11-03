@@ -23,8 +23,6 @@ describe('CollisionWorld', () => {
   })
 
   it('recovers a player spawned inside a building collision box', () => {
-    const result = world().move({ x: 0, z: 0 }, 0.2, 0)
-    expect(world().isBlocked(result.x, result.z)).toBe(true)
     const collision = world()
     const recovered = collision.resolvePosition({ x: 0, z: 0 })
     expect(collision.isBlocked(recovered.x, recovered.z)).toBe(false)

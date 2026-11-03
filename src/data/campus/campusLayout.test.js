@@ -3,6 +3,7 @@ import {
   CAMPUS_AREAS,
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_PLAN_REFERENCE,
+  CAMPUS_PLAYER_SPAWN_PIXEL,
   CAMPUS_ROAD_CENTERLINES,
   mapPixelToWorld,
   mapRectToWorld,
@@ -37,6 +38,18 @@ describe('南昌工学院像素校园主空间底图', () => {
       expect(world.width).toBeGreaterThan(0)
       expect(world.depth).toBeGreaterThan(0)
     }
+  })
+
+  it('中央湖区保留可步行岛屿，并将出生点放在校园陆地区域', () => {
+    const centralLake = CAMPUS_AREAS.find(area => area.id === 'central-lake')
+    expect(centralLake?.holes).toHaveLength(1)
+    expect(centralLake.holes[0].length).toBeGreaterThanOrEqual(3)
+    const [spawnX, spawnY] = CAMPUS_PLAYER_SPAWN_PIXEL
+    expect(spawnX).toBeGreaterThan(CAMPUS_PLAN_REFERENCE.mapBounds.left)
+    expect(spawnX).toBeLessThan(CAMPUS_PLAN_REFERENCE.mapBounds.right)
+    expect(spawnY).toBeGreaterThan(CAMPUS_PLAN_REFERENCE.mapBounds.top)
+    expect(spawnY).toBeLessThan(CAMPUS_PLAN_REFERENCE.mapBounds.bottom)
+    expect(centralLake.polygon.some(([x, y]) => Math.hypot(x - spawnX, y - spawnY) < 20)).toBe(false)
   })
 
   it('道路和水体控制点均位于校园底图范围内', () => {

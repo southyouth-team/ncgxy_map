@@ -505,8 +505,8 @@ onBeforeUnmount(() => {
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isRpgSample } ]">
     <CampusPixelMap v-if="!showEditor" :initial-player-position="returnPixelPosition" :plan-document="campusPlanDocument" @enter-building="openBuildingFromPixelMap" />
-    <div ref="viewport" class="scene-viewport" v-show="showEditor && editorViewMode === '3d'"></div>
-    <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
+    <div v-if="showEditor && editorViewMode === '3d'" ref="viewport" class="scene-viewport"></div>
+    <CampusPlanEditor v-if="showEditor && editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 
     <template v-if="showEditor && editorViewMode === '3d'">
     <header class="topbar">

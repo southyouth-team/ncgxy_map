@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
+import { createCampusLayoutV2Scene } from '../world/campus/campusLayoutV2Scene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
@@ -464,8 +465,6 @@ export function createCampusEngine(container, callbacks = {}) {
 
   function previewCampusLayoutV2(documentData) {
     if (!scene) throw new Error('三维场景尚未初始化')
-    const { createCampusLayoutV2Scene } = window.__campusLayoutV2SceneModule || {}
-    if (!createCampusLayoutV2Scene) throw new Error('V2 场景模块未加载')
     const group = createCampusLayoutV2Scene(THREE, documentData)
     clearRpgPreview()
     editorPreviewActive = true

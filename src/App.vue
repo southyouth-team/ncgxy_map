@@ -98,6 +98,7 @@ async function enterSelectedBuilding() {
     if (opened) {
       indoorDefinition.value = engine.getIndoorBuildingDefinition()
       if (saved) indoorDefinition.value = { ...indoorDefinition.value, ...saved, id: buildingId }
+      indoorDefinition.value.exterior ||= { roofStyle: 'flat' }
       engine.updateIndoorBuildingDefinition(indoorDefinition.value)
       indoorEditorOpen.value = false
       indoorEditorMessage.value = indoorLayoutRevision.value > 0 ? '已加载服务端布局 · 版本 ' + indoorLayoutRevision.value : saved ? '已加载本地缓存布局' : '已根据校园建筑占地生成初始模板'

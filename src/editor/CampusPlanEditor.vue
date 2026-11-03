@@ -153,6 +153,33 @@ function beginFeatureDrag(event, type, item) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function clearMultiSelection() { multiSelection.value = [] }
+function getFeatureBounds(type, feature) {
+  const points = type === 'road' ? feature.points : feature.footprint
+  if (!points || !points.length) return null
+  const xs = points.map(point => point[0]), ys = points.map(point => point[1])
+  return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) }
+}
+function alignSelection(mode) {
+  const targets = multiSelection.value.filter(entry => !isLayerLocked(entry.type)).map(entry => {
+    const feature = featureCollection(entry.type).find(item => item.id === entry.id)
+    return feature ? { ...entry, feature, bounds: getFeatureBounds(entry.type, feature) } : null
+  }).filter(entry => entry && entry.bounds)
+  if (targets.length < 2) return
+  const left = Math.min(...targets.map(entry => entry.bounds.left))
+  const right = Math.max(...targets.map(entry => entry.bounds.right))
+  const top = Math.min(...targets.map(entry => entry.bounds.top))
+  const bottom = Math.max(...targets.map(entry => entry.bounds.bottom))
+  const centerX = (left + right) / 2, centerY = (top + bottom) / 2
+  snapshot()
+  targets.forEach(entry => {
+    const b = entry.bounds
+    const dx = mode === 'left' ? left - b.left : mode === 'right' ? right - b.right : mode === 'centerX' ? centerX - (b.left + b.right) / 2 : 0
+    const dy = mode === 'top' ? top - b.top : mode === 'bottom' ? bottom - b.bottom : mode === 'centerY' ? centerY - (b.top + b.bottom) / 2 : 0
+    const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
+    if (entry.type === 'road') entry.feature.points = moved
+    else { entry.feature.footprint = moved; if (entry.type === 'building') entry.feature.rect = polygonBounds(moved) }
+  })
+}
 function deleteSelectionBatch() {
   const targets = multiSelection.value.length ? [...multiSelection.value] : (selected.value.id ? [selected.value] : [])
   if (!targets.length) return
@@ -832,7 +859,7 @@ function exportDocument() {
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
-        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id || isLayerLocked(selected.type)">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || (clipboardObject && isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id || isLayerLocked(selected.type)">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || (clipboardObject && isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
           <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>

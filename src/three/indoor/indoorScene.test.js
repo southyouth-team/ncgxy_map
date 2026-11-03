@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -25,6 +25,28 @@ describe('stair traversal endpoints', () => {
   })
 })
 
+describe('stair path geometry', () => {
+  it('matches the four rendered stair orientations', () => {
+    expect(createStairPath({ x: 3, z: 5, direction: 'south' })).toEqual({
+      start: { x: 3, z: 2.9 }, end: { x: 3, z: 7.1 }, rise: 4.2, direction: 'south',
+    })
+    expect(createStairPath({ x: 3, z: 5, direction: 'north' })).toEqual({
+      start: { x: 3, z: 7.1 }, end: { x: 3, z: 2.9 }, rise: 4.2, direction: 'north',
+    })
+    expect(createStairPath({ x: 3, z: 5, direction: 'east' })).toEqual({
+      start: { x: 5.1, z: 5 }, end: { x: 0.9, z: 5 }, rise: 4.2, direction: 'east',
+    })
+    expect(createStairPath({ x: 3, z: 5, direction: 'west' })).toEqual({
+      start: { x: 0.9, z: 5 }, end: { x: 5.1, z: 5 }, rise: 4.2, direction: 'west',
+    })
+  })
+
+  it('rejects invalid stair configuration', () => {
+    expect(createStairPath({ x: 1, z: 2, direction: 'diagonal' })).toBeNull()
+    expect(createStairPath({ x: NaN, z: 2 })).toBeNull()
+  })
+})
+
 describe('multi-floor navigation planning', () => {
   const building = {
     floors: [
@@ -39,10 +61,14 @@ describe('multi-floor navigation planning', () => {
     expect(planIndoorFloorRoute(building, 1, 4)).toMatchObject({
       levels: [1, 2, 3, 4],
       transitions: [
-        { fromLevel: 1, toLevel: 2, direction: 1, stairPoint: { x: 8, z: 0 } },
-        { fromLevel: 2, toLevel: 3, direction: 1, stairPoint: { x: 8, z: 0 } },
-        { fromLevel: 3, toLevel: 4, direction: 1, stairPoint: { x: 8, z: 0 } },
+        { fromLevel: 1, toLevel: 2, direction: 1, connector: { from: { level: 1, point: { x: 8, z: -2.1 } }, to: { level: 2, point: { x: 8, z: 2.1 } } } },
+        { fromLevel: 2, toLevel: 3, direction: 1, connector: { from: { level: 2, point: { x: 8, z: -2.1 } }, to: { level: 3, point: { x: 8, z: 2.1 } } } },
+        { fromLevel: 3, toLevel: 4, direction: 1, connector: { from: { level: 3, point: { x: 8, z: -2.1 } }, to: { level: 4, point: { x: 8, z: 2.1 } } } },
       ],
+    })
+    expect(planIndoorFloorRoute(building, 4, 1)?.transitions[0].connector).toEqual({
+      from: { level: 4, point: { x: 8, z: 2.1 } },
+      to: { level: 3, point: { x: 8, z: -2.1 } },
     })
     expect(planIndoorFloorRoute(building, 4, 1)?.levels).toEqual([4, 3, 2, 1])
     expect(planIndoorFloorRoute(building, 2, 2)).toEqual({ levels: [2], transitions: [] })

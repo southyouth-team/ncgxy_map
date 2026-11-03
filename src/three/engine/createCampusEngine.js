@@ -4,7 +4,7 @@ import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { createIndoorFloor, getStairLandingPoint, getStairTraversalPoints, planIndoorFloorRoute } from '../indoor/indoorScene.js'
+import { createIndoorFloor, getStairTraversalPoints, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -768,6 +768,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
     }
     if (indoorGroup && cameraRig?.player && !stairTransition && pendingIndoorFloorTarget !== null && !activeIndoorRoom) {
+      if (input?.keys?.size) pendingIndoorFloorTarget = null
       const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, pendingIndoorFloorTarget)
       const nextTransition = plan?.transitions?.[0]
       const traversal = getStairTraversalPoints(indoorGroup.userData.stairPath, nextTransition?.direction)
@@ -1197,10 +1198,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const transition = stairTransition
     transition.elapsed = Math.min(transition.duration, transition.elapsed + delta)
     const progress = transition.elapsed / transition.duration
-    const eased = progress * progress * (3 - 2 * progress)
-    cameraRig.player.x = transition.fromX + (transition.toX - transition.fromX) * eased
-    cameraRig.player.y = transition.fromY + (transition.toY - transition.fromY) * eased
-    cameraRig.player.z = transition.fromZ + (transition.toZ - transition.fromZ) * eased
+    // 楼梯几何为等高阶梯，按恒定进度沿楼梯轴线移动，避免缓入缓出造成悬浮感。
+    cameraRig.player.x = transition.fromX + (transition.toX - transition.fromX) * progress
+    cameraRig.player.y = transition.fromY + (transition.toY - transition.fromY) * progress
+    cameraRig.player.z = transition.fromZ + (transition.toZ - transition.fromZ) * progress
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
     else cameraRig.updateThirdPersonDesired()
     if (progress >= 1) {

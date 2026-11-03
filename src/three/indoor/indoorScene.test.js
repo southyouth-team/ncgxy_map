@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, getStairStepHeight, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, getStairStepHeight, getIndoorInteractionPrompt, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance, transformIndoorFootprint } from './indoorBuildingDefinitions.js'
 
@@ -10,6 +10,16 @@ const sample = {
   rooms: [{ id: 'classroom-101', name: '教室 101', x: -5, z: 0, width: 8, depth: 6, doorWall: 'south', doorWidth: 1.4 }],
   doors: [{ wall: 'south', offset: 0, width: 2 }],
 }
+
+describe('indoor prompt resolver', () => {
+  it('returns the highest-priority nearby interaction', () => {
+    expect(getIndoorInteractionPrompt({ activeRoom: { id: 'a' }, nearExit: true }).key).toBe('room-return')
+    expect(getIndoorInteractionPrompt({ nearExit: true, buildingName: 'Library' }).key).toBe('exit')
+    expect(getIndoorInteractionPrompt({ nearStairs: true, stairTarget: 3 }).key).toBe('stairs-3')
+    expect(getIndoorInteractionPrompt({ nearRoom: { roomId: 'room-a' } }).key).toBe('room-room-a')
+    expect(getIndoorInteractionPrompt()).toBeNull()
+  })
+})
 
 describe('stair traversal endpoints', () => {
   const path = { start: { x: 4, z: -2 }, end: { x: 4, z: 2 } }

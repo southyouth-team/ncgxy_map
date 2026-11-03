@@ -112,7 +112,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
     const spawn = campus.userData.playerSpawn || fallbackSpawn
     cameraRig.player.set(playerSprite?.position.x ?? spawn.x, 1.7, playerSprite?.position.z ?? spawn.z)
-    if (isRpgSample) cameraRig.focusBounds(campus.userData.sampleBounds.width, campus.userData.sampleBounds.depth)
+    if (isRpgSample && !options.deferInitialFocus) cameraRig.focusBounds(campus.userData.sampleBounds.width, campus.userData.sampleBounds.depth)
     // 从像素地图进入建筑时，先将室外角色恢复到离开前的地图坐标；
     // enterIndoorPrototype 会快照该位置，退出室内后即可回到原地。
     if (Number.isFinite(options.initialPlayerPosition?.x) && Number.isFinite(options.initialPlayerPosition?.z)) {
@@ -559,7 +559,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const safeSpawn = collisionWorld.resolvePosition(cameraRig.player)
     cameraRig.player.x = safeSpawn.x
     cameraRig.player.z = safeSpawn.z
-    cameraRig?.focusBounds(groundWidth, groundDepth, centerX, centerZ)
+    cameraRig?.focusBounds(groundWidth, groundDepth, centerX, centerZ, { immediate: true })
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
     else if (cameraRig.mode === 'thirdPerson') cameraRig.updateThirdPersonDesired()
     return true

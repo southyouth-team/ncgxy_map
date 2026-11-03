@@ -21,6 +21,8 @@ let dragState = null
 let dpr = 1
 let baseMapCanvas = null
 const selectedTitle = computed(() => selected.value?.label || selected.value?.name || '校园')
+const player = ref({ x: 640, y: 340, direction: 'down' })
+const PLAYER_SPEED = 3.2
 const palette = {
   grass: '#a9c78b', grassLight: '#b8d49a', grassDark: '#91b477',
   roadEdge: '#87977b', road: '#d9c99f', roadMark: '#eee3c7',
@@ -407,6 +409,7 @@ function render() {
   ctx.scale(scale, scale)
   ctx.imageSmoothingEnabled = false
   if (baseMapCanvas) ctx.drawImage(baseMapCanvas, 0, 0)
+  drawExplorerCharacter(ctx, player.value)
   for (const [target, color, lineWidth] of [[hovered.value, '#fff8cf', 1.5], [selected.value, '#f6d66e', 2.5]]) {
     if (target?.type !== 'building') continue
     const item = CAMPUS_BUILDING_FOOTPRINTS.find(b => b.id === target.id)
@@ -432,6 +435,75 @@ function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 1.5)
   canvas.value.width = Math.round(rect.width * dpr)
   canvas.value.height = Math.round(rect.height * dpr)
+  render()
+}
+function drawExplorerCharacter(ctx, actor) {
+  const { x, y, direction } = actor
+  ctx.save()
+  ctx.translate(x, y)
+  // 像素角色采用独立阴影、身体和朝向细节绘制，保持缩放时的像素边缘。
+  ctx.fillStyle = 'rgba(39, 55, 43, .28)'
+  ctx.fillRect(-6, 5, 13, 4)
+  ctx.fillStyle = '#344c43'
+  ctx.fillRect(-4, 1, 3, 5)
+  ctx.fillRect(2, 1, 3, 5)
+  ctx.fillStyle = '#e8c59b'
+  ctx.fillRect(-5, -7, 10, 8)
+  ctx.fillStyle = '#4f6f86'
+  ctx.fillRect(-6, -1, 12, 7)
+  ctx.fillStyle = '#d9e4d9'
+  ctx.fillRect(-5, 0, 10, 2)
+  ctx.fillStyle = '#bd815d'
+  ctx.fillRect(-5, -12, 10, 6)
+  ctx.fillStyle = '#e5ad7b'
+  ctx.fillRect(-4, -14, 8, 4)
+  ctx.fillStyle = '#344a40'
+  ctx.fillRect(-3, -10, 2, 2)
+  ctx.fillRect(2, -10, 2, 2)
+  ctx.fillStyle = '#f2d47d'
+  ctx.fillRect(-2, -15, 5, 2)
+  if (direction === 'left') ctx.fillRect(-6, -9, 2, 3)
+  if (direction === 'right') ctx.fillRect(5, -9, 2, 3)
+  if (direction === 'up') {
+    ctx.fillStyle = '#bd815d'
+    ctx.fillRect(-4, -13, 8, 2)
+  }
+  ctx.restore()
+}
+function canPlayerMoveTo(x, y) {
+  if (x < 8 || x > 992 || y < 8 || y > 492) return false
+  for (const building of CAMPUS_BUILDING_FOOTPRINTS) {
+    const [left, top, right, bottom] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
+    const blocked = building.polygon
+      ? pointInCampusPolygon([x, y], building.polygon)
+      : x >= left - 2 && x <= right + 2 && y >= top - 2 && y <= bottom + 2
+    if (blocked) return false
+  }
+  return !CAMPUS_AREAS.some(area =>
+    area.type === 'water' &&
+    pointInCampusPolygon([x, y], area.polygon) &&
+    !(area.holes || []).some(hole => pointInCampusPolygon([x, y], hole))
+  )
+}
+function onExplorerKeydown(event) {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.repeat && !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(event.key)) return
+  const key = event.key.toLowerCase()
+  const directions = {
+    arrowup: [0, -1, 'up'], w: [0, -1, 'up'],
+    arrowdown: [0, 1, 'down'], s: [0, 1, 'down'],
+    arrowleft: [-1, 0, 'left'], a: [-1, 0, 'left'],
+    arrowright: [1, 0, 'right'], d: [1, 0, 'right'],
+  }
+  const direction = directions[key]
+  if (!direction) return
+  event.preventDefault()
+  const [dx, dy, facing] = direction
+  const nextX = player.value.x + dx * PLAYER_SPEED
+  const nextY = player.value.y + dy * PLAYER_SPEED
+  player.value.direction = facing
+  if (canPlayerMoveTo(nextX, player.value.y)) player.value.x = nextX
+  if (canPlayerMoveTo(player.value.x, nextY)) player.value.y = nextY
+  selected.value = null
   render()
 }
 function pointerPosition(event) {
@@ -521,11 +593,13 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(resize)
   if (canvas.value) resizeObserver.observe(canvas.value)
   window.addEventListener('resize', resize)
+  window.addEventListener('keydown', onExplorerKeydown)
   resize()
 })
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   window.removeEventListener('resize', resize)
+  window.removeEventListener('keydown', onExplorerKeydown)
 })
 </script>
 
@@ -537,7 +611,7 @@ onBeforeUnmount(() => {
         <div><strong>南昌工学院</strong><span>NANCHANG INSTITUTE OF TECHNOLOGY</span></div>
       </div>
       <div class="pixel-header-actions">
-        <div class="pixel-header-tag"><i></i> 像素校园地图</div>
+        <div class="pixel-header-tag"><i></i> RPG 校园探索 · WASD / 方向键移动</div>
         <button class="pixel-showcase-link" @click="openShowcase">进入 3D 场景预览 <span>↗</span></button>
       </div>
     </header>
@@ -567,6 +641,6 @@ onBeforeUnmount(() => {
       <span>{{ selected.type === 'building' ? '建筑轮廓' : selected.type === 'water' ? '湖泊水域' : selected.type === 'sports' ? '运动场地' : '校园区域' }}</span>
       <em>位置数据：{{ selected.confidence === 'low' ? '待核验' : '近似标注' }}</em>
     </aside>
-    <footer class="pixel-footer"><span>NCGXY · CAMPUS MAP</span><span>平面像素地图 · 拖动浏览 / 滚轮缩放 / 点击查看</span></footer>
+    <footer class="pixel-footer"><span>NCGXY · CAMPUS MAP</span><span>WASD / 方向键移动角色 · 拖动浏览 / 滚轮缩放 / 点击查看</span></footer>
   </section>
 </template>

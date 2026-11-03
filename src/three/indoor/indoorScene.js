@@ -25,7 +25,7 @@ export function validateIndoorFloor(floor) {
   const stair = floor.stairPoint
   if (stair !== undefined && (!stair || !Number.isFinite(stair.x) || !Number.isFinite(stair.z) ||
     Math.abs(stair.x) > floor.width / 2 - 1 || Math.abs(stair.z) > floor.depth / 2 - 2.2 ||
-    !['south', 'west', 'north', 'east'].includes(stair.direction || 'south'))) errors.push('stairPoint 必须位于楼层范围内、预留楼梯空间且方向有效')
+    !['south', 'west', 'north', 'east'].includes(stair.direction || 'south'))) errors.push('stairPoint 必须位于楼层范围内并预留楼梯空间，且方向有效')
   for (const door of Array.isArray(floor.doors) ? floor.doors : []) {
     if (!['north', 'south', 'east', 'west'].includes(door.wall)) errors.push('门洞 wall 必须是 north/south/east/west')
     const wallLength = ['north', 'south'].includes(door.wall) ? floor.width : floor.depth
@@ -268,34 +268,34 @@ export function createIndoorFloor(THREE, floor) {
     })
   }
 
-  // 楼梯由共享的 stairPoint 驱动；direction 控制视觉朝向，楼层切换仍由楼梯交互触发。
+  // 楼梯由共享的 stairPoint 驱动；方向变化直接变换构件坐标，保持台阶为楼层组直接子节点。
   const stairPoint = floor.stairPoint || { x: 9, z: 0, direction: 'south' }
   const stairDirections = { south: 0, west: -Math.PI / 2, north: Math.PI, east: Math.PI / 2 }
   const stairRotation = stairDirections[stairPoint.direction || 'south'] ?? 0
-  const stairGroup = new THREE.Group()
-  stairGroup.name = 'indoor-staircase'
-  stairGroup.position.set(stairPoint.x, 0, stairPoint.z)
-  stairGroup.rotation.y = stairRotation
-  group.add(stairGroup)
+  const rotateStairPoint = (x, z) => ({
+    x: stairPoint.x + Math.cos(stairRotation) * x + Math.sin(stairRotation) * z,
+    z: stairPoint.z - Math.sin(stairRotation) * x + Math.cos(stairRotation) * z,
+  })
   const stairMaterial = new THREE.MeshStandardMaterial({ color: '#9a7958', roughness: 1 })
   const stairCount = 12
   const stairRise = 4.2 / stairCount
   const stairDepth = 4.2 / stairCount
+  const rotated = Math.abs(Math.sin(stairRotation)) > 0.5
   for (let index = 0; index < stairCount; index += 1) {
-    const z = -2.1 + (index + 0.5) * stairDepth
-    const step = addBox(THREE, stairGroup, 'indoor-stair-step', 0, index * stairRise, z, 1.7, stairRise, stairDepth, stairMaterial)
+    const localZ = -2.1 + (index + 0.5) * stairDepth
+    const point = rotateStairPoint(0, localZ)
+    const step = addBox(THREE, group, 'indoor-stair-step', point.x, index * stairRise, point.z,
+      rotated ? stairDepth : 1.7, stairRise, rotated ? 1.7 : stairDepth, stairMaterial)
     if (index === 5) step.userData.interactionData = createIndoorInteractionData({
       id: `stair-${floor.level}`, name: '楼层楼梯', objectType: 'stairs', interactionType: 'navigate', action: 'change-floor',
       operationHint: '靠近楼梯后按 E 切换楼层', description: '连接相邻楼层；楼层切换由楼梯区域近距离 E 键触发',
     })
   }
   const railMaterial = new THREE.MeshStandardMaterial({ color: '#6d5842', roughness: 1 })
-  const rotateStairPoint = (x, z) => ({
-    x: stairPoint.x + Math.cos(stairRotation) * x + Math.sin(stairRotation) * z,
-    z: stairPoint.z - Math.sin(stairRotation) * x + Math.cos(stairRotation) * z,
-  })
   for (const offset of [-0.95, 0.95]) {
-    addBox(THREE, stairGroup, 'indoor-stair-rail', offset, 0.25, 0, 0.12, 4.2, 4.4, railMaterial)
+    const railCenter = rotateStairPoint(offset, 0)
+    addBox(THREE, group, 'indoor-stair-rail', railCenter.x, 0.25, railCenter.z,
+      rotated ? 4.4 : 0.12, 4.2, rotated ? 0.12 : 4.4, railMaterial)
     const railCorners = [
       rotateStairPoint(offset - 0.06, -2.2), rotateStairPoint(offset + 0.06, -2.2),
       rotateStairPoint(offset - 0.06, 2.2), rotateStairPoint(offset + 0.06, 2.2),

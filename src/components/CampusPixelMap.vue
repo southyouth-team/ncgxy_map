@@ -14,7 +14,7 @@ import {
   circleIntersectsCampusPolygon,
 } from '../data/campus/campusLayout.js'
 import { getCampusSpatialLayers } from '../data/campus/campusGeoJSON.js'
-import { getReferenceImageContainRect } from '../data/campus/campusReferenceImage.js'
+import { getReferenceImageContainRect, hasMatchingReferenceAspectRatio } from '../data/campus/campusReferenceImage.js'
 
 // Canvas 2D 与 Three.js 共用同一组从统一 FeatureCollection 派生的空间图层。
 const { boundary: CAMPUS_BOUNDARY, gates: CAMPUS_GATES, areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS } = getCampusSpatialLayers()
@@ -42,9 +42,12 @@ const referenceMapDimensions = ref({ width: 0, height: 0 })
 const referenceMapAspectMismatch = computed(() => {
   const { width, height } = referenceMapDimensions.value
   if (!width || !height) return false
-  const actualRatio = width / height
-  const expectedRatio = CAMPUS_PLAN_REFERENCE.image.width / CAMPUS_PLAN_REFERENCE.image.height
-  return Math.abs(actualRatio - expectedRatio) / expectedRatio > 0.005
+  return !hasMatchingReferenceAspectRatio(
+    width,
+    height,
+    CAMPUS_PLAN_REFERENCE.image.width,
+    CAMPUS_PLAN_REFERENCE.image.height,
+  )
 })
 referenceMapImage.onload = () => {
   referenceMapDimensions.value = {
@@ -342,7 +345,7 @@ function buildBaseMap() {
   ctx.imageSmoothingEnabled = false
   drawGround(ctx)
   // 近似矢量层可独立开关，便于直接与原始参考图比对。
-  if (showVectorOverlay.value) {
+  if (showVectorOverlay.value && !referenceMapAspectMismatch.value) {
     ctx.save()
     // 允许在原图坐标系内微调矢量层，解决参考图裁切/缩放差异造成的整体偏移。
     ctx.translate(500 + vectorAlignment.value.x, 250 + vectorAlignment.value.y)
@@ -402,7 +405,7 @@ function render() {
   ctx.translate(500 + vectorAlignment.value.x, 250 + vectorAlignment.value.y)
   ctx.scale(vectorAlignment.value.scale, vectorAlignment.value.scale)
   ctx.translate(-500, -250)
-  if (showBuildingFootprints.value) CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
+  if (showBuildingFootprints.value && !referenceMapAspectMismatch.value) CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
     const bounds = getCampusFootprintBounds(building)
     if (!bounds || bounds[2] < visibleBounds.left || bounds[0] > visibleBounds.right
       || bounds[3] < visibleBounds.top || bounds[1] > visibleBounds.bottom) return
@@ -626,6 +629,8 @@ function pointerPosition(event) {
   return { x: event.clientX - rect.left, y: event.clientY - rect.top }
 }
 function hitTest(screenPoint) {
+  // 参考图比例变化后，旧图像像素坐标不再能保证命中位置正确；校准前暂停地点命中。
+  if (referenceMapAspectMismatch.value) return null
   const { scale, x, y } = mapToScreen()
   const screenX = (screenPoint.x - x) / scale
   const screenY = (screenPoint.y - y) / scale
@@ -763,12 +768,12 @@ onBeforeUnmount(() => {
     <div style="position:absolute;top:18px;left:18px;z-index:3;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(250,248,230,.92);border:1px solid rgba(76,96,70,.22);border-radius:7px;box-shadow:0 3px 12px rgba(48,65,48,.12);pointer-events:none;font-size:12px;color:#405648;">
       <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b9a60;box-shadow:0 0 0 3px rgba(107,154,96,.16);"></span>
       <strong>平面图模式</strong>
-      <span style="opacity:.7;">{{ referenceMapReady ? `原始平面图 ${referenceMapDimensions.width}×${referenceMapDimensions.height}` : '原始平面图加载中 / 不可用' }}{{ referenceMapAspectMismatch ? ' · 原图宽高比与坐标基准不一致，需重新校准' : '' }} · 建筑候选尚未逐栋校准 · 矢量层仅供位置比对</span>
+      <span style="opacity:.7;">{{ referenceMapReady ? `原始平面图 ${referenceMapDimensions.width}×${referenceMapDimensions.height}` : '原始平面图加载中 / 不可用' }}{{ referenceMapAspectMismatch ? ' · 原图宽高比与坐标基准不一致：矢量叠加、建筑候选和地点点击已暂停，需重新校准' : '' }} · 建筑候选尚未逐栋校准 · 矢量层仅供位置比对</span>
     </div>
     <div class="pixel-map-controls">
       <button :class="{ active: showReferenceImage }" @click="showReferenceImage = !showReferenceImage; baseMapCanvas = null; render()">原图</button>
-      <button :class="{ active: showVectorOverlay }" @click="showVectorOverlay = !showVectorOverlay; baseMapCanvas = null; render()">道路/水域</button>
-      <button :class="{ active: showBuildingFootprints }" @click="showBuildingFootprints = !showBuildingFootprints; render()">建筑候选（未校准）</button>
+      <button :disabled="referenceMapAspectMismatch" :class="{ active: showVectorOverlay }" @click="showVectorOverlay = !showVectorOverlay; baseMapCanvas = null; render()">道路/水域</button>
+      <button :disabled="referenceMapAspectMismatch" :class="{ active: showBuildingFootprints }" @click="showBuildingFootprints = !showBuildingFootprints; render()">建筑候选（未校准）</button>
       <label style="display:flex;align-items:center;gap:6px;padding:0 8px;font-size:12px;color:#405648;white-space:nowrap;">原图透明度 <input v-model.number="referenceOpacity" type="range" min="0.15" max="1" step="0.05" style="width:88px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" /> {{ Math.round(referenceOpacity * 100) }}%</label>
       <label style="display:flex;align-items:center;gap:5px;padding:0 6px;font-size:12px;color:#405648;white-space:nowrap;">矢量 X <input v-model.number="vectorAlignment.x" type="range" min="-80" max="80" step="1" style="width:64px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" /></label>
       <label style="display:flex;align-items:center;gap:5px;padding:0 6px;font-size:12px;color:#405648;white-space:nowrap;">Y <input v-model.number="vectorAlignment.y" type="range" min="-80" max="80" step="1" style="width:64px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" /></label>

@@ -18,3 +18,23 @@ export function getReferenceImageContainRect(imageWidth, imageHeight, canvasWidt
     scale,
   }
 }
+
+
+/**
+ * 判断参考图是否仍与校园数据集的图像坐标基准兼容。
+ * 宽高比不一致通常意味着裁切或转码画布变化；此时不能假设矢量坐标仍可直接叠加。
+ */
+export function hasMatchingReferenceAspectRatio(
+  imageWidth,
+  imageHeight,
+  referenceWidth = 1000,
+  referenceHeight = 500,
+  tolerance = 0.005,
+) {
+  const values = [imageWidth, imageHeight, referenceWidth, referenceHeight, tolerance].map(Number)
+  if (!values.every(Number.isFinite) || values.some(value => value <= 0) || tolerance >= 1) return false
+  const [sourceWidth, sourceHeight, targetWidth, targetHeight, allowedDeviation] = values
+  const sourceRatio = sourceWidth / sourceHeight
+  const targetRatio = targetWidth / targetHeight
+  return Math.abs(sourceRatio - targetRatio) / targetRatio <= allowedDeviation
+}

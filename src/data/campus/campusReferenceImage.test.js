@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getReferenceImageContainRect } from './campusReferenceImage.js'
+import { getReferenceImageContainRect, hasMatchingReferenceAspectRatio } from './campusReferenceImage.js'
 
 describe('reference image contain placement', () => {
   it('keeps a matching 2:1 image at the full campus canvas size', () => {
@@ -20,5 +20,22 @@ describe('reference image contain placement', () => {
   it('returns null for invalid dimensions', () => {
     expect(getReferenceImageContainRect(0, 800)).toBeNull()
     expect(getReferenceImageContainRect(100, Number.NaN)).toBeNull()
+  })
+})
+
+
+describe('reference image coordinate compatibility', () => {
+  it('accepts matching source and dataset aspect ratios', () => {
+    expect(hasMatchingReferenceAspectRatio(1600, 800)).toBe(true)
+    expect(hasMatchingReferenceAspectRatio(640, 320)).toBe(true)
+  })
+
+  it('rejects a changed aspect ratio that requires coordinate recalibration', () => {
+    expect(hasMatchingReferenceAspectRatio(1200, 900)).toBe(false)
+  })
+
+  it('rejects invalid dimensions and tolerances', () => {
+    expect(hasMatchingReferenceAspectRatio(0, 800)).toBe(false)
+    expect(hasMatchingReferenceAspectRatio(1000, 500, 1000, 500, -1)).toBe(false)
   })
 })

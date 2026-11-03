@@ -477,6 +477,11 @@ function onWheel(event) {
   }
   render()
 }
+function openShowcase() {
+  const url = new URL(window.location.href)
+  url.searchParams.set('view', 'showcase')
+  window.location.assign(url)
+}
 function resetView() { zoom.value = 1; mapOffset.value = { x: 0, y: 0 }; render() }
 function zoomBy(value) { zoom.value = Math.max(.72, Math.min(3.2, zoom.value * value)); render() }
 onMounted(() => {
@@ -498,7 +503,10 @@ onBeforeUnmount(() => {
         <div class="pixel-emblem">NC</div>
         <div><strong>南昌工学院</strong><span>NANCHANG INSTITUTE OF TECHNOLOGY</span></div>
       </div>
-      <div class="pixel-header-tag"><i></i> 像素校园地图</div>
+      <div class="pixel-header-actions">
+        <div class="pixel-header-tag"><i></i> 像素校园地图</div>
+        <button class="pixel-showcase-link" @click="openShowcase">进入 3D 场景预览 <span>↗</span></button>
+      </div>
     </header>
     <canvas
       ref="canvas"

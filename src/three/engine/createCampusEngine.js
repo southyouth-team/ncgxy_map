@@ -39,6 +39,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let selectedIndoorObject = null
   let loadedSceneData = null
   let rpgPreviewGroup = null
+  let loadedBuildingModels = []
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
   let pointerStart = null
@@ -105,8 +106,10 @@ export function createCampusEngine(container, callbacks = {}) {
       }
     }
     const buildingObstacles = []
+    const cameraObstacleRoots = []
     campus.traverse((object) => {
       if (!(object.userData?.buildingId || object.userData?.objectType === 'building')) return
+      cameraObstacleRoots.push(object)
       const bounds = new THREE.Box3().setFromObject(object)
       if (bounds.isEmpty()) return
       buildingObstacles.push({
@@ -116,11 +119,14 @@ export function createCampusEngine(container, callbacks = {}) {
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
     outdoorCollisionWorld = collisionWorld
+    cameraRig.setObstructionObjects(cameraObstacleRoots)
     // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
     if (!campus.userData.isGISDriven) {
       loadCampusBuildingModels(scene)
         .then((result) => {
-          for (const model of result.models || []) {
+          loadedBuildingModels = result.models || []
+          for (const model of loadedBuildingModels) {
+            model.userData.objectType = 'building'
             model.updateMatrixWorld(true)
             const bounds = new THREE.Box3().setFromObject(model)
             if (!bounds.isEmpty()) outdoorCollisionWorld.addObstacle({
@@ -128,6 +134,7 @@ export function createCampusEngine(container, callbacks = {}) {
               minZ: bounds.min.z, maxZ: bounds.max.z,
             })
           }
+          cameraRig?.setObstructionObjects([...cameraObstacleRoots, ...loadedBuildingModels])
           callbacks.onAssetsLoaded?.(result)
         })
         .catch((error) => callbacks.onAssetError?.(error))
@@ -174,6 +181,10 @@ export function createCampusEngine(container, callbacks = {}) {
     disposeObjectGroup(rpgPreviewGroup)
     rpgPreviewGroup = null
     if (campus) campus.visible = true
+    cameraRig?.setObstructionObjects([
+      ...(campus ? (() => { const roots = []; campus.traverse(object => { if (object.userData?.buildingId || object.userData?.objectType === 'building') roots.push(object) }); return roots })() : []),
+      ...loadedBuildingModels,
+    ])
     if (outdoorCollisionWorld && !indoorGroup) {
       collisionWorld = outdoorCollisionWorld
       if (input) input.collisionWorld = collisionWorld
@@ -393,6 +404,7 @@ export function createCampusEngine(container, callbacks = {}) {
     }
 
     scene.add(rpgPreviewGroup)
+    cameraRig?.setObstructionObjects(rpgPreviewGroup.children.filter(object => object.userData?.objectType === 'building'))
     if (campus) campus.visible = false
     // 编辑器实时预览使用当前文档的地面边界和建筑碰撞体，不能沿用旧校园场景的碰撞数据。
     const previewBounds = {

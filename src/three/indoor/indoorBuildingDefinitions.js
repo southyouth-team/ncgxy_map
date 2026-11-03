@@ -179,6 +179,12 @@ export function expandIndoorBuilding(definition, { side, amount = 2 } = {}) {
     type: 'rect',
     source: 'legacy-layout',
     bounds: { minX: -next.footprintSize.width / 2, maxX: next.footprintSize.width / 2, minZ: -next.footprintSize.depth / 2, maxZ: next.footprintSize.depth / 2 },
+    polygon: [
+      { x: -next.footprintSize.width / 2, z: -next.footprintSize.depth / 2 },
+      { x: next.footprintSize.width / 2, z: -next.footprintSize.depth / 2 },
+      { x: next.footprintSize.width / 2, z: next.footprintSize.depth / 2 },
+      { x: -next.footprintSize.width / 2, z: next.footprintSize.depth / 2 },
+    ],
     expansion: { north: 0, south: 0, east: 0, west: 0 },
   }
   const expansion = { north: 0, south: 0, east: 0, west: 0, ...(footprint.expansion || {}) }

@@ -513,17 +513,33 @@ function drawExplorerCharacter(ctx, actor) {
 }
 function canPlayerMoveTo(x, y) {
   if (x < 8 || x > 992 || y < 8 || y > 492) return false
+
+  // 角色不是一个无面积的点：用五点采样近似角色脚底碰撞体，减少贴墙穿模。
+  const radiusX = 4
+  const radiusY = 3
+  const samples = [
+    [x, y],
+    [x - radiusX, y],
+    [x + radiusX, y],
+    [x, y - radiusY],
+    [x, y + radiusY],
+  ]
+
   for (const building of CAMPUS_BUILDING_FOOTPRINTS) {
     const [left, top, right, bottom] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
     const blocked = building.polygon
-      ? pointInCampusPolygon([x, y], building.polygon)
-      : x >= left - 2 && x <= right + 2 && y >= top - 2 && y <= bottom + 2
+      ? samples.some(point => pointInCampusPolygon(point, building.polygon))
+      : x + radiusX >= left - 2 && x - radiusX <= right + 2
+        && y + radiusY >= top - 2 && y - radiusY <= bottom + 2
     if (blocked) return false
   }
+
   return !CAMPUS_AREAS.some(area =>
     area.type === 'water' &&
-    pointInCampusPolygon([x, y], area.polygon) &&
-    !(area.holes || []).some(hole => pointInCampusPolygon([x, y], hole))
+    samples.some(point =>
+      pointInCampusPolygon(point, area.polygon) &&
+      !(area.holes || []).some(hole => pointInCampusPolygon(point, hole))
+    )
   )
 }
 function onExplorerKeydown(event) {

@@ -33,6 +33,7 @@ export function createCampusMaterials(THREE) {
   const grassTexture = makePixelTexture('#82a95f', ['#719653', '#9bbc70', '#668c50', '#b0c77a'], 13)
   const pathTexture = makePixelTexture('#c4a477', ['#b18c61', '#d8bd91', '#a9845e', '#e0c99d'], 29)
   const roofTexture = makePixelTexture('#a85f4e', ['#914d43', '#c4775c', '#d18a68'], 47)
+  const waterTexture = makePixelTexture('#68b9b5', ['#7cc8c0', '#4f9ea2', '#9bd6c8', '#5fa9ad'], 103)
   const wallTexture = makePixelTexture('#e7d2a5', ['#d8bd8c', '#f1dfb8', '#c9ad7d'], 61)
   const woodTexture = makePixelTexture('#8c6848', ['#725239', '#a17a54', '#b28a5d'], 79)
   return {
@@ -40,7 +41,7 @@ export function createCampusMaterials(THREE) {
     grassPlain: material('#87a966'),
     path: material('#ffffff', { map: pathTexture }),
     pathEdge: material('#927a59'),
-    water: material('#68b9b5', { roughness: 0.32, metalness: 0.02 }),
+    water: material('#ffffff', { map: waterTexture, roughness: 0.38, metalness: 0 }),
     waterShallow: material('#91d0c0', { roughness: 0.38 }),
     waterEdge: material('#e8d7a7'),
     wall: material('#ffffff', { map: wallTexture }),

@@ -122,6 +122,35 @@ export function validateIndoorBuilding(building) {
 }
 
 /**
+ * 将建筑根节点局部几何边界按根节点缩放转换为室内生成坐标。
+ * 返回的 bounds 保留非居中原点；entrancePoint 则平移到生成器使用的中心原点。
+ */
+export function transformIndoorFootprint(bounds, scale = { x: 1, z: 1 }, entrancePoint = null) {
+  const values = [bounds?.minX, bounds?.maxX, bounds?.minZ, bounds?.maxZ, scale?.x, scale?.z]
+  if (!values.every(Number.isFinite) || bounds.maxX <= bounds.minX || bounds.maxZ <= bounds.minZ ||
+      scale.x === 0 || scale.z === 0) {
+    throw new TypeError('Invalid indoor footprint transform')
+  }
+  const xValues = [bounds.minX * scale.x, bounds.maxX * scale.x]
+  const zValues = [bounds.minZ * scale.z, bounds.maxZ * scale.z]
+  const transformedBounds = {
+    minX: Math.min(...xValues), maxX: Math.max(...xValues),
+    minZ: Math.min(...zValues), maxZ: Math.max(...zValues),
+  }
+  let transformedEntrance = null
+  if (entrancePoint !== null) {
+    if (!Number.isFinite(entrancePoint?.x) || !Number.isFinite(entrancePoint?.z)) {
+      throw new TypeError('Invalid indoor entrance transform')
+    }
+    transformedEntrance = {
+      x: entrancePoint.x * scale.x - (transformedBounds.minX + transformedBounds.maxX) / 2,
+      z: entrancePoint.z * scale.z - (transformedBounds.minZ + transformedBounds.maxZ) / 2,
+    }
+  }
+  return { bounds: transformedBounds, entrancePoint: transformedEntrance }
+}
+
+/**
  * 从校园建筑轮廓创建可编辑室内空间。
  * footprint 仅提供建筑占地边界；房间布局是明确标注的程序化初始模板，不代表实测室内图。
  */

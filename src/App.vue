@@ -33,6 +33,7 @@ const indoorEditorOpen = ref(false)
 const indoorDefinition = ref(null)
 const indoorEditorMessage = ref('')
 const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
+const indoorBuildingId = computed(() => indoorDefinition.value?.id || selectedBuildingId.value)
 const initialView = new URLSearchParams(window.location.search).get('view')
 const isRpgSample = initialView === 'showcase'
 const showEditor = ref(initialView === 'editor' || initialView === 'showcase')
@@ -399,7 +400,7 @@ onBeforeUnmount(() => {
       <input v-model.number="indoorFloorCount" type="number" min="1" max="30" aria-label="生成楼层数">
       <button :disabled="indoorEntryBusy" @click="enterSelectedBuilding">{{ indoorEntryBusy ? '生成中…' : '生成室内并进入' }}</button>
     </div>
-    <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }}F / {{ indoorFloors.length }} 层</span><button @click="indoorEditorOpen = !indoorEditorOpen">{{ indoorEditorOpen ? "关闭编辑" : "编辑室内" }}</button></div>
+    <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }}F / {{ indoorFloors.length }} 层</span><select aria-label="切换楼层" :value="indoorFloor" @change="engine?.switchIndoorFloor(Number($event.target.value))"><option v-for="floor in indoorFloors" :key="floor" :value="floor">{{ floor }}F</option></select><button @click="indoorEditorOpen = !indoorEditorOpen">{{ indoorEditorOpen ? "关闭编辑" : "编辑室内" }}</button></div>
     <aside v-if="indoorPrototypeActive && indoorEditorOpen" class="indoor-layout-editor">
       <header><strong>室内空间编辑器</strong><small>建筑 {{ indoorBuildingId }} · {{ indoorFloor }}F</small></header>
       <div class="indoor-editor-actions"><button @click="addIndoorFloor">＋ 增加楼层</button><button :disabled="indoorFloors.length <= 1" @click="removeIndoorFloor">删除当前层</button><button @click="addIndoorRoom">＋ 添加房间</button></div>

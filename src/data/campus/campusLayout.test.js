@@ -20,6 +20,10 @@ import {
 describe('南昌工学院像素校园主空间底图', () => {
   it('使用 2026 校园平面图的图像坐标基准', () => {
     expect(CAMPUS_PLAN_REFERENCE.image).toMatchObject({ width: 1000, height: 500 })
+    expect(CAMPUS_PLAN_REFERENCE).toMatchObject({
+      publishedAt: '2026-08-28',
+      sourcePageUrl: 'https://app.gaokaozhitongche.com/newsguide/h/Rg1KJO0N',
+    })
     const center = mapPixelToWorld(
       (CAMPUS_PLAN_REFERENCE.mapBounds.left + CAMPUS_PLAN_REFERENCE.mapBounds.right) / 2,
       (CAMPUS_PLAN_REFERENCE.mapBounds.top + CAMPUS_PLAN_REFERENCE.mapBounds.bottom) / 2,

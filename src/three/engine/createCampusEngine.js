@@ -4,7 +4,7 @@ import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
+import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -618,8 +618,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       pendingIndoorFloorTarget = null
       return false
     }
-    const distance = Math.hypot(cameraRig.player.x - traversal.entry.x, cameraRig.player.z - traversal.entry.z)
-    if (distance <= 0.85) {
+    if (isAtStairLanding(cameraRig.player, traversal.entry)) {
       const started = beginStairTransition(plan.transitions[0].toLevel)
       if (!started) pendingIndoorFloorTarget = null
       return started
@@ -875,7 +874,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const nextTransition = plan?.transitions?.[0]
       const traversal = getStairTraversalPoints(indoorGroup.userData.stairPath, nextTransition?.direction)
       if (!nextTransition || !traversal) pendingIndoorFloorTarget = null
-      else if (Math.hypot(cameraRig.player.x - traversal.entry.x, cameraRig.player.z - traversal.entry.z) <= 0.85) {
+      else if (isAtStairLanding(cameraRig.player, traversal.entry)) {
         input?.setNavigationPath(null)
         navigationWasActive = false
         clearNavigationVisuals()
@@ -1349,8 +1348,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!direction) return false
     const traversal = getStairTraversalPoints(indoorGroup.userData.stairPath, direction)
     if (!traversal) return false
-    const entryDistance = Math.hypot(cameraRig.player.x - traversal.entry.x, cameraRig.player.z - traversal.entry.z)
-    if (entryDistance > 1) return false
+    if (!isAtStairLanding(cameraRig.player, traversal.entry)) return false
     const fromY = cameraRig.player.y
     const horizontalDistance = Math.hypot(traversal.exit.x - traversal.entry.x, traversal.exit.z - traversal.entry.z)
     const travelDistance = Math.hypot(horizontalDistance, indoorBuilding.floorHeight)

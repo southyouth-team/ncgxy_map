@@ -25,6 +25,7 @@ const nearIndoorStairs = ref(false)
 const nearIndoorRoom = ref(null)
 const activeIndoorRoom = ref(null)
 const initialView = new URLSearchParams(window.location.search).get('view')
+const isRpgSample = initialView === 'showcase'
 const showEditor = ref(initialView === 'editor' || initialView === 'showcase')
 const editorViewMode = ref(initialView === 'showcase' ? '3d' : '2d')
 const selectedObject = ref(null)
@@ -195,7 +196,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    })
+    }, { sceneType: isRpgSample ? 'rpg-sample' : 'campus' })
     await engine.init()
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'
@@ -227,7 +228,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="showcase-actions">
-        <span class="topbar-status"><span class="status-dot"></span> 等距 2.5D 场景原型</span>
+        <span class="topbar-status"><span class="status-dot"></span> 宝可梦风格 · 2.5D 校园样板</span>
         <button class="showcase-back" @click="closeEditor">返回 2D 地图</button>
       </div>
     </header>
@@ -235,7 +236,7 @@ onBeforeUnmount(() => {
     <section class="intro-card">
       <div class="eyebrow">CAMPUS EXPLORER / 01</div>
       <h1>探索校园<br /><span>从这里开始</span></h1>
-      <p>等距像素校园 · 自由浏览校园空间，切换视角进行漫游。</p>
+      <p>经典 RPG 斜俯视像素校园 · 教学楼、石板路、树木与角色探索样板。</p>
       <div class="intro-rule"><span></span></div>
       <div class="intro-foot">INTERACTIVE CAMPUS MAP</div>
     </section>
@@ -304,7 +305,7 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="loading-screen">
       <div class="loader"></div>
-      <div>正在加载南昌工学院像素校园</div>
+      <div>正在加载 2.5D 校园样板</div>
       <span>INITIALIZING SCENE</span>
     </div>
     <aside v-if="selectedObject && !showEditor" style="position:absolute;right:24px;top:110px;z-index:12;min-width:190px;padding:14px 16px;background:rgba(255,255,255,.94);border:1px solid #d7ded7;border-radius:6px;color:#34443b;box-shadow:0 8px 24px rgba(30,50,40,.12)">

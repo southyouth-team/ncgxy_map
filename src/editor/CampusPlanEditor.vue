@@ -117,6 +117,7 @@ const areas = ref(CAMPUS_AREAS.map((item) => ({
 const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item.points.map((point) => [...point]) })))
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 const multiSelection = ref([])
+const boxSelection = ref(null)
 const selectionCount = computed(() => multiSelection.value.length || (selected.value.id ? 1 : 0))
 function toggleMultiSelection(type, id, event) {
   if (!event?.shiftKey) { multiSelection.value = []; selected.value = { type, id }; return false }
@@ -624,6 +625,41 @@ function point(event) {
   const local = p.matrixTransform(svg.getScreenCTM().inverse())
   return { x: local.x, y: local.y }
 }
+function startBoxSelection(event) {
+  if (event.button !== 0 || tool.value !== 'select' || spacePressed.value || calibrationMode.value || event.target.closest?.('.map-feature')) return
+  const start = point(event)
+  boxSelection.value = { start, current: start, pointerId: event.pointerId }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+  event.preventDefault()
+  event.stopPropagation()
+}
+function updateBoxSelection(event) {
+  if (!boxSelection.value) return
+  boxSelection.value.current = point(event)
+}
+function finishBoxSelection() {
+  if (!boxSelection.value) return
+  const { start, current } = boxSelection.value
+  boxSelection.value = null
+  const dx = current.x - start.x, dy = current.y - start.y
+  if (Math.hypot(dx, dy) < 4) { multiSelection.value = []; selected.value = { type: '', id: '' }; return }
+  const rect = { left: Math.min(start.x, current.x), right: Math.max(start.x, current.x), top: Math.min(start.y, current.y), bottom: Math.max(start.y, current.y) }
+  const contain = dx >= 0
+  const hits = []
+  ;[['building', buildings.value], ['road', roads.value], ['area', areas.value]].forEach(([type, collection]) => {
+    if (isLayerLocked(type) || !layerStates.value[layerKey(type)]?.visible) return
+    collection.forEach(feature => {
+      const bounds = getFeatureBounds(type, feature)
+      if (!bounds) return
+      const match = contain
+        ? bounds.left >= rect.left && bounds.right <= rect.right && bounds.top >= rect.top && bounds.bottom <= rect.bottom
+        : bounds.right >= rect.left && bounds.left <= rect.right && bounds.bottom >= rect.top && bounds.top <= rect.bottom
+      if (match) hits.push({ type, id: feature.id })
+    })
+  })
+  multiSelection.value = hits
+  selected.value = hits[hits.length - 1] || { type: '', id: '' }
+}
 function startBuildingDrag(event, item) { beginFeatureDrag(event, 'building', item) }
 function startAreaDrag(event, area) { beginFeatureDrag(event, 'area', area) }
 function startPolygonVertexDrag(event, type, item, index) {
@@ -644,6 +680,7 @@ function startRoadNodeDrag(event, road, index) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function movePointer(event) {
+  if (boxSelection.value) { updateBoxSelection(event); return }
   if (!drag.value) return
   const p = point(event)
   if (drag.value.type === 'multi') {
@@ -709,7 +746,7 @@ function removePolygonVertex(index) {
   item.footprint.splice(index, 1)
   if (selectedBuilding.value) item.rect = polygonBounds(item.footprint)
 }
-function endPointer() { drag.value = null }
+function endPointer() { if (boxSelection.value) finishBoxSelection(); drag.value = null }
 function addBuilding(event) {
   snapshot()
   const position = event?.clientX != null ? point(event) : { x: 305, y: 232 }
@@ -862,18 +899,18 @@ function exportDocument() {
         <div class="panel-title road-title">道路工具</div>
         <label>道路宽度 <b>{{ roadWidth }} px</b></label><input v-model.number="roadWidth" type="range" min="4" max="24">
         <button class="add-button" @click="addRoad">＋ 新建道路</button>
-        <p class="hint">快捷键：Shift + 点击多选；Ctrl/Cmd + C 复制，Ctrl/Cmd + V 粘贴（支持多对象），Delete 批量删除，Esc 清空选择。复制对象后会在右下方偏移 24 像素生成副本。</p><p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
+        <p class="hint">快捷键：拖动空白区域框选（左→右完全包含，右→左相交即选中）；Shift + 点击多选；Ctrl/Cmd + C 复制，Ctrl/Cmd + V 粘贴（支持多对象），Delete 批量删除，Esc 清空选择。复制对象后会在右下方偏移 24 像素生成副本。</p><p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
         <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || !(Array.isArray(clipboardObject) ? clipboardObject.some(entry => !isLayerLocked(entry.type)) : !isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="alignSelection('right')" :disabled="multiSelection.length<2" title="右对齐">右对齐</button><button @click="alignSelection('bottom')" :disabled="multiSelection.length<2" title="底部对齐">底对齐</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
-          <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
+          <svg class="campus-map" :viewBox="canvasViewBox()" @pointerdown="startBoxSelection" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
-            <rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="#86a765"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#grass-pattern)" opacity=".42"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
+            <rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="#86a765"/><rect v-if="boxSelection" :x="Math.min(boxSelection.start.x,boxSelection.current.x)" :y="Math.min(boxSelection.start.y,boxSelection.current.y)" :width="Math.abs(boxSelection.current.x-boxSelection.start.x)" :height="Math.abs(boxSelection.current.y-boxSelection.start.y)" fill="#4f86bd" fill-opacity=".14" stroke="#3678b8" stroke-width="1.5" stroke-dasharray="5 3" pointer-events="none"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#grass-pattern)" opacity=".42"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
             <g v-if="layerStates.areas.visible" v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id || multiSelection.some(entry=>entry.type==='area' && entry.id===area.id) ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>

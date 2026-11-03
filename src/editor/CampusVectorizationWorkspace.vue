@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { CAMPUS_LAYOUT_V2, validateCampusFeature, validateCampusGeometry } from '../data/campus/campusLayoutV2.js'
+import { CAMPUS_LAYOUT_V2, validateCampusFeature, validateCampusGeometry, validateCampusLayoutV2 } from '../data/campus/campusLayoutV2.js'
 
 const emit = defineEmits(['close'])
 const imageUrl = ref('')
@@ -8,6 +8,7 @@ const imageName = ref('未加载参考图')
 const imageWidth = ref(640)
 const imageHeight = ref(480)
 const sourceRef = ref('freshman-guide-2026-campus-plan')
+const referenceImageMeta = ref({ ...CAMPUS_LAYOUT_V2.coordinateSystem.referenceImage })
 const featureType = ref('boundary')
 const drawMode = ref('draw')
 const status = ref('draft')
@@ -144,7 +145,7 @@ function buildV2Document() {
       type: 'image-pixel', origin: 'top-left', xAxis: 'right', yAxis: 'down', unit: 'px',
       calibrationStatus: 'uncalibrated',
       referenceImage: {
-        ...CAMPUS_LAYOUT_V2.coordinateSystem.referenceImage,
+        ...referenceImageMeta.value,
         id: sourceRef.value.trim() || 'user-supplied-reference',
         title: imageName.value,
         width: imageWidth.value,
@@ -156,9 +157,10 @@ function buildV2Document() {
   }
 }
 function exportJson() {
-  const invalid = features.value.filter(item => !validateCampusFeature(item, imageWidth.value, imageHeight.value) || !collectionByType[item.type])
-  if (invalid.length) { message.value = '存在 ' + invalid.length + ' 个不合规或未知类型要素，无法导出'; return }
-  const blob = new Blob([JSON.stringify(buildV2Document(), null, 2)], { type: 'application/json' })
+  const documentData = buildV2Document()
+  const validation = validateCampusLayoutV2(documentData)
+  if (!validation.valid) { message.value = '导出校验失败：' + validation.errors.slice(0, 3).join('；'); return }
+  const blob = new Blob([JSON.stringify(documentData, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -175,16 +177,9 @@ function importJson(event) {
   reader.onload = () => {
     try {
       const documentData = JSON.parse(String(reader.result || ''))
-      if (documentData.schemaVersion !== '2.0.0' || documentData.campusId !== 'ncgxy-main-campus' || !documentData.features || Array.isArray(documentData.features)) {
-        throw new Error('文件结构不符合校园空间 V2 标准')
-      }
-      if (documentData.coordinateSystem?.type !== 'image-pixel' || documentData.coordinateSystem?.unit !== 'px' || documentData.coordinateSystem?.origin !== 'top-left') {
-        throw new Error('当前只支持左上角原点的 image-pixel / px 坐标文档')
-      }
-      const referenceImage = documentData.coordinateSystem?.referenceImage
-      if (!Number.isFinite(referenceImage?.width) || !Number.isFinite(referenceImage?.height) || referenceImage.width <= 0 || referenceImage.height <= 0) {
-        throw new Error('V2 文件缺少有效的参考图像素宽高')
-      }
+      const validation = validateCampusLayoutV2(documentData)
+      if (!validation.valid) throw new Error(validation.errors.slice(0, 5).join('；'))
+      const referenceImage = documentData.coordinateSystem.referenceImage
       const imported = []
       for (const [collection, items] of Object.entries(documentData.features)) {
         const type = typeByCollection[collection]
@@ -203,6 +198,7 @@ function importJson(event) {
       imageHeight.value = referenceImage.height
       imageName.value = referenceImage.title || file.name
       sourceRef.value = referenceImage.id || 'imported-reference'
+      referenceImageMeta.value = { ...referenceImage }
       activePoints.value = []
       message.value = '已导入并校验 ' + imported.length + ' 个空间要素。请加载对应参考底图进行目视核对。'
     } catch (error) {

@@ -4,7 +4,7 @@ import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { createIndoorFloor } from '../indoor/indoorScene.js'
+import { createIndoorFloor, getStairLandingPoint } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -1043,13 +1043,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const direction = Math.sign(targetLevel - currentIndoorFloor)
     if (!direction) return false
     const stairPoint = indoorGroup.userData.stairPoint
+    const landingPoint = getStairLandingPoint(indoorGroup.userData.stairPath, direction)
+    if (!stairPoint || !landingPoint) return false
     const fromY = cameraRig.player.y
     stairTransition = {
       targetLevel,
       fromX: cameraRig.player.x,
-      toX: stairPoint.x,
+      toX: landingPoint.x,
       fromZ: cameraRig.player.z,
-      toZ: stairPoint.z + direction * 2.1,
+      toZ: landingPoint.z,
       fromY,
       toY: fromY + direction * indoorBuilding.floorHeight,
       elapsed: 0, duration: 2.8,

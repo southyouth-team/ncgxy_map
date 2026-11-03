@@ -260,6 +260,18 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
       expansion: { north: 0, south: 0, east: 0, west: 0 },
     },
     interiorNormalized: width !== footprintWidth || depth !== footprintDepth,
+    // 室内可玩尺寸与室外测绘轮廓分离：窄小轮廓归一化后，室内地板/导航使用归一化矩形，
+    // 室外扩建仍使用 footprint 中的原始尺寸，避免两套坐标被混用。
+    interiorFootprint: {
+      type: 'rect',
+      bounds: { minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 },
+      polygon: [
+        { x: -width / 2, z: -depth / 2 },
+        { x: width / 2, z: -depth / 2 },
+        { x: width / 2, z: depth / 2 },
+        { x: -width / 2, z: depth / 2 },
+      ],
+    },
     entrance: { wall: entrance.wall, offset: entrance.offset, source: options.entrancePoint ? 'building-local' : 'default-template' },
     floorHeight,
     exterior: { roofStyle: footprint.roofStyle || 'flat' },

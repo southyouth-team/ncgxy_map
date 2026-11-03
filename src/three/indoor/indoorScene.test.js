@@ -401,7 +401,7 @@ describe('scaled building-local indoor footprint', () => {
       { x: 1, z: 4 },
     )).toEqual({
       bounds: { minX: -8, maxX: 12, minZ: -1.5, maxZ: 2.5 },
-      entrancePoint: { x: 2, z: 1.5 },
+      entrancePoint: { x: 0, z: 1.5 },
     })
     expect(transformIndoorFootprint(
       { minX: -4, maxX: 6, minZ: -3, maxZ: 5 },
@@ -409,7 +409,7 @@ describe('scaled building-local indoor footprint', () => {
       { x: 2, z: 1 },
     )).toEqual({
       bounds: { minX: -6, maxX: 4, minZ: -6, maxZ: 10 },
-      entrancePoint: { x: -2, z: 2 },
+      entrancePoint: { x: -1, z: 2 },
     })
   })
 

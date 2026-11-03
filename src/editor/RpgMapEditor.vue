@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { createRpgMapDocument, TILE_PALETTE, RPG_OBJECT_PALETTE, paintTile } from './rpgMapDocument.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, drawPixelBuildingPreview } from '../three/world/campus/campusAssetLibrary.js'
 
 const emit = defineEmits(['close', 'switch-view'])
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
@@ -50,6 +51,11 @@ function draw() {
     context.beginPath(); context.moveTo(0, y * tileSize + .5); context.lineTo(width * tileSize, y * tileSize + .5); context.stroke()
   }
   for (const object of map.value.objects) {
+    const buildingAsset = CAMPUS_BUILDING_ASSET_CATALOG.find(item => item.id === object.assetId)
+    if (object.kind === 'building' && buildingAsset) {
+      drawPixelBuildingPreview(context, { x: object.x, y: object.y, width: object.width, height: object.height, tileSize, template: object.template || buildingAsset.template, selected: object.id === selectedObject.value })
+      continue
+    }
     const asset = RPG_OBJECT_PALETTE.find(item => item.id === object.assetId)
     const w = Number(object.width || asset?.width || 1), h = Number(object.height || asset?.height || 1)
     context.fillStyle = object.color || asset?.color || '#285c3b'; context.globalAlpha = .24
@@ -70,6 +76,12 @@ function getCell(event) {
 function applyAt(event) {
   const { x, y } = getCell(event)
   if (tool.value === 'object' && selectedObject.value) {
+    const building = CAMPUS_BUILDING_ASSET_CATALOG.find(entry => entry.id === selectedObject.value)
+    if (building && x >= 0 && y >= 0 && x + building.width <= map.value.grid.width && y + building.height <= map.value.grid.height) {
+      map.value.objects.push({ id: `building-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, kind: 'building', assetId: building.id, template: building.template, name: building.label, x, y, width: building.width, height: building.height, rotation: 0 })
+      draw()
+      return
+    }
     const item = RPG_OBJECT_PALETTE.find(entry => entry.id === selectedObject.value)
     if (item && x >= 0 && y >= 0 && x + item.width <= map.value.grid.width && y + item.height <= map.value.grid.height) {
       map.value.objects.push({ id: `obj-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, kind: 'decoration', assetId: item.id, x, y, width: item.width, height: item.height, rotation: 0, glyph: item.glyph, color: item.color })
@@ -177,7 +189,11 @@ onMounted(loadMapDocument)
         <button v-for="tile in TILE_PALETTE" :key="tile.id" :class="['rpg-asset', { chosen: tool === 'brush' && selectedTile === tile.id }]" @click="tool='brush'; selectedTile=tile.id">
           <i :style="{ background: tile.color }"></i>{{ tile.label }}
         </button>
-        <div class="rpg-section-title">场景对象</div>
+        <div class="rpg-section-title">建筑资产（二维/三维共用）</div>
+        <button v-for="item in CAMPUS_BUILDING_ASSET_CATALOG" :key="item.id" :class="['rpg-asset', { chosen: tool === 'object' && selectedObject === item.id }]" @click="tool='object'; selectedObject=item.id">
+          <i class="rpg-glyph" :style="{ color: item.color }">{{ item.glyph }}</i>{{ item.label }}
+        </button>
+        <div class="rpg-section-title">场景装饰</div>
         <button v-for="item in RPG_OBJECT_PALETTE" :key="item.id" :class="['rpg-asset', { chosen: tool === 'object' && selectedObject === item.id }]" @click="tool='object'; selectedObject=item.id">
           <i class="rpg-glyph" :style="{ color: item.color }">{{ item.glyph }}</i>{{ item.label }}
         </button>

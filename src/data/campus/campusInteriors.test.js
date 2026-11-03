@@ -60,3 +60,39 @@ describe('campus interior data contract', () => {
     expect(result.errors).toContain('entrances[0].floorId 未引用已定义楼层')
   })
 })
+
+
+describe('campus interior spatial validation', () => {
+  const buildingId = Object.keys(CAMPUS_BUILDING_INTERIORS)[0]
+  const validInterior = () => ({
+    buildingId,
+    status: 'ready',
+    sceneId: 'interior-scene-02',
+    entrances: [{ id: 'main-gate', pixel: [200, 200], floorId: 'floor-1', enabled: true }],
+    floors: [{ id: 'floor-1', level: 1, width: 20, depth: 16, wallHeight: 3.2, rooms: [], spawnPoint: { x: 0, y: 1.7, z: 5 } }],
+  })
+
+  it('rejects a ready entrance without a floor reference', () => {
+    const interior = validInterior()
+    delete interior.entrances[0].floorId
+    const result = validateCampusInteriorData(interior)
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('ready 状态的 entrances[0] 必须引用有效楼层')
+  })
+
+  it('rejects entrance pixels outside the campus map', () => {
+    const interior = validInterior()
+    interior.entrances[0].pixel = [1001, 200]
+    const result = validateCampusInteriorData(interior)
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('entrances[0].pixel 必须是校园地图范围内的 [x, y] 坐标')
+  })
+
+  it('rejects spawn points outside the interior floor bounds', () => {
+    const interior = validInterior()
+    interior.floors[0].spawnPoint.x = 11
+    const result = validateCampusInteriorData(interior)
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('floors[0].spawnPoint 必须位于楼层范围内且高度有效')
+  })
+})

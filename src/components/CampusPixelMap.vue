@@ -27,6 +27,18 @@ let resizeObserver
 let dragState = null
 let dpr = 1
 let baseMapCanvas = null
+// 直接加载公开指南中的校园原始平面图，作为真实布局底图；矢量层用于后续逐项校准。
+const referenceMapImage = new Image()
+let referenceMapReady = false
+referenceMapImage.onload = () => {
+  referenceMapReady = true
+  baseMapCanvas = null
+  render()
+}
+referenceMapImage.onerror = () => {
+  referenceMapReady = false
+  render()
+}
 const pressedMovementKeys = new Set()
 let movementFrameId = 0
 let lastMovementFrameTime = 0
@@ -167,9 +179,15 @@ function drawAreas(ctx) {
   }
 }
 function drawGround(ctx) {
-  // 平面图核对阶段使用中性底色，不叠加随机草地纹理与装饰性花簇。
+  // 优先显示指南原始校园平面图，避免当前近似矢量数据掩盖真实布局。
   ctx.fillStyle = '#eeeee7'
   ctx.fillRect(0, 0, 1000, 500)
+  if (referenceMapReady && referenceMapImage.naturalWidth > 0) {
+    ctx.save()
+    ctx.globalAlpha = 0.88
+    ctx.drawImage(referenceMapImage, 0, 0, 1000, 500)
+    ctx.restore()
+  }
   ctx.strokeStyle = '#c8c9bd'
   ctx.lineWidth = 1
   ctx.strokeRect(153, 49, 691, 417)
@@ -580,6 +598,7 @@ function openShowcase() {
 function resetView() { zoom.value = 1; mapOffset.value = { x: 0, y: 0 }; render() }
 function zoomBy(value) { zoom.value = Math.max(.72, Math.min(3.2, zoom.value * value)); render() }
 onMounted(() => {
+  referenceMapImage.src = 'https://mmbiz.qpic.cn/sz_mmbiz_jpg/I7CrcZW85viauJhPE5oxIic650acadic3zicLbM1kQ4eHcz4fbdYMNw0QliaiapzFkyBOakxlRcZINmMyD2DO1ib6Da2agZD6iaKM9RhmA1mkh3H8Pc/640?from=appmsg&wx_fmt=jpeg'
   resizeObserver = new ResizeObserver(resize)
   if (canvas.value) resizeObserver.observe(canvas.value)
   window.addEventListener('resize', resize)

@@ -120,11 +120,36 @@ const multiSelection = ref([])
 const selectionCount = computed(() => multiSelection.value.length || (selected.value.id ? 1 : 0))
 function toggleMultiSelection(type, id, event) {
   if (!event?.shiftKey) { multiSelection.value = []; selected.value = { type, id }; return false }
+  if (!multiSelection.value.length && selected.value.id && !isLayerLocked(selected.value.type)) {
+    multiSelection.value.push({ type: selected.value.type, id: selected.value.id })
+  }
   const index = multiSelection.value.findIndex(item => item.type === type && item.id === id)
   if (index >= 0) multiSelection.value.splice(index, 1)
   else if (!isLayerLocked(type)) multiSelection.value.push({ type, id })
   selected.value = multiSelection.value.at(-1) || { type: '', id: '' }
   return true
+}
+function featureCollection(type) { return type === 'building' ? buildings.value : type === 'road' ? roads.value : areas.value }
+function featureGeometry(type, item) {
+  return type === 'road' ? item.points.map(point => [...point]) : item.footprint.map(point => [...point])
+}
+function beginFeatureDrag(event, type, item) {
+  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked(type)) return
+  event.stopPropagation()
+  const isMultiDrag = multiSelection.value.length > 1 && multiSelection.value.some(entry => entry.type === type && entry.id === item.id)
+  if (!isMultiDrag) { multiSelection.value = []; selected.value = { type, id: item.id } }
+  snapshot()
+  const start = point(event)
+  if (isMultiDrag) {
+    const items = multiSelection.value.filter(entry => !isLayerLocked(entry.type)).map(entry => {
+      const feature = featureCollection(entry.type).find(candidate => candidate.id === entry.id)
+      return feature ? { type: entry.type, id: entry.id, geometry: featureGeometry(entry.type, feature) } : null
+    }).filter(Boolean)
+    drag.value = { type: 'multi', start, items }
+  } else {
+    drag.value = { type, id: item.id, start, geometry: featureGeometry(type, item) }
+  }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function clearMultiSelection() { multiSelection.value = [] }
 function deleteSelectionBatch() {
@@ -564,24 +589,8 @@ function point(event) {
   const local = p.matrixTransform(svg.getScreenCTM().inverse())
   return { x: local.x, y: local.y }
 }
-function startBuildingDrag(event, item) {
-  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('building')) return
-  event.stopPropagation()
-  if (toggleMultiSelection('building', item.id, event)) return
-  snapshot()
-  const p = point(event)
-  drag.value = { type: 'building', id: item.id, start: p, footprint: item.footprint.map((point) => [...point]) }
-  event.currentTarget.setPointerCapture?.(event.pointerId)
-}
-function startAreaDrag(event, area) {
-  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('area')) return
-  event.stopPropagation()
-  if (toggleMultiSelection('area', area.id, event)) return
-  snapshot()
-  const p = point(event)
-  drag.value = { type: 'area', id: area.id, start: p, footprint: area.footprint.map((vertex) => [...vertex]) }
-  event.currentTarget.setPointerCapture?.(event.pointerId)
-}
+function startBuildingDrag(event, item) { beginFeatureDrag(event, 'building', item) }
+function startAreaDrag(event, area) { beginFeatureDrag(event, 'area', area) }
 function startPolygonVertexDrag(event, type, item, index) {
   if (event.button !== 0 || isLayerLocked(type)) return
   event.stopPropagation()
@@ -590,11 +599,7 @@ function startPolygonVertexDrag(event, type, item, index) {
   drag.value = { type: 'vertex', featureType: type, id: item.id, index }
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
-function selectRoad(event, road) {
-  if (event.button !== 0 || isLayerLocked('road')) return
-  event.stopPropagation()
-  toggleMultiSelection('road', road.id, event)
-}
+function selectRoad(event, road) { beginFeatureDrag(event, 'road', road) }
 function startRoadNodeDrag(event, road, index) {
   if (event.button !== 0 || isLayerLocked('road')) return
   event.stopPropagation()
@@ -606,7 +611,19 @@ function startRoadNodeDrag(event, road, index) {
 function movePointer(event) {
   if (!drag.value) return
   const p = point(event)
-  if (drag.value.type === 'vertex') {
+  if (drag.value.type === 'multi') {
+    const dx = p.x - drag.value.start.x, dy = p.y - drag.value.start.y
+    drag.value.items.forEach(entry => {
+      const feature = featureCollection(entry.type).find(candidate => candidate.id === entry.id)
+      if (!feature) return
+      const moved = entry.geometry.map(([x, y]) => [x + dx, y + dy])
+      if (entry.type === 'road') feature.points = moved
+      else {
+        feature.footprint = moved
+        if (entry.type === 'building') feature.rect = polygonBounds(feature.footprint)
+      }
+    })
+  } else if (drag.value.type === 'vertex') {
     const collection = drag.value.featureType === 'building' ? buildings.value : areas.value
     const item = collection.find((entry) => entry.id === drag.value.id)
     if (item) {

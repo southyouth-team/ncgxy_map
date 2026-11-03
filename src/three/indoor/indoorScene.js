@@ -24,7 +24,8 @@ export function validateIndoorFloor(floor) {
     Math.abs(spawn.x) > floor.width / 2 || Math.abs(spawn.z) > floor.depth / 2 || spawn.y < 0.5 || spawn.y > floor.wallHeight)) errors.push('spawnPoint 必须位于楼层范围内且高度有效')
   const stair = floor.stairPoint
   if (stair !== undefined && (!stair || !Number.isFinite(stair.x) || !Number.isFinite(stair.z) ||
-    Math.abs(stair.x) > floor.width / 2 - 1 || Math.abs(stair.z) > floor.depth / 2 - 2.2)) errors.push('stairPoint 必须位于楼层范围内并预留楼梯空间')
+    Math.abs(stair.x) > floor.width / 2 - (['east', 'west'].includes(stair.direction) ? 2.2 : 1) ||
+    Math.abs(stair.z) > floor.depth / 2 - (['east', 'west'].includes(stair.direction) ? 1 : 2.2))) errors.push('stairPoint 必须位于楼层范围内并预留楼梯空间')
   if (stair && !['south', 'west', 'north', 'east'].includes(stair.direction || 'south')) errors.push('stairPoint direction 必须是 south/west/north/east')
   for (const door of Array.isArray(floor.doors) ? floor.doors : []) {
     if (!['north', 'south', 'east', 'west'].includes(door.wall)) errors.push('门洞 wall 必须是 north/south/east/west')

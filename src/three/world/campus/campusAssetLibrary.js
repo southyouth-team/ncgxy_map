@@ -446,6 +446,10 @@ export function createPixelBuilding(THREE, options = {}) {
     return { point, next, dx: next.x - point.x, dy: next.y - point.y, length: point.distanceTo(next), index }
   })
   const wallEntrance = selectBuildingEntranceEdge(wallEdges, entranceEdgeIndex)
+  const wallArea = wallPoints.reduce((sum, point, index) => {
+    const next = wallPoints[(index + 1) % wallPoints.length]
+    return sum + point.x * next.y - next.x * point.y
+  }, 0) / 2
   const wallDoorWidth = Math.min(Number(preset.doorWidth || 0.9), Math.max(0.5, (wallEntrance?.length || 0) * 0.42))
   const wallDoorHeight = Math.min(2.05, buildingHeight * 0.58)
   const wallThickness = 0.28
@@ -496,8 +500,8 @@ export function createPixelBuilding(THREE, options = {}) {
       x: (wallEntrance.point.x + wallEntrance.next.x) / 2,
       y: (wallEntrance.point.y + wallEntrance.next.y) / 2,
     }
-    const normalX = area >= 0 ? wallEntrance.dy / wallEntrance.length : -wallEntrance.dy / wallEntrance.length
-    const normalZ = area >= 0 ? wallEntrance.dx / wallEntrance.length : -wallEntrance.dx / wallEntrance.length
+    const normalX = wallArea >= 0 ? wallEntrance.dy / wallEntrance.length : -wallEntrance.dy / wallEntrance.length
+    const normalZ = wallArea >= 0 ? wallEntrance.dx / wallEntrance.length : -wallEntrance.dx / wallEntrance.length
     group.userData.indoorEntrance = {
       x: midpoint.x + normalX * 1.5,
       z: -midpoint.y + normalZ * 1.5,

@@ -4,7 +4,7 @@ import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { createIndoorFloor, getStairTraversalPoints, planIndoorFloorRoute } from '../indoor/indoorScene.js'
+import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -1186,7 +1186,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       fromZ: traversal.entry.z,
       toZ: traversal.exit.z,
       fromY,
-      toY: fromY + direction * indoorBuilding.floorHeight,
+      direction,
       elapsed: 0, duration: Math.max(0.8, travelDistance / 5.5),
     }
     input.setMovementEnabled(false)
@@ -1200,7 +1200,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const progress = transition.elapsed / transition.duration
     // 楼梯几何为等高阶梯，按恒定进度沿楼梯轴线移动，避免缓入缓出造成悬浮感。
     cameraRig.player.x = transition.fromX + (transition.toX - transition.fromX) * progress
-    cameraRig.player.y = transition.fromY + (transition.toY - transition.fromY) * progress
+    const steppedRise = getStairStepHeight(progress, indoorBuilding.floorHeight)
+    cameraRig.player.y = transition.fromY + transition.direction * steppedRise
     cameraRig.player.z = transition.fromZ + (transition.toZ - transition.fromZ) * progress
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
     else cameraRig.updateThirdPersonDesired()

@@ -4,6 +4,7 @@ import { createCampusEngine } from './three/engine/createCampusEngine.js'
 import CampusPixelMap from './components/CampusPixelMap.vue'
 import CampusPlanEditor from './editor/CampusPlanEditor.vue'
 import IndoorFloorPlanEditor from './components/IndoorFloorPlanEditor.vue'
+import BuildingFootprintEditor from './components/BuildingFootprintEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 import { CAMPUS_BUILDING_FOOTPRINTS } from './data/campus/campusLayout.js'
@@ -508,6 +509,7 @@ onBeforeUnmount(() => {
         </div>
         <small v-if="indoorDefinition?.footprintSize">当前占地：{{ indoorDefinition.footprintSize.width.toFixed(1) }} × {{ indoorDefinition.footprintSize.depth.toFixed(1) }}</small>
       </section>
+      <BuildingFootprintEditor :definition="indoorDefinition" @change="refreshIndoorLayout" />
       <IndoorFloorPlanEditor :floor="activeEditableFloor" @change="refreshIndoorLayout" />
       <div class="indoor-room-list"><section v-for="room in activeEditableFloor?.rooms || []" :key="room.id" class="indoor-room-item">
         <div class="indoor-room-title"><input v-model="room.name" aria-label="房间名称" @change="refreshIndoorLayout"><button @click="removeIndoorRoom(room.id)">删除</button></div>

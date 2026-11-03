@@ -538,7 +538,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function navigateToIndoorFloor(targetLevel) {
-    if (!indoorGroup || !indoorBuilding || stairTransition) return false
+    if (!indoorGroup || !indoorBuilding || stairTransition || activeIndoorRoom) return false
     const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, Number(targetLevel))
     if (!plan) return false
     if (!plan.transitions.length) {

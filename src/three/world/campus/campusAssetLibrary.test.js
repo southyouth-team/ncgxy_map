@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview } from './campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
+  it('uses a configured entrance edge and falls back to the longest edge', () => {
+    const edges = [{ index: 0, length: 4 }, { index: 1, length: 9 }, { index: 2, length: 6 }]
+    expect(selectBuildingEntranceEdge(edges, 2)).toBe(edges[2])
+    expect(selectBuildingEntranceEdge(edges, 99)).toBe(edges[1])
+    expect(selectBuildingEntranceEdge(edges, null)).toBe(edges[1])
+    expect(selectBuildingEntranceEdge([])).toBeNull()
+  })
   it('exposes one editor asset for every 3D building template', () => {
     expect(CAMPUS_BUILDING_ASSET_CATALOG.map(item => item.template)).toEqual(Object.keys(CAMPUS_BUILDING_TEMPLATES))
     expect(CAMPUS_BUILDING_ASSET_CATALOG.every(item => item.id.startsWith('building-'))).toBe(true)

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, getGableRoofLayout, normalizeBuildingParameters, validateBuildingFootprint, getFacadeWindowPositions } from './campusAssetLibrary.js'
+import * as THREE from 'three'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, getGableRoofLayout, normalizeBuildingParameters, validateBuildingFootprint, getFacadeWindowPositions, createCampusMaterials, createPixelBuilding } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
   it('creates a ridge-based gable roof for a convex rectangular footprint', () => {
@@ -92,6 +93,38 @@ describe('shared campus building assets', () => {
     expect(validateBuildingFootprint([[0, 0], [0, 0], [0, 0]]).valid).toBe(false)
   })
 
+
+  it('rebuilds concave building walls, facade and roof from the exact polygon footprint', () => {
+    const materials = createCampusMaterials(THREE)
+    const shape = new THREE.Shape([
+      new THREE.Vector2(-6, -5),
+      new THREE.Vector2(6, -5),
+      new THREE.Vector2(6, 1),
+      new THREE.Vector2(1, 1),
+      new THREE.Vector2(1, 5),
+      new THREE.Vector2(-6, 5),
+    ])
+    const building = createPixelBuilding(THREE, {
+      footprint: shape,
+      width: 12,
+      depth: 10,
+      height: 7.2,
+      floors: 2,
+      template: '教学楼',
+      materials,
+      label: 'polygon-building-test',
+    })
+    const roof = building.children.find(child => child.userData.objectType === 'building-roof')
+    expect(roof).toBeTruthy()
+    expect(roof.userData.roofStyle).toBe('flat')
+    roof.geometry.computeBoundingBox()
+    expect(roof.geometry.boundingBox.min.x).toBeCloseTo(-6, 5)
+    expect(roof.geometry.boundingBox.max.x).toBeCloseTo(6, 5)
+    expect(roof.geometry.boundingBox.min.z).toBeCloseTo(-5, 5)
+    expect(roof.geometry.boundingBox.max.z).toBeCloseTo(5, 5)
+    expect(building.children.filter(child => child.userData.objectType === 'building-cornice')).toHaveLength(6)
+    expect(building.userData.floorCount).toBe(2)
+  })
 
   it('keeps facade windows inside short edges and prevents overlap at high density', () => {
     expect(getFacadeWindowPositions(1.1, 0.6, 3)).toEqual([])

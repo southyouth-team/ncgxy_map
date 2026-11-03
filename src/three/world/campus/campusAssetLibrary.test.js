@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices } from './campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, validateBuildingFootprint } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
   it('creates a ridge-based gable roof for a convex rectangular footprint', () => {
@@ -35,6 +35,13 @@ describe('shared campus building assets', () => {
     expect(selectBuildingEntranceEdge(edges, null)).toBe(edges[1])
     expect(selectBuildingEntranceEdge([])).toBeNull()
   })
+  it('validates building footprints and detects self-intersections', () => {
+    expect(validateBuildingFootprint([[0, 0], [8, 0], [8, 5], [0, 5]]).valid).toBe(true)
+    expect(validateBuildingFootprint([[0, 0], [4, 4], [0, 4], [4, 0]]).errors).toContain('建筑轮廓存在自相交边线')
+    expect(validateBuildingFootprint([[0, 0], [1, 1], [2, 2]]).errors).toContain('建筑轮廓面积为零或过小')
+    expect(validateBuildingFootprint([[0, 0], [0, 0], [0, 0]]).valid).toBe(false)
+  })
+
   it('exposes one editor asset for every 3D building template', () => {
     expect(CAMPUS_BUILDING_ASSET_CATALOG.map(item => item.template)).toEqual(Object.keys(CAMPUS_BUILDING_TEMPLATES))
     expect(CAMPUS_BUILDING_ASSET_CATALOG.every(item => item.id.startsWith('building-'))).toBe(true)

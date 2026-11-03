@@ -851,7 +851,7 @@ onBeforeUnmount(() => {
       <span>{{ selected.type === 'building' ? '建筑轮廓' : selected.type === 'water' ? '湖泊水域' : selected.type === 'sports' ? '运动场地' : '校园区域' }}</span>
       <em>位置数据：{{ selected.confidence === 'low' ? '待核验' : '近似标注' }}</em>
       <em v-if="selected.type === 'building'">室内数据：{{ getCampusInteriorData(selected.id)?.status === 'ready' ? '已配置' : '入口与楼层待采集' }}</em>
-      <button v-if="selected.type === 'building'" type="button" style="margin-top:10px;padding:9px 12px;border:1px solid #9bad91;border-radius:6px;background:#edf2e4;color:#405648;font:inherit;font-size:12px;cursor:pointer" @click="emit('enter-building', { buildingId: selected.id, playerPosition: { x: player.value.x, y: player.value.y } })">进入室内探索样板 ↗</button>
+      <button v-if="selected.type === 'building'" type="button" style="margin-top:10px;padding:9px 12px;border:1px solid #9bad91;border-radius:6px;background:#edf2e4;color:#405648;font:inherit;font-size:12px;cursor:pointer" @click="emit('enter-building', { buildingId: selected.id, playerPosition: { x: player.x, y: player.y } })">进入室内探索样板 ↗</button>
     </aside>
     <footer class="pixel-footer"><span>NCGXY · CAMPUS MAP</span><span>WASD / 方向键移动 · 镜头跟随 · 拖动浏览 / 滚轮缩放</span></footer>
   </section>

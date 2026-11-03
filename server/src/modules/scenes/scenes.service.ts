@@ -277,6 +277,27 @@ export class ScenesService {
     );
   }
 
+  async findIndoorBuildingVersion(
+    userId: string,
+    campusId: string,
+    mapId: string,
+    buildingId: string,
+    revision: string,
+  ) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor','viewer']);
+    await this.requireMap(campusId, mapId);
+    this.validateBuildingKey(buildingId);
+    const rows = await this.db.query(
+      `SELECT v.revision,v.definition,v.created_by,v.created_at
+       FROM campus_indoor_building_layout_version v
+       JOIN campus_indoor_building_layout l ON l.id=v.layout_id
+       WHERE l.campus_id=$1 AND l.map_id=$2 AND l.building_key=$3 AND v.revision=$4`,
+      [campusId,mapId,buildingId,revision],
+    );
+    if (!rows.length) throw new NotFoundException('指定的室内布局历史版本不存在');
+    return { buildingId, ...rows[0] };
+  }
+
   private validateBuildingKey(buildingId: string) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(buildingId)) {
       throw new BadRequestException('建筑 ID 格式无效');

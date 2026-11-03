@@ -884,6 +884,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig.setMode('thirdPerson')
     input.setMode('thirdPerson')
     buildIndoorFloor(definition.floors[0].level)
+    // 从实际门内落脚点进入，不再把玩家传送到楼层中央出生点。
+    const entranceLanding = indoorGroup?.userData.exitInteractions?.[0]
+    const firstFloor = definition.floors.find(floor => floor.level === currentIndoorFloor)
+    if (entranceLanding && firstFloor) {
+      cameraRig.player.set(
+        entranceLanding.x,
+        indoorGroup.position.y + (firstFloor.spawnPoint?.y ?? 1.7),
+        entranceLanding.z,
+      )
+      if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
+      else cameraRig.updateThirdPersonDesired()
+    }
     cameraRig.thirdDistance = 8
     cameraRig.updateThirdPersonDesired()
     return true

@@ -205,6 +205,31 @@ export function resolveIndoorEntrance(bounds, entrancePoint) {
   return { wall, offset, landing, distanceToWall: nearest.distance }
 }
 
+/**
+ * 将室外入口投影到归一化后的室内轮廓边缘。
+ * 保留入口所在墙面和沿墙偏移，避免窄建筑扩大室内尺寸后入口落在墙体中部。
+ */
+export function normalizeIndoorEntrancePoint(bounds, entrancePoint, width, depth) {
+  if (!bounds || !entrancePoint ||
+    ![bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, entrancePoint.x, entrancePoint.z, width, depth].every(Number.isFinite) ||
+    bounds.maxX <= bounds.minX || bounds.maxZ <= bounds.minZ || width <= 0 || depth <= 0) {
+    throw new TypeError('Invalid normalized entrance geometry')
+  }
+  const distances = [
+    { wall: 'west', distance: Math.abs(entrancePoint.x - bounds.minX) },
+    { wall: 'east', distance: Math.abs(bounds.maxX - entrancePoint.x) },
+    { wall: 'north', distance: Math.abs(entrancePoint.z - bounds.minZ) },
+    { wall: 'south', distance: Math.abs(bounds.maxZ - entrancePoint.z) },
+  ].sort((a, b) => a.distance - b.distance)
+  const wall = distances[0].wall
+  const halfWidth = width / 2
+  const halfDepth = depth / 2
+  if (wall === 'west') return { x: -halfWidth, z: Math.max(-halfDepth, Math.min(halfDepth, entrancePoint.z)) }
+  if (wall === 'east') return { x: halfWidth, z: Math.max(-halfDepth, Math.min(halfDepth, entrancePoint.z)) }
+  if (wall === 'north') return { x: Math.max(-halfWidth, Math.min(halfWidth, entrancePoint.x)), z: -halfDepth }
+  return { x: Math.max(-halfWidth, Math.min(halfWidth, entrancePoint.x)), z: halfDepth }
+}
+
 export function createIndoorBuildingFromFootprint(footprint, options = {}) {
   if (!footprint?.id || !footprint?.bounds) throw new TypeError('建筑轮廓必须包含 id 和 bounds')
   const footprintWidth = Number(footprint.bounds.maxX) - Number(footprint.bounds.minX)
@@ -220,8 +245,14 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
   const corridorDepth = Math.max(2.4, Math.min(3.6, depth * 0.2))
   const roomDepth = Math.max(3, (depth - corridorDepth - 2) / 2)
   const roomWidth = Math.max(3, (width - 3) / 2)
-  const entrance = options.entrancePoint
-    ? resolveIndoorEntrance({ minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 }, options.entrancePoint)
+  const normalizedEntrancePoint = options.entrancePoint
+    ? normalizeIndoorEntrancePoint({
+      minX: -footprintWidth / 2, maxX: footprintWidth / 2,
+      minZ: -footprintDepth / 2, maxZ: footprintDepth / 2,
+    }, options.entrancePoint, width, depth)
+    : null
+  const entrance = normalizedEntrancePoint
+    ? resolveIndoorEntrance({ minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 }, normalizedEntrancePoint)
     : { wall: 'south', offset: 0, landing: { x: 0, z: depth / 2 - 2.2 } }
   const entranceDoorWidth = Math.max(0.7, Math.min(
     Number(options.doorWidth) > 0 ? Number(options.doorWidth) : Math.min(2.4, width * 0.18),

@@ -2,7 +2,6 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
 import CampusPlanEditor from './editor/CampusPlanEditor.vue'
-import CampusVectorizationWorkspace from './editor/CampusVectorizationWorkspace.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 
@@ -25,7 +24,6 @@ const nearIndoorStairs = ref(false)
 const nearIndoorRoom = ref(null)
 const activeIndoorRoom = ref(null)
 const showEditor = ref(false)
-const showVectorWorkspace = ref(false)
 const editorViewMode = ref('2d')
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
@@ -210,7 +208,6 @@ onBeforeUnmount(() => {
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
     <div ref="viewport" class="scene-viewport" v-show="!showEditor || editorViewMode === '3d'"></div>
-    <div v-if="showVectorWorkspace" class="vector-workspace-overlay"><CampusVectorizationWorkspace @close="showVectorWorkspace = false" /></div>
     <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 
     <template v-if="!showEditor || editorViewMode === '3d'">
@@ -222,20 +219,19 @@ onBeforeUnmount(() => {
           <div class="brand-subtitle">NANCHANG INSTITUTE OF TECHNOLOGY · 3D CAMPUS</div>
         </div>
       </div>
-      <div class="topbar-status"><span class="status-dot"></span> 像素风格样板</div>
+      <div class="topbar-status"><span class="status-dot"></span> 像素校园</div>
     </header>
 
     <section class="intro-card">
       <div class="eyebrow">CAMPUS EXPLORER / 01</div>
       <h1>探索校园<br /><span>从这里开始</span></h1>
-      <p>等距像素风格样板场景 · 校园布局为演示数据，尚非真实测绘。</p>
+      <p>等距像素校园 · 自由浏览校园空间，切换视角进行漫游。</p>
       <div class="intro-rule"><span></span></div>
       <div class="intro-foot">INTERACTIVE CAMPUS MAP</div>
     </section>
 
     <nav class="mode-switcher" aria-label="视角切换">
-      <button class="mode-button editor-mode-button" @click="showVectorWorkspace = true"><span class="mode-label">校园底图标注 V2</span><span class="mode-hint">真实空间矢量化</span></button>
-      <div v-if="indoorPrototypeActive && activeIndoorRoom" class="indoor-interaction-hint" style="position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:20;padding:10px 16px;border-radius:10px;background:#28251fe8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none">正在探索 {{ activeIndoorRoom.name }} · 按 E 返回走廊</div>
+            <div v-if="indoorPrototypeActive && activeIndoorRoom" class="indoor-interaction-hint" style="position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:20;padding:10px 16px;border-radius:10px;background:#28251fe8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none">正在探索 {{ activeIndoorRoom.name }} · 按 E 返回走廊</div>
       <div v-else-if="indoorPrototypeActive && nearIndoorRoom" class="indoor-interaction-hint" style="position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:20;padding:10px 16px;border-radius:10px;background:#28251fe8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none">进入 {{ nearIndoorRoom.roomName }} · 按 E</div>
       <div v-else-if="indoorPrototypeActive && nearIndoorStairs" class="indoor-interaction-hint" style="position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:20;padding:10px 16px;border-radius:10px;background:#28251fe8;color:#fff;font-size:13px;white-space:nowrap;pointer-events:none">靠近楼梯 · 按 E 切换楼层</div>
       <button v-if="!indoorPrototypeActive" class="mode-button" @click="engine?.enterIndoorPrototype()">
@@ -327,7 +323,7 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="loading-screen">
       <div class="loader"></div>
-      <div>正在加载像素风格样板场景</div>
+      <div>正在加载南昌工学院像素校园</div>
       <span>INITIALIZING SCENE</span>
     </div>
     <aside v-if="selectedObject && !showEditor" style="position:absolute;right:24px;top:110px;z-index:12;min-width:190px;padding:14px 16px;background:rgba(255,255,255,.94);border:1px solid #d7ded7;border-radius:6px;color:#34443b;box-shadow:0 8px 24px rgba(30,50,40,.12)">

@@ -6,6 +6,7 @@ const emit = defineEmits(['change'])
 const svgRef = ref(null)
 const selectedRoomId = ref('')
 const selectedWallId = ref('')
+const selectedFurnitureType = ref('desk')
 const dragState = ref(null)
 const undoStack = ref([])
 const redoStack = ref([])
@@ -111,11 +112,24 @@ function moveDrag(event) {
   }
   const room = props.floor?.rooms?.find(item => item.id === state.roomId)
   if (!room) return
+  if (state.kind === 'furniture') {
+    const furniture = room.furniture?.find(item => item.id === state.furnitureId)
+    if (!furniture) return
+    const maxX = room.width / 2 - furniture.width / 2 - 0.25
+    const maxZ = room.depth / 2 - furniture.depth / 2 - 0.25
+    furniture.x = round(Math.max(-maxX, Math.min(maxX, state.x + dx)))
+    furniture.z = round(Math.max(-maxZ, Math.min(maxZ, state.z + dz)))
+    return
+  }
   if (state.mode === 'move') {
     const maxX = props.floor.width / 2 - room.width / 2
     const maxZ = props.floor.depth / 2 - room.depth / 2
-    room.x = round(Math.max(-maxX, Math.min(maxX, state.x + dx)))
-    room.z = round(Math.max(-maxZ, Math.min(maxZ, state.z + dz)))
+    const nextX = round(Math.max(-maxX, Math.min(maxX, state.x + dx)))
+    const nextZ = round(Math.max(-maxZ, Math.min(maxZ, state.z + dz)))
+    const overlaps = (props.floor.rooms || []).some(other => other.id !== room.id &&
+      Math.abs(nextX - other.x) < (room.width + other.width) / 2 - 0.05 &&
+      Math.abs(nextZ - other.z) < (room.depth + other.depth) / 2 - 0.05)
+    if (!overlaps) { room.x = nextX; room.z = nextZ }
   } else {
     const maxWidth = props.floor.width / 2 - state.x + state.width / 2
     const maxDepth = props.floor.depth / 2 - state.z + state.depth / 2
@@ -209,14 +223,24 @@ function removeExteriorDoor(index) {
 }
 function addRoom() {
   if (!props.floor) return
-  checkpoint()
-  if (!Array.isArray(props.floor.rooms)) props.floor.rooms = []
-  const id = 'room-' + Date.now()
+  const existing = props.floor.rooms || []
   const width = Math.min(5, props.floor.width - 1)
   const depth = Math.min(4, props.floor.depth - 1)
+  const candidates = []
+  for (let z = -props.floor.depth / 2 + depth / 2 + 0.5; z <= props.floor.depth / 2 - depth / 2; z += 0.5) {
+    for (let x = -props.floor.width / 2 + width / 2 + 0.5; x <= props.floor.width / 2 - width / 2; x += 0.5) {
+      candidates.push({ x: round(x), z: round(z) })
+    }
+  }
+  const spot = candidates.find(point => existing.every(other =>
+    Math.abs(point.x - other.x) >= (width + other.width) / 2 + 0.2 ||
+    Math.abs(point.z - other.z) >= (depth + other.depth) / 2 + 0.2))
+  if (!spot) return
+  checkpoint()
+  const id = 'room-' + Date.now()
   const room = {
-    id, name: `新建空间 ${props.floor.rooms.length + 1}`,
-    x: 0, z: 0, width, depth, doorWall: 'south',
+    id, name: `新建空间 ${existing.length + 1}`,
+    ...spot, width, depth, doorWall: 'south',
     doorWidth: Math.min(1.2, width - 0.5), doorOffset: 0, furniture: [],
   }
   props.floor.rooms.push(room)
@@ -241,17 +265,29 @@ function addFurniture(room) {
     podium: { name: '讲台', width: 1.2, depth: 0.8, height: 1 },
     board: { name: '教学板', width: 1.8, depth: 0.15, height: 1.2 },
   }
-  const type = 'desk'
+  const type = selectedFurnitureType.value
   const count = room.furniture.length
   const spec = types[type]
   room.furniture.push({
-    id: `furniture-${Date.now()}`, type, name: spec.name,
-    x: round(-room.width / 2 + 1 + (count % 3) * 1.3),
-    z: round(-room.depth / 2 + 1 + Math.floor(count / 3) * 1),
+    id: `furniture-${Date.now()}-${count}`, type, name: spec.name,
+    x: 0, z: 0,
     ...spec,
   })
   selectedRoomId.value = room.id
   emit('change')
+}
+function startFurnitureDrag(event, room, item) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  checkpoint()
+  selectedRoomId.value = room.id
+  const point = worldPoint(event)
+  dragState.value = {
+    kind: 'furniture', furnitureId: item.id, roomId: room.id, pointerId: event.pointerId,
+    startX: point.x, startZ: point.z, x: item.x, z: item.z,
+  }
+  svgRef.value?.setPointerCapture?.(event.pointerId)
 }
 function removeFurniture(room, furnitureId) {
   checkpoint()
@@ -289,7 +325,7 @@ function roomLabel(room) { return room.name || '未命名空间' }
           :x="origin.x + (room.x + item.x - item.width / 2) * scale"
           :y="origin.z + (room.z + item.z - item.depth / 2) * scale"
           :width="Math.max(4, item.width * scale)" :height="Math.max(4, item.depth * scale)"
-          rx="1" class="furniture-shape" @pointerdown.stop="selectedRoomId = room.id"/>
+          rx="1" class="furniture-shape" @pointerdown="startFurnitureDrag($event, room, item)"/>
       </g>
       <g class="stair-marker" @pointerdown="startStairDrag" :transform="'translate(' + (origin.x + (floor.stairPoint?.x || 0) * scale) + ' ' + (origin.z + (floor.stairPoint?.z || 0) * scale) + ') rotate(' + ({ south: 0, west: -90, north: 180, east: 90 }[floor.stairPoint?.direction || 'south']) + ')'">
         <rect x="-18" y="-13" width="36" height="26" rx="3"/><text text-anchor="middle" y="4">楼梯</text>
@@ -310,7 +346,7 @@ function roomLabel(room) { return room.name || '未命名空间' }
           <label>门所在墙<select v-model="room.doorWall" @focus="checkpoint" @change="emit('change')"><option value="north">北侧</option><option value="south">南侧</option><option value="east">东侧</option><option value="west">西侧</option></select></label>
           <label>门宽<input v-model.number="room.doorWidth" type="number" min="0" step="0.1" @focus="checkpoint" @change="emit('change')"></label>
         </div>
-        <div class="construction-title furniture-heading"><b>家具（{{ (room.furniture || []).length }}）</b><button @click.stop="addFurniture(room)">＋ 添加课桌</button></div>
+        <div class="construction-title furniture-heading"><b>家具（{{ (room.furniture || []).length }}）</b><select v-model="selectedFurnitureType" @click.stop><option value="desk">课桌</option><option value="table">桌子</option><option value="chair">座椅</option><option value="cabinet">储物柜</option><option value="podium">讲台</option><option value="board">教学板</option></select><button @click.stop="addFurniture(room)">＋ 添加家具</button></div>
         <div v-for="item in room.furniture || []" :key="item.id" class="furniture-row">
           <span>{{ item.name || item.type }} · {{ item.width }} × {{ item.depth }}</span>
           <button @click.stop="removeFurniture(room, item.id)">移除</button>
@@ -347,5 +383,5 @@ function roomLabel(room) { return room.name || '未命名空间' }
 </template>
 
 <style scoped>
-.floor-plan-editor{display:flex;flex-direction:column;gap:7px;min-height:260px}.history-actions{display:flex;gap:5px}.history-actions button{padding:3px 7px;border:1px solid #cbd4ca;border-radius:3px;background:white;color:#3f634c;font-size:10px}.history-actions button:disabled{opacity:.35;cursor:not-allowed}.history-actions{display:flex;gap:5px}.history-actions button{padding:3px 7px;border:1px solid #cbd4ca;border-radius:3px;background:white;color:#3f634c;font-size:10px}.history-actions button:disabled{opacity:.35;cursor:not-allowed}.plan-toolbar{display:flex;justify-content:space-between;gap:8px;color:#718075;font-size:10px}.floor-plan-canvas{display:block;width:100%;height:auto;max-height:48vh;border:1px solid #dce3d9;border-radius:4px;touch-action:none;user-select:none}.floor-boundary{fill:#fffefa;stroke:#65796b;stroke-width:3}.boundary-label{font-size:10px;fill:#718075}.room-shape{fill:#dce9d9;stroke:#66866b;stroke-width:2;cursor:move}.room-shape.selected{fill:#c8e0c8;stroke:#2d7148;stroke-width:3}.room-name{font-size:13px;font-weight:700;fill:#34483a;pointer-events:none}.room-size{font-size:10px;fill:#65786a;pointer-events:none}.furniture-shape{fill:#a9825c;stroke:#6f543a;stroke-width:1;pointer-events:all}.resize-handle{fill:#2f7048;stroke:#fff;stroke-width:2;cursor:nwse-resize}.stair-marker rect{fill:#e9d6a6;stroke:#9d8044;stroke-width:1.5}.stair-marker text{font-size:10px;fill:#6f5729}.spawn-marker circle{fill:#d98d75;stroke:#fff;stroke-width:2}.spawn-marker text{font-size:10px;fill:#a75c49}.plan-legend{display:flex;gap:14px;color:#78847a;font-size:10px}.plan-legend span{display:flex;align-items:center;gap:5px}.plan-legend i{width:9px;height:9px;border-radius:2px;display:inline-block}.legend-room{background:#dce9d9;border:1px solid #66866b}.legend-stair{background:#e9d6a6}.legend-spawn{background:#d98d75}.partition-line{stroke:#a56b42;stroke-width:5;stroke-linecap:square;pointer-events:stroke;cursor:move}.wall-handle{fill:#d26b35;stroke:#fff;stroke-width:2;cursor:crosshair;pointer-events:all}.partition-line.selected{stroke:#d26b35;stroke-width:6}.wall-door-gap{stroke:#f7f8f3;stroke-width:9;pointer-events:stroke;cursor:ew-resize}.construction-editor{display:flex;flex-direction:column;gap:7px}.construction-heading,.construction-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#45594a}.construction-heading button,.construction-title button{padding:4px 7px;border:1px solid #cbd4ca;border-radius:3px;background:white;color:#3f634c;font-size:10px}.construction-heading div{display:flex;gap:5px}.construction-item{padding:8px;border:1px solid #dce3d9;border-radius:4px;background:#fff}.construction-item.active{border-color:#7b9d7c}.construction-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:7px}.construction-fields label{display:flex;flex-direction:column;gap:3px;font-size:9px;color:#77847a}.wide-field{grid-column:span 2}.furniture-heading{margin-top:8px}.furniture-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;color:#69776b;font-size:10px;border-top:1px solid #edf0eb}.furniture-row button{border:0;background:transparent;color:#9a6552;font-size:10px}.construction-fields input,.construction-fields select{width:100%;min-width:0;padding:5px;border:1px solid #d7ded7;border-radius:3px;font-size:10px}.plan-empty{padding:40px;text-align:center;color:#89958b;background:#f5f7f2}
+.floor-plan-editor{display:flex;flex-direction:column;gap:7px;min-height:260px}.history-actions{display:flex;gap:5px}.history-actions button{padding:3px 7px;border:1px solid #cbd4ca;border-radius:3px;background:white;color:#3f634c;font-size:10px}.history-actions button:disabled{opacity:.35;cursor:not-allowed}.history-actions{display:flex;gap:5px}.history-actions button{padding:3px 7px;border:1px solid #cbd4ca;border-radius:3px;background:white;color:#3f634c;font-size:10px}.history-actions button:disabled{opacity:.35;cursor:not-allowed}.plan-toolbar{display:flex;justify-content:space-between;gap:8px;color:#718075;font-size:10px}.floor-plan-canvas{display:block;width:100%;height:auto;max-height:48vh;border:1px solid #dce3d9;border-radius:4px;touch-action:none;user-select:none}.floor-boundary{fill:#fffefa;stroke:#65796b;stroke-width:3}.boundary-label{font-size:10px;fill:#718075}.room-shape{fill:#dce9d9;stroke:#66866b;stroke-width:2;cursor:move}.room-shape.selected{fill:#c8e0c8;stroke:#2d7148;stroke-width:3}.room-name{font-size:13px;font-weight:700;fill:#34483a;pointer-events:none}.room-size{font-size:10px;fill:#65786a;pointer-events:none}.furniture-shape{fill:#a9825c;stroke:#6f543a;stroke-width:1;pointer-events:all;cursor:move}.resize-handle{fill:#2f7048;stroke:#fff;stroke-width:2;cursor:nwse-resize}.stair-marker rect{fill:#e9d6a6;stroke:#9d8044;stroke-width:1.5}.stair-marker text{font-size:10px;fill:#6f5729}.spawn-marker circle{fill:#d98d75;stroke:#fff;stroke-width:2}.spawn-marker text{font-size:10px;fill:#a75c49}.plan-legend{display:flex;gap:14px;color:#78847a;font-size:10px}.plan-legend span{display:flex;align-items:center;gap:5px}.plan-legend i{width:9px;height:9px;border-radius:2px;display:inline-block}.legend-room{background:#dce9d9;border:1px solid #66866b}.legend-stair{background:#e9d6a6}.legend-spawn{background:#d98d75}.partition-line{stroke:#a56b42;stroke-width:5;stroke-linecap:square;pointer-events:stroke;cursor:move}.wall-handle{fill:#d26b35;stroke:#fff;stroke-width:2;cursor:crosshair;pointer-events:all}.partition-line.selected{stroke:#d26b35;stroke-width:6}.wall-door-gap{stroke:#f7f8f3;stroke-width:9;pointer-events:stroke;cursor:ew-resize}.construction-editor{display:flex;flex-direction:column;gap:7px}.construction-heading,.construction-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#45594a}.construction-heading button,.construction-title button{padding:4px 7px;border:1px solid #cbd4ca;border-radius:3px;background:white;color:#3f634c;font-size:10px}.construction-heading div{display:flex;gap:5px}.construction-item{padding:8px;border:1px solid #dce3d9;border-radius:4px;background:#fff}.construction-item.active{border-color:#7b9d7c}.construction-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:7px}.construction-fields label{display:flex;flex-direction:column;gap:3px;font-size:9px;color:#77847a}.wide-field{grid-column:span 2}.furniture-heading{margin-top:8px}.furniture-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;color:#69776b;font-size:10px;border-top:1px solid #edf0eb}.furniture-row button{border:0;background:transparent;color:#9a6552;font-size:10px}.construction-fields input,.construction-fields select{width:100%;min-width:0;padding:5px;border:1px solid #d7ded7;border-radius:3px;font-size:10px}.plan-empty{padding:40px;text-align:center;color:#89958b;background:#f5f7f2}
 </style>

@@ -269,16 +269,18 @@ export function createPixelBuilding(THREE, options = {}) {
     label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null, floors, height: customHeight, roofStyle: customRoofStyle, roofRise: customRoofRise, windowDensity: customWindowDensity, windowWidth: customWindowWidth, windowHeight: customWindowHeight, doorWidth: customDoorWidth,
   } = options
   const basePreset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
+  const hasNumericOverride = value => value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value))
   const preset = {
     ...basePreset,
-    ...(Number.isFinite(Number(customRoofRise)) && customRoofRise !== undefined ? { roofRise: Number(customRoofRise) } : {}),
-    ...(Number.isFinite(Number(customWindowDensity)) && customWindowDensity !== undefined ? { windowDensity: Number(customWindowDensity) } : {}),
-    ...(Number.isFinite(Number(customWindowWidth)) && customWindowWidth !== undefined ? { windowWidth: Number(customWindowWidth) } : {}),
-    ...(Number.isFinite(Number(customWindowHeight)) && customWindowHeight !== undefined ? { windowHeight: Number(customWindowHeight) } : {}),
-    ...(Number.isFinite(Number(customDoorWidth)) && customDoorWidth !== undefined ? { doorWidth: Number(customDoorWidth) } : {}),
+    ...(hasNumericOverride(customRoofRise) ? { roofRise: Number(customRoofRise) } : {}),
+    ...(hasNumericOverride(customWindowDensity) ? { windowDensity: Number(customWindowDensity) } : {}),
+    ...(hasNumericOverride(customWindowWidth) ? { windowWidth: Number(customWindowWidth) } : {}),
+    ...(hasNumericOverride(customWindowHeight) ? { windowHeight: Number(customWindowHeight) } : {}),
+    ...(hasNumericOverride(customDoorWidth) ? { doorWidth: Number(customDoorWidth) } : {}),
     ...(customRoofStyle ? { roofStyle: customRoofStyle } : {}),
   }
-  const buildingHeight = Number(customHeight ?? height ?? preset.height)
+  const requestedHeight = hasNumericOverride(customHeight) ? customHeight : height
+  const buildingHeight = Number(hasNumericOverride(requestedHeight) ? requestedHeight : preset.height)
   const facadeMaterial = wallMaterial || materials[preset.wall] || materials.wall
   const group = new THREE.Group()
   group.name = label

@@ -84,6 +84,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let navigationVisualGroup = null
   let navigationWasActive = false
   let pendingIndoorFloorTarget = null
+  const renderDebugEnabled = new URLSearchParams(window.location.search).has('render-debug')
+  let renderDebugFrame = 0
 
   async function init() {
     if (!container) throw new Error('未找到三维场景容器')
@@ -825,12 +827,41 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
   }
 
+  function logRenderDiagnostics(stage) {
+    if (!renderDebugEnabled || !renderer || !cameraRig) return
+    const canvas = renderer.domElement
+    const rect = canvas.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+    const gl = renderer.getContext()
+    const camera = cameraRig.camera
+    console.info('[CampusRenderDiagnostics]', {
+      stage,
+      container: { width: containerRect.width, height: containerRect.height, top: containerRect.top, bottom: containerRect.bottom },
+      canvas: { cssWidth: rect.width, cssHeight: rect.height, top: rect.top, bottom: rect.bottom, width: canvas.width, height: canvas.height },
+      drawingBuffer: { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight },
+      viewport: Array.from(gl.getParameter(gl.VIEWPORT)),
+      scissor: Array.from(gl.getParameter(gl.SCISSOR_BOX)),
+      scissorTest: gl.isEnabled(gl.SCISSOR_TEST),
+      pixelRatio: renderer.getPixelRatio(),
+      camera: {
+        type: camera.type,
+        near: camera.near,
+        far: camera.far,
+        zoom: camera.zoom,
+        aspect: camera.aspect,
+        position: camera.position.toArray(),
+        target: cameraRig.currentTarget?.toArray?.() || null,
+      },
+    })
+  }
+
   function resize() {
     if (!renderer || !cameraRig) return
     const width = Math.max(container.clientWidth, 1)
     const height = Math.max(container.clientHeight, 1)
     renderer.setSize(width, height)
     cameraRig.resize(width / height)
+    logRenderDiagnostics('resize')
   }
 
   function animate(time) {
@@ -965,6 +996,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     cameraRig?.update(delta)
     renderer.render(scene, cameraRig.camera)
+    if (renderDebugEnabled && ++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
   }
 
   function updateSceneObject(sceneObject) {

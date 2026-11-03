@@ -254,6 +254,55 @@ export function getBuildingFloorLayout(totalHeight, requestedFloors = 1, windowH
   }
 }
 
+
+/**
+ * 校验建筑 footprint，阻止重复点、零面积和自相交轮廓进入三维生成流程。
+ * points 使用 [x, y] 或 { x, y }，返回可用于编辑器提示的结构化结果。
+ */
+export function validateBuildingFootprint(points = []) {
+  const normalized = Array.isArray(points) ? points.map(point => Array.isArray(point)
+    ? { x: Number(point[0]), y: Number(point[1]) }
+    : { x: Number(point?.x), y: Number(point?.y) }) : []
+  const errors = []
+  if (normalized.length < 3) return { valid: false, errors: ['建筑轮廓至少需要 3 个顶点'] }
+  if (normalized.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+    return { valid: false, errors: ['建筑轮廓包含无效坐标'] }
+  }
+  const vertices = normalized.filter((point, index) => (
+    index === 0 || Math.hypot(point.x - normalized[index - 1].x, point.y - normalized[index - 1].y) > 1e-4
+  ))
+  if (vertices.length > 2 && Math.hypot(vertices[0].x - vertices.at(-1).x, vertices[0].y - vertices.at(-1).y) <= 1e-4) vertices.pop()
+  if (vertices.length < 3) return { valid: false, errors: ['建筑轮廓存在重复顶点'] }
+  const area = vertices.reduce((sum, point, index) => {
+    const next = vertices[(index + 1) % vertices.length]
+    return sum + point.x * next.y - next.x * point.y
+  }, 0) / 2
+  if (Math.abs(area) < 1e-3) errors.push('建筑轮廓面积为零或过小')
+  const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+  const onSegment = (a, b, p) => p.x >= Math.min(a.x, b.x) - 1e-4 && p.x <= Math.max(a.x, b.x) + 1e-4
+    && p.y >= Math.min(a.y, b.y) - 1e-4 && p.y <= Math.max(a.y, b.y) + 1e-4
+  const intersects = (a, b, c, d) => {
+    const abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b)
+    if (((abC > 1e-4 && abD < -1e-4) || (abC < -1e-4 && abD > 1e-4))
+      && ((cdA > 1e-4 && cdB < -1e-4) || (cdA < -1e-4 && cdB > 1e-4))) return true
+    return (Math.abs(abC) <= 1e-4 && onSegment(a, b, c))
+      || (Math.abs(abD) <= 1e-4 && onSegment(a, b, d))
+      || (Math.abs(cdA) <= 1e-4 && onSegment(c, d, a))
+      || (Math.abs(cdB) <= 1e-4 && onSegment(c, d, b))
+  }
+  for (let i = 0; i < vertices.length; i += 1) {
+    const a = vertices[i], b = vertices[(i + 1) % vertices.length]
+    for (let j = i + 1; j < vertices.length; j += 1) {
+      if (j === i || j === i + 1 || (i === 0 && j === vertices.length - 1)) continue
+      if (intersects(a, b, vertices[j], vertices[(j + 1) % vertices.length])) {
+        errors.push('建筑轮廓存在自相交边线')
+        return { valid: false, errors }
+      }
+    }
+  }
+  return { valid: errors.length === 0, errors }
+}
+
 export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
   if (!Array.isArray(edges) || !edges.length) return null
   const hasRequestedIndex = requestedIndex !== null && requestedIndex !== undefined && requestedIndex !== ''

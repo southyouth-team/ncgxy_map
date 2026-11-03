@@ -14,6 +14,8 @@ export class InputController {
     this.lastPointer = { x: 0, y: 0 }
     this.pointerLocked = false
     this.touchLookPointerId = null
+    this.navigationPath = null
+    this.navigationPathIndex = 0
     this.lastTouchLook = { x: 0, y: 0 }
     this.onKeyDown = (event) => {
       const key = event.key.toLowerCase()
@@ -92,6 +94,8 @@ export class InputController {
   setMode(mode) {
     this.mode = mode
     this.keys.clear()
+    this.navigationPath = null
+    this.navigationPathIndex = 0
     this.pointerDown = false
     if (mode !== 'firstPerson') this.exitPointerLock()
   }
@@ -105,6 +109,14 @@ export class InputController {
     this.cameraRig.player.set(Number(position.x) || 0, 1.7, Number(position.z) || 0)
   }
 
+  setNavigationPath(path) {
+    this.navigationPath = Array.isArray(path) && path.length > 1
+      ? path.map(point => ({ x: Number(point.x), z: Number(point.z) })).filter(point => Number.isFinite(point.x) && Number.isFinite(point.z))
+      : null
+    this.navigationPathIndex = this.navigationPath ? 1 : 0
+    return Boolean(this.navigationPath)
+  }
+
   setMovementEnabled(enabled) {
     this.movementEnabled = Boolean(enabled)
     if (!this.movementEnabled) this.keys.clear()
@@ -114,6 +126,28 @@ export class InputController {
     if (this.mode === 'overview' || !this.movementEnabled) return
     const forward = (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0) - (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0)
     const strafe = (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0)
+    if (forward || strafe) this.navigationPath = null
+    if (!forward && !strafe && this.navigationPath) {
+      const target = this.navigationPath[this.navigationPathIndex]
+      if (!target) { this.navigationPath = null; return }
+      const player = this.cameraRig.player
+      const dx = target.x - player.x, dz = target.z - player.z
+      const distance = Math.hypot(dx, dz)
+      if (distance <= 0.16) {
+        this.navigationPathIndex += 1
+        if (this.navigationPathIndex >= this.navigationPath.length) this.navigationPath = null
+        return
+      }
+      const travel = Math.min(distance, 5.5 * delta)
+      const movement = this.collisionWorld.move(player, dx / distance * travel, dz / distance * travel)
+      const moved = Math.hypot(movement.x - player.x, movement.z - player.z)
+      if (moved < 0.002) { this.navigationPath = null; return }
+      player.x = movement.x
+      player.z = movement.z
+      if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
+      else this.cameraRig.updateFirstPersonDesired()
+      return
+    }
     if (!forward && !strafe) return
     const speed = (this.keys.has('shift') ? 18 : 9) * delta
     // 第三人称 yaw 描述的是相机相对角色的偏移方向，角色前进方向与其相反。

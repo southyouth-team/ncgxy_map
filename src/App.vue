@@ -7,6 +7,7 @@ import IndoorFloorPlanEditor from './components/IndoorFloorPlanEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 import { CAMPUS_BUILDING_FOOTPRINTS } from './data/campus/campusLayout.js'
+import { expandIndoorBuilding } from './three/indoor/indoorBuildingDefinitions.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -112,6 +113,18 @@ function ensureIndoorDefinition() {
   if (indoorDefinition.value) return indoorDefinition.value
   indoorDefinition.value = engine?.getIndoorBuildingDefinition?.() || null
   return indoorDefinition.value
+}
+
+function expandCurrentBuilding(side) {
+  if (!indoorDefinition.value) return
+  try {
+    indoorDefinition.value = expandIndoorBuilding(indoorDefinition.value, { side, amount: 2 })
+    engine?.updateIndoorBuildingDefinition(indoorDefinition.value)
+    indoorEditorMessage.value = '占地边界已向' + ({ north: '北', south: '南', east: '东', west: '西' }[side]) + '侧扩建 2 个场景单位；请检查布局后保存'
+    indoorFloors.value = indoorDefinition.value.floors.map(floor => floor.level).sort((a,b) => a-b)
+  } catch (error) {
+    indoorEditorMessage.value = error?.message || '建筑扩建失败'
+  }
 }
 
 function refreshIndoorLayout() {
@@ -484,6 +497,17 @@ onBeforeUnmount(() => {
     <aside v-if="indoorPrototypeActive && indoorEditorOpen" class="indoor-layout-editor">
       <header><strong>室内空间编辑器</strong><small>建筑 {{ indoorBuildingId }} · {{ indoorFloor }}F</small></header>
       <div class="indoor-editor-actions"><button @click="addIndoorFloor">＋ 增加楼层</button><button :disabled="indoorFloors.length <= 1" @click="removeIndoorFloor">删除当前层</button><button @click="addIndoorRoom">＋ 添加房间</button></div>
+      <section class="indoor-footprint-tools">
+        <strong>建筑占地扩建</strong>
+        <small>按校园底图建筑轮廓为基准；每次向指定方向扩展 2 个场景单位</small>
+        <div class="indoor-expansion-buttons">
+          <button @click="expandCurrentBuilding('north')">北侧＋</button>
+          <button @click="expandCurrentBuilding('south')">南侧＋</button>
+          <button @click="expandCurrentBuilding('west')">西侧＋</button>
+          <button @click="expandCurrentBuilding('east')">东侧＋</button>
+        </div>
+        <small v-if="indoorDefinition?.footprintSize">当前占地：{{ indoorDefinition.footprintSize.width.toFixed(1) }} × {{ indoorDefinition.footprintSize.depth.toFixed(1) }}</small>
+      </section>
       <IndoorFloorPlanEditor :floor="activeEditableFloor" @change="refreshIndoorLayout" />
       <div class="indoor-room-list"><section v-for="room in activeEditableFloor?.rooms || []" :key="room.id" class="indoor-room-item">
         <div class="indoor-room-title"><input v-model="room.name" aria-label="房间名称" @change="refreshIndoorLayout"><button @click="removeIndoorRoom(room.id)">删除</button></div>

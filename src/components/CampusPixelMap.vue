@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   CAMPUS_AREAS,
   CAMPUS_BUILDING_FOOTPRINTS,
+  CAMPUS_PLAYER_SPAWN_PIXEL,
   CAMPUS_ROAD_CENTERLINES,
   CAMPUS_ROAD_WIDTHS,
   getCampusFootprintBounds,
@@ -21,7 +22,7 @@ let dragState = null
 let dpr = 1
 let baseMapCanvas = null
 const selectedTitle = computed(() => selected.value?.label || selected.value?.name || '校园')
-const player = ref({ x: 640, y: 340, direction: 'down', walkFrame: 0 })
+const player = ref({ x: CAMPUS_PLAYER_SPAWN_PIXEL[0], y: CAMPUS_PLAYER_SPAWN_PIXEL[1], direction: 'down', walkFrame: 0 })
 const PLAYER_SPEED = 3.2
 const palette = {
   grass: '#a9c78b', grassLight: '#b8d49a', grassDark: '#91b477',

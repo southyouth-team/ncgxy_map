@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, validateBuildingFootprint, getFacadeWindowPositions } from './campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, getGableRoofLayout, validateBuildingFootprint, getFacadeWindowPositions } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
   it('creates a ridge-based gable roof for a convex rectangular footprint', () => {
@@ -17,6 +17,26 @@ describe('shared campus building assets', () => {
     ], 4, 1)).toBeNull()
     expect(createGableRoofVertices([{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }], 4, 1)).toBeNull()
   })
+
+  it('uses one ridge layout for roof surfaces and ridge decoration', () => {
+    const points = [
+      { x: -5, y: -2 }, { x: 5, y: -2 }, { x: 4, y: 2 }, { x: -4, y: 2 },
+    ]
+    const layout = getGableRoofLayout(points)
+    const vertices = createGableRoofVertices(points, 3, 1)
+    expect(layout).not.toBeNull()
+    expect(vertices).toHaveLength(36)
+    const ridgeVertices = vertices.filter((value, index) => index % 3 === 1 && value === 4)
+    expect(ridgeVertices.length).toBeGreaterThan(0)
+    expect(layout.ridgeStart).toEqual({
+      x: (layout.contour[3].x + layout.contour[0].x) / 2,
+      y: (layout.contour[3].y + layout.contour[0].y) / 2,
+    })
+    expect(getGableRoofLayout([
+      { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 2, y: 1 }, { x: 0, y: 4 },
+    ])).toBeNull()
+  })
+
   it('calculates consistent floor heights, window levels and floor bands', () => {
     const layout = getBuildingFloorLayout(12, 4, 0.8)
     expect(layout.floors).toBe(4)

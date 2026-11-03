@@ -346,6 +346,37 @@ export function getFacadeWindowPositions(edgeLength, windowWidth, density = 1, r
   return positions.filter(position => Math.abs(position - Number(reservedCenter)) >= keepAway)
 }
 
+/**
+ * 统一约束建筑三维参数，避免 UI 输入或外部数据产生负尺寸、极端楼层和非法屋顶样式。
+ * 未提供的字段保留模板默认值；数值越界时进行安全钳制。
+ */
+export function normalizeBuildingParameters(preset = {}, overrides = {}) {
+  const read = (key, fallback, min, max) => {
+    const value = overrides[key]
+    const number = value !== '' && value !== null && value !== undefined ? Number(value) : NaN
+    return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback
+  }
+  const height = read('height', Number(preset.height) || 4, 1, 80)
+  const floors = Math.min(
+    Math.max(1, Math.floor(read('floors', Number(preset.floors) || 1, 1, 30))),
+    Math.max(1, Math.floor(height / 1.8)),
+  )
+  const roofStyle = ['flat', 'pitched', 'span', 'glass'].includes(overrides.roofStyle)
+    ? overrides.roofStyle
+    : (['flat', 'pitched', 'span', 'glass'].includes(preset.roofStyle) ? preset.roofStyle : 'flat')
+  return {
+    ...preset,
+    height,
+    floors,
+    roofStyle,
+    roofRise: read('roofRise', Number(preset.roofRise) || 0, 0, Math.max(0.1, height * 0.6)),
+    windowDensity: read('windowDensity', Number(preset.windowDensity) || 1, 0.1, 3),
+    windowWidth: read('windowWidth', Number(preset.windowWidth) || 0.48, 0.28, 4),
+    windowHeight: read('windowHeight', Number(preset.windowHeight) || 0.6, 0.2, 8),
+    doorWidth: read('doorWidth', Number(preset.doorWidth) || 0.9, 0.5, 5),
+  }
+}
+
 export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
   if (!Array.isArray(edges) || !edges.length) return null
   const hasRequestedIndex = requestedIndex !== null && requestedIndex !== undefined && requestedIndex !== ''
@@ -362,17 +393,18 @@ export function createPixelBuilding(THREE, options = {}) {
   } = options
   const basePreset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
   const hasNumericOverride = value => value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value))
-  const preset = {
-    ...basePreset,
-    ...(hasNumericOverride(customRoofRise) ? { roofRise: Number(customRoofRise) } : {}),
-    ...(hasNumericOverride(customWindowDensity) ? { windowDensity: Number(customWindowDensity) } : {}),
-    ...(hasNumericOverride(customWindowWidth) ? { windowWidth: Number(customWindowWidth) } : {}),
-    ...(hasNumericOverride(customWindowHeight) ? { windowHeight: Number(customWindowHeight) } : {}),
-    ...(hasNumericOverride(customDoorWidth) ? { doorWidth: Number(customDoorWidth) } : {}),
-    ...(customRoofStyle ? { roofStyle: customRoofStyle } : {}),
-  }
   const requestedHeight = hasNumericOverride(customHeight) ? customHeight : height
-  const buildingHeight = Number(hasNumericOverride(requestedHeight) ? requestedHeight : preset.height)
+  const preset = normalizeBuildingParameters(basePreset, {
+    height: requestedHeight,
+    floors,
+    roofRise: customRoofRise,
+    windowDensity: customWindowDensity,
+    windowWidth: customWindowWidth,
+    windowHeight: customWindowHeight,
+    doorWidth: customDoorWidth,
+    roofStyle: customRoofStyle,
+  })
+  const buildingHeight = preset.height
   const facadeMaterial = wallMaterial || materials[preset.wall] || materials.wall
   const group = new THREE.Group()
   group.name = label

@@ -272,11 +272,20 @@ function addFurniture(room) {
   const type = selectedFurnitureType.value
   const count = room.furniture.length
   const spec = types[type]
+  const candidates = []
+  for (let z = -room.depth / 2 + spec.depth / 2 + 0.35; z <= room.depth / 2 - spec.depth / 2 - 0.35; z += 0.5) {
+    for (let x = -room.width / 2 + spec.width / 2 + 0.35; x <= room.width / 2 - spec.width / 2 - 0.35; x += 0.5) {
+      candidates.push({ x: round(x), z: round(z) })
+    }
+  }
+  const spot = candidates.find(point => room.furniture.every(other =>
+    Math.abs(point.x - other.x) >= (spec.width + other.width) / 2 + 0.12 ||
+    Math.abs(point.z - other.z) >= (spec.depth + other.depth) / 2 + 0.12))
+  if (!spot) return
+  checkpoint()
   room.furniture.push({
     id: `furniture-${Date.now()}-${count}`, type, name: spec.name,
-    x: round(-room.width / 2 + spec.width / 2 + 0.4 + (count % 3) * Math.min(1.5, (room.width - spec.width - 0.8) / 2)),
-    z: round(-room.depth / 2 + spec.depth / 2 + 0.4 + Math.floor(count / 3) * Math.min(1.2, (room.depth - spec.depth - 0.8) / 1)),
-    ...spec,
+    ...spot, ...spec,
   })
   selectedRoomId.value = room.id
   emit('change')

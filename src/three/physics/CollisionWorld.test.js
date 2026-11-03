@@ -82,6 +82,21 @@ describe('CollisionWorld', () => {
     expect(collision.isBlocked(9, 0)).toBe(false)
   })
 
+  it('keeps a player on the island when walking toward lake water', () => {
+    const collision = new CollisionWorld(
+      { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
+      [],
+      0.5,
+    )
+    collision.addPolygonObstacle({
+      outer: [[-8, -8], [8, -8], [8, 8], [-8, 8]],
+      holes: [[[-2, -2], [2, -2], [2, 2], [-2, 2]]],
+    })
+    const result = collision.move({ x: 0, z: 0 }, 5, 0)
+    expect(result.x).toBeLessThanOrEqual(1.5)
+    expect(collision.isBlocked(result.x, result.z)).toBe(false)
+  })
+
   it('rejects invalid polygon obstacles', () => {
     const collision = new CollisionWorld({ minX: -5, maxX: 5, minZ: -5, maxZ: 5 })
     expect(collision.addPolygonObstacle({ outer: [[0, 0], [1, 1]] })).toBe(false)

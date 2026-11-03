@@ -1083,6 +1083,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       })
       const wallThickness = 0.28
       const entranceEdgeIndex = Number(rebuildOptions?.entranceEdgeIndex ?? 0)
+      const entranceGapHalf = Math.max(1.05, Number(rebuildOptions?.doorWidth || 1.28) / 2 + 0.55)
       const wallObstacles = []
       const appendWallSegment = (start, end) => {
         const dx = end.x - start.x, dz = end.z - start.z
@@ -1115,11 +1116,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           appendWallSegment(after, end)
         } else appendWallSegment(start, end)
       })
+      const previousCollisionCount = indoorOutdoorBase.collisionCount
       outdoorCollisionWorld.obstacles.splice(
         indoorOutdoorBase.collisionStart,
-        indoorOutdoorBase.collisionCount,
+        previousCollisionCount,
         ...wallObstacles,
       )
+      const collisionCountDelta = wallObstacles.length - previousCollisionCount
+      if (collisionCountDelta) {
+        campus?.traverse(object => {
+          if (!Number.isInteger(object.userData?.collisionObstacleStart) ||
+              object === indoorOutdoorTarget ||
+              object.userData.collisionObstacleStart <= indoorOutdoorBase.collisionStart) return
+          object.userData.collisionObstacleStart += collisionCountDelta
+          const baseline = outdoorBuildingBaselines.get(object)
+          if (baseline && Number.isInteger(baseline.collisionStart)) baseline.collisionStart += collisionCountDelta
+        })
+      }
       indoorOutdoorTarget.userData.collisionObstacleCount = wallObstacles.length
       indoorOutdoorBase.collisionCount = wallObstacles.length
       const baseline = outdoorBuildingBaselines.get(indoorOutdoorTarget)

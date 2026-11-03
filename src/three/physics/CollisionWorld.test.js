@@ -115,6 +115,18 @@ describe('CollisionWorld', () => {
     expect(collision.isBlocked(2, -3)).toBe(true)
   })
 
+  it('keeps a generated doorway open while blocking adjacent wall segments', () => {
+    const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 }, [], 0.35)
+    const wall = (x1, x2) => collision.addPolygonObstacle({
+      outer: [[x1, 2], [x2, 2], [x2, 2.3], [x1, 2.3]],
+    })
+    expect(wall(-4, -0.7)).toBe(true)
+    expect(wall(0.7, 4)).toBe(true)
+    expect(collision.isBlocked(0, 2.15)).toBe(false)
+    expect(collision.isBlocked(-2, 2.15)).toBe(true)
+    expect(collision.isBlocked(2, 2.15)).toBe(true)
+  })
+
   it('rejects invalid polygon obstacles', () => {
     const collision = new CollisionWorld({ minX: -5, maxX: 5, minZ: -5, maxZ: 5 })
     expect(collision.addPolygonObstacle({ outer: [[0, 0], [1, 1]] })).toBe(false)

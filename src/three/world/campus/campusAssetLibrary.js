@@ -248,38 +248,23 @@ export function createPixelBuilding(THREE, options = {}) {
   wall.receiveShadow = true
   group.add(wall)
 
-  const roofWidth = width + 0.42
-  const roofDepth = depth + 0.42
-  const roofShape = new THREE.Shape()
-  roofShape.moveTo(-roofWidth / 2, 0)
-  roofShape.lineTo(0, preset.roofRise)
-  roofShape.lineTo(roofWidth / 2, 0)
-  roofShape.closePath()
-  const roofGeometry = new THREE.ExtrudeGeometry(roofShape, { depth: roofDepth, bevelEnabled: false, steps: 1 })
-  roofGeometry.translate(0, buildingHeight - 0.08, -roofDepth / 2)
+  // 屋顶必须复用建筑 footprint，不能再按外接矩形生成，否则不规则建筑会出现悬空屋顶。
+  // 使用同一 Shape 生成薄屋面，确保凹多边形、斜边建筑的屋顶边界与墙体完全一致。
+  const roofGeometry = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.14,
+    bevelEnabled: false,
+    curveSegments: 1,
+  })
+  roofGeometry.rotateX(-Math.PI / 2)
   const roof = new THREE.Mesh(roofGeometry, materials.roof)
+  roof.position.y = buildingHeight - 0.02
   roof.castShadow = true
   roof.receiveShadow = true
+  roof.userData.objectType = 'building-roof'
   group.add(roof)
 
-  const eave = new THREE.Mesh(new THREE.BoxGeometry(roofWidth + 0.18, 0.16, roofDepth + 0.2), materials.roofDark)
-  eave.position.y = buildingHeight - 0.05
-  group.add(eave)
-
-  const windows = Math.max(1, Math.min(8, Math.round(width / 2.5 * preset.windowDensity)))
-  for (let i = 0; i < windows; i += 1) {
-    const x = -width / 2 + (i + 1) * width / (windows + 1)
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.92, 0.12), materials.windowTrim)
-    frame.position.set(x, 1.95, depth / 2 + 0.075)
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.68, 0.06), materials.window)
-    glass.position.set(x, 1.95, depth / 2 + 0.15)
-    const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.68, 0.04), materials.windowTrim)
-    mullion.position.set(x, 1.95, depth / 2 + 0.19)
-    group.add(frame, glass, mullion)
-  }
-  const door = new THREE.Mesh(new THREE.BoxGeometry(preset.doorWidth, 1.55, 0.16), materials.door)
-  door.position.set(0, 0.78, depth / 2 + 0.09)
-  group.add(door)
+  // 门窗暂不按外接矩形布置，避免不规则 footprint 下装饰件脱离真实墙面。
+  // 后续可根据 footprint 边段法线，在真实立面上参数化生成门窗。
   group.traverse((object) => {
     if (object.isMesh) { object.castShadow = true; object.receiveShadow = true }
   })

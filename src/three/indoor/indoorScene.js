@@ -28,6 +28,22 @@ export function getStairTraversalPoints(stairPath, direction) {
   return { entry, exit }
 }
 
+/** 根据楼梯配置生成与楼梯模型一致的上下平台坐标。 */
+export function createStairPath(stairPoint = {}) {
+  const x = Number(stairPoint.x)
+  const z = Number(stairPoint.z)
+  const direction = stairPoint.direction || 'south'
+  const rotations = { south: 0, west: -Math.PI / 2, north: Math.PI, east: Math.PI / 2 }
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !(direction in rotations)) return null
+  const rotation = rotations[direction]
+  const rotate = localZ => ({
+    x: Number((x + Math.sin(rotation) * localZ).toFixed(3)),
+    z: Number((z + Math.cos(rotation) * localZ).toFixed(3)),
+  })
+  return { start: rotate(-2.1), end: rotate(2.1), rise: 4.2, direction }
+}
+
+
 /**
  * 生成建筑内跨楼层导航计划。楼层按编号排序，每次只跨越一个相邻楼层，
  * 由运行时在每层分别执行平面寻路，避免把不同高度的网格错误地投影到同一平面。
@@ -49,11 +65,20 @@ export function planIndoorFloorRoute(building, startLevel, targetLevel) {
     if (Math.abs(to.level - from.level) !== 1 || !from.stairPoint || !to.stairPoint) return null
     const aligned = Math.hypot(from.stairPoint.x - to.stairPoint.x, from.stairPoint.z - to.stairPoint.z) <= 0.05
     if (!aligned) return null
+    const fromPath = createStairPath(from.stairPoint)
+    const toPath = createStairPath(to.stairPoint)
+    if (!fromPath || !toPath) return null
+    const fromLanding = direction > 0 ? fromPath.start : fromPath.end
+    const toLanding = direction > 0 ? toPath.end : toPath.start
     transitions.push({
       fromLevel: from.level,
       toLevel: to.level,
       direction,
       stairPoint: { x: from.stairPoint.x, z: from.stairPoint.z },
+      connector: {
+        from: { level: from.level, point: fromLanding },
+        to: { level: to.level, point: toLanding },
+      },
     })
   }
   return { levels: transitions.length ? [startLevel, ...transitions.map(item => item.toLevel)] : [startLevel], transitions }
@@ -326,6 +351,10 @@ export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}
       { id: 'room:' + room.roomId + ':inside', type: 'room-inside', point: room.inside },
     ]),
     ...(landmarks.stairPoint ? [{ id: 'stairs', type: 'stairs', point: landmarks.stairPoint }] : []),
+    ...(landmarks.stairPath ? [
+      { id: 'stairs:lower-landing', type: 'stair-landing', point: landmarks.stairPath.start },
+      { id: 'stairs:upper-landing', type: 'stair-landing', point: landmarks.stairPath.end },
+    ] : []),
     ...(landmarks.exitInteractions || []).map((point, index) => ({ id: 'exit:' + index, type: 'exit', point })),
   ].map(item => {
     const nodeId = nearestNode(item.point)
@@ -607,14 +636,13 @@ export function createIndoorFloor(THREE, floor) {
     if (door.wall === 'east') return { x: halfW - distance, z: offset }
     return { x: -halfW + distance, z: offset }
   })
-  const stairStart = rotateStairPoint(0, -2.1)
-  const stairEnd = rotateStairPoint(0, 2.1)
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
-  group.userData.stairPath = { start: stairStart, end: stairEnd, rise: 4.2, direction: stairPoint.direction || 'south' }
+  group.userData.stairPath = createStairPath(stairPoint)
   // 以实际碰撞障碍生成低分辨率导航网格，供室内可达性校验和后续寻路复用。
   const navigation = buildIndoorNavigationGraph(floor, collision, {
     roomInteractions: getRoomInteractionPoints(floor),
     stairPoint,
+    stairPath: group.userData.stairPath,
     exitInteractions: doors.map(door => {
       const offset = Number(door.offset) || 0
       const distance = 1.15

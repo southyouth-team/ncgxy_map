@@ -21,7 +21,7 @@ let dragState = null
 let dpr = 1
 let baseMapCanvas = null
 const selectedTitle = computed(() => selected.value?.label || selected.value?.name || '校园')
-const player = ref({ x: 640, y: 340, direction: 'down' })
+const player = ref({ x: 640, y: 340, direction: 'down', walkFrame: 0 })
 const PLAYER_SPEED = 3.2
 const palette = {
   grass: '#a9c78b', grassLight: '#b8d49a', grassDark: '#91b477',
@@ -428,6 +428,7 @@ function render() {
   ctx.imageSmoothingEnabled = false
   if (baseMapCanvas) ctx.drawImage(baseMapCanvas, 0, 0)
   drawExplorerCharacter(ctx, player.value)
+  drawForegroundTreeCanopies(ctx, player.value)
   for (const [target, color, lineWidth] of [[hovered.value, '#fff8cf', 1.5], [selected.value, '#f6d66e', 2.5]]) {
     if (target?.type !== 'building') continue
     const item = CAMPUS_BUILDING_FOOTPRINTS.find(b => b.id === target.id)
@@ -463,8 +464,14 @@ function drawExplorerCharacter(ctx, actor) {
   ctx.fillStyle = 'rgba(39, 55, 43, .28)'
   ctx.fillRect(-6, 5, 13, 4)
   ctx.fillStyle = '#344c43'
-  ctx.fillRect(-4, 1, 3, 5)
-  ctx.fillRect(2, 1, 3, 5)
+  const step = actor.walkFrame % 2 === 0 ? 1 : -1
+  if (actor.walking) {
+    ctx.fillRect(-4 + step, 1, 3, 5)
+    ctx.fillRect(2 - step, 1, 3, 5)
+  } else {
+    ctx.fillRect(-4, 1, 3, 5)
+    ctx.fillRect(2, 1, 3, 5)
+  }
   ctx.fillStyle = '#e8c59b'
   ctx.fillRect(-5, -7, 10, 8)
   ctx.fillStyle = '#4f6f86'
@@ -487,6 +494,21 @@ function drawExplorerCharacter(ctx, actor) {
     ctx.fillRect(-4, -13, 8, 2)
   }
   ctx.restore()
+}
+function drawForegroundTreeCanopies(ctx, actor) {
+  // 仅重绘角色后方且与角色发生空间重叠的树冠，形成基础前后遮挡。
+  for (let index = 0; index < TREE_SPOTS.length; index++) {
+    const [x, y] = TREE_SPOTS[index]
+    if (actor.y >= y + 2 || Math.abs(actor.x - x) > 10 || y - actor.y > 18) continue
+    const variant = index % 3
+    ctx.fillStyle = variant === 1 ? '#638d59' : variant === 2 ? '#527c50' : '#6f9d60'
+    ctx.fillRect(x - 5, y - 8, 10, 7)
+    if (variant === 0) ctx.fillRect(x - 7, y - 2, 14, 5)
+    if (variant === 1) ctx.fillRect(x - 3, y - 10, 7, 5)
+    if (variant === 2) ctx.fillRect(x - 3, y - 10, 8, 7)
+    ctx.fillStyle = '#a3c982'
+    ctx.fillRect(x - 2, y - 8, 4, 2)
+  }
 }
 function canPlayerMoveTo(x, y) {
   if (x < 8 || x > 992 || y < 8 || y > 492) return false
@@ -515,12 +537,17 @@ function onExplorerKeydown(event) {
   const direction = directions[key]
   if (!direction) return
   event.preventDefault()
-  const [dx, dy, facing] = direction
+  const [rawDx, rawDy, facing] = direction
+  const length = Math.hypot(rawDx, rawDy) || 1
+  const dx = rawDx / length, dy = rawDy / length
   const nextX = player.value.x + dx * PLAYER_SPEED
   const nextY = player.value.y + dy * PLAYER_SPEED
   player.value.direction = facing
+  const previousX = player.value.x, previousY = player.value.y
   if (canPlayerMoveTo(nextX, player.value.y)) player.value.x = nextX
   if (canPlayerMoveTo(player.value.x, nextY)) player.value.y = nextY
+  player.value.walking = player.value.x !== previousX || player.value.y !== previousY
+  if (player.value.walking) player.value.walkFrame++
   followPlayerCamera()
   selected.value = null
   render()

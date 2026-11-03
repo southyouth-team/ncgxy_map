@@ -97,6 +97,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         const sideWidth = 0.55
         const doorHalfWidth = 1.08
         const wallDepth = 0.5
+        object.userData.collisionObstacleStart = buildingObstacles.length
         buildingObstacles.push(
           { minX: bounds.min.x, maxX: centerX - doorHalfWidth, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
           { minX: centerX + doorHalfWidth, maxX: bounds.max.x, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
@@ -104,6 +105,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           { minX: bounds.min.x, maxX: bounds.min.x + sideWidth, minZ: backZ, maxZ: frontZ },
           { minX: bounds.max.x - sideWidth, maxX: bounds.max.x, minZ: backZ, maxZ: frontZ },
         )
+        object.userData.collisionObstacleCount = 5
       } else {
         buildingObstacles.push({
           minX: bounds.min.x, maxX: bounds.max.x,
@@ -849,9 +851,53 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     indoorOutdoorTarget.updateMatrixWorld(true)
 
-    // 室外碰撞体与重建后的建筑包围盒同步。
-    if (!(isRpgSample && indoorOutdoorTarget.userData?.buildingId === 'sample-teaching-building') &&
-        indoorOutdoorBase.collisionIndex >= 0 && outdoorCollisionWorld?.obstacles[indoorOutdoorBase.collisionIndex]) {
+    // 室外碰撞体与重建后的建筑轮廓同步；样板楼保留入口缺口，不能用整栋多边形封死门洞。
+    if (isRpgSample && indoorOutdoorTarget.userData?.buildingId === 'sample-teaching-building' &&
+        Number.isInteger(indoorOutdoorBase.collisionStart) && indoorOutdoorBase.collisionCount > 0 && outdoorCollisionWorld) {
+      const worldPolygon = polygon.map(point => {
+        const worldPoint = indoorOutdoorTarget.localToWorld(new THREE.Vector3(point.x, 0, point.z))
+        return { x: worldPoint.x, z: worldPoint.z }
+      })
+      const wallThickness = 0.55
+      const entranceEdgeIndex = Number(rebuildOptions?.entranceEdgeIndex ?? 0)
+      const entranceGapHalf = Math.max(1.05, Number(rebuildOptions?.doorWidth || 1.28) / 2 + 0.55)
+      const wallObstacles = []
+      const appendWallSegment = (start, end) => {
+        const dx = end.x - start.x, dz = end.z - start.z
+        const length = Math.hypot(dx, dz)
+        if (length < 0.15) return
+        const nx = -dz / length * wallThickness / 2
+        const nz = dx / length * wallThickness / 2
+        const corners = [
+          { x: start.x + nx, z: start.z + nz }, { x: start.x - nx, z: start.z - nz },
+          { x: end.x + nx, z: end.z + nz }, { x: end.x - nx, z: end.z - nz },
+        ]
+        wallObstacles.push({
+          minX: Math.min(...corners.map(point => point.x)), maxX: Math.max(...corners.map(point => point.x)),
+          minZ: Math.min(...corners.map(point => point.z)), maxZ: Math.max(...corners.map(point => point.z)),
+        })
+      }
+      worldPolygon.forEach((start, index) => {
+        const end = worldPolygon[(index + 1) % worldPolygon.length]
+        if (index === entranceEdgeIndex) {
+          const dx = end.x - start.x, dz = end.z - start.z
+          const length = Math.hypot(dx, dz)
+          const halfGap = Math.min(entranceGapHalf, length * 0.35)
+          const middle = { x: (start.x + end.x) / 2, z: (start.z + end.z) / 2 }
+          const before = { x: middle.x - dx / length * halfGap, z: middle.z - dz / length * halfGap }
+          const after = { x: middle.x + dx / length * halfGap, z: middle.z + dz / length * halfGap }
+          appendWallSegment(start, before)
+          appendWallSegment(after, end)
+        } else appendWallSegment(start, end)
+      })
+      outdoorCollisionWorld.obstacles.splice(
+        indoorOutdoorBase.collisionStart,
+        indoorOutdoorBase.collisionCount,
+        ...wallObstacles,
+      )
+      indoorOutdoorTarget.userData.collisionObstacleCount = wallObstacles.length
+      indoorOutdoorBase.collisionCount = wallObstacles.length
+    } else if (indoorOutdoorBase.collisionIndex >= 0 && outdoorCollisionWorld?.obstacles[indoorOutdoorBase.collisionIndex]) {
       if (rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
         const worldPolygon = polygon.map(point => {
           const worldPoint = indoorOutdoorTarget.localToWorld(new THREE.Vector3(point.x, 0, point.z))
@@ -894,6 +940,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         bounds: { minX: originalBounds.min.x, maxX: originalBounds.max.x, minZ: originalBounds.min.z, maxZ: originalBounds.max.z },
         position: target.position.clone(),
         scale: target.scale.clone(),
+        collisionStart: target.userData?.collisionObstacleStart,
+        collisionCount: target.userData?.collisionObstacleCount,
       }
       outdoorBuildingBaselines.set(target, baseline)
     }
@@ -916,6 +964,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       depth: baseline.depth,
       bounds: baseline.bounds,
       collisionIndex,
+      collisionStart: baseline.collisionStart,
+      collisionCount: baseline.collisionCount,
       position: baseline.position.clone(),
       scale: baseline.scale.clone(),
     }

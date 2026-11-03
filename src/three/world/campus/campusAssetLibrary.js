@@ -71,6 +71,8 @@ export function addPixelTree(THREE, parent, x, z, scale = 1, variant = 0, mats) 
   const group = new THREE.Group()
   group.position.set(x, 0, z)
   group.scale.setScalar(scale)
+  group.userData.objectType = 'tree'
+  group.userData.collisionRadius = 0.32 * scale
   const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.48, 1.45, 0.48), mats.trunk)
   trunk.position.y = 0.72
   trunk.castShadow = true

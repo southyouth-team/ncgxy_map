@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
+import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
@@ -11,7 +12,8 @@ import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
 import { createCampusMaterials, createPixelBuilding, validateBuildingFootprint } from '../world/campus/campusAssetLibrary.js'
 
-export function createCampusEngine(container, callbacks = {}) {
+export function createCampusEngine(container, callbacks = {}, options = {}) {
+  const isRpgSample = options.sceneType === 'rpg-sample'
   let renderer
   let scene
   let campus
@@ -62,13 +64,15 @@ export function createCampusEngine(container, callbacks = {}) {
     container.appendChild(renderer.domElement)
 
     // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
-    campus = createCampusScene(THREE)
+    campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE)
     scene.add(campus)
     cameraRig = new CameraRig(THREE, renderer.domElement)
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     const playerSprite = campus.getObjectByName('PixelExplorerSprite')
-    const spawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
+    const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
+    const spawn = campus.userData.playerSpawn || fallbackSpawn
     cameraRig.player.set(playerSprite?.position.x ?? spawn.x, 1.7, playerSprite?.position.z ?? spawn.z)
+    if (isRpgSample) cameraRig.focusBounds(campus.userData.sampleBounds.width, campus.userData.sampleBounds.depth)
     // 从明确标记为建筑的场景对象提取世界包围盒，避免把道路、树木等误判为墙体。
     campus.updateMatrixWorld(true)
     const buildingObstacles = []
@@ -95,7 +99,7 @@ export function createCampusEngine(container, callbacks = {}) {
     // 树木、长椅和路灯使用圆形碰撞体，避免 AABB 方形外扩占用过多步行空间。
     for (const obstacle of circularObstacles) collisionWorld.addCircleObstacle(obstacle)
     // 湖水不可通行；中央湖区保留 holes 中定义的岛屿步行区域。
-    for (const area of CAMPUS_AREAS.filter(item => item.type === 'water' && item.polygon?.length >= 3)) {
+    for (const area of (isRpgSample ? [] : CAMPUS_AREAS.filter(item => item.type === 'water' && item.polygon?.length >= 3))) {
       const toWorldRing = ring => ring.map(([x, y]) => {
         const point = mapPixelToWorld(x, y)
         return [point.x, point.z]
@@ -108,7 +112,7 @@ export function createCampusEngine(container, callbacks = {}) {
     outdoorCollisionWorld = collisionWorld
     cameraRig.setObstructionObjects(cameraObstacleRoots)
     // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
-    {
+    if (!isRpgSample) {
       loadCampusBuildingModels(scene)
         .then((result) => {
           loadedBuildingModels = result.models || []

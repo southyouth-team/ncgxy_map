@@ -629,7 +629,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (playerSprite && cameraRig?.player) {
       // 第一人称相机位于角色眼部，隐藏自身 Sprite，避免角色贴图遮挡视野。
       playerSprite.visible = cameraRig.mode !== 'firstPerson'
-      playerSprite.position.set(cameraRig.player.x, 2.1, cameraRig.player.z)
+      playerSprite.position.set(cameraRig.player.x, isRpgSample ? 1.35 : 2.1, cameraRig.player.z)
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
       const moving = dx * dx + dz * dz > 0.000001

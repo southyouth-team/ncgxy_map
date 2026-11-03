@@ -24,6 +24,7 @@ const indoorBuildingName = ref('室内空间样板')
 const nearIndoorStairs = ref(false)
 const nearIndoorRoom = ref(null)
 const activeIndoorRoom = ref(null)
+const indoorPrompt = ref(null)
 const initialView = new URLSearchParams(window.location.search).get('view')
 const isRpgSample = initialView === 'showcase'
 const showEditor = ref(initialView === 'editor' || initialView === 'showcase')
@@ -189,6 +190,7 @@ onMounted(async () => {
   try {
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
+      onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },
       onIndoorStateChange: (state) => {
         indoorPrototypeActive.value = Boolean(state.active)
         if (state.active) { indoorFloor.value = state.floor; indoorFloors.value = state.floors || [state.floor]; indoorBuildingName.value = state.buildingName || '室内空间样板'; nearIndoorStairs.value = Boolean(state.nearStairs); nearIndoorRoom.value = state.nearRoom || null; activeIndoorRoom.value = state.activeRoom || null }
@@ -309,6 +311,7 @@ onBeforeUnmount(() => {
       <button class="reset-button" @click="focusCampus"><span>↗</span> 重置视角</button>
     </div>
 
+    <div v-if="indoorPrompt" class="indoor-interaction-prompt">{{ indoorPrompt.text }}</div>
     <div v-if="loading" class="loading-screen">
       <div class="loader"></div>
       <div>正在加载 2.5D 校园样板</div>

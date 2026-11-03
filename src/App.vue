@@ -5,6 +5,7 @@ import CampusPixelMap from './components/CampusPixelMap.vue'
 import CampusPlanEditor from './editor/CampusPlanEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
+import { CAMPUS_BUILDING_FOOTPRINTS } from './data/campus/campusLayout.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -25,6 +26,9 @@ const nearIndoorStairs = ref(false)
 const nearIndoorRoom = ref(null)
 const activeIndoorRoom = ref(null)
 const indoorPrompt = ref(null)
+const selectedBuildingId = ref(CAMPUS_BUILDING_FOOTPRINTS[0]?.id || '')
+const indoorFloorCount = ref(3)
+const indoorEntryBusy = ref(false)
 const initialView = new URLSearchParams(window.location.search).get('view')
 const isRpgSample = initialView === 'showcase'
 const showEditor = ref(initialView === 'editor' || initialView === 'showcase')
@@ -55,6 +59,23 @@ function adjacentIndoorFloor(direction) {
   const levels = [...indoorFloors.value].sort((a, b) => a - b)
   const index = levels.indexOf(indoorFloor.value)
   return levels[index + direction]
+}
+
+function enterSelectedBuilding() {
+  if (!selectedBuildingId.value || indoorEntryBusy.value || !engine) return
+  indoorEntryBusy.value = true
+  try {
+    const building = CAMPUS_BUILDING_FOOTPRINTS.find(item => item.id === selectedBuildingId.value)
+    const opened = engine.enterIndoorBuilding(selectedBuildingId.value, {
+      name: building?.label || selectedBuildingId.value,
+      floors: indoorFloorCount.value,
+    })
+    if (!opened) errorMessage.value = '未能定位该建筑模型，请先加载校园真实底图场景'
+  } catch (error) {
+    errorMessage.value = error?.message || '室内空间生成失败'
+  } finally {
+    indoorEntryBusy.value = false
+  }
 }
 
 function switchIndoorFloor(direction) {
@@ -324,6 +345,14 @@ onBeforeUnmount(() => {
       <button class="reset-button" @click="focusCampus"><span>↗</span> 重置视角</button>
     </div>
 
+    <div v-if="!isRpgSample && !indoorPrototypeActive && engineReady" class="building-indoor-launcher">
+      <label>建筑空间预览</label>
+      <select v-model="selectedBuildingId">
+        <option v-for="building in CAMPUS_BUILDING_FOOTPRINTS" :key="building.id" :value="building.id">{{ building.label }}</option>
+      </select>
+      <input v-model.number="indoorFloorCount" type="number" min="1" max="30" aria-label="生成楼层数">
+      <button :disabled="indoorEntryBusy" @click="enterSelectedBuilding">{{ indoorEntryBusy ? '生成中…' : '生成室内并进入' }}</button>
+    </div>
     <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }}F / {{ indoorFloors.length }} 层</span></div>
     <div v-if="indoorPrompt" class="indoor-interaction-prompt">{{ indoorPrompt.text }}</div>
     <div v-if="loading" class="loading-screen">

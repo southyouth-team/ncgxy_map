@@ -3,6 +3,23 @@
  * 坐标约定：建筑中心为 (0, 0)，平面使用 XZ，Y 为高度；尺寸单位沿用校园场景单位。
  * 这是可替换的空间构建器，不包含未经测绘的南昌工学院真实房间数据。
  */
+export const INDOOR_STAIR_STEP_COUNT = 12
+
+/** 将楼梯行走进度映射为逐级抬升的高度进度，避免角色沿斜线穿过台阶。 */
+export function getStairStepHeight(progress, rise, stepCount = INDOOR_STAIR_STEP_COUNT) {
+  if (!Number.isFinite(progress) || !Number.isFinite(rise) || rise < 0 ||
+    !Number.isInteger(stepCount) || stepCount < 1) return null
+  const normalized = Math.max(0, Math.min(1, progress))
+  if (normalized >= 1) return rise
+  const stepPosition = normalized * stepCount
+  const completedSteps = Math.floor(stepPosition)
+  const withinStep = stepPosition - completedSteps
+  // 在每级踏步末端的 22% 行程内平滑抬升，模拟跨越踢面时的脚步高度变化。
+  const liftProgress = Math.max(0, Math.min(1, (withinStep - 0.78) / 0.22))
+  const easedLift = liftProgress * liftProgress * (3 - 2 * liftProgress)
+  return rise * (completedSteps + easedLift) / stepCount
+}
+
 /** 室内交互对象统一数据契约，供拾取、提示和后续服务端数据映射复用。 */
 export function createIndoorInteractionData({ id, name, objectType, interactionType = 'inspect', action = 'inspect', operationHint = '点击查看详情', roomId = null, roomName = null, description = '' }) {
   if (!id || !name || !objectType) throw new TypeError('室内交互对象必须包含 id、name 和 objectType')
@@ -600,7 +617,7 @@ export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
     z: stairPoint.z - Math.sin(stairRotation) * x + Math.cos(stairRotation) * z,
   })
   const stairMaterial = new THREE.MeshStandardMaterial({ color: '#9a7958', roughness: 1 })
-  const stairCount = 12
+  const stairCount = INDOOR_STAIR_STEP_COUNT
   const stairRise = floorHeight / stairCount
   const stairDepth = 4.2 / stairCount
   const rotated = Math.abs(Math.sin(stairRotation)) > 0.5

@@ -33,7 +33,8 @@ const initialUrlParams = new URLSearchParams(window.location.search)
 const requestedBuildingId = initialUrlParams.get('buildingId')
 const returnPixelX = Number(initialUrlParams.get('returnX'))
 const returnPixelY = Number(initialUrlParams.get('returnY'))
-const returnPixelPosition = Number.isFinite(returnPixelX) && Number.isFinite(returnPixelY)
+const returnPixelPosition = initialUrlParams.has('returnX') && initialUrlParams.has('returnY')
+  && Number.isFinite(returnPixelX) && Number.isFinite(returnPixelY)
   ? { x: returnPixelX, y: returnPixelY }
   : null
 const returnWorldPosition = returnPixelPosition ? mapPixelToWorld(returnPixelPosition.x, returnPixelPosition.y) : null

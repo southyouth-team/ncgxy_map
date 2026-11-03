@@ -1,6 +1,6 @@
 import {
   CAMPUS_PLAN_REFERENCE, CAMPUS_AREAS, CAMPUS_ROAD_CENTERLINES,
-  CAMPUS_BUILDING_FOOTPRINTS, mapPixelToWorld, mapRectToWorld,
+  CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
@@ -32,13 +32,22 @@ export function createCampusScene(THREE) {
     root.add(mesh)
     return mesh
   }
-  function addPolygon(name, polygon, material, y = 0.08) {
+  function addPolygon(name, polygon, material, y = 0.08, holes = []) {
     if (!Array.isArray(polygon) || polygon.length < 3) return null
     const points = polygon.map(([px, py]) => {
       const point = mapPixelToWorld(px, py)
       return new THREE.Vector2(point.x, -point.z)
     })
-    const geometry = new THREE.ShapeGeometry(new THREE.Shape(points))
+    const shape = new THREE.Shape(points)
+    for (const hole of holes) {
+      if (!Array.isArray(hole) || hole.length < 3) continue
+      const path = new THREE.Path(hole.map(([px, py]) => {
+        const point = mapPixelToWorld(px, py)
+        return new THREE.Vector2(point.x, -point.z)
+      }))
+      shape.holes.push(path)
+    }
+    const geometry = new THREE.ShapeGeometry(shape)
     geometry.rotateX(-Math.PI / 2)
     const mesh = new THREE.Mesh(geometry, material)
     mesh.name = name
@@ -65,8 +74,8 @@ export function createCampusScene(THREE) {
 
   for (const area of CAMPUS_AREAS) {
     if (area.type === 'water' && area.polygon?.length) {
-      addPolygon('campus-' + area.id + '-bed', area.polygon, mats.waterEdge, 0.065)
-      addPolygon('campus-' + area.id + '-water', area.polygon, mats.water, 0.13)
+      addPolygon('campus-' + area.id + '-bed', area.polygon, mats.waterEdge, 0.065, area.holes)
+      addPolygon('campus-' + area.id + '-water', area.polygon, mats.water, 0.13, area.holes)
       continue
     }
     if (!area.rect) continue
@@ -138,14 +147,6 @@ export function createCampusScene(THREE) {
   }
   CAMPUS_AREAS.filter(area => area.type === 'sports' && area.rect).forEach(area => addSportsMarkings(area.rect, area.id))
 
-  // 中央湖心绿地：平面图中的环湖水域围绕中央开放空间，保留可步行的岛状绿地。
-  const centralIsland = [
-    [492, 178], [520, 158], [553, 158], [582, 178], [599, 207],
-    [600, 244], [580, 274], [552, 294], [520, 298], [493, 280],
-    [478, 250], [478, 214],
-  ]
-  addPolygon('central-lake-island', centralIsland, mats.grassPlain, 0.145)
-
   const wallPalette = [mats.wall, mats.wallPeach, mats.wallMint, mats.wallCream]
   function addCampusBuilding(item, index) {
     const bounds = mapRectToWorld(item.rect)
@@ -153,7 +154,7 @@ export function createCampusScene(THREE) {
     const depth = Math.max(2.4, bounds.depth)
     const height = item.confidence === 'medium' ? 4.2 : 3.4
     const group = createPixelBuilding(THREE, {
-      width, depth, height: item.height || (item.confidence === 'medium' ? 4.2 : undefined), template: item.template || ['教学楼', '宿舍楼', '实验楼', '办公楼'][index % 4], materials: mats,
+      width, depth, height: item.height, template: item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4], materials: mats,
       wallMaterial: wallPalette[index % wallPalette.length],
       label: item.label || item.id,
       confidence: item.confidence || 'unverified',
@@ -240,7 +241,7 @@ export function createCampusScene(THREE) {
   texture.colorSpace = THREE.SRGBColorSpace
   const character = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }))
   character.name = 'PixelExplorerSprite'
-  const spawn = mapPixelToWorld(455, 365)
+  const spawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
   character.position.set(spawn.x, 2.1, spawn.z)
   character.scale.set(2.4, 3.6, 1)
   root.add(character)

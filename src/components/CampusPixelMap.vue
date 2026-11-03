@@ -312,9 +312,6 @@ function render() {
     ctx.setLineDash([])
   }
   ctx.restore()
-    }
-  }
-  ctx.restore()
 }
 function resize() {
   const rect = canvas.value?.getBoundingClientRect()

@@ -788,6 +788,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         polygon, width, depth,
         height: Number(definition.floorHeight) * definition.floors.length,
         floors: definition.floors.length,
+        roofStyle: definition.exterior?.roofStyle || rebuildOptions.roofStyle || 'flat',
       })
       if (indoorOutdoorBase.geometryKey !== geometryKey) {
       const shape = new THREE.Shape()

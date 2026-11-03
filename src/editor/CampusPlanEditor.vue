@@ -135,7 +135,7 @@ function featureGeometry(type, item) {
   return type === 'road' ? item.points.map(point => [...point]) : item.footprint.map(point => [...point])
 }
 function beginFeatureDrag(event, type, item) {
-  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked(type)) return
+  if (event.button !== 0 || tool.value !== 'select' || spacePressed.value || isLayerLocked(type)) return
   event.stopPropagation()
   if (event.shiftKey) { toggleMultiSelection(type, item.id, event); return }
   const isMultiDrag = multiSelection.value.length > 1 && multiSelection.value.some(entry => entry.type === type && entry.id === item.id)
@@ -523,7 +523,8 @@ function startCanvasPan(event) {
   // 平移事件绑定在视口容器，而不是 SVG；这样即使指针离开 SVG 内容区域，仍可持续拖动画布。
   if (event.button === 2 || (event.button !== 0 && event.button !== 1)) return
   const onFeature = Boolean(event.target.closest?.('.map-feature'))
-  if (event.button === 0 && onFeature && !spacePressed.value) return
+  if (event.button === 0 && onFeature && tool.value !== 'pan' && !spacePressed.value) return
+  if (event.button === 0 && tool.value !== 'pan' && !spacePressed.value) return
   canvasPan.value = {
     pointerId: event.pointerId,
     clientX: event.clientX,
@@ -714,7 +715,7 @@ function finishBoxSelection() {
 function startBuildingDrag(event, item) { beginFeatureDrag(event, 'building', item) }
 function startAreaDrag(event, area) { beginFeatureDrag(event, 'area', area) }
 function startPolygonVertexDrag(event, type, item, index) {
-  if (event.button !== 0 || isLayerLocked(type)) return
+  if (event.button !== 0 || tool.value === 'pan' || spacePressed.value || isLayerLocked(type)) return
   event.stopPropagation()
   selected.value = { type, id: item.id }
   snapshot()
@@ -723,7 +724,7 @@ function startPolygonVertexDrag(event, type, item, index) {
 }
 function selectRoad(event, road) { beginFeatureDrag(event, 'road', road) }
 function startRoadNodeDrag(event, road, index) {
-  if (event.button !== 0 || isLayerLocked('road')) return
+  if (event.button !== 0 || tool.value === 'pan' || spacePressed.value || isLayerLocked('road')) return
   event.stopPropagation()
   if (toggleMultiSelection('road', road.id, event)) return
   snapshot()
@@ -954,8 +955,8 @@ function exportDocument() {
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
-        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || !(Array.isArray(clipboardObject) ? clipboardObject.some(entry => !isLayerLocked(entry.type)) : !isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="alignSelection('right')" :disabled="multiSelection.length<2" title="右对齐">右对齐</button><button @click="alignSelection('bottom')" :disabled="multiSelection.length<2" title="底部对齐">底对齐</button><button @click="distributeSelection('horizontal')" :disabled="multiSelection.length<3" title="水平等间距">水平分布</button><button @click="distributeSelection('vertical')" :disabled="multiSelection.length<3" title="垂直等间距">垂直分布</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
-        <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='pan'}" @click="tool='pan'" title="按住并拖动以平移画布">✋ 平移</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || !(Array.isArray(clipboardObject) ? clipboardObject.some(entry => !isLayerLocked(entry.type)) : !isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="alignSelection('right')" :disabled="multiSelection.length<2" title="右对齐">右对齐</button><button @click="alignSelection('bottom')" :disabled="multiSelection.length<2" title="底部对齐">底对齐</button><button @click="distributeSelection('horizontal')" :disabled="multiSelection.length<3" title="水平等间距">水平分布</button><button @click="distributeSelection('vertical')" :disabled="multiSelection.length<3" title="垂直等间距">垂直分布</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
+        <div ref="canvasViewport" class="map-scroll" :class="{ 'pan-mode': tool === 'pan' || spacePressed }" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
           <svg class="campus-map" :viewBox="canvasViewBox()" @pointerdown="startBoxSelection" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
@@ -1061,7 +1062,7 @@ function exportDocument() {
 .canvas-toolbar button{padding:6px 10px;border:1px solid #e1e6dd;border-radius:5px;background:#fff;color:#506653;font-size:10px;cursor:pointer}
 .canvas-toolbar button.active{background:#e9f1e7;border-color:#88a28a;color:#315b43;font-weight:700}
 .canvas-toolbar button:disabled{opacity:.35;cursor:not-allowed}
-.map-scroll{background-color:#e7ebdf;background-image:radial-gradient(#7b927755 .8px,transparent .8px);background-size:18px 18px}
+.map-scroll{background-color:#e7ebdf;background-image:radial-gradient(#7b927755 .8px,transparent .8px);background-size:18px 18px;cursor:crosshair}.map-scroll.pan-mode{cursor:grab}.map-scroll.pan-mode:active{cursor:grabbing}
 .campus-map{box-shadow:0 8px 28px #344a351c}
 .stage-footer{height:34px;background:#f8faf5;border-top:1px solid #dce3d7;font-size:9px}
 .inspector-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}

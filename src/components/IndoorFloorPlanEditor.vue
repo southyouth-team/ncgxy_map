@@ -117,7 +117,7 @@ function roomLabel(room) { return room.name || '未命名空间' }
       <text :x="boundary.x + 8" :y="boundary.y - 10" class="boundary-label">建筑室内边界</text>
       <g v-for="wall in walls" :key="wall.id">
         <line :x1="wall.x1" :y1="wall.y1" :x2="wall.x2" :y2="wall.y2" :class="['partition-line', { selected: selectedWallId === wall.id }]"/>
-        <line v-if="wall.doorWidth > 0" :x1="wall.axis === 'x' ? origin.x + (wall.x - wall.doorWidth/2) * scale : wall.x1" :y1="wall.axis === 'z' ? origin.z + (wall.z - wall.doorWidth/2) * scale : wall.y1" :x2="wall.axis === 'x' ? origin.x + (wall.x + wall.doorWidth/2) * scale : wall.x2" :y2="wall.axis === 'z' ? origin.z + (wall.z + wall.doorWidth/2) * scale : wall.y2" class="wall-door-gap"/>
+        <line v-if="wall.doorWidth > 0" :x1="wall.axis === 'x' ? origin.x + (wall.x + (wall.doorOffset || 0) - wall.doorWidth/2) * scale : wall.x1" :y1="wall.axis === 'z' ? origin.z + (wall.z + (wall.doorOffset || 0) - wall.doorWidth/2) * scale : wall.y1" :x2="wall.axis === 'x' ? origin.x + (wall.x + (wall.doorOffset || 0) + wall.doorWidth/2) * scale : wall.x2" :y2="wall.axis === 'z' ? origin.z + (wall.z + (wall.doorOffset || 0) + wall.doorWidth/2) * scale : wall.y2" class="wall-door-gap"/>
       </g>
       <g v-for="room in rooms" :key="room.id">
         <rect :x="room.px - room.pw/2" :y="room.py - room.ph/2" :width="room.pw" :height="room.ph" rx="2" :class="['room-shape', { selected: selectedRoomId === room.id }]" @pointerdown="startDrag($event, room, 'move')"/>

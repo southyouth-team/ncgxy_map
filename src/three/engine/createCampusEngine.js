@@ -560,6 +560,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           if (doorway) navigateIndoorTo(doorway.approach)
           return
         }
+        if (interaction.action === 'change-floor') {
+          const stairs = indoorGroup.userData.stairPoint
+          if (stairs) navigateIndoorTo(stairs)
+          return
+        }
         selectIndoorObject(indoorTarget)
         return
       }

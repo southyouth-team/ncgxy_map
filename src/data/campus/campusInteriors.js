@@ -65,8 +65,11 @@ export function validateCampusInteriorData(interior) {
     if (!Number.isFinite(floor.depth) || floor.depth < 6) errors.push(`${prefix}.depth 必须大于等于 6`)
     if (!Number.isFinite(floor.wallHeight) || floor.wallHeight < 2) errors.push(`${prefix}.wallHeight 必须大于等于 2`)
     if (!Array.isArray(floor.rooms)) errors.push(`${prefix}.rooms 必须是数组`)
-    if (floor.spawnPoint && (!Number.isFinite(floor.spawnPoint.x) || !Number.isFinite(floor.spawnPoint.y) || !Number.isFinite(floor.spawnPoint.z))) {
-      errors.push(`${prefix}.spawnPoint 坐标必须是有限数值`)
+    if (floor.spawnPoint !== undefined && (!floor.spawnPoint ||
+      !Number.isFinite(floor.spawnPoint.x) || !Number.isFinite(floor.spawnPoint.y) || !Number.isFinite(floor.spawnPoint.z) ||
+      Math.abs(floor.spawnPoint.x) > floor.width / 2 || Math.abs(floor.spawnPoint.z) > floor.depth / 2 ||
+      floor.spawnPoint.y < 0.5 || floor.spawnPoint.y > floor.wallHeight)) {
+      errors.push(`${prefix}.spawnPoint 必须位于楼层范围内且高度有效`)
     }
   })
 
@@ -80,8 +83,9 @@ export function validateCampusInteriorData(interior) {
     if (typeof entrance.id !== 'string' || !entrance.id.trim()) errors.push(`${prefix}.id 必须是非空字符串`)
     else if (entranceIds.has(entrance.id)) errors.push(`${prefix}.id 不能重复`)
     else entranceIds.add(entrance.id)
-    if (!Array.isArray(entrance.pixel) || entrance.pixel.length !== 2 || !entrance.pixel.every(Number.isFinite)) {
-      errors.push(`${prefix}.pixel 必须是有效的 [x, y] 坐标`)
+    if (!Array.isArray(entrance.pixel) || entrance.pixel.length !== 2 || !entrance.pixel.every(Number.isFinite) ||
+      entrance.pixel[0] < 0 || entrance.pixel[0] > 1000 || entrance.pixel[1] < 0 || entrance.pixel[1] > 500) {
+      errors.push(`${prefix}.pixel 必须是校园地图范围内的 [x, y] 坐标`)
     }
     if (typeof entrance.enabled !== 'boolean') errors.push(`${prefix}.enabled 必须是布尔值`)
     if (entrance.floorId && !floorIds.has(entrance.floorId)) errors.push(`${prefix}.floorId 未引用已定义楼层`)
@@ -91,6 +95,11 @@ export function validateCampusInteriorData(interior) {
     if (typeof interior.sceneId !== 'string' || !interior.sceneId.trim()) errors.push('ready 状态必须配置 sceneId')
     if (!floors.length) errors.push('ready 状态至少需要一个楼层')
     if (!entrances.some(entrance => entrance?.enabled === true)) errors.push('ready 状态至少需要一个启用入口')
+    entrances.forEach((entrance, index) => {
+      if (entrance?.enabled === true && (!entrance.floorId || !floorIds.has(entrance.floorId))) {
+        errors.push(`ready 状态的 entrances[${index}] 必须引用有效楼层`)
+      }
+    })
   }
 
   return { valid: errors.length === 0, errors }

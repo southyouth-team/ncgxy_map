@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, validateBuildingFootprint } from './campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices, validateBuildingFootprint, getFacadeWindowPositions } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
   it('creates a ridge-based gable roof for a convex rectangular footprint', () => {
@@ -40,6 +40,20 @@ describe('shared campus building assets', () => {
     expect(validateBuildingFootprint([[0, 0], [4, 4], [0, 4], [4, 0]]).errors).toContain('建筑轮廓存在自相交边线')
     expect(validateBuildingFootprint([[0, 0], [1, 1], [2, 2]]).errors).toContain('建筑轮廓面积为零或过小')
     expect(validateBuildingFootprint([[0, 0], [0, 0], [0, 0]]).valid).toBe(false)
+  })
+
+
+  it('keeps facade windows inside short edges and prevents overlap at high density', () => {
+    expect(getFacadeWindowPositions(1.1, 0.6, 3)).toEqual([])
+    const positions = getFacadeWindowPositions(12, 0.6, 3)
+    expect(positions.length).toBeGreaterThan(0)
+    positions.slice(1).forEach((position, index) => {
+      expect(position - positions[index]).toBeGreaterThanOrEqual(0.92 - 1e-8)
+    })
+  })
+  it('reserves the entrance opening when placing facade windows', () => {
+    const positions = getFacadeWindowPositions(12, 0.6, 1, 6, 1.1)
+    expect(positions.every(position => Math.abs(position - 6) >= 1.46)).toBe(true)
   })
 
   it('exposes one editor asset for every 3D building template', () => {

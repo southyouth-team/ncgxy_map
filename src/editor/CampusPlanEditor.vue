@@ -116,6 +116,8 @@ const areas = ref(CAMPUS_AREAS.map((item) => ({
 })))
 const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item.points.map((point) => [...point]) })))
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
+// 图层状态仅控制编辑视图与交互，不写入地图业务数据。
+const layerStates = ref({ buildings: { visible: true, locked: false }, roads: { visible: true, locked: false }, areas: { visible: true, locked: false } })
 const tool = ref('select')
 const scale = ref(1)
 const pan = ref({ x: 0, y: 0 })
@@ -311,6 +313,21 @@ const selectedBuilding = computed(() => buildings.value.find((item) => item.id =
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
 const selectedArea = computed(() => areas.value.find((item) => item.id === selected.value.id))
 const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || selectedArea.value?.name || '未选择对象')
+const layerItems = computed(() => [
+  { key: 'buildings', label: '建筑图层', count: buildings.value.length, icon: '▦' },
+  { key: 'roads', label: '道路图层', count: roads.value.length, icon: '⌁' },
+  { key: 'areas', label: '区域图层', count: areas.value.length, icon: '▧' },
+])
+function layerKey(type) { return type === 'building' ? 'buildings' : type === 'road' ? 'roads' : 'areas' }
+function isLayerLocked(type) { return Boolean(layerStates.value[layerKey(type)]?.locked) }
+function toggleLayerVisibility(key) { layerStates.value[key].visible = !layerStates.value[key].visible }
+function toggleLayerLock(key) {
+  layerStates.value[key].locked = !layerStates.value[key].locked
+  if (layerStates.value[key].locked && selected.value.type && layerKey(selected.value.type) === key) {
+    selected.value = { type: '', id: '' }
+    drag.value = null
+  }
+}
 const palette = CAMPUS_BUILDING_ASSET_CATALOG.map(item => item.template)
 const buildingPreset = item => CAMPUS_BUILDING_TEMPLATES[item?.template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
 const buildingWallColor = item => ({ wall: '#e7d2a5', wallCream: '#e7d2a5', wallPeach: '#d8a77d', wallMint: '#b8c99a' }[buildingPreset(item).wall] || '#e7d2a5')
@@ -482,7 +499,7 @@ function point(event) {
   return { x: local.x, y: local.y }
 }
 function startBuildingDrag(event, item) {
-  if (event.button !== 0 || tool.value !== 'select') return
+  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('building')) return
   event.stopPropagation()
   selected.value = { type: 'building', id: item.id }
   snapshot()
@@ -491,7 +508,7 @@ function startBuildingDrag(event, item) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function startAreaDrag(event, area) {
-  if (event.button !== 0 || tool.value !== 'select') return
+  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('area')) return
   event.stopPropagation()
   selected.value = { type: 'area', id: area.id }
   snapshot()
@@ -500,7 +517,7 @@ function startAreaDrag(event, area) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function startPolygonVertexDrag(event, type, item, index) {
-  if (event.button !== 0) return
+  if (event.button !== 0 || isLayerLocked(type)) return
   event.stopPropagation()
   selected.value = { type, id: item.id }
   snapshot()
@@ -508,7 +525,7 @@ function startPolygonVertexDrag(event, type, item, index) {
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
 function startRoadNodeDrag(event, road, index) {
-  if (event.button !== 0) return
+  if (event.button !== 0 || isLayerLocked('road')) return
   event.stopPropagation()
   selected.value = { type: 'road', id: road.id }
   snapshot()
@@ -631,6 +648,7 @@ function removeRoadNode(index) {
   road.points.splice(index, 1)
 }
 function deleteSelected() {
+  if (!selected.value.id || isLayerLocked(selected.value.type)) return
   snapshot()
   if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'road') roads.value = roads.value.filter(item => item.id !== selected.value.id)
@@ -671,6 +689,17 @@ function exportDocument() {
           <button :class="{active:tool==='building'}" @click="tool='building'"><span>▰</span>建筑摆放</button>
           <button :class="{active:tool==='road'}" @click="tool='road'"><span>⌁</span>道路绘制</button>
         </div>
+        <div class="panel-separator"></div>
+        <section class="layer-panel">
+          <div class="panel-title">图层管理 <small>LAYERS</small></div>
+          <div v-for="layer in layerItems" :key="layer.key" class="layer-row" :class="{ locked: layerStates[layer.key].locked, hidden: !layerStates[layer.key].visible }">
+            <span class="layer-icon">{{ layer.icon }}</span>
+            <span class="layer-name"><b>{{ layer.label }}</b><small>{{ layer.count }} 个对象</small></span>
+            <button class="layer-action" :title="layerStates[layer.key].visible ? '隐藏图层' : '显示图层'" @click="toggleLayerVisibility(layer.key)">{{ layerStates[layer.key].visible ? '◉' : '○' }}</button>
+            <button class="layer-action" :title="layerStates[layer.key].locked ? '解锁图层' : '锁定图层'" @click="toggleLayerLock(layer.key)">{{ layerStates[layer.key].locked ? '▣' : '▢' }}</button>
+          </div>
+          <small class="layer-help">隐藏仅影响画布显示；锁定后禁止选择、拖动、顶点编辑和删除。</small>
+        </section>
         <div class="panel-separator"></div>
         <div class="panel-title">底图与校准</div>
         <label class="upload-control">上传校园底图（PNG/JPG/WebP，≤15MB）<input type="file" accept="image/png,image/jpeg,image/webp" @change="uploadReferenceImage" /></label>
@@ -718,18 +747,18 @@ function exportDocument() {
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
             <rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="#86a765"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#grass-pattern)" opacity=".42"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
-            <g v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
+            <g v-if="layerStates.areas.visible" v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="selected={type:'area',id:area.id}">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
             <g v-if="showGrid"><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#map-grid)"/></g>
-            <path :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
-            <g v-for="road in roads" :key="road.id" class="map-feature">
+            <path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
+            <g v-if="layerStates.roads.visible" v-for="road in roads" :key="road.id" class="map-feature">
               <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="selected={type:'road',id:road.id}"/>
               <path v-if="selected.id===road.id" :d="roadPath(road.points)" fill="none" stroke="#d59a43" :stroke-width="Math.max(2,(road.width || 13)*0.18)" stroke-linecap="round" pointer-events="none"/>
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
-            <g v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">
+            <g v-if="layerStates.buildings.visible" v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" :fill="buildingWallColor(item)" stroke="#75473e" stroke-width="2"/>
               <path :d="'M '+(item.rect[0]+3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))+' L '+((item.rect[0]+item.rect[2])/2)+' '+(item.rect[1]-Math.max(3,(item.rect[3]-item.rect[1])*(buildingPreset(item).roofRise/10)))+' L '+(item.rect[2]-3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))" fill="none" stroke="#a85f4e" stroke-width="5" stroke-linejoin="round"/>
               <g fill="#8bc3c5" stroke="#f3dfb5" stroke-width="1">
@@ -824,7 +853,7 @@ function exportDocument() {
 .inspector-heading .panel-title{margin:0}.inspector-heading>span{font-size:8px;letter-spacing:1.2px;color:#a0aa9c}
 .selected-card{border-radius:8px;background:#eef3ea;border-color:#e0e8dc;padding:14px}
 .selected-card strong{color:#2e4e37;font-size:14px}
-.property-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.property-grid label{margin:4px 0 0;font-size:10px}.property-grid input{margin-top:5px!important;padding:7px!important;font-variant-numeric:tabular-nums}.property-hint{display:block;margin-top:8px}
+.layer-panel{margin:0 0 4px}.layer-panel>.panel-title{margin-bottom:9px}.layer-panel>.panel-title small{font-size:8px;color:#a0aa9c;letter-spacing:1px}.layer-row{display:flex;align-items:center;gap:6px;padding:8px 6px;margin:5px 0;background:#fff;border:1px solid #e3e8df;border-radius:6px}.layer-row.hidden{opacity:.58;background:#f1f2ed}.layer-row.locked{border-color:#d8c7a8;background:#fbf7ed}.layer-icon{display:grid;place-items:center;width:25px;height:25px;border-radius:5px;background:#edf2e9;color:#48694d}.layer-name{flex:1;min-width:0}.layer-name b,.layer-name small{display:block}.layer-name b{font-size:10px;color:#425845}.layer-name small{margin-top:3px;font-size:9px;color:#8a9587}.layer-action{width:25px;height:25px;padding:0!important;border-radius:4px!important;font-size:13px!important}.layer-help{display:block;font-size:9px;line-height:1.6;color:#879184;margin:8px 2px 0}.property-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.property-grid label{margin:4px 0 0;font-size:10px}.property-grid input{margin-top:5px!important;padding:7px!important;font-variant-numeric:tabular-nums}.property-hint{display:block;margin-top:8px}
 .inspector label{font-weight:600;color:#526653;margin-top:16px}
 .inspector input:not([type=range]),.inspector select{border-radius:5px}
 .inspector .add-button,.inspector .danger-button{border-radius:6px!important}

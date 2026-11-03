@@ -203,6 +203,43 @@ export function drawPixelBuildingPreview(context, options = {}) {
   context.restore()
 }
 
+/**
+ * 为简单凸四边形生成真正的双坡屋顶三角面。
+ * 返回世界坐标 position 数组；凹多边形/非四边形返回 null，由调用方回退平顶。
+ */
+export function createGableRoofVertices(points = [], baseHeight = 0, rise = 0.8) {
+  if (!Array.isArray(points) || points.length !== 4 || !Number.isFinite(baseHeight) || !Number.isFinite(rise) || rise <= 0) return null
+  const cross = (a, b, c) => (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+  const turns = points.map((point, index) => cross(point, points[(index + 1) % 4], points[(index + 2) % 4]))
+  if (turns.some(value => Math.abs(value) < 1e-5) || !(turns.every(value => value > 0) || turns.every(value => value < 0))) return null
+  let contour = points.slice()
+  const lengths = contour.map((point, index) => {
+    const next = contour[(index + 1) % 4]
+    return Math.hypot(next.x - point.x, next.y - point.y)
+  })
+  if (lengths[1] + lengths[3] > lengths[0] + lengths[2]) contour = [contour[1], contour[2], contour[3], contour[0]]
+  const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+  const ridgeStart = midpoint(contour[3], contour[0])
+  const ridgeEnd = midpoint(contour[1], contour[2])
+  const world = (point, elevated = false) => [point.x, elevated ? baseHeight + rise : baseHeight, -point.y]
+  const triangles = [
+    [world(contour[0]), world(contour[1]), world(ridgeEnd, true)],
+    [world(contour[0]), world(ridgeEnd, true), world(ridgeStart, true)],
+    [world(contour[2]), world(contour[3]), world(ridgeStart, true)],
+    [world(contour[2]), world(ridgeStart, true), world(ridgeEnd, true)],
+  ]
+  const positions = []
+  triangles.forEach((triangle) => {
+    const [a, b, c] = triangle
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+    const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+    const normalY = ab[2] * ac[0] - ab[0] * ac[2]
+    if (normalY >= 0) positions.push(...a, ...b, ...c)
+    else positions.push(...a, ...c, ...b)
+  })
+  return positions
+}
+
 export function getBuildingFloorLayout(totalHeight, requestedFloors = 1, windowHeight = 0.6) {
   const height = Number(totalHeight)
   const floors = Math.max(1, Math.min(30, Math.floor(Number(requestedFloors) || 1)))
@@ -271,40 +308,30 @@ export function createPixelBuilding(THREE, options = {}) {
     if (normal.y < 0) [b, c] = [c, b]
     roofPositions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
   }
-  if (roofStyle === 'pitched' || roofStyle === 'span') {
+  let actualRoofStyle = roofStyle
+  let roofPositions = roofStyle === 'pitched' ? createGableRoofVertices(contour, buildingHeight, roofRise) : null
+  if (roofPositions) {
+    actualRoofStyle = 'gable'
+  } else {
+    // 复杂轮廓、内环及暂不支持的跨度屋顶均安全回退到贴合 footprint 的平顶。
+    actualRoofStyle = roofStyle === 'glass' ? 'glass' : 'flat'
     const triangles = THREE.ShapeUtils.triangulateShape(contour, roofPoints.holes || [])
     triangles.forEach(([ia, ib, ic]) => {
       const points = [triangulationPoints[ia], triangulationPoints[ib], triangulationPoints[ic]]
-      const center = points.reduce((sum, point) => ({ x: sum.x + point.x / 3, y: sum.y + point.y / 3 }), { x: 0, y: 0 })
-      const peak = new THREE.Vector3(center.x, buildingHeight + roofRise, -center.y)
-      for (let i = 0; i < 3; i += 1) {
-        const p1 = points[i]
-        const p2 = points[(i + 1) % 3]
-        addRoofTriangle(
-          new THREE.Vector3(p1.x, buildingHeight, -p1.y),
-          new THREE.Vector3(p2.x, buildingHeight, -p2.y),
-          peak.clone(),
-        )
-      }
-    })
-  } else {
-    const triangles = THREE.ShapeUtils.triangulateShape(contour, roofPoints.holes || [])
-    triangles.forEach(([ia, ib, ic]) => {
-      const points = [contour[ia], contour[ib], contour[ic]]
       addRoofTriangle(...points.map(point => new THREE.Vector3(point.x, buildingHeight + 0.06, -point.y)))
     })
   }
   const roofGeometry = new THREE.BufferGeometry()
   roofGeometry.setAttribute('position', new THREE.Float32BufferAttribute(roofPositions, 3))
   roofGeometry.computeVertexNormals()
-  const roofMaterial = roofStyle === 'glass' ? materials.window : materials.roof
+  const roofMaterial = actualRoofStyle === 'glass' ? materials.window : materials.roof
   const roof = new THREE.Mesh(roofGeometry, roofMaterial)
   roof.castShadow = true
   roof.receiveShadow = true
   roof.userData.objectType = 'building-roof'
-  roof.userData.roofStyle = roofStyle
+  roof.userData.roofStyle = actualRoofStyle
   group.add(roof)
-  group.userData.roofStyle = roofStyle
+  group.userData.roofStyle = actualRoofStyle
 
   // 沿 footprint 的真实边段生成窗户，绝不使用外接矩形布置。
   // 先统一为不重复闭合点，避免最后一条边长度为 0。

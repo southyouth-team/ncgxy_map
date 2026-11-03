@@ -33,22 +33,51 @@ export class CollisionWorld {
     )
   }
 
-  move(position, dx, dz) {
-    const bounds = this.bounds
-    const next = {
-      x: Math.max(bounds.minX + this.radius, Math.min(bounds.maxX - this.radius, position.x)),
-      z: Math.max(bounds.minZ + this.radius, Math.min(bounds.maxZ - this.radius, position.z)),
+  resolvePosition(position) {
+    const r = this.radius
+    const resolved = {
+      x: Math.max(this.bounds.minX + r, Math.min(this.bounds.maxX - r, position.x)),
+      z: Math.max(this.bounds.minZ + r, Math.min(this.bounds.maxZ - r, position.z)),
     }
-    const wantedX = Math.max(bounds.minX + this.radius, Math.min(bounds.maxX - this.radius, position.x + dx))
-    const wantedZ = Math.max(bounds.minZ + this.radius, Math.min(bounds.maxZ - this.radius, position.z + dz))
-    let blockedX = false
-    let blockedZ = false
+    // 如果出生点或场景切换点落在碰撞体内，逐次推到最近可行边界，避免角色永久卡死。
+    for (let iteration = 0; iteration < this.obstacles.length + 2; iteration++) {
+      const obstacle = this.obstacles.find(box => this.isBlocked(resolved.x, resolved.z) &&
+        resolved.x > box.minX - r && resolved.x < box.maxX + r &&
+        resolved.z > box.minZ - r && resolved.z < box.maxZ + r)
+      if (!obstacle) break
+      const candidates = [
+        { x: obstacle.minX - r - 0.015, z: resolved.z },
+        { x: obstacle.maxX + r + 0.015, z: resolved.z },
+        { x: resolved.x, z: obstacle.minZ - r - 0.015 },
+        { x: resolved.x, z: obstacle.maxZ + r + 0.015 },
+      ].map(point => ({
+        x: Math.max(this.bounds.minX + r, Math.min(this.bounds.maxX - r, point.x)),
+        z: Math.max(this.bounds.minZ + r, Math.min(this.bounds.maxZ - r, point.z)),
+      })).filter(point => !this.isBlocked(point.x, point.z))
+      if (!candidates.length) break
+      candidates.sort((a, b) => Math.hypot(a.x - resolved.x, a.z - resolved.z) - Math.hypot(b.x - resolved.x, b.z - resolved.z))
+      resolved.x = candidates[0].x
+      resolved.z = candidates[0].z
+    }
+    return resolved
+  }
 
-    if (!this.isBlocked(wantedX, next.z)) next.x = wantedX
-    else blockedX = true
-    if (!this.isBlocked(next.x, wantedZ)) next.z = wantedZ
-    else blockedZ = true
-
-    return { ...next, blockedX, blockedZ }
+  move(position, dx, dz) {
+    const start = this.resolvePosition(position)
+    const r = this.radius, bounds = this.bounds
+    const wantedX = Math.max(bounds.minX + r, Math.min(bounds.maxX - r, start.x + dx))
+    const wantedZ = Math.max(bounds.minZ + r, Math.min(bounds.maxZ - r, start.z + dz))
+    const xFirst = { ...start }, zFirst = { ...start }
+    let xBlocked = false, zBlocked = false
+    if (!this.isBlocked(wantedX, xFirst.z)) xFirst.x = wantedX
+    else xBlocked = true
+    if (!this.isBlocked(xFirst.x, wantedZ)) xFirst.z = wantedZ
+    else zBlocked = true
+    if (!this.isBlocked(zFirst.x, wantedZ)) zFirst.z = wantedZ
+    if (!this.isBlocked(wantedX, zFirst.z)) zFirst.x = wantedX
+    const xDistance = (xFirst.x - start.x) ** 2 + (xFirst.z - start.z) ** 2
+    const zDistance = (zFirst.x - start.x) ** 2 + (zFirst.z - start.z) ** 2
+    const next = zDistance > xDistance ? zFirst : xFirst
+    return { ...next, blockedX: xBlocked, blockedZ: zBlocked }
   }
 }

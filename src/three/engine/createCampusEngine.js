@@ -1083,7 +1083,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       })
       const wallThickness = 0.28
       const entranceEdgeIndex = Number(rebuildOptions?.entranceEdgeIndex ?? 0)
-      const entranceGapHalf = Math.max(1.05, Number(rebuildOptions?.doorWidth || 1.28) / 2 + 0.55)
+      const entranceGapHalf = Math.max(0.85, (Number(rebuildOptions?.doorWidth || indoorOutdoorTarget.userData?.entrance?.width || 1.35) + 0.18) / 2)
       const wallObstacles = []
       const appendWallSegment = (start, end) => {
         const dx = end.x - start.x, dz = end.z - start.z

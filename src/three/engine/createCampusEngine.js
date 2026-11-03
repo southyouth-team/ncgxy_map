@@ -177,11 +177,20 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
 
+  function disposeMaterial(material) {
+    if (!material) return
+    // 材质贴图需要单独释放；像素样板新增 CanvasTexture 后不能只 dispose 材质本身。
+    for (const key of ['map', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap']) {
+      material[key]?.dispose?.()
+    }
+    material.dispose?.()
+  }
+
   function disposeObjectGroup(group) {
     group?.traverse((object) => {
       object.geometry?.dispose?.()
-      if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose())
-      else object.material?.dispose?.()
+      if (Array.isArray(object.material)) object.material.forEach(disposeMaterial)
+      else disposeMaterial(object.material)
     })
   }
 
@@ -677,8 +686,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     campus.children.splice(index, 0, replacement)
     current.traverse((object) => {
       object.geometry?.dispose?.()
-      if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose())
-      else object.material?.dispose?.()
+      if (Array.isArray(object.material)) object.material.forEach(disposeMaterial)
+      else disposeMaterial(object.material)
     })
     item.sceneObject = sceneObject
     if (wasSelected) selectObject(item.feature.id)
@@ -822,8 +831,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig?.dispose()
     scene?.traverse((object) => {
       object.geometry?.dispose?.()
-      if (Array.isArray(object.material)) object.material.forEach((m) => m.dispose())
-      else object.material?.dispose?.()
+      if (Array.isArray(object.material)) object.material.forEach(disposeMaterial)
+      else disposeMaterial(object.material)
     })
     renderer?.dispose()
     renderer?.domElement?.remove()

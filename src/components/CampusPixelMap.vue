@@ -224,13 +224,23 @@ function drawBuilding(ctx, building, index) {
       for (let stripeY = y1 + 3; stripeY < y1 + roofHeight - 1; stripeY += 4) {
         ctx.fillRect(x1 + 3, stripeY, Math.max(1, w - 6), 1)
       }
+      // 不规则建筑轮廓仍按原 footprint 裁切，右侧立面阴影不会越出占地边界。
+      if (w >= 16) {
+        ctx.fillStyle = '#52666b'
+        ctx.fillRect(x2 - 4, y1 + 2, 4, h - 2)
+        ctx.fillStyle = '#70858a'
+        ctx.fillRect(x2 - 4, y1 + roofHeight, 2, facadeHeight)
+      }
       ctx.fillStyle = '#829694'
-      ctx.fillRect(x1, y1 + roofHeight, w, facadeHeight)
-      const windowCount = Math.max(2, Math.floor(w / 13))
+      ctx.fillRect(x1, y1 + roofHeight, w - (w >= 16 ? 4 : 0), facadeHeight)
+      const facadeWidth = w - (w >= 16 ? 4 : 0)
+      const windowCount = Math.max(2, Math.floor(facadeWidth / 13))
       for (let col = 0; col < windowCount; col++) {
-        const wx = x1 + 4 + col * ((w - 8) / windowCount)
+        const wx = x1 + 4 + col * ((facadeWidth - 8) / windowCount)
         ctx.fillStyle = '#355b68'
         ctx.fillRect(wx, y1 + roofHeight + 1, 3, Math.max(1, facadeHeight - 2))
+        ctx.fillStyle = '#d2e7d9'
+        ctx.fillRect(wx + 1, y1 + roofHeight + 1, 1, 1)
       }
       ctx.restore()
       polygon(ctx, footprint)

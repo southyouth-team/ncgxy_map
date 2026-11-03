@@ -6,7 +6,7 @@ import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
-import { mapPixelToWorld } from '../../data/campus/campusLayout.js'
+import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
 import { createCampusMaterials, createPixelBuilding, validateBuildingFootprint } from '../world/campus/campusAssetLibrary.js'
@@ -67,7 +67,8 @@ export function createCampusEngine(container, callbacks = {}) {
     cameraRig = new CameraRig(THREE, renderer.domElement)
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     const playerSprite = campus.getObjectByName('PixelExplorerSprite')
-    if (playerSprite) cameraRig.player.set(playerSprite.position.x, 1.7, playerSprite.position.z)
+    const spawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
+    cameraRig.player.set(playerSprite?.position.x ?? spawn.x, 1.7, playerSprite?.position.z ?? spawn.z)
     // 从明确标记为建筑的场景对象提取世界包围盒，避免把道路、树木等误判为墙体。
     campus.updateMatrixWorld(true)
     const buildingObstacles = []
@@ -83,6 +84,17 @@ export function createCampusEngine(container, callbacks = {}) {
       })
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    // 湖水不可通行；中央湖区保留 holes 中定义的岛屿步行区域。
+    for (const area of CAMPUS_AREAS.filter(item => item.type === 'water' && item.polygon?.length >= 3)) {
+      const toWorldRing = ring => ring.map(([x, y]) => {
+        const point = mapPixelToWorld(x, y)
+        return [point.x, point.z]
+      })
+      collisionWorld.addPolygonObstacle({
+        outer: toWorldRing(area.polygon),
+        holes: (area.holes || []).map(toWorldRing),
+      })
+    }
     outdoorCollisionWorld = collisionWorld
     cameraRig.setObstructionObjects(cameraObstacleRoots)
     // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
@@ -728,7 +740,8 @@ export function createCampusEngine(container, callbacks = {}) {
 
   function focusCampus() {
     cameraRig?.focusCampus()
-    input?.resetPosition()
+    const spawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
+    input?.resetPosition(spawn)
   }
 
   function dispose() {

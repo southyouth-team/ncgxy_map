@@ -138,6 +138,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           { minX: bounds.max.x - sideWidth, maxX: bounds.max.x, minZ: backZ, maxZ: frontZ },
         )
         object.userData.collisionObstacleCount = 5
+      } else if (Array.isArray(object.userData?.collisionPolygon) && object.userData.collisionPolygon.length >= 3) {
+        // 多边形建筑按真实 footprint 轮廓碰撞，避免外接矩形封死凹角和周边通道。
+        const polygon = object.userData.collisionPolygon
+        const xs = polygon.map(point => point[0])
+        const zs = polygon.map(point => point[1])
+        buildingObstacles.push({
+          polygon,
+          holes: [],
+          minX: Math.min(...xs), maxX: Math.max(...xs),
+          minZ: Math.min(...zs), maxZ: Math.max(...zs),
+        })
       } else {
         buildingObstacles.push({
           minX: bounds.min.x, maxX: bounds.max.x,

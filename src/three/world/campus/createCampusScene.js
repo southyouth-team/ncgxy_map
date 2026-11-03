@@ -7,7 +7,7 @@ import {
   addPixelBench, addPixelLamp, createPixelBuilding,
 } from './campusAssetLibrary.js'
 
-// 星露谷式 2.5D 校园原型。空间轮廓来自示意图，程序化建筑不代表真实楼体测绘。
+// 等距像素风 2.5D 校园原型。空间轮廓来自示意图，程序化建筑不代表真实楼体测绘。
 export function createCampusScene(THREE) {
   const root = new THREE.Group()
   root.name = 'NanchangInstituteCampus'
@@ -310,7 +310,7 @@ export function createCampusScene(THREE) {
   const halfD = worldDepth / 2
   root.userData.walkableBounds = { minX: -halfW + 2, maxX: halfW - 2, minZ: -halfD + 2, maxZ: halfD - 2 }
   root.userData.isVisualPrototype = true
-  root.userData.assetStyle = 'stardew-inspired-pixel-art'
+  root.userData.assetStyle = 'isometric-pixel-campus'
   root.userData.coordinateSystem = 'campus-plan-pixel-to-world'
   return root
 }

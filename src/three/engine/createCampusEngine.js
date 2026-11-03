@@ -66,7 +66,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
     campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE)
     scene.add(campus)
-    cameraRig = new CameraRig(THREE, renderer.domElement)
+    cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: isRpgSample })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     const playerSprite = campus.getObjectByName('PixelExplorerSprite')
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
@@ -633,7 +633,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
       const moving = dx * dx + dz * dz > 0.000001
-      campus?.userData.updatePlayerAnimation?.(moving, time / 1000)
+      campus?.userData.updatePlayerAnimation?.(moving, time / 1000, dx, dz)
       lastPlayerX = cameraRig.player.x
       lastPlayerZ = cameraRig.player.z
     }

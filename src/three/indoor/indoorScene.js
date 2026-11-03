@@ -155,7 +155,23 @@ export function createIndoorFloor(THREE, floor) {
   const halfD = floor.depth / 2
   const h = floor.wallHeight
   const t = 0.28
-  addBox(THREE, group, 'indoor-floor-slab', 0, -0.18, 0, floor.width, 0.36, floor.depth, floorMaterial)
+  const footprintPolygon = Array.isArray(floor.footprintPolygon) && floor.footprintPolygon.length >= 3
+    ? floor.footprintPolygon : null
+  if (footprintPolygon) {
+    const shape = new THREE.Shape()
+    shape.moveTo(footprintPolygon[0].x, footprintPolygon[0].z)
+    footprintPolygon.slice(1).forEach(point => shape.lineTo(point.x, point.z))
+    shape.closePath()
+    const geometry = new THREE.ShapeGeometry(shape)
+    geometry.rotateX(Math.PI / 2)
+    const slab = new THREE.Mesh(geometry, floorMaterial)
+    slab.name = 'indoor-floor-slab'
+    slab.position.y = -0.18
+    slab.receiveShadow = true
+    group.add(slab)
+  } else {
+    addBox(THREE, group, 'indoor-floor-slab', 0, -0.18, 0, floor.width, 0.36, floor.depth, floorMaterial)
+  }
 
   const doors = Array.isArray(floor.doors) ? floor.doors : []
   const collision = []
@@ -199,10 +215,51 @@ export function createIndoorFloor(THREE, floor) {
     }
   }
 
-  addWallSegments({ axis: 'x', centerX: 0, centerZ: -halfD, length: floor.width, wallName: 'north', openings: doors.filter(door => door.wall === 'north') })
+  if (footprintPolygon) {
+    const addPolygonWall = (start, end, wallName, openings = []) => {
+      const dx = end.x - start.x, dz = end.z - start.z
+      const length = Math.hypot(dx, dz)
+      const ux = dx / length, uz = dz / length
+      const angle = -Math.atan2(dz, dx)
+      const normalized = openings.map(opening => ({
+        start: Math.max(-length / 2, (Number(opening.offset) || 0) - (Number(opening.width) || 1.2) / 2),
+        end: Math.min(length / 2, (Number(opening.offset) || 0) + (Number(opening.width) || 1.2) / 2),
+      })).filter(item => item.end > item.start).sort((a,b) => a.start-b.start)
+      const segments = []
+      let cursor = -length / 2
+      for (const opening of normalized) {
+        if (opening.start > cursor) segments.push([cursor, opening.start])
+        cursor = Math.max(cursor, opening.end)
+      }
+      if (cursor < length / 2) segments.push([cursor, length / 2])
+      for (const [from, to] of segments) {
+        const span = to - from
+        if (span < 0.05) continue
+        const centerDistance = (from + to) / 2
+        const x = (start.x + end.x) / 2 + ux * centerDistance
+        const z = (start.z + end.z) / 2 + uz * centerDistance
+        const mesh = addBox(THREE, group, 'indoor-wall-' + wallName, x, 0, z, span, h, t, wall)
+        mesh.rotation.y = angle
+        const padX = Math.abs(ux) * span / 2 + Math.abs(uz) * t / 2
+        const padZ = Math.abs(uz) * span / 2 + Math.abs(ux) * t / 2
+        collision.push({ minX: x-padX, maxX: x+padX, minZ: z-padZ, maxZ: z+padZ })
+      }
+    }
+    footprintPolygon.forEach((point, index) => {
+      const next = footprintPolygon[(index + 1) % footprintPolygon.length]
+      const midpoint = { x: (point.x + next.x) / 2, z: (point.z + next.z) / 2 }
+      const dx = Math.abs(next.x - point.x), dz = Math.abs(next.z - point.z)
+      const side = dx >= dz
+        ? (midpoint.z <= 0 ? 'north' : 'south')
+        : (midpoint.x <= 0 ? 'west' : 'east')
+      addPolygonWall(point, next, 'outline-' + index, doors.filter(door => door.wall === side))
+    })
+  } else {
+      addWallSegments({ axis: 'x', centerX: 0, centerZ: -halfD, length: floor.width, wallName: 'north', openings: doors.filter(door => door.wall === 'north') })
   addWallSegments({ axis: 'x', centerX: 0, centerZ: halfD, length: floor.width, wallName: 'south', openings: doors.filter(door => door.wall === 'south') })
   addWallSegments({ axis: 'z', centerX: -halfW, centerZ: 0, length: floor.depth, wallName: 'west', openings: doors.filter(door => door.wall === 'west') })
   addWallSegments({ axis: 'z', centerX: halfW, centerZ: 0, length: floor.depth, wallName: 'east', openings: doors.filter(door => door.wall === 'east') })
+  }
 
   // 自定义隔墙由同一份楼层数据驱动，门洞在几何与碰撞层同步留空。
   for (const wallDefinition of Array.isArray(floor.walls) ? floor.walls : []) {

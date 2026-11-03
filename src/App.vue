@@ -29,7 +29,13 @@ const nearIndoorStairs = ref(false)
 const nearIndoorRoom = ref(null)
 const activeIndoorRoom = ref(null)
 const indoorPrompt = ref(null)
-const requestedBuildingId = new URLSearchParams(window.location.search).get('buildingId')
+const initialUrlParams = new URLSearchParams(window.location.search)
+const requestedBuildingId = initialUrlParams.get('buildingId')
+const returnPixelX = Number(initialUrlParams.get('returnX'))
+const returnPixelY = Number(initialUrlParams.get('returnY'))
+const returnPixelPosition = Number.isFinite(returnPixelX) && Number.isFinite(returnPixelY)
+  ? { x: returnPixelX, y: returnPixelY }
+  : null
 const selectedBuildingId = ref(CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId) ? requestedBuildingId : (CAMPUS_BUILDING_FOOTPRINTS[0]?.id || ''))
 const indoorFloorCount = ref(3)
 const indoorEntryBusy = ref(false)
@@ -315,11 +321,16 @@ function focusCampus() {
   engine?.focusCampus()
 }
 
-function openBuildingFromPixelMap(buildingId) {
+function openBuildingFromPixelMap(payload) {
+  const buildingId = payload?.buildingId
   if (!CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === buildingId)) return
   const url = new URL(window.location.href)
   url.searchParams.set('view', 'showcase')
   url.searchParams.set('buildingId', buildingId)
+  if (Number.isFinite(payload?.playerPosition?.x) && Number.isFinite(payload?.playerPosition?.y)) {
+    url.searchParams.set('returnX', String(payload.playerPosition.x))
+    url.searchParams.set('returnY', String(payload.playerPosition.y))
+  }
   window.location.assign(url)
 }
 
@@ -343,6 +354,7 @@ function closeEditor() {
   editorViewMode.value = '2d'
   const url = new URL(window.location.href)
   url.searchParams.delete('view')
+  url.searchParams.delete('buildingId')
   window.history.replaceState({}, '', url)
   activeMode.value = 'overview'
   engine?.setMode('overview')
@@ -397,7 +409,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: isRpgSample ? 'rpg-sample' : 'campus' })
+    }, { sceneType: requestedBuildingId ? 'campus' : (isRpgSample ? 'rpg-sample' : 'campus') })
     await engine.init()
     if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {
@@ -416,7 +428,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isRpgSample } ]">
-    <CampusPixelMap v-if="!showEditor" @enter-building="openBuildingFromPixelMap" />
+    <CampusPixelMap v-if="!showEditor" :initial-player-position="returnPixelPosition" @enter-building="openBuildingFromPixelMap" />
     <div ref="viewport" class="scene-viewport" v-show="showEditor && editorViewMode === '3d'"></div>
     <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 

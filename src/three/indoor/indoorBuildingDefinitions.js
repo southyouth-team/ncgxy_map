@@ -62,11 +62,14 @@ export function validateIndoorBuilding(building) {
  */
 export function createIndoorBuildingFromFootprint(footprint, options = {}) {
   if (!footprint?.id || !footprint?.bounds) throw new TypeError('建筑轮廓必须包含 id 和 bounds')
-  const width = Number(footprint.bounds.maxX) - Number(footprint.bounds.minX)
-  const depth = Number(footprint.bounds.maxZ) - Number(footprint.bounds.minZ)
-  if (!Number.isFinite(width) || !Number.isFinite(depth) || width < 8 || depth < 8) {
-    throw new TypeError('建筑轮廓尺寸不足，无法生成可行走室内空间')
+  const footprintWidth = Number(footprint.bounds.maxX) - Number(footprint.bounds.minX)
+  const footprintDepth = Number(footprint.bounds.maxZ) - Number(footprint.bounds.minZ)
+  if (!Number.isFinite(footprintWidth) || !Number.isFinite(footprintDepth) || footprintWidth <= 0 || footprintDepth <= 0) {
+    throw new TypeError('建筑轮廓尺寸无效，无法生成室内空间')
   }
+  // 当前底图为视觉数字化近似图，狭长轮廓无法直接作为可玩室内尺寸；仅对室内模板做最小空间归一化。
+  const width = Math.max(8, footprintWidth)
+  const depth = Math.max(8, footprintDepth)
   const floorCount = Math.max(1, Math.min(30, Math.floor(Number(options.floors) || 1)))
   const floorHeight = Math.max(2.8, Math.min(6, Number(options.floorHeight) || 3.6))
   const corridorDepth = Math.max(2.4, Math.min(3.6, depth * 0.2))
@@ -91,6 +94,8 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
     prototype: true,
     generatedFromFootprint: true,
     layoutStatus: 'procedural-template',
+    footprintSize: { width: footprintWidth, depth: footprintDepth },
+    interiorNormalized: width !== footprintWidth || depth !== footprintDepth,
     floorHeight,
     bounds: { minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 },
     floors,

@@ -199,25 +199,32 @@ const layerStates = ref({ buildings: { visible: true, locked: false }, roads: { 
 const clipboardObject = ref(null)
 let duplicateSequence = 0
 function copySelected() {
-  if (!selected.value.id || isLayerLocked(selected.value.type)) return
-  const collection = selected.value.type === 'building' ? buildings.value : selected.value.type === 'road' ? roads.value : areas.value
-  const item = collection.find(entry => entry.id === selected.value.id)
-  if (!item) return
-  clipboardObject.value = { type: selected.value.type, item: JSON.parse(JSON.stringify(item)) }
+  const targets = multiSelection.value.length > 1 ? multiSelection.value : (selected.value.id ? [selected.value] : [])
+  const copied = targets.filter(entry => !isLayerLocked(entry.type)).map(entry => {
+    const collection = featureCollection(entry.type)
+    const item = collection.find(candidate => candidate.id === entry.id)
+    return item ? { type: entry.type, item: JSON.parse(JSON.stringify(item)) } : null
+  }).filter(Boolean)
+  if (copied.length) clipboardObject.value = copied
 }
 function pasteCopied() {
-  const copied = clipboardObject.value
-  if (!copied || isLayerLocked(copied.type)) return
-  const clone = JSON.parse(JSON.stringify(copied.item))
-  duplicateSequence += 1
-  clone.id = `copy-${copied.type}-${Date.now()}-${duplicateSequence}`
-  if (Array.isArray(clone.footprint)) clone.footprint = clone.footprint.map(([x, y]) => [x + 24, y + 24])
-  if (Array.isArray(clone.points)) clone.points = clone.points.map(([x, y]) => [x + 24, y + 24])
-  if (Array.isArray(clone.rect)) clone.rect = [clone.rect[0] + 24, clone.rect[1] + 24, clone.rect[2] + 24, clone.rect[3] + 24]
+  const copied = Array.isArray(clipboardObject.value) ? clipboardObject.value : (clipboardObject.value ? [clipboardObject.value] : [])
+  const available = copied.filter(entry => !isLayerLocked(entry.type))
+  if (!available.length) return
   snapshot()
-  const collection = copied.type === 'building' ? buildings.value : copied.type === 'road' ? roads.value : areas.value
-  collection.push(clone)
-  selected.value = { type: copied.type, id: clone.id }
+  const pasted = []
+  available.forEach(entry => {
+    const clone = JSON.parse(JSON.stringify(entry.item))
+    duplicateSequence += 1
+    clone.id = `copy-${entry.type}-${Date.now()}-${duplicateSequence}`
+    if (Array.isArray(clone.footprint)) clone.footprint = clone.footprint.map(([x, y]) => [x + 24, y + 24])
+    if (Array.isArray(clone.points)) clone.points = clone.points.map(([x, y]) => [x + 24, y + 24])
+    if (Array.isArray(clone.rect)) clone.rect = [clone.rect[0] + 24, clone.rect[1] + 24, clone.rect[2] + 24, clone.rect[3] + 24]
+    featureCollection(entry.type).push(clone)
+    pasted.push({ type: entry.type, id: clone.id })
+  })
+  multiSelection.value = pasted
+  selected.value = pasted[pasted.length - 1] || { type: '', id: '' }
   tool.value = 'select'
 }
 function handleEditorKeydown(event) {
@@ -855,11 +862,11 @@ function exportDocument() {
         <div class="panel-title road-title">道路工具</div>
         <label>道路宽度 <b>{{ roadWidth }} px</b></label><input v-model.number="roadWidth" type="range" min="4" max="24">
         <button class="add-button" @click="addRoad">＋ 新建道路</button>
-        <p class="hint">快捷键：Shift + 点击多选；Ctrl/Cmd + C 复制，Ctrl/Cmd + V 粘贴，Delete 批量删除，Esc 清空选择。复制对象后会在右下方偏移 24 像素生成副本。</p><p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
+        <p class="hint">快捷键：Shift + 点击多选；Ctrl/Cmd + C 复制，Ctrl/Cmd + V 粘贴（支持多对象），Delete 批量删除，Esc 清空选择。复制对象后会在右下方偏移 24 像素生成副本。</p><p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
-        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id || isLayerLocked(selected.type)">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || (clipboardObject && isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || (clipboardObject && isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
           <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>

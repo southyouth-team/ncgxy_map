@@ -35,6 +35,8 @@ const indoorDefinition = ref(null)
 const indoorEditorMessage = ref('')
 const indoorLayoutRevision = ref(0)
 const indoorLayoutSaving = ref(false)
+const indoorLayoutVersions = ref([])
+const indoorHistoryOpen = ref(false)
 const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
 const indoorBuildingId = computed(() => indoorDefinition.value?.id || selectedBuildingId.value)
 const initialView = new URLSearchParams(window.location.search).get('view')
@@ -163,6 +165,41 @@ async function saveIndoorLayout() {
     indoorEditorMessage.value = error?.message || '保存失败'
   } finally {
     indoorLayoutSaving.value = false
+  }
+}
+
+async function loadIndoorLayoutVersions() {
+  if (!sceneDocument.value?.campusId || !sceneDocument.value?.mapId || sceneSource.value !== 'postgis' || !indoorDefinition.value) {
+    indoorEditorMessage.value = '历史版本需要连接正式地图服务'
+    return
+  }
+  try {
+    const path = API_BASE + '/campuses/' + sceneDocument.value.campusId + '/maps/' + sceneDocument.value.mapId + '/scene/indoor-buildings/' + encodeURIComponent(indoorDefinition.value.id) + '/versions'
+    const response = await fetch(path, { headers: { 'X-Dev-User-Id': DEV_USER_ID } })
+    const payload = await response.json().catch(() => [])
+    if (!response.ok) throw new Error(payload.message || '读取历史版本失败')
+    indoorLayoutVersions.value = Array.isArray(payload) ? payload : []
+    indoorHistoryOpen.value = true
+  } catch (error) {
+    indoorEditorMessage.value = error?.message || '读取历史版本失败'
+  }
+}
+
+async function restoreIndoorLayoutVersion(revision) {
+  if (!indoorDefinition.value || indoorLayoutSaving.value) return
+  try {
+    const path = API_BASE + '/campuses/' + sceneDocument.value.campusId + '/maps/' + sceneDocument.value.mapId + '/scene/indoor-buildings/' + encodeURIComponent(indoorDefinition.value.id) + '/versions/' + revision
+    const response = await fetch(path, { headers: { 'X-Dev-User-Id': DEV_USER_ID } })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || !payload.definition) throw new Error(payload.message || '历史版本读取失败')
+    indoorDefinition.value = payload.definition
+    engine?.updateIndoorBuildingDefinition(indoorDefinition.value)
+    indoorFloors.value = indoorDefinition.value.floors.map(floor => floor.level).sort((a,b) => a-b)
+    indoorEditorMessage.value = '已载入历史版本，正在以新版本号保存…'
+    await saveIndoorLayout()
+    await loadIndoorLayoutVersions()
+  } catch (error) {
+    indoorEditorMessage.value = error?.message || '历史版本恢复失败'
   }
 }
 
@@ -451,7 +488,7 @@ onBeforeUnmount(() => {
       <div class="indoor-room-list"><section v-for="room in activeEditableFloor?.rooms || []" :key="room.id" class="indoor-room-item">
         <div class="indoor-room-title"><input v-model="room.name" aria-label="房间名称" @change="refreshIndoorLayout"><button @click="removeIndoorRoom(room.id)">删除</button></div>
         <div class="indoor-room-fields"><label>X<input v-model.number="room.x" type="number" step="0.5" @change="refreshIndoorLayout"></label><label>Z<input v-model.number="room.z" type="number" step="0.5" @change="refreshIndoorLayout"></label><label>宽<input v-model.number="room.width" type="number" min="2" step="0.5" @change="refreshIndoorLayout"></label><label>深<input v-model.number="room.depth" type="number" min="2" step="0.5" @change="refreshIndoorLayout"></label></div>
-      </section></div><button class="indoor-save-layout" :disabled="indoorLayoutSaving" @click="saveIndoorLayout">{{ indoorLayoutSaving ? "保存中…" : "保存室内布局" }}</button><p>{{ indoorEditorMessage }}</p>
+      </section></div><div class="indoor-layout-actions"><button class="indoor-save-layout" :disabled="indoorLayoutSaving" @click="saveIndoorLayout">{{ indoorLayoutSaving ? "保存中…" : "保存室内布局" }}</button><button class="indoor-history-button" @click="loadIndoorLayoutVersions">历史版本</button></div><div v-if="indoorHistoryOpen" class="indoor-history-list"><div v-if="!indoorLayoutVersions.length">暂无历史版本</div><div v-for="version in indoorLayoutVersions" :key="version.revision" class="indoor-history-item"><span>版本 {{ version.revision }} · {{ new Date(version.created_at).toLocaleString() }}</span><button :disabled="indoorLayoutSaving || Number(version.revision) === indoorLayoutRevision" @click="restoreIndoorLayoutVersion(version.revision)">恢复</button></div></div><p>{{ indoorEditorMessage }}</p>
     </aside>
     <div v-if="indoorPrompt" class="indoor-interaction-prompt">{{ indoorPrompt.text }}</div>
     <div v-if="loading" class="loading-screen">

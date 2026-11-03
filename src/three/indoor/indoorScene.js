@@ -321,6 +321,25 @@ export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}
     }
     return inside
   }
+  const hasPolygonClearance = (x, z) => {
+    if (!polygon || polygon.length < 3) return true
+    // 网格节点代表角色中心，必须与建筑轮廓保持角色半径级别的安全距离。
+    // 仅判断点在多边形内部会让寻路贴墙，最终被运行时碰撞体反复顶回。
+    for (let index = 0; index < polygon.length; index += 1) {
+      const start = polygon[index]
+      const end = polygon[(index + 1) % polygon.length]
+      const dx = end.x - start.x
+      const dz = end.z - start.z
+      const lengthSquared = dx * dx + dz * dz
+      const projection = lengthSquared > 0
+        ? Math.max(0, Math.min(1, ((x - start.x) * dx + (z - start.z) * dz) / lengthSquared))
+        : 0
+      const nearestX = start.x + projection * dx
+      const nearestZ = start.z + projection * dz
+      if (Math.hypot(x - nearestX, z - nearestZ) < clearance) return false
+    }
+    return true
+  }
   const isBlocked = (x, z) => obstacles.some(obstacle => {
     if (![obstacle.minX, obstacle.maxX, obstacle.minZ, obstacle.maxZ].every(Number.isFinite)) return false
     return x + clearance > obstacle.minX && x - clearance < obstacle.maxX &&
@@ -334,7 +353,7 @@ export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}
     const z = -halfD + iz * step
     for (let ix = 0; ix <= columns; ix += 1) {
       const x = -halfW + ix * step
-      if (!isInsidePolygon(x, z) || isBlocked(x, z)) continue
+      if (!isInsidePolygon(x, z) || !hasPolygonClearance(x, z) || isBlocked(x, z)) continue
       const id = nodes.length
       nodes.push({ id, x: Number(x.toFixed(3)), z: Number(z.toFixed(3)), neighbors: [] })
       lookup.set(ix + ':' + iz, id)

@@ -259,13 +259,45 @@ export function createPixelBuilding(THREE, options = {}) {
     const next = outline[(index + 1) % outline.length]
     return sum + point.x * next.y - next.x * point.y
   }, 0) / 2
+  const edges = outline.map((point, index) => {
+    const next = outline[(index + 1) % outline.length]
+    const dx = next.x - point.x
+    const dy = next.y - point.y
+    return { point, next, dx, dy, length: Math.hypot(dx, dy), index }
+  })
+  const entranceEdge = edges.reduce((longest, edge) => edge.length > longest.length ? edge : longest, { length: 0 })
+  const doorWidth = Math.min(Number(preset.doorWidth || 0.9), Math.max(0.5, entranceEdge.length * 0.42))
+  const doorHeight = Math.min(2.05, buildingHeight * 0.58)
+  if (entranceEdge.length >= doorWidth * 1.6) {
+    const normalX = area >= 0 ? entranceEdge.dy / entranceEdge.length : -entranceEdge.dy / entranceEdge.length
+    const normalZ = area >= 0 ? entranceEdge.dx / entranceEdge.length : -entranceEdge.dx / entranceEdge.length
+    const centerX = (entranceEdge.point.x + entranceEdge.next.x) / 2 + normalX * 0.07
+    const centerZ = -(entranceEdge.point.y + entranceEdge.next.y) / 2 + normalZ * 0.07
+    const angle = Math.atan2(entranceEdge.dy, entranceEdge.dx)
+    const doorFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(doorWidth + 0.18, doorHeight + 0.16, 0.12),
+      materials.windowTrim,
+    )
+    doorFrame.position.set(centerX, doorHeight / 2, centerZ)
+    doorFrame.rotation.y = angle
+    const door = new THREE.Mesh(
+      new THREE.BoxGeometry(doorWidth, doorHeight, 0.14),
+      materials.door,
+    )
+    door.position.copy(doorFrame.position)
+    door.rotation.y = angle
+    door.userData.objectType = 'building-entrance'
+    group.add(doorFrame, door)
+    group.userData.entrance = { edgeIndex: entranceEdge.index, width: doorWidth, height: doorHeight }
+  }
   outline.forEach((point, index) => {
     const next = outline[(index + 1) % outline.length]
     const dx = next.x - point.x
     const dy = next.y - point.y
     const edgeLength = Math.hypot(dx, dy)
     if (edgeLength < windowWidth * 1.8) return
-    const count = Math.min(12, Math.floor(edgeLength / (windowWidth * 2.2)))
+    const density = Math.max(0.1, Number(preset.windowDensity || 1))
+    const count = Math.min(12, Math.floor(edgeLength / (windowWidth * 2.2) * density))
     if (!count) return
     // shape 坐标的 Y 对应世界 -Z；根据多边形绕序计算外法线。
     const normalX = area >= 0 ? dy / edgeLength : -dy / edgeLength
@@ -273,6 +305,8 @@ export function createPixelBuilding(THREE, options = {}) {
     const angle = Math.atan2(dy, dx)
     for (let i = 0; i < count; i += 1) {
       const t = (i + 1) / (count + 1)
+      // 主入口两侧留出门洞净空，避免窗户与门框重叠。
+      if (index === entranceEdge.index && Math.abs(t - 0.5) * edgeLength < doorWidth / 2 + windowWidth * 0.65) continue
       const centerX = point.x + dx * t + normalX * 0.055
       const centerZ = -(point.y + dy * t) + normalZ * 0.055
       const frame = new THREE.Mesh(

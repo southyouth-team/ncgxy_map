@@ -105,6 +105,16 @@ describe('CollisionWorld', () => {
     expect(collision.isBlocked(result.x, result.z)).toBe(false)
   })
 
+  it('uses a concave building footprint instead of blocking its bounding-box corners', () => {
+    const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 }, [], 0.25)
+    expect(collision.addPolygonObstacle({
+      outer: [[-4, -4], [4, -4], [4, -2], [-1, -2], [-1, 4], [-4, 4]],
+    })).toBe(true)
+    expect(collision.isBlocked(2, 2)).toBe(false)
+    expect(collision.isBlocked(-2, 2)).toBe(true)
+    expect(collision.isBlocked(2, -3)).toBe(true)
+  })
+
   it('rejects invalid polygon obstacles', () => {
     const collision = new CollisionWorld({ minX: -5, maxX: 5, minZ: -5, maxZ: 5 })
     expect(collision.addPolygonObstacle({ outer: [[0, 0], [1, 1]] })).toBe(false)

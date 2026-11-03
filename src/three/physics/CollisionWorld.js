@@ -76,13 +76,15 @@ export class CollisionWorld {
     return obstacle.holes.some(ring => this.distanceToRing(x, z, ring) <= r)
   }
 
-  isBlocked(x, z) {
+  isObstacleBlocked(x, z, obstacle) {
     const r = this.radius
-    return this.obstacles.some((box) => {
-      if (box.polygon) return this.isPolygonBlocked(x, z, box)
-      return x > box.minX - r && x < box.maxX + r &&
-        z > box.minZ - r && z < box.maxZ + r
-    })
+    if (obstacle.polygon) return this.isPolygonBlocked(x, z, obstacle)
+    return x > obstacle.minX - r && x < obstacle.maxX + r &&
+      z > obstacle.minZ - r && z < obstacle.maxZ + r
+  }
+
+  isBlocked(x, z) {
+    return this.obstacles.some(obstacle => this.isObstacleBlocked(x, z, obstacle))
   }
 
   resolvePosition(position) {
@@ -93,9 +95,7 @@ export class CollisionWorld {
     }
     // 如果出生点或场景切换点落在碰撞体内，逐次推到最近可行边界，避免角色永久卡死。
     for (let iteration = 0; iteration < this.obstacles.length + 2; iteration++) {
-      const obstacle = this.obstacles.find(box => this.isBlocked(resolved.x, resolved.z) &&
-        resolved.x > box.minX - r && resolved.x < box.maxX + r &&
-        resolved.z > box.minZ - r && resolved.z < box.maxZ + r)
+      const obstacle = this.obstacles.find(box => this.isObstacleBlocked(resolved.x, resolved.z, box))
       if (!obstacle) break
       const candidates = [
         { x: obstacle.minX - r - 0.015, z: resolved.z },

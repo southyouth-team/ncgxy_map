@@ -129,6 +129,10 @@ describe('shared campus building assets', () => {
     expect(entranceWalls.some(child => child.geometry.parameters.height < 7.2)).toBe(true)
     expect(building.children.filter(child => child.userData.objectType === 'building-wall')).toHaveLength(8)
     expect(building.userData.floorCount).toBe(2)
+    expect(building.userData.collisionSegments).toHaveLength(7)
+    expect(building.userData.collisionSegments.every(segment => segment.thickness > 0)).toBe(true)
+    expect(building.userData.indoorEntrance.edgeIndex).toBe(0)
+    expect(building.userData.indoorEntrance.radius).toBeGreaterThan(2)
   })
 
   it('keeps facade windows inside short edges and prevents overlap at high density', () => {

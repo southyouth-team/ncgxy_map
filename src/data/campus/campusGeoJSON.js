@@ -179,6 +179,8 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
   const errors = []
   const warnings = []
   const features = Array.isArray(collection?.features) ? collection.features : []
+  const width = Number.isFinite(dataset?.width) ? dataset.width : 0
+  const height = Number.isFinite(dataset?.height) ? dataset.height : 0
   const seenIds = new Set()
   const allowedConfidence = new Set(['low', 'medium', 'high'])
   const allowedStatus = new Set(['verified', 'unverified'])
@@ -186,7 +188,7 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
   if (collection?.type !== 'FeatureCollection') {
     errors.push({ code: 'INVALID_COLLECTION_TYPE', message: '根节点必须是 FeatureCollection' })
   }
-  if (!Number.isFinite(dataset?.width) || !Number.isFinite(dataset?.height) || dataset.width <= 0 || dataset.height <= 0) {
+  if (width <= 0 || height <= 0) {
     errors.push({ code: 'INVALID_DATASET_BOUNDS', message: '数据集必须提供有效的图像宽高' })
   }
 
@@ -197,7 +199,7 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
     }
     if (value.length >= 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
       const [x, y] = value
-      if (x < 0 || y < 0 || x > dataset.width || y > dataset.height) {
+      if (x < 0 || y < 0 || x > width || y > height) {
         errors.push({ code: 'COORDINATE_OUT_OF_BOUNDS', featureId, path, message: '坐标超出参考底图像素范围' })
       }
       if (value.length > 2 && !value.slice(2).every(Number.isFinite)) {
@@ -206,6 +208,51 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
       return
     }
     value.forEach((child, index) => visitCoordinates(child, featureId, `${path}[${index}]`))
+  }
+
+  const orientation = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+  const segmentsIntersect = (a, b, c, d) => {
+    const o1 = orientation(a, b, c)
+    const o2 = orientation(a, b, d)
+    const o3 = orientation(c, d, a)
+    const o4 = orientation(c, d, b)
+    return ((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+      ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))
+  }
+  const validateRingTopology = (ring, featureId, path) => {
+    if (!Array.isArray(ring) || ring.length < 4) return
+    const points = ring.slice(0, -1)
+    const distinct = new Set(points.map(point => Array.isArray(point) ? point.join(',') : String(point)))
+    if (distinct.size < 3) {
+      errors.push({ code: 'DEGENERATE_POLYGON_RING', featureId, path, message: 'Polygon 环至少需要三个不同顶点' })
+      return
+    }
+    let twiceArea = 0
+    for (let i = 0; i < points.length; i++) {
+      const current = points[i]
+      const next = points[(i + 1) % points.length]
+      if (Array.isArray(current) && Array.isArray(next) &&
+        Number.isFinite(current[0]) && Number.isFinite(current[1]) &&
+        Number.isFinite(next[0]) && Number.isFinite(next[1])) {
+        twiceArea += current[0] * next[1] - next[0] * current[1]
+      }
+    }
+    if (Math.abs(twiceArea) < 1e-6) {
+      errors.push({ code: 'ZERO_AREA_POLYGON_RING', featureId, path, message: 'Polygon 环面积为零或过小' })
+    }
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length]
+      for (let j = i + 1; j < points.length; j++) {
+        // 相邻边及首尾相邻边共享端点，不属于自交。
+        if (j === i || j === i + 1 || (i === 0 && j === points.length - 1)) continue
+        const c = points[j], d = points[(j + 1) % points.length]
+        if ([a, b, c, d].every(point => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1])) &&
+          segmentsIntersect(a, b, c, d)) {
+          errors.push({ code: 'SELF_INTERSECTING_POLYGON_RING', featureId, path, message: 'Polygon 环存在边交叉' })
+          break
+        }
+      }
+    }
   }
 
   for (const [index, feature] of features.entries()) {
@@ -234,6 +281,10 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
       errors.push({ code: 'UNSUPPORTED_GEOMETRY', featureId, message: '仅允许 Polygon 或 LineString 几何' })
       continue
     }
+    const expectedGeometry = properties.featureType === 'road' ? 'LineString' : 'Polygon'
+    if (['road', 'area', 'building'].includes(properties.featureType) && geometry.type !== expectedGeometry) {
+      errors.push({ code: 'GEOMETRY_TYPE_MISMATCH', featureId, message: `${properties.featureType} 要素应使用 ${expectedGeometry}` })
+    }
     if (geometry.type === 'LineString' && (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2)) {
       errors.push({ code: 'INVALID_LINESTRING', featureId, message: '道路至少需要两个坐标点' })
     }
@@ -245,6 +296,8 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
           if (!Array.isArray(ring) || ring.length < 4 ||
             JSON.stringify(ring[0]) !== JSON.stringify(ring[ring.length - 1])) {
             errors.push({ code: 'INVALID_POLYGON_RING', featureId, path: `geometry.coordinates[${ringIndex}]`, message: 'Polygon 环至少包含四个坐标且首尾闭合' })
+          } else {
+            validateRingTopology(ring, featureId, `geometry.coordinates[${ringIndex}]`)
           }
         })
       }

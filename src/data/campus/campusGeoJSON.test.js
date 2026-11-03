@@ -73,6 +73,19 @@ describe('统一校园空间数据出口', () => {
     expect(report.errors.map(error => error.code)).toContain('INVALID_ROAD_WIDTH')
   })
 
+
+  it('质检能识别自交面和要素类型不匹配', () => {
+    const invalid = structuredClone(buildCampusGeoJSON())
+    const polygon = invalid.features.find(feature => feature.geometry.type === 'Polygon')
+    polygon.geometry.coordinates = [[[100, 100], [120, 120], [100, 120], [120, 100], [100, 100]]]
+    const road = invalid.features.find(feature => feature.properties.featureType === 'road')
+    road.geometry.type = 'Polygon'
+    road.geometry.coordinates = [[[200, 200], [220, 200], [220, 220], [200, 220], [200, 200]]]
+    const report = validateCampusGeoJSON(invalid)
+    expect(report.errors.map(error => error.code)).toContain('SELF_INTERSECTING_POLYGON_RING')
+    expect(report.errors.map(error => error.code)).toContain('GEOMETRY_TYPE_MISMATCH')
+  })
+
   it('道路输出为 LineString，建筑 footprint 输出为 Polygon', () => {
     const features = buildCampusGeoJSON().features
     expect(features.find(feature => feature.id === CAMPUS_ROAD_CENTERLINES[0].id).geometry.type).toBe('LineString')

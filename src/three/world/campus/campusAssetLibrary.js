@@ -303,6 +303,31 @@ export function validateBuildingFootprint(points = []) {
   return { valid: errors.length === 0, errors }
 }
 
+
+/**
+ * 根据立面净长度计算窗户中心位置。
+ * 以窗框实际宽度控制最小间距，密度只影响数量，不允许窗户互相穿插。
+ */
+export function getFacadeWindowPositions(edgeLength, windowWidth, density = 1, reservedCenter = null, reservedHalfWidth = 0) {
+  const length = Number(edgeLength)
+  const width = Number(windowWidth)
+  const factor = Number(density)
+  if (!Number.isFinite(length) || !Number.isFinite(width) || length <= 0 || width <= 0) return []
+  const margin = width / 2 + 0.12
+  const usableLength = length - margin * 2
+  if (usableLength < width + 0.12) return []
+  const physicalCapacity = Math.max(0, Math.floor((usableLength + 0.12) / (width + 0.32)))
+  if (!physicalCapacity) return []
+  const safeDensity = Number.isFinite(factor) ? Math.max(0.1, Math.min(3, factor)) : 1
+  const count = Math.min(12, physicalCapacity, Math.max(1, Math.round(physicalCapacity * safeDensity)))
+  const positions = Array.from({ length: count }, (_, index) => (
+    margin + usableLength * (index + 0.5) / count
+  ))
+  if (!Number.isFinite(Number(reservedCenter))) return positions
+  const keepAway = Math.max(0, Number(reservedHalfWidth) || 0) + width / 2 + 0.06
+  return positions.filter(position => Math.abs(position - Number(reservedCenter)) >= keepAway)
+}
+
 export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
   if (!Array.isArray(edges) || !edges.length) return null
   const hasRequestedIndex = requestedIndex !== null && requestedIndex !== undefined && requestedIndex !== ''
@@ -492,22 +517,25 @@ export function createPixelBuilding(THREE, options = {}) {
     const dx = next.x - point.x
     const dy = next.y - point.y
     const edgeLength = Math.hypot(dx, dy)
-    if (edgeLength < windowWidth * 1.8) return
-    const density = Math.max(0.1, Number(preset.windowDensity || 1))
-    const count = Math.min(12, Math.floor(edgeLength / (windowWidth * 2.2) * density))
-    if (!count) return
+    // 根据窗框实际宽度计算可用位置，密度不会突破最小安全间距。
+    const reservedHalfWidth = index === entranceEdge.index ? doorWidth / 2 : 0
+    const windowPositions = getFacadeWindowPositions(
+      edgeLength,
+      windowWidth + 0.12,
+      preset.windowDensity,
+      index === entranceEdge.index ? edgeLength / 2 : null,
+      reservedHalfWidth,
+    )
+    if (!windowPositions.length) return
     // shape 坐标的 Y 对应世界 -Z；根据多边形绕序计算外法线。
     const normalX = area >= 0 ? dy / edgeLength : -dy / edgeLength
     const normalZ = area >= 0 ? dx / edgeLength : -dx / edgeLength
     const angle = Math.atan2(dy, dx)
-    for (let i = 0; i < count; i += 1) {
-      const t = (i + 1) / (count + 1)
-      // 主入口两侧留出门洞净空，避免首层窗户与门框重叠。
-      if (index === entranceEdge.index && Math.abs(t - 0.5) * edgeLength < doorWidth / 2 + windowWidth * 0.65) continue
+    windowPositions.forEach((distanceAlongEdge) => {
+      const t = distanceAlongEdge / edgeLength
       const centerX = point.x + dx * t + normalX * 0.055
       const centerZ = -(point.y + dy * t) + normalZ * 0.055
       floorLayout.windowCenters.forEach((centerY, floorIndex) => {
-        if (floorIndex === 0 && index === entranceEdge.index && Math.abs(t - 0.5) * edgeLength < doorWidth / 2 + windowWidth * 0.65) return
         const frame = new THREE.Mesh(
           new THREE.BoxGeometry(windowWidth + 0.12, windowHeight + 0.12, 0.075),
           materials.windowTrim,
@@ -524,7 +552,7 @@ export function createPixelBuilding(THREE, options = {}) {
         glass.userData.floor = floorIndex + 1
         group.add(frame, glass)
       })
-    }
+    })
   })
   // 檐口沿 footprint 每条边生成，收口建筑墙顶，避免矩形檐口越界。
   edges.forEach((edge) => {

@@ -33,6 +33,8 @@ const indoorEntryBusy = ref(false)
 const indoorEditorOpen = ref(false)
 const indoorDefinition = ref(null)
 const indoorEditorMessage = ref('')
+const indoorLayoutRevision = ref(0)
+const indoorLayoutSaving = ref(false)
 const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
 const indoorBuildingId = computed(() => indoorDefinition.value?.id || selectedBuildingId.value)
 const initialView = new URLSearchParams(window.location.search).get('view')
@@ -67,20 +69,35 @@ function adjacentIndoorFloor(direction) {
   return levels[index + direction]
 }
 
-function enterSelectedBuilding() {
+async function enterSelectedBuilding() {
   if (!selectedBuildingId.value || indoorEntryBusy.value || !engine) return
   indoorEntryBusy.value = true
   try {
-    const building = CAMPUS_BUILDING_FOOTPRINTS.find(item => item.id === selectedBuildingId.value)
-    const stored = localStorage.getItem('ncgxy-indoor-layout:' + selectedBuildingId.value + ':v1')
-    const saved = stored ? JSON.parse(stored) : null
-    const opened = engine.enterIndoorBuilding(selectedBuildingId.value, {
-      name: building?.label || selectedBuildingId.value,
-      floors: indoorFloorCount.value,
-      floorsData: saved?.floors,
-      floorHeight: saved?.floorHeight,
-    })
-    if (opened) { indoorDefinition.value = engine.getIndoorBuildingDefinition(); indoorEditorOpen.value = false; indoorEditorMessage.value = saved ? '已加载本地保存布局' : '自动生成模板，可开始编辑' }
+    const buildingId = selectedBuildingId.value
+    const building = CAMPUS_BUILDING_FOOTPRINTS.find(item => item.id === buildingId)
+    const cacheKey = 'ncgxy-indoor-layout:' + buildingId + ':v1'
+    const stored = localStorage.getItem(cacheKey)
+    let saved = stored ? JSON.parse(stored) : null
+    indoorLayoutRevision.value = 0
+    if (sceneDocument.value?.campusId && sceneDocument.value?.mapId && sceneSource.value === 'postgis') {
+      try {
+        const response = await fetch(API_BASE + '/campuses/' + sceneDocument.value.campusId + '/maps/' + sceneDocument.value.mapId + '/scene/indoor-buildings/' + encodeURIComponent(buildingId), { headers: { 'X-Dev-User-Id': DEV_USER_ID } })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload.message || '读取室内布局失败：HTTP ' + response.status)
+        indoorLayoutRevision.value = Number(payload.revision || 0)
+        if (payload.definition) saved = payload.definition
+      } catch (error) {
+        indoorEditorMessage.value = '服务端读取失败，已回退本地缓存：' + (error.message || '网络异常')
+      }
+    }
+    const opened = engine.enterIndoorBuilding(buildingId, { name: building?.label || buildingId, floors: indoorFloorCount.value, floorsData: saved?.floors, floorHeight: saved?.floorHeight })
+    if (opened) {
+      indoorDefinition.value = engine.getIndoorBuildingDefinition()
+      if (saved) indoorDefinition.value = { ...indoorDefinition.value, ...saved, id: buildingId }
+      engine.updateIndoorBuildingDefinition(indoorDefinition.value)
+      indoorEditorOpen.value = false
+      indoorEditorMessage.value = indoorLayoutRevision.value > 0 ? '已加载服务端布局 · 版本 ' + indoorLayoutRevision.value : saved ? '已加载本地缓存布局' : '已根据校园建筑占地生成初始模板'
+    }
     if (!opened) errorMessage.value = '未能定位该建筑模型，请先加载校园真实底图场景'
   } catch (error) {
     errorMessage.value = error?.message || '室内空间生成失败'
@@ -122,7 +139,32 @@ function removeIndoorFloor() {
   engine?.updateIndoorBuildingDefinition(definition); engine?.switchIndoorFloor(indoorFloors.value[0])
 }
 
-function saveIndoorLayout() { if (!indoorDefinition.value) return; try { localStorage.setItem('ncgxy-indoor-layout:' + indoorDefinition.value.id + ':v1', JSON.stringify(indoorDefinition.value)); indoorEditorMessage.value = '已保存到当前浏览器，本机重新进入仍会保留' } catch (error) { indoorEditorMessage.value = error?.message || '保存失败' } }
+async function saveIndoorLayout() {
+  if (!indoorDefinition.value || indoorLayoutSaving.value) return
+  const definition = JSON.parse(JSON.stringify(indoorDefinition.value))
+  const cacheKey = 'ncgxy-indoor-layout:' + definition.id + ':v1'
+  indoorLayoutSaving.value = true
+  try {
+    if (sceneDocument.value?.campusId && sceneDocument.value?.mapId && sceneSource.value === 'postgis') {
+      const response = await fetch(API_BASE + '/campuses/' + sceneDocument.value.campusId + '/maps/' + sceneDocument.value.mapId + '/scene/indoor-buildings/' + encodeURIComponent(definition.id), { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID }, body: JSON.stringify({ revision: indoorLayoutRevision.value, definition }) })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        if (response.status === 409) throw new Error('版本冲突：服务端当前版本为 ' + (payload.currentRevision ?? '未知') + '，请重新加载后再保存')
+        throw new Error(payload.message || '保存失败：HTTP ' + response.status)
+      }
+      indoorLayoutRevision.value = Number(payload.revision || indoorLayoutRevision.value + 1)
+      localStorage.setItem(cacheKey, JSON.stringify(payload.definition || definition))
+      indoorEditorMessage.value = '已保存到服务器 · 版本 ' + indoorLayoutRevision.value
+    } else {
+      localStorage.setItem(cacheKey, JSON.stringify(definition))
+      indoorEditorMessage.value = '当前未连接正式地图服务，已保存到本地浏览器'
+    }
+  } catch (error) {
+    indoorEditorMessage.value = error?.message || '保存失败'
+  } finally {
+    indoorLayoutSaving.value = false
+  }
+}
 
 function switchIndoorFloor(direction) {
   const target = adjacentIndoorFloor(direction)
@@ -409,7 +451,7 @@ onBeforeUnmount(() => {
       <div class="indoor-room-list"><section v-for="room in activeEditableFloor?.rooms || []" :key="room.id" class="indoor-room-item">
         <div class="indoor-room-title"><input v-model="room.name" aria-label="房间名称" @change="refreshIndoorLayout"><button @click="removeIndoorRoom(room.id)">删除</button></div>
         <div class="indoor-room-fields"><label>X<input v-model.number="room.x" type="number" step="0.5" @change="refreshIndoorLayout"></label><label>Z<input v-model.number="room.z" type="number" step="0.5" @change="refreshIndoorLayout"></label><label>宽<input v-model.number="room.width" type="number" min="2" step="0.5" @change="refreshIndoorLayout"></label><label>深<input v-model.number="room.depth" type="number" min="2" step="0.5" @change="refreshIndoorLayout"></label></div>
-      </section></div><button class="indoor-save-layout" @click="saveIndoorLayout">保存室内布局</button><p>{{ indoorEditorMessage }}</p>
+      </section></div><button class="indoor-save-layout" :disabled="indoorLayoutSaving" @click="saveIndoorLayout">{{ indoorLayoutSaving ? "保存中…" : "保存室内布局" }}</button><p>{{ indoorEditorMessage }}</p>
     </aside>
     <div v-if="indoorPrompt" class="indoor-interaction-prompt">{{ indoorPrompt.text }}</div>
     <div v-if="loading" class="loading-screen">

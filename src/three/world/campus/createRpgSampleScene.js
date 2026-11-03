@@ -121,7 +121,7 @@ export function createRpgSampleScene(THREE) {
   root.add(sprite)
   root.userData.playerSpawn = { x: 0, z: 14 }
   root.userData.walkableBounds = { minX: -25, maxX: 25, minZ: -19, maxZ: 19 }
-  root.userData.sampleBounds = { width: 48, depth: 36 }
+  root.userData.sampleBounds = { width: 62, depth: 54 }
   root.userData.updatePlayerAnimation = (moving, time) => {
     sprite.position.y = moving ? 1.78 + Math.abs(Math.sin(time * 12)) * 0.09 : 1.75
   }

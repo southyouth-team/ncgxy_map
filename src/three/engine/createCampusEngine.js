@@ -837,7 +837,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         indoorOutdoorBase.position.z + shiftZ,
       )
       if (target.userData.foundationMesh) {
-        target.userData.foundationMesh.position.set(target.position.x, 0, target.position.z)
+        // 基座是建筑组的子对象，保持局部原点；世界位移由建筑组统一承担。
+        target.userData.foundationMesh.position.set(0, 0.18, 0)
       }
     } else {
       // 非程序化模型（含 RPG 样板手工建筑）暂保留原有包围盒缩放路径。

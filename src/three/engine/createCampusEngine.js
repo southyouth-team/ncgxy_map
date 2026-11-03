@@ -234,12 +234,50 @@ export function createCampusEngine(container, callbacks = {}) {
       Number(document.worldUnitsPerCampusUnit || 1),
     ) || mapPixelToWorld(x, y)
 
+    // 世界范围从完整编辑文档计算，不再假设校园永远只有 640×480 / 150×96。
+    // workspaceBounds 包含视口原点参考范围和超出底图的新增要素。
+    const sourcePoints = []
+    const addSourcePoints = (points) => {
+      if (Array.isArray(points)) for (const point of points) {
+        if (Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1])) sourcePoints.push(point)
+      }
+    }
+    for (const building of document.buildings || []) {
+      if (Array.isArray(building.footprint)) addSourcePoints(building.footprint)
+      else if (Array.isArray(building.rect)) {
+        const [left, top, right, bottom] = building.rect
+        addSourcePoints([[left, top], [right, top], [right, bottom], [left, bottom]])
+      }
+    }
+    for (const area of document.areas || []) {
+      if (Array.isArray(area.polygon)) addSourcePoints(area.polygon)
+      else if (Array.isArray(area.rect)) {
+        const [left, top, right, bottom] = area.rect
+        addSourcePoints([[left, top], [right, top], [right, bottom], [left, bottom]])
+      }
+    }
+    for (const road of document.roads || []) addSourcePoints(road.points)
+    const workspace = document.workspaceBounds
+    if (workspace && [workspace.minX, workspace.minY, workspace.maxX, workspace.maxY].every(Number.isFinite)) {
+      addSourcePoints([[workspace.minX, workspace.minY], [workspace.maxX, workspace.minY], [workspace.maxX, workspace.maxY], [workspace.minX, workspace.maxY]])
+    }
+    if (!sourcePoints.length) addSourcePoints([[36, 92], [612, 460]])
+    const worldPoints = sourcePoints.map(([x, y]) => calibratedPoint(x, y))
+    const minX = Math.min(...worldPoints.map(point => point.x))
+    const maxX = Math.max(...worldPoints.map(point => point.x))
+    const minZ = Math.min(...worldPoints.map(point => point.z))
+    const maxZ = Math.max(...worldPoints.map(point => point.z))
+    const centerX = (minX + maxX) / 2
+    const centerZ = (minZ + maxZ) / 2
+    const margin = Math.max(8, Math.max(maxX - minX, maxZ - minZ) * 0.04)
+    const groundWidth = Math.max(20, maxX - minX + margin * 2)
+    const groundDepth = Math.max(20, maxZ - minZ + margin * 2)
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(150, 96),
+      new THREE.PlaneGeometry(groundWidth, groundDepth),
       new THREE.MeshStandardMaterial({ color: '#8eae69', roughness: 1 }),
     )
     ground.rotation.x = -Math.PI / 2
-    ground.position.y = -0.12
+    ground.position.set(centerX, -0.12, centerZ)
     ground.receiveShadow = true
     rpgPreviewGroup.add(ground)
 
@@ -339,13 +377,7 @@ export function createCampusEngine(container, callbacks = {}) {
 
     scene.add(rpgPreviewGroup)
     if (campus) campus.visible = false
-    cameraRig?.setMode('overview')
-    if (document.calibration && document.referenceImage) {
-      const mapped = (document.buildings || []).flatMap((building) => (building.footprint || []).map(([x, y]) => calibratedPoint(x, y)))
-      const xs = mapped.map((point) => point.x), zs = mapped.map((point) => point.z)
-      if (xs.length && zs.length) cameraRig?.focusBounds(Math.max(20, Math.max(...xs) - Math.min(...xs)), Math.max(20, Math.max(...zs) - Math.min(...zs)))
-      else cameraRig?.focusBounds(150, 96)
-    } else cameraRig?.focusBounds(150, 96)
+    cameraRig?.focusBounds(groundWidth, groundDepth, centerX, centerZ)
     return true
   }
 

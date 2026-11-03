@@ -25,12 +25,64 @@ export class CollisionWorld {
     return true
   }
 
+  addPolygonObstacle({ outer = [], holes = [] } = {}) {
+    const normalizeRing = ring => Array.isArray(ring)
+      ? ring.map(point => Array.isArray(point) ? { x: Number(point[0]), z: Number(point[1]) } : { x: Number(point?.x), z: Number(point?.z) })
+        .filter(point => Number.isFinite(point.x) && Number.isFinite(point.z))
+      : []
+    const polygon = normalizeRing(outer)
+    const innerRings = holes.map(normalizeRing).filter(ring => ring.length >= 3)
+    if (polygon.length < 3) return false
+    const xs = polygon.map(point => point.x), zs = polygon.map(point => point.z)
+    this.obstacles.push({
+      polygon,
+      holes: innerRings,
+      minX: Math.min(...xs), maxX: Math.max(...xs),
+      minZ: Math.min(...zs), maxZ: Math.max(...zs),
+    })
+    return true
+  }
+
+  pointInRing(x, z, ring) {
+    let inside = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j]
+      const crosses = (a.z > z) !== (b.z > z)
+        && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x
+      if (crosses) inside = !inside
+    }
+    return inside
+  }
+
+  distanceToRing(x, z, ring) {
+    let distance = Infinity
+    for (let index = 0; index < ring.length; index += 1) {
+      const a = ring[index], b = ring[(index + 1) % ring.length]
+      const dx = b.x - a.x, dz = b.z - a.z
+      const lengthSquared = dx * dx + dz * dz
+      const t = lengthSquared ? Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / lengthSquared)) : 0
+      distance = Math.min(distance, Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t)))
+    }
+    return distance
+  }
+
+  isPolygonBlocked(x, z, obstacle) {
+    const r = this.radius
+    if (x < obstacle.minX - r || x > obstacle.maxX + r || z < obstacle.minZ - r || z > obstacle.maxZ + r) return false
+    const insideOuter = this.pointInRing(x, z, obstacle.polygon)
+    const insideHole = obstacle.holes.some(ring => this.pointInRing(x, z, ring))
+    if (insideOuter && !insideHole) return true
+    if (this.distanceToRing(x, z, obstacle.polygon) <= r) return true
+    return obstacle.holes.some(ring => this.distanceToRing(x, z, ring) <= r)
+  }
+
   isBlocked(x, z) {
     const r = this.radius
-    return this.obstacles.some((box) =>
-      x > box.minX - r && x < box.maxX + r &&
-      z > box.minZ - r && z < box.maxZ + r,
-    )
+    return this.obstacles.some((box) => {
+      if (box.polygon) return this.isPolygonBlocked(x, z, box)
+      return x > box.minX - r && x < box.maxX + r &&
+        z > box.minZ - r && z < box.maxZ + r
+    })
   }
 
   resolvePosition(position) {
@@ -65,19 +117,27 @@ export class CollisionWorld {
   move(position, dx, dz) {
     const start = this.resolvePosition(position)
     const r = this.radius, bounds = this.bounds
-    const wantedX = Math.max(bounds.minX + r, Math.min(bounds.maxX - r, start.x + dx))
-    const wantedZ = Math.max(bounds.minZ + r, Math.min(bounds.maxZ - r, start.z + dz))
-    const xFirst = { ...start }, zFirst = { ...start }
-    let xBlocked = false, zBlocked = false
-    if (!this.isBlocked(wantedX, xFirst.z)) xFirst.x = wantedX
-    else xBlocked = true
-    if (!this.isBlocked(xFirst.x, wantedZ)) xFirst.z = wantedZ
-    else zBlocked = true
-    if (!this.isBlocked(zFirst.x, wantedZ)) zFirst.z = wantedZ
-    if (!this.isBlocked(wantedX, zFirst.z)) zFirst.x = wantedX
-    const xDistance = (xFirst.x - start.x) ** 2 + (xFirst.z - start.z) ** 2
-    const zDistance = (zFirst.x - start.x) ** 2 + (zFirst.z - start.z) ** 2
-    const next = zDistance > xDistance ? zFirst : xFirst
-    return { ...next, blockedX: xBlocked, blockedZ: zBlocked }
+    // 将大步长拆分，避免快速移动时跨过窄墙/建筑边界。
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) / Math.max(0.12, r * 0.5)))
+    const stepX = dx / steps, stepZ = dz / steps
+    const next = { ...start }
+    let blockedX = false, blockedZ = false
+    for (let step = 0; step < steps; step += 1) {
+      const wantedX = Math.max(bounds.minX + r, Math.min(bounds.maxX - r, next.x + stepX))
+      const wantedZ = Math.max(bounds.minZ + r, Math.min(bounds.maxZ - r, next.z + stepZ))
+      const xFirst = { ...next }, zFirst = { ...next }
+      if (!this.isBlocked(wantedX, xFirst.z)) xFirst.x = wantedX
+      else blockedX = true
+      if (!this.isBlocked(xFirst.x, wantedZ)) xFirst.z = wantedZ
+      else blockedZ = true
+      if (!this.isBlocked(zFirst.x, wantedZ)) zFirst.z = wantedZ
+      if (!this.isBlocked(wantedX, zFirst.z)) zFirst.x = wantedX
+      const xDistance = (xFirst.x - next.x) ** 2 + (xFirst.z - next.z) ** 2
+      const zDistance = (zFirst.x - next.x) ** 2 + (zFirst.z - next.z) ** 2
+      const chosen = zDistance > xDistance ? zFirst : xFirst
+      next.x = chosen.x
+      next.z = chosen.z
+    }
+    return { ...next, blockedX, blockedZ }
   }
 }

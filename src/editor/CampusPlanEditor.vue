@@ -663,6 +663,35 @@ function updateBoxSelection(event) {
   if (!boxSelection.value) return
   boxSelection.value.current = point(event)
 }
+function pointInsideRect(point, rect) { return point[0] >= rect.left && point[0] <= rect.right && point[1] >= rect.top && point[1] <= rect.bottom }
+function pointInsidePolygon(point, polygon) {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i], [xj, yj] = polygon[j]
+    const crosses = (yi > point[1]) !== (yj > point[1]) && point[0] < (xj - xi) * (point[1] - yi) / ((yj - yi) || 0.0000001) + xi
+    if (crosses) inside = !inside
+  }
+  return inside
+}
+function segmentsIntersect(a, b, c, d) {
+  const cross = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+  const ab1 = cross(a, b, c), ab2 = cross(a, b, d), cd1 = cross(c, d, a), cd2 = cross(c, d, b)
+  return ab1 * ab2 <= 0 && cd1 * cd2 <= 0
+}
+function featureMatchesBox(type, feature, rect, contain) {
+  const points = type === 'road' ? feature.points : feature.footprint
+  if (!points?.length) return false
+  if (contain) return points.every(point => pointInsideRect(point, rect))
+  if (points.some(point => pointInsideRect(point, rect))) return true
+  const corners = [[rect.left, rect.top], [rect.right, rect.top], [rect.right, rect.bottom], [rect.left, rect.bottom]]
+  const edgeCount = type === 'road' ? points.length - 1 : points.length
+  for (let i = 0; i < edgeCount; i++) {
+    const a = points[i], b = points[(i + 1) % points.length]
+    const edges = [[[rect.left, rect.top], [rect.right, rect.top]], [[rect.right, rect.top], [rect.right, rect.bottom]], [[rect.right, rect.bottom], [rect.left, rect.bottom]], [[rect.left, rect.bottom], [rect.left, rect.top]]]
+    if (edges.some(([c, d]) => segmentsIntersect(a, b, c, d))) return true
+  }
+  return type !== 'road' && corners.some(corner => pointInsidePolygon(corner, points))
+}
 function finishBoxSelection() {
   if (!boxSelection.value) return
   const { start, current } = boxSelection.value
@@ -675,12 +704,7 @@ function finishBoxSelection() {
   ;[['building', buildings.value], ['road', roads.value], ['area', areas.value]].forEach(([type, collection]) => {
     if (isLayerLocked(type) || !layerStates.value[layerKey(type)]?.visible) return
     collection.forEach(feature => {
-      const bounds = getFeatureBounds(type, feature)
-      if (!bounds) return
-      const match = contain
-        ? bounds.left >= rect.left && bounds.right <= rect.right && bounds.top >= rect.top && bounds.bottom <= rect.bottom
-        : bounds.right >= rect.left && bounds.left <= rect.right && bounds.bottom >= rect.top && bounds.top <= rect.bottom
-      if (match) hits.push({ type, id: feature.id })
+      if (featureMatchesBox(type, feature, rect, contain)) hits.push({ type, id: feature.id })
     })
   })
   multiSelection.value = hits

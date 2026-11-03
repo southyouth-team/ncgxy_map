@@ -75,8 +75,9 @@ function moveDrag(event) {
   const dx = point.x - state.startX
   const dz = point.z - state.startZ
   if (state.kind === 'stair') {
-    const maxX = props.floor.width / 2 - 1
-    const maxZ = props.floor.depth / 2 - 2.2
+    const horizontal = ['east', 'west'].includes(props.floor.stairPoint.direction)
+    const maxX = props.floor.width / 2 - (horizontal ? 2.2 : 1)
+    const maxZ = props.floor.depth / 2 - (horizontal ? 1 : 2.2)
     props.floor.stairPoint.x = round(Math.max(-maxX, Math.min(maxX, state.x + dx)))
     props.floor.stairPoint.z = round(Math.max(-maxZ, Math.min(maxZ, state.z + dz)))
     return

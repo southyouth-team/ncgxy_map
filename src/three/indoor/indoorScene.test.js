@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -15,6 +15,23 @@ describe('indoor interaction contract', () => {
   it('normalizes inspect and navigation interaction metadata', () => {
     expect(createIndoorInteractionData({ id: 'door-101', name: '教室入口', objectType: 'door', interactionType: 'navigate', action: 'enter-room', operationHint: '按 E 进入' })).toMatchObject({ id: 'door-101', interactionType: 'navigate', action: 'enter-room', operationHint: '按 E 进入' })
     expect(() => createIndoorInteractionData({ id: 'x', name: '对象', objectType: 'fixture', interactionType: 'teleport' })).toThrow('室内交互类型必须是 inspect/use/navigate')
+  })
+})
+
+describe('stair landing point', () => {
+  it('uses the correct endpoint for ascending and descending on all stair orientations', () => {
+    const cases = [
+      { direction: 'south', start: { x: 2, z: -2 }, end: { x: 2, z: 2 } },
+      { direction: 'west', start: { x: 4, z: 0 }, end: { x: 0, z: 0 } },
+      { direction: 'north', start: { x: 2, z: 2 }, end: { x: 2, z: -2 } },
+      { direction: 'east', start: { x: 0, z: 0 }, end: { x: 4, z: 0 } },
+    ]
+    for (const stairPath of cases) {
+      expect(getStairLandingPoint(stairPath, 1)).toEqual(stairPath.end)
+      expect(getStairLandingPoint(stairPath, -1)).toEqual(stairPath.start)
+    }
+    expect(getStairLandingPoint(null, 1)).toBeNull()
+    expect(getStairLandingPoint(cases[0], 0)).toBeNull()
   })
 })
 

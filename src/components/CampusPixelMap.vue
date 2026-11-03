@@ -207,10 +207,10 @@ function drawBuilding(ctx, building) {
   ]
   // 当前阶段只表达建筑真实占地轮廓，不虚构屋顶、窗户、楼层和入口。
   polygon(ctx, footprint)
-  ctx.fillStyle = '#b9b7ad'
+  ctx.fillStyle = 'rgba(111, 119, 112, .28)'
   ctx.fill()
-  ctx.strokeStyle = '#666f6a'
-  ctx.lineWidth = 1.35
+  ctx.strokeStyle = 'rgba(54, 68, 59, .78)'
+  ctx.lineWidth = 1.1
   ctx.stroke()
   if (building.confidence === 'low') {
     ctx.save()
@@ -273,8 +273,12 @@ function buildBaseMap() {
   if (!ctx) return
   ctx.imageSmoothingEnabled = false
   drawGround(ctx)
+  // 参考图为主视觉；近似矢量层降低透明度，避免未校准轮廓遮挡原图。
+  ctx.save()
+  ctx.globalAlpha = 0.34
   drawAreas(ctx)
   drawRoads(ctx)
+  ctx.restore()
   drawLabels(ctx)
 }
 function render() {

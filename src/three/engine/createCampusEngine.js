@@ -32,6 +32,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let roomReturnPosition = null
   let stairTransition = null
   let outdoorState = null
+  let nearOutdoorEntrance = false
   let frameId = 0
   let resizeObserver
   let previousTime = 0
@@ -593,7 +594,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function onKeyDown(event) {
     if (event.key === 'Escape') input?.exitPointerLock()
     if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
-    if (event.key.toLowerCase() !== 'e' || !indoorGroup || stairTransition) return
+    if (event.key.toLowerCase() !== 'e') return
+    // 室外靠近教学楼正门按 E 进入；室内交互继续由同一按键处理。
+    if (!indoorGroup) {
+      if (nearOutdoorEntrance) enterIndoorPrototype()
+      return
+    }
+    if (stairTransition) return
     if (activeIndoorRoom && roomReturnPosition) {
       cameraRig.player.set(roomReturnPosition.x, roomReturnPosition.y, roomReturnPosition.z)
       activeIndoorRoom = null
@@ -637,6 +644,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     previousTime = time
     if (stairTransition) updateStairTransition(delta)
     else input?.update(delta)
+    if (!indoorGroup && cameraRig?.player && isRpgSample) {
+      const entrance = campus?.getObjectByName('sample-teaching-building')?.userData?.indoorEntrance
+      if (entrance) {
+        const building = campus.getObjectByName('sample-teaching-building')
+        const worldEntrance = building.localToWorld(new THREE.Vector3(entrance.x, 0, entrance.z))
+        const near = Math.hypot(cameraRig.player.x - worldEntrance.x, cameraRig.player.z - worldEntrance.z) <= entrance.radius
+        if (near !== nearOutdoorEntrance) {
+          nearOutdoorEntrance = near
+          callbacks.onIndoorPromptChange?.(near ? { visible: true, text: '按 E 进入教学楼' } : { visible: false })
+        }
+      }
+    }
     if (indoorGroup && cameraRig?.player && !stairTransition) {
       const point = indoorGroup.userData.stairPoint
       const nearStairs = !activeIndoorRoom && point && Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z) <= 2.4
@@ -792,6 +811,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorBuilding = null
     currentIndoorFloor = null
     campus.visible = outdoorState.visible
+    nearOutdoorEntrance = false
+    callbacks.onIndoorPromptChange?.({ visible: false })
     collisionWorld = outdoorState.collisionWorld
     input.collisionWorld = collisionWorld
     cameraRig.player.copy(outdoorState.player)

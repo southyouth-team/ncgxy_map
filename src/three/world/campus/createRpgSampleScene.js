@@ -30,12 +30,34 @@ export function createRpgSampleScene(THREE) {
   ground.position.y = 0.012
   ground.receiveShadow = true
   root.add(ground)
-  for (let z = -18; z <= 18; z += 4) {
-    for (let x = -24; x <= 24; x += 4) {
-      if (((x + z) / 4) % 3 !== 0) continue
-      addBox('grass-pixel-patch', x, 0.025, z, 1.8, 0.025, 1.25, materials.grassLight)
+  const grassPatchPositions = []
+  for (let z = -18; z <= 18; z += 3) {
+    for (let x = -24; x <= 24; x += 3) {
+      const cellX = Math.round((x + 24) / 3)
+      const cellZ = Math.round((z + 18) / 3)
+      // 规则但不机械的疏密节奏，避免草地变成棋盘格。
+      if ((cellX * 7 + cellZ * 11) % 4 === 0 || (cellX + cellZ) % 9 === 0) {
+        grassPatchPositions.push({ x, z, tone: (cellX * 3 + cellZ) % 3 })
+      }
     }
   }
+  const grassPatchMesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1.55, 0.025, 1.05),
+    materials.grassLight,
+    grassPatchPositions.length,
+  )
+  const grassPatchTransform = new THREE.Object3D()
+  const grassPatchTones = ['#91b96a', '#86b365', '#9bc477'].map(color => new THREE.Color(color))
+  grassPatchPositions.forEach((patch, index) => {
+    grassPatchTransform.position.set(patch.x, 0.0375, patch.z)
+    grassPatchTransform.updateMatrix()
+    grassPatchMesh.setMatrixAt(index, grassPatchTransform.matrix)
+    grassPatchMesh.setColorAt(index, grassPatchTones[patch.tone])
+  })
+  grassPatchMesh.name = 'grass-pixel-tile-instances'
+  grassPatchMesh.castShadow = false
+  grassPatchMesh.receiveShadow = true
+  root.add(grassPatchMesh)
   // 校园主路与通往教学楼的石板支路。
   addBox('main-campus-road-edge', 0, 0.012, 8, 48, 0.015, 5.4, materials.pathDark)
   addBox('main-campus-road', 0, 0.027, 8, 48, 0.015, 4.9, materials.path)

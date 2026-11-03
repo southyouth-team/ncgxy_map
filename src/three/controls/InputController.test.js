@@ -6,7 +6,7 @@ function createController() {
     player: { x: 0, y: 1.7, z: 0 },
     updateThirdPersonDesired: vi.fn(),
     updateFirstPersonDesired: vi.fn(),
-    thirdYaw: 0,
+    thirdYaw: -Math.PI,
     firstYaw: 0,
   }
   const collisionWorld = {

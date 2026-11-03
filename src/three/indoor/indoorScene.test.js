@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, buildIndoorNavigationGraph } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -173,6 +173,32 @@ describe('indoor floor contract', () => {
       stairPoint: { x: 0, z: 0, direction: 'south' },
     }
     expect(validateIndoorFloor(blocked).some(error => error.includes('stair-blocker 占用楼梯通行区域'))).toBe(true)
+  })
+
+  it('builds a collision-aware navigation graph linking spawn, room, and exit', () => {
+    const group = createIndoorFloor(THREE, sample)
+    const graph = group.userData.navigationGraph
+    expect(graph.nodes.length).toBeGreaterThan(100)
+    expect(graph.summary.spawnReachable).toBe(true)
+    expect(graph.points.find(point => point.id === 'room:classroom-101:approach')?.reachableFromSpawn).toBe(true)
+    expect(graph.points.find(point => point.id === 'room:classroom-101:inside')?.reachableFromSpawn).toBe(true)
+    expect(graph.points.find(point => point.id === 'exit:0')?.reachableFromSpawn).toBe(true)
+    expect(group.userData.navigationSummary).toEqual(graph.summary)
+  })
+
+  it('marks a room landmark disconnected when its doorway is blocked by a wall', () => {
+    const blockedFloor = {
+      ...sample,
+      rooms: [],
+      walls: [{ id: 'barrier', axis: 'z', x: -5, z: 0, length: 12, thickness: 0.3 }],
+    }
+    const graph = buildIndoorNavigationGraph(blockedFloor, [
+      { minX: -5.15, maxX: -4.85, minZ: -6, maxZ: 6 },
+    ], {
+      roomInteractions: [{ roomId: 'isolated', approach: { x: -5, z: -2 }, inside: { x: -5, z: 2 } }],
+    })
+    expect(graph.points.find(point => point.id === 'room:isolated:inside')?.reachableFromSpawn).toBe(false)
+    expect(graph.summary.disconnectedPoints).toContain('room:isolated:inside')
   })
 
   it('requires integer floor levels', () => {

@@ -185,6 +185,20 @@ describe('indoor floor contract', () => {
     expect(validateIndoorFloor({ ...sample, stairPoint: { x: 20, z: 0 } })).toContain('stairPoint 必须位于楼层范围内并预留楼梯空间')
   })
 
+  it('registers both stair landings as reachable navigation landmarks', () => {
+    const floor = { ...sample, rooms: [], stairPoint: { x: 8, z: 0, direction: 'south' } }
+    const group = createIndoorFloor(THREE, floor)
+    const graph = group.userData.navigationGraph
+    const lower = graph.points.find(point => point.id === 'stairs:lower-landing')
+    const upper = graph.points.find(point => point.id === 'stairs:upper-landing')
+    expect(lower?.point).toEqual({ x: 8, z: -2.1 })
+    expect(upper?.point).toEqual({ x: 8, z: 2.1 })
+    expect(lower?.nodeId).not.toBeNull()
+    expect(upper?.nodeId).not.toBeNull()
+    expect(graph.findPath({ x: 0, z: 0 }, lower.point)).not.toBeNull()
+    expect(graph.findPath({ x: 0, z: 0 }, upper.point)).not.toBeNull()
+  })
+
   it('calculates room door approach and interior interaction points', () => {
     const points = getRoomInteractionPoints({ rooms: [
       { id: 'south', name: '南侧房间', x: 0, z: 0, width: 8, depth: 6, doorWall: 'south', doorWidth: 1.4, doorOffset: 0.5 },

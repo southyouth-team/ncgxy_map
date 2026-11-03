@@ -78,7 +78,7 @@ function enterSelectedBuilding() {
       floorsData: saved?.floors,
       floorHeight: saved?.floorHeight,
     })
-    if (opened) { indoorDefinition.value = saved || null; indoorEditorOpen.value = false; indoorEditorMessage.value = saved ? '已加载本地保存布局' : '自动生成模板，可开始编辑' }
+    if (opened) { indoorDefinition.value = engine.getIndoorBuildingDefinition(); indoorEditorOpen.value = false; indoorEditorMessage.value = saved ? '已加载本地保存布局' : '自动生成模板，可开始编辑' }
     if (!opened) errorMessage.value = '未能定位该建筑模型，请先加载校园真实底图场景'
   } catch (error) {
     errorMessage.value = error?.message || '室内空间生成失败'
@@ -399,7 +399,15 @@ onBeforeUnmount(() => {
       <input v-model.number="indoorFloorCount" type="number" min="1" max="30" aria-label="生成楼层数">
       <button :disabled="indoorEntryBusy" @click="enterSelectedBuilding">{{ indoorEntryBusy ? '生成中…' : '生成室内并进入' }}</button>
     </div>
-    <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }}F / {{ indoorFloors.length }} 层</span></div>
+    <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }}F / {{ indoorFloors.length }} 层</span><button @click="indoorEditorOpen = !indoorEditorOpen">{{ indoorEditorOpen ? "关闭编辑" : "编辑室内" }}</button></div>
+    <aside v-if="indoorPrototypeActive && indoorEditorOpen" class="indoor-layout-editor">
+      <header><strong>室内空间编辑器</strong><small>建筑 {{ indoorBuildingId }} · {{ indoorFloor }}F</small></header>
+      <div class="indoor-editor-actions"><button @click="addIndoorFloor">＋ 增加楼层</button><button :disabled="indoorFloors.length <= 1" @click="removeIndoorFloor">删除当前层</button><button @click="addIndoorRoom">＋ 添加房间</button></div>
+      <div class="indoor-room-list"><section v-for="room in activeEditableFloor?.rooms || []" :key="room.id" class="indoor-room-item">
+        <div class="indoor-room-title"><input v-model="room.name" aria-label="房间名称" @change="refreshIndoorLayout"><button @click="removeIndoorRoom(room.id)">删除</button></div>
+        <div class="indoor-room-fields"><label>X<input v-model.number="room.x" type="number" step="0.5" @change="refreshIndoorLayout"></label><label>Z<input v-model.number="room.z" type="number" step="0.5" @change="refreshIndoorLayout"></label><label>宽<input v-model.number="room.width" type="number" min="2" step="0.5" @change="refreshIndoorLayout"></label><label>深<input v-model.number="room.depth" type="number" min="2" step="0.5" @change="refreshIndoorLayout"></label></div>
+      </section></div><button class="indoor-save-layout" @click="saveIndoorLayout">保存室内布局</button><p>{{ indoorEditorMessage }}</p>
+    </aside>
     <div v-if="indoorPrompt" class="indoor-interaction-prompt">{{ indoorPrompt.text }}</div>
     <div v-if="loading" class="loading-screen">
       <div class="loader"></div>

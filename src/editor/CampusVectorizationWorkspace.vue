@@ -9,7 +9,7 @@ const imageWidth = ref(640)
 const imageHeight = ref(480)
 const sourceRef = ref('freshman-guide-2026-campus-plan')
 const featureType = ref('boundary')
-const drawMode = ref('polygon')
+const drawMode = ref('draw')
 const status = ref('draft')
 const confidence = ref('medium')
 const featureName = ref('')
@@ -18,6 +18,8 @@ const history = ref([])
 const activePoints = ref([])
 const selectedId = ref('')
 const message = ref('先加载校园平面图，再选择要素类型并在底图上绘制。')
+const collectionByType = { boundary: 'boundary', entrance: 'entrances', road: 'roads', 'water-body': 'waterBodies', bridge: 'bridges', 'sports-ground': 'sportsGrounds', 'building-cluster': 'buildingClusters', building: 'buildings', 'green-space': 'greenSpaces', landmark: 'landmarks' }
+const typeByCollection = Object.fromEntries(Object.entries(collectionByType).map(([type, collection]) => [collection, type]))
 const typeOptions = [
   { value: 'boundary', label: '校园边界', geometry: 'Polygon' },
   { value: 'entrance', label: '出入口', geometry: 'Point' },
@@ -132,29 +134,80 @@ function deleteSelected() {
   message.value = '已删除选中要素（仅本地未导出数据）。'
 }
 function clearDraft() { activePoints.value = [] }
-function exportJson() {
-  const invalid = features.value.filter(item => !validateCampusFeature(item, imageWidth.value, imageHeight.value))
-  if (invalid.length) { message.value = '存在 ' + invalid.length + ' 个不合规要素，无法导出'; return }
-  const payload = {
+function buildV2Document() {
+  const collections = Object.fromEntries(Object.values(collectionByType).map(key => [key, []]))
+  for (const feature of features.value) collections[collectionByType[feature.type]].push(feature)
+  return {
     schemaVersion: '2.0.0',
     campusId: 'ncgxy-main-campus',
     coordinateSystem: {
       type: 'image-pixel', origin: 'top-left', xAxis: 'right', yAxis: 'down', unit: 'px',
       calibrationStatus: 'uncalibrated',
-      referenceImage: { name: imageName.value, width: imageWidth.value, height: imageHeight.value, sourceRef: sourceRef.value, rightsStatus: 'reference-only' },
+      referenceImage: {
+        id: sourceRef.value.trim() || 'user-supplied-reference',
+        title: imageName.value,
+        width: imageWidth.value,
+        height: imageHeight.value,
+        rightsStatus: 'reference-only',
+      },
     },
     calibration: null,
-    features: features.value,
-    exportNote: '几何坐标为参考图像素；未完成控制点配准前，不代表真实米制/GIS坐标。',
+    features: collections,
   }
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+}
+function exportJson() {
+  const invalid = features.value.filter(item => !validateCampusFeature(item, imageWidth.value, imageHeight.value) || !collectionByType[item.type])
+  if (invalid.length) { message.value = '存在 ' + invalid.length + ' 个不合规或未知类型要素，无法导出'; return }
+  const blob = new Blob([JSON.stringify(buildV2Document(), null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = 'ncgxy-campus-layout-v2.json'
   anchor.click()
-  URL.revokeObjectURL(url)
-  message.value = '已导出 ' + features.value.length + ' 个空间要素。请将 JSON 纳入版本管理并进行复核。'
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  message.value = '已导出符合 CAMPUS_LAYOUT_V2 结构的 ' + features.value.length + ' 个空间要素。'
+}
+function importJson(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const documentData = JSON.parse(String(reader.result || ''))
+      if (documentData.schemaVersion !== '2.0.0' || documentData.campusId !== 'ncgxy-main-campus' || !documentData.features || Array.isArray(documentData.features)) {
+        throw new Error('文件结构不符合校园空间 V2 标准')
+      }
+      const referenceImage = documentData.coordinateSystem?.referenceImage
+      if (!Number.isFinite(referenceImage?.width) || !Number.isFinite(referenceImage?.height) || referenceImage.width <= 0 || referenceImage.height <= 0) {
+        throw new Error('V2 文件缺少有效的参考图像素宽高')
+      }
+      const imported = []
+      for (const [collection, items] of Object.entries(documentData.features)) {
+        const type = typeByCollection[collection]
+        if (!type || !Array.isArray(items)) throw new Error('未知要素集合或集合格式错误：' + collection)
+        for (const item of items) {
+          if (item.type !== type || !validateCampusFeature(item, referenceImage.width, referenceImage.height)) {
+            throw new Error('要素校验失败：' + (item.id || '未命名要素'))
+          }
+          imported.push(item)
+        }
+      }
+      snapshot()
+      features.value = imported
+      selectedId.value = ''
+      imageWidth.value = referenceImage.width
+      imageHeight.value = referenceImage.height
+      imageName.value = referenceImage.title || file.name
+      sourceRef.value = referenceImage.id || 'imported-reference'
+      activePoints.value = []
+      message.value = '已导入并校验 ' + imported.length + ' 个空间要素。请加载对应参考底图进行目视核对。'
+    } catch (error) {
+      message.value = '导入失败：' + (error.message || 'JSON 格式错误')
+    }
+  }
+  reader.onerror = () => { message.value = '导入失败：无法读取文件' }
+  reader.readAsText(file, 'utf-8')
+  event.target.value = ''
 }
 function featurePath(feature) {
   const geometry = feature.geometry
@@ -172,6 +225,7 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value) 
       <div><strong>南昌工学院 · V2 校园底图标注</strong><small>VECTORIZATION WORKSPACE / IMAGE PIXEL</small></div>
       <div class="vector-actions">
         <label class="file-button">加载参考图<input type="file" accept="image/png,image/jpeg,image/webp" @change="onImageChange"></label>
+        <label class="file-button">导入 V2 JSON<input type="file" accept="application/json,.json" @change="importJson"></label>
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="exportJson" :disabled="!features.length">导出 V2 JSON</button>
         <button @click="emit('close')">返回旧版编辑器</button>
       </div>
@@ -182,7 +236,7 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value) 
           <h3>底图信息</h3>
           <p>{{ imageName }}</p>
           <p>{{ imageWidth }} × {{ imageHeight }} px</p>
-          <p class="muted">坐标原点在左上角；当前不进行米制配准。</p>
+          <p class="muted">坐标原点在左上角；当前不进行米制配准。导入 JSON 后请重新加载对应底图。</p>
           <label>来源 ID<input v-model="sourceRef" /></label>
         </section>
         <section class="vector-section">

@@ -55,7 +55,7 @@ export function mapRectToWorld([left, top, right, bottom]) {
  * 校园主要地理区域。多边形来自官方平面图的人工近似描绘，
  * 重点保证整体空间关系；后续可用现场核验数据逐项修正。
  */
-export const CAMPUS_PLAYER_SPAWN_PIXEL = Object.freeze([455, 365])
+export const CAMPUS_PLAYER_SPAWN_PIXEL = Object.freeze([420, 315])
 
 export const CAMPUS_AREAS = [
   {

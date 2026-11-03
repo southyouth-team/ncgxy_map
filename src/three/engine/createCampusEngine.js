@@ -10,7 +10,7 @@ import { buildFeatureObject } from '../world/buildFeatureObject.js'
 import { mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
-import { createCampusMaterials, createPixelBuilding } from '../world/campus/campusAssetLibrary.js'
+import { createCampusMaterials, createPixelBuilding, validateBuildingFootprint } from '../world/campus/campusAssetLibrary.js'
 
 export function createCampusEngine(container, callbacks = {}) {
   let renderer
@@ -365,6 +365,7 @@ export function createCampusEngine(container, callbacks = {}) {
     })
 
     const buildingMaterials = createCampusMaterials(THREE)
+    const invalidBuildingFootprints = []
     for (const building of document.buildings) {
       const footprint = Array.isArray(building.footprint) && building.footprint.length >= 3
         ? building.footprint
@@ -372,6 +373,11 @@ export function createCampusEngine(container, callbacks = {}) {
           ? [[building.rect[0], building.rect[1]], [building.rect[2], building.rect[1]], [building.rect[2], building.rect[3]], [building.rect[0], building.rect[3]]]
           : null
       if (!footprint) continue
+      const footprintValidation = validateBuildingFootprint(footprint)
+      if (!footprintValidation.valid) {
+        invalidBuildingFootprints.push({ id: building.id, label: building.label, errors: footprintValidation.errors })
+        continue
+      }
       const worldPoints = footprint.map(([x, y]) => {
         const point = calibratedPoint(x, y)
         return { x: point.x, z: point.z }
@@ -409,6 +415,10 @@ export function createCampusEngine(container, callbacks = {}) {
       group.userData.objectType = 'building'
       group.userData.displayName = building.label
       rpgPreviewGroup.add(group)
+    }
+    rpgPreviewGroup.userData.invalidBuildingFootprints = invalidBuildingFootprints
+    if (invalidBuildingFootprints.length) {
+      console.warn('三维预览已跳过无效建筑轮廓：', invalidBuildingFootprints)
     }
 
     scene.add(rpgPreviewGroup)

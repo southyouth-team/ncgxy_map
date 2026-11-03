@@ -436,6 +436,13 @@ describe('campus footprint indoor generation', () => {
     expect(building.footprintSize).toEqual({ width: 13, depth: 3 })
     for (const floor of building.floors) expect(validateIndoorFloor(floor)).toEqual([])
     expect(validateIndoorBuilding(building)).toEqual([])
+    const entranceAligned = createIndoorBuildingFromFootprint({
+      id: 'teaching-building',
+      bounds: { minX: -7.75, maxX: 7.75, minZ: -4.6, maxZ: 4.6 },
+    }, { floors: 2, entrancePoint: { x: 0, z: 5.35 } })
+    expect(entranceAligned.floors[0].doors[0]).toMatchObject({ wall: 'south', offset: 0 })
+    expect(entranceAligned.floors[0].spawnPoint).toMatchObject({ x: 0, z: 2.4 })
+    expect(entranceAligned.floors[1].doors).toEqual([])
   })
 
   it('rejects invalid wall geometry inside a building document', () => {

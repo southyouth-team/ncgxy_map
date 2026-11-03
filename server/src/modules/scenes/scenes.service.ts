@@ -329,8 +329,8 @@ export class ScenesService {
     }
     const footprint = definition.footprint as Record<string, any> | undefined;
     if (footprint) {
-      if (footprint.type !== 'rect' || !footprint.bounds || typeof footprint.bounds !== 'object') {
-        throw new BadRequestException('当前建筑占地仅支持有效的矩形轮廓');
+      if (!['rect', 'polygon'].includes(footprint.type) || !footprint.bounds || typeof footprint.bounds !== 'object') {
+        throw new BadRequestException('建筑占地类型或边界无效');
       }
       const bounds = footprint.bounds as Record<string, unknown>;
       const values = ['minX','maxX','minZ','maxZ'].map(key => Number(bounds[key]));
@@ -344,6 +344,33 @@ export class ScenesService {
           (Math.abs(Number(bounds.maxX) - Number(bounds.minX) - Number(footprintSize.width)) > 0.01 ||
            Math.abs(Number(bounds.maxZ) - Number(bounds.minZ) - Number(footprintSize.depth)) > 0.01)) {
         throw new BadRequestException('建筑占地边界与占地尺寸不一致');
+      }
+      const polygon = footprint.polygon;
+      if (!Array.isArray(polygon) || polygon.length < 3 || polygon.length > 32) {
+        throw new BadRequestException('建筑多边形轮廓必须包含 3 至 32 个顶点');
+      }
+      const points = polygon.map((point: any) => ({ x: Number(point?.x), z: Number(point?.z) }));
+      if (points.some((point: any) => !Number.isFinite(point.x) || !Number.isFinite(point.z) ||
+        point.x < Number(bounds.minX) - 0.01 || point.x > Number(bounds.maxX) + 0.01 ||
+        point.z < Number(bounds.minZ) - 0.01 || point.z > Number(bounds.maxZ) + 0.01)) {
+        throw new BadRequestException('建筑轮廓顶点坐标无效或超出占地包围范围');
+      }
+      const area = Math.abs(points.reduce((sum: number, point: any, index: number) => {
+        const next = points[(index + 1) % points.length];
+        return sum + point.x * next.z - next.x * point.z;
+      }, 0)) / 2;
+      if (area < 1) throw new BadRequestException('建筑轮廓面积过小');
+      const cross = (p: any, q: any, r: any) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i], b = points[(i + 1) % points.length];
+        if (Math.hypot(a.x - b.x, a.z - b.z) < 0.25) throw new BadRequestException('建筑轮廓存在重合或过近顶点');
+        for (let j = i + 1; j < points.length; j++) {
+          if (j === i || j === (i + 1) % points.length || i === (j + 1) % points.length) continue;
+          const d = points[j], e = points[(j + 1) % points.length];
+          if (cross(a,b,d) * cross(a,b,e) < -1e-8 && cross(d,e,a) * cross(d,e,b) < -1e-8) {
+            throw new BadRequestException('建筑轮廓不能自相交');
+          }
+        }
       }
       const expansion = footprint.expansion || {};
       for (const side of ['north','south','east','west']) {

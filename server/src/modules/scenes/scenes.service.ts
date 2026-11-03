@@ -336,12 +336,30 @@ export class ScenesService {
           throw new BadRequestException(`楼层 ${level} 的 ${key} 数据格式无效或数量超限`);
         }
       }
+      const roomIds = new Set<string>();
+      for (const room of (Array.isArray(floor.rooms) ? floor.rooms : []) as Array<Record<string, unknown>>) {
+        const roomId = String(room.id || '');
+        const x = Number(room.x), z = Number(room.z), roomWidth = Number(room.width), roomDepth = Number(room.depth);
+        if (!roomId || roomIds.has(roomId)) throw new BadRequestException(`楼层 ${level} 房间 ID 缺失或重复`);
+        roomIds.add(roomId);
+        if (![x,z,roomWidth,roomDepth].every(Number.isFinite) || roomWidth <= 0 || roomDepth <= 0 ||
+            Math.abs(x) + roomWidth / 2 > width / 2 || Math.abs(z) + roomDepth / 2 > depth / 2) {
+          throw new BadRequestException(`楼层 ${level} 房间 ${roomId} 尺寸或位置超出楼层边界`);
+        }
+      }
       if (floors.length > 1 && !floor.stairPoint) {
         throw new BadRequestException('多层建筑的每个楼层都必须配置楼梯连接点');
       }
       const stair = floor.stairPoint as Record<string, unknown> | undefined;
-      if (stair && (!Number.isFinite(Number(stair.x)) || !Number.isFinite(Number(stair.z)))) {
-        throw new BadRequestException(`楼层 ${level} 楼梯坐标无效`);
+      if (stair) {
+        const x = Number(stair.x), z = Number(stair.z);
+        const direction = String(stair.direction || 'south');
+        const horizontal = direction === 'east' || direction === 'west';
+        if (![x,z].every(Number.isFinite) || !['south','west','north','east'].includes(direction) ||
+            Math.abs(x) > width / 2 - (horizontal ? 2.2 : 1) ||
+            Math.abs(z) > depth / 2 - (horizontal ? 1 : 2.2)) {
+          throw new BadRequestException(`楼层 ${level} 楼梯位置或方向无效`);
+        }
       }
     }
     const stairFloors = (floors as Array<Record<string, unknown>>).filter((floor) => floor.stairPoint) as Array<Record<string, any>>;

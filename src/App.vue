@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile }]">
+  <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isRpgSample } ]">
     <CampusPixelMap v-if="!showEditor" />
     <div ref="viewport" class="scene-viewport" v-show="showEditor && editorViewMode === '3d'"></div>
     <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />

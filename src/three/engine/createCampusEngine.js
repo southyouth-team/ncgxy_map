@@ -783,6 +783,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
     // 对程序化校园建筑按真实多边形重新生成建筑实体，不再用 scale 把矩形模型硬拉伸。
     if (rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
+      const target = indoorOutdoorTarget
       const geometryKey = JSON.stringify({
         polygon, width, depth,
         height: Number(definition.floorHeight) * definition.floors.length,
@@ -802,7 +803,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         floors: definition.floors.length,
         label: rebuildOptions.label || indoorOutdoorTarget.name,
       })
-      const target = indoorOutdoorTarget
       target.children.slice().forEach(child => {
         child.geometry?.dispose?.()
         target.remove(child)

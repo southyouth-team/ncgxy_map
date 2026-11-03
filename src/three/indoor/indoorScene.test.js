@@ -589,6 +589,35 @@ describe('building-local entrance mapping', () => {
   })
 })
 
+describe('generated indoor floor navigation', () => {
+  it('keeps spawn, exits, rooms, and stair landings reachable on generated floors', () => {
+    const building = createIndoorBuildingFromFootprint({
+      id: 'navigation-campus-building',
+      label: '导航测试建筑',
+      bounds: { minX: -6.5, maxX: 6.5, minZ: -1.5, maxZ: 1.5 },
+    }, { floors: 4, floorHeight: 3.8 })
+
+    for (const floor of building.floors) {
+      const group = createIndoorFloor(THREE, {
+        ...floor,
+        footprintPolygon: building.interiorFootprint.polygon,
+      }, building.floorHeight)
+      const graph = group.userData.navigationGraph
+      expect(graph.summary.spawnReachable, 'spawn on floor ' + floor.level).toBe(true)
+      expect(graph.summary.disconnectedPoints, 'disconnected landmarks on floor ' + floor.level).toEqual([])
+      expect(graph.points.find(point => point.type === 'stairs')?.reachableFromSpawn, 'stairs on floor ' + floor.level).toBe(true)
+      if (floor.level === 1) {
+        expect(graph.points.find(point => point.type === 'exit')?.reachableFromSpawn).toBe(true)
+      }
+      group.traverse(object => {
+        object.geometry?.dispose?.()
+        if (Array.isArray(object.material)) object.material.forEach(material => material.dispose?.())
+        else object.material?.dispose?.()
+      })
+    }
+  })
+})
+
 describe('campus footprint indoor generation', () => {
   it('creates editable procedural floors from an approximate campus footprint', () => {
     const building = createIndoorBuildingFromFootprint({

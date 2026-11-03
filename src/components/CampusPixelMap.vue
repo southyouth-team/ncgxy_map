@@ -556,11 +556,8 @@ function isEditableTarget(target) {
     && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName))
 }
 
-function onExplorerKeydown(event) {
-  if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return
-  const key = event.key.toLowerCase()
+function startMovementKey(key) {
   if (!MOVEMENT_KEYS.has(key)) return
-  event.preventDefault()
   pressedMovementKeys.add(key)
   if (!movementFrameId) {
     lastMovementFrameTime = 0
@@ -568,12 +565,34 @@ function onExplorerKeydown(event) {
   }
 }
 
-function onExplorerKeyup(event) {
-  pressedMovementKeys.delete(event.key.toLowerCase())
+function stopMovementKey(key) {
+  pressedMovementKeys.delete(key)
   if (!pressedMovementKeys.size) {
     player.value.walking = false
     render()
   }
+}
+
+function onExplorerKeydown(event) {
+  if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return
+  const key = event.key.toLowerCase()
+  if (!MOVEMENT_KEYS.has(key)) return
+  event.preventDefault()
+  startMovementKey(key)
+}
+
+function onExplorerKeyup(event) {
+  stopMovementKey(event.key.toLowerCase())
+}
+
+function onTouchMovementStart(key, event) {
+  event.preventDefault()
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+  startMovementKey(key)
+}
+
+function onTouchMovementEnd(key) {
+  stopMovementKey(key)
 }
 
 function updateExplorerMovement(timestamp) {
@@ -770,6 +789,12 @@ onBeforeUnmount(() => {
       <button @click="zoomBy(1.2)" aria-label="放大">＋</button>
       <button @click="zoomBy(.84)" aria-label="缩小">－</button>
       <button @click="resetView">复位</button>
+    </div>
+    <div class="pixel-mobile-pad" aria-label="触屏方向控制">
+      <button class="pixel-mobile-key pixel-key-up" aria-label="向上移动" @pointerdown="onTouchMovementStart('arrowup', $event)" @pointerup="onTouchMovementEnd('arrowup')" @pointercancel="onTouchMovementEnd('arrowup')" @lostpointercapture="onTouchMovementEnd('arrowup')">▲</button>
+      <button class="pixel-mobile-key pixel-key-left" aria-label="向左移动" @pointerdown="onTouchMovementStart('arrowleft', $event)" @pointerup="onTouchMovementEnd('arrowleft')" @pointercancel="onTouchMovementEnd('arrowleft')" @lostpointercapture="onTouchMovementEnd('arrowleft')">◀</button>
+      <button class="pixel-mobile-key pixel-key-down" aria-label="向下移动" @pointerdown="onTouchMovementStart('arrowdown', $event)" @pointerup="onTouchMovementEnd('arrowdown')" @pointercancel="onTouchMovementEnd('arrowdown')" @lostpointercapture="onTouchMovementEnd('arrowdown')">▼</button>
+      <button class="pixel-mobile-key pixel-key-right" aria-label="向右移动" @pointerdown="onTouchMovementStart('arrowright', $event)" @pointerup="onTouchMovementEnd('arrowright')" @pointercancel="onTouchMovementEnd('arrowright')" @lostpointercapture="onTouchMovementEnd('arrowright')">▶</button>
     </div>
     <div class="pixel-map-legend"><span><i class="legend-building"></i> 建筑</span><span><i class="legend-water"></i> 湖泊</span><span><i class="legend-road"></i> 道路</span><span><i class="legend-sports"></i> 运动场</span></div>
     <aside v-if="selected" class="pixel-selection">

@@ -193,6 +193,23 @@ describe('indoor floor contract', () => {
     expect(roomDoor.blockedZ).toBe(false)
   })
 
+  it('keeps room doorways traversable on all four wall orientations', () => {
+    const cases = [
+      { wall: 'south', start: { x: 0, z: 4.2 }, delta: { x: 0, z: -2.5 } },
+      { wall: 'north', start: { x: 0, z: -4.2 }, delta: { x: 0, z: 2.5 } },
+      { wall: 'east', start: { x: 5.2, z: 0 }, delta: { x: -2.5, z: 0 } },
+      { wall: 'west', start: { x: -5.2, z: 0 }, delta: { x: 2.5, z: 0 } },
+    ]
+    for (const item of cases) {
+      const floor = { ...sample, rooms: [{ ...sample.rooms[0], x: 0, z: 0, doorWall: item.wall, doorWidth: 1.4 }] }
+      const group = createIndoorFloor(THREE, floor)
+      const collision = new CollisionWorld({ minX: -12, maxX: 12, minZ: -9, maxZ: 9 }, group.userData.collisionObstacles, 0.35)
+      const result = collision.move(item.start, item.delta.x, item.delta.z)
+      expect(result.blockedX, item.wall).toBe(false)
+      expect(result.blockedZ, item.wall).toBe(false)
+      expect(Math.hypot(result.x - item.start.x, result.z - item.start.z), item.wall).toBeGreaterThan(2)
+    }
+  })
   it('validates custom partition walls and their door openings', () => {
     const floor = { ...sample, walls: [{ id: 'wall-a', axis: 'x', x: 0, z: 0, length: 10, thickness: 0.2, doorWidth: 1.4, doorOffset: 0 }] }
     expect(validateIndoorFloor(floor)).toEqual([])

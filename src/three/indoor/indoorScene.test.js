@@ -733,3 +733,29 @@ describe('building expansion layout', () => {
     expect(validateIndoorBuilding(expanded)).toEqual([])
   })
 })
+
+describe('teaching block prototype stair continuity', () => {
+  it('keeps all four switchback floors connected in both travel directions', () => {
+    const building = indoorBuildingDefinitions.teachingBlockPrototype
+    const floors = [...building.floors].sort((a, b) => a.level - b.level)
+
+    expect(floors.map(floor => floor.level)).toEqual([1, 2, 3, 4])
+    for (let index = 0; index < floors.length - 1; index++) {
+      const lowerFloor = floors[index]
+      const upperFloor = floors[index + 1]
+      const lowerPath = createStairPath(lowerFloor.stairPoint, building.floorHeight)
+      const upperPath = createStairPath(upperFloor.stairPoint, building.floorHeight)
+      const lowerAscending = getStairTraversalPoints(lowerPath, 1)
+      const upperAscending = getStairTraversalPoints(upperPath, 1)
+      const upperDescending = getStairTraversalPoints(upperPath, -1)
+      const lowerDescending = getStairTraversalPoints(lowerPath, -1)
+
+      // 上一层的入口必须落在下一层的同一平台，反向下楼也必须连续。
+      expect(lowerAscending.exit).toEqual(upperAscending.entry)
+      expect(upperDescending.exit).toEqual(lowerDescending.entry)
+    }
+
+    expect(planIndoorFloorRoute(building, 1, 4)?.levels).toEqual([1, 2, 3, 4])
+    expect(planIndoorFloorRoute(building, 4, 1)?.levels).toEqual([4, 3, 2, 1])
+  })
+})

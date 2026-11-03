@@ -14,6 +14,7 @@ const status = ref('draft')
 const confidence = ref('medium')
 const featureName = ref('')
 const features = ref([])
+const history = ref([])
 const activePoints = ref([])
 const selectedId = ref('')
 const message = ref('先加载校园平面图，再选择要素类型并在底图上绘制。')
@@ -80,12 +81,21 @@ function addPoint(event) {
   }
   activePoints.value.push(canvasPoint(event))
 }
+function snapshot() { history.value.push(JSON.stringify(features.value)); if (history.value.length > 80) history.value.shift() }
+function undo() {
+  const previous = history.value.pop()
+  if (!previous) return
+  features.value = JSON.parse(previous)
+  selectedId.value = ''
+  message.value = '已撤销上一步要素变更。'
+}
 function finishFeature() {
   const geometry = draftGeometry()
   if (!geometry || !validateCampusGeometry(geometry, imageWidth.value, imageHeight.value)) {
     message.value = activeType.value.geometry === 'Polygon' ? '面要素至少需要三个顶点' : '线要素至少需要两个点'
     return
   }
+  snapshot()
   const id = featureType.value + '-' + Date.now().toString(36) + '-' + (features.value.length + 1)
   const feature = {
     id,
@@ -106,7 +116,9 @@ function finishFeature() {
 function onCanvasDoubleClick(event) {
   if (activeType.value.geometry === 'Point') return
   event.preventDefault()
-  if (activePoints.value.length > 1) activePoints.value.pop()
+  const last = activePoints.value.at(-1)
+  const previous = activePoints.value.at(-2)
+  if (last && previous && Math.hypot(last[0] - previous[0], last[1] - previous[1]) < 2) activePoints.value.pop()
   finishFeature()
 }
 function selectFeature(id) {
@@ -114,6 +126,7 @@ function selectFeature(id) {
 }
 function deleteSelected() {
   if (!selectedId.value) return
+  snapshot()
   features.value = features.value.filter(item => item.id !== selectedId.value)
   selectedId.value = ''
   message.value = '已删除选中要素（仅本地未导出数据）。'
@@ -159,7 +172,7 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value) 
       <div><strong>南昌工学院 · V2 校园底图标注</strong><small>VECTORIZATION WORKSPACE / IMAGE PIXEL</small></div>
       <div class="vector-actions">
         <label class="file-button">加载参考图<input type="file" accept="image/png,image/jpeg,image/webp" @change="onImageChange"></label>
-        <button @click="exportJson" :disabled="!features.length">导出 V2 JSON</button>
+        <button @click="undo" :disabled="!history.length">撤销</button><button @click="exportJson" :disabled="!features.length">导出 V2 JSON</button>
         <button @click="emit('close')">返回旧版编辑器</button>
       </div>
     </header>

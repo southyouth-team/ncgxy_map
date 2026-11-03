@@ -110,22 +110,38 @@ export function createCampusScene(THREE) {
     root.add(ripple)
   })
 
+  // 道路采用硬边像素铺装：底层路缘 + 内层路面，避免圆管道路破坏等距像素风格。
+  function addPixelRoadLayer(roadId, sampledPoints, width, height, y, material, suffix) {
+    for (let index = 0; index < sampledPoints.length - 1; index += 1) {
+      const from = sampledPoints[index]
+      const to = sampledPoints[index + 1]
+      const dx = to.x - from.x
+      const dz = to.z - from.z
+      const length = Math.hypot(dx, dz)
+      if (length < 0.025) continue
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(length + width * 0.34, height, width),
+        material,
+      )
+      slab.name = 'pixel-road-' + suffix + '-' + roadId + '-' + index
+      slab.position.set((from.x + to.x) / 2, y, (from.z + to.z) / 2)
+      slab.rotation.y = Math.atan2(-dz, dx)
+      slab.receiveShadow = true
+      root.add(slab)
+    }
+  }
+
   for (const road of CAMPUS_ROAD_CENTERLINES) {
     const points = road.points.map(([px, py]) => {
       const point = mapPixelToWorld(px, py)
-      return new THREE.Vector3(point.x, 0.11, point.z)
+      return new THREE.Vector3(point.x, 0, point.z)
     })
     if (points.length < 2) continue
     const curve = new THREE.CatmullRomCurve3(points)
-    const segments = Math.max(32, points.length * 16)
-    const edge = new THREE.Mesh(new THREE.TubeGeometry(curve, segments, 1.72, 6, false), mats.pathEdge)
-    edge.name = 'path-edge-' + road.id
-    edge.receiveShadow = true
-    root.add(edge)
-    const path = new THREE.Mesh(new THREE.TubeGeometry(curve, segments, 1.42, 6, false), mats.path)
-    path.name = 'path-surface-' + road.id
-    path.receiveShadow = true
-    root.add(path)
+    const segments = Math.max(16, (points.length - 1) * 5)
+    const sampledPoints = curve.getPoints(segments)
+    addPixelRoadLayer(road.id, sampledPoints, 3.5, 0.16, 0.105, mats.pathEdge, 'curb')
+    addPixelRoadLayer(road.id, sampledPoints, 2.86, 0.12, 0.205, mats.path, 'surface')
   }
 
   // 运动场边线与中心标记：让校园远景中的场地具备明确的运动设施识别度。

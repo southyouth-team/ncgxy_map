@@ -187,7 +187,7 @@ export function createRpgSampleScene(THREE) {
     template: '教学楼',
     label: '现代教学楼',
     confidence: 'sample-prototype',
-    entranceEdgeIndex: 0,
+    entranceEdgeIndex: 2,
     roofStyle: 'flat',
     materials: buildingMaterials,
     wallMaterial: materials.wall,
@@ -215,7 +215,7 @@ export function createRpgSampleScene(THREE) {
     windowWidth: 1.02,
     windowHeight: 0.82,
     doorWidth: 1.28,
-    entranceEdgeIndex: 0,
+    entranceEdgeIndex: 2,
   }
   building.userData.floorCount = generatedBuilding.userData.floorCount
   building.userData.floorHeight = generatedBuilding.userData.floorHeight

@@ -23,6 +23,7 @@ const hovered = ref(null)
 const zoom = ref(1)
 const showReferenceImage = ref(true)
 const referenceOpacity = ref(0.88)
+const vectorAlignment = ref({ x: 0, y: 0, scale: 1 })
 const showVectorOverlay = ref(true)
 const showBuildingFootprints = ref(false)
 const mapOffset = ref({ x: 0, y: 0 })
@@ -280,11 +281,15 @@ function buildBaseMap() {
   // 近似矢量层可独立开关，便于直接与原始参考图比对。
   if (showVectorOverlay.value) {
     ctx.save()
+    // 允许在原图坐标系内微调矢量层，解决参考图裁切/缩放差异造成的整体偏移。
+    ctx.translate(500 + vectorAlignment.value.x, 250 + vectorAlignment.value.y)
+    ctx.scale(vectorAlignment.value.scale, vectorAlignment.value.scale)
+    ctx.translate(-500, -250)
     ctx.globalAlpha = 0.22
     drawAreas(ctx)
     drawRoads(ctx)
-    ctx.restore()
     drawLabels(ctx)
+    ctx.restore()
   }
 }
 function render() {
@@ -672,6 +677,10 @@ onBeforeUnmount(() => {
       <button :class="{ active: showVectorOverlay }" @click="showVectorOverlay = !showVectorOverlay; baseMapCanvas = null; render()">道路/水域</button>
       <button :class="{ active: showBuildingFootprints }" @click="showBuildingFootprints = !showBuildingFootprints; render()">建筑候选（未校准）</button>
       <label style="display:flex;align-items:center;gap:6px;padding:0 8px;font-size:12px;color:#405648;white-space:nowrap;">原图透明度 <input v-model.number="referenceOpacity" type="range" min="0.15" max="1" step="0.05" style="width:88px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" /> {{ Math.round(referenceOpacity * 100) }}%</label>
+      <label style="display:flex;align-items:center;gap:5px;padding:0 6px;font-size:12px;color:#405648;white-space:nowrap;">矢量 X <input v-model.number="vectorAlignment.x" type="range" min="-80" max="80" step="1" style="width:64px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" /></label>
+      <label style="display:flex;align-items:center;gap:5px;padding:0 6px;font-size:12px;color:#405648;white-space:nowrap;">Y <input v-model.number="vectorAlignment.y" type="range" min="-80" max="80" step="1" style="width:64px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" /></label>
+      <label style="display:flex;align-items:center;gap:5px;padding:0 6px;font-size:12px;color:#405648;white-space:nowrap;">比例 <input v-model.number="vectorAlignment.scale" type="range" min="0.8" max="1.2" step="0.01" style="width:64px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" />{{ Math.round(vectorAlignment.scale * 100) }}%</label>
+      <button @click="vectorAlignment = { x: 0, y: 0, scale: 1 }; baseMapCanvas = null; render()">重置对齐</button>
       <button @click="zoomBy(1.2)" aria-label="放大">＋</button>
       <button @click="zoomBy(.84)" aria-label="缩小">－</button>
       <button @click="resetView">复位</button>

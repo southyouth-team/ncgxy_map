@@ -61,8 +61,11 @@ function moveDrag(event) {
     } else if (state.mode === 'resize') {
       const delta = wall.axis === 'x' ? dx : dz
       const signedDelta = state.endpoint === 'end' ? delta : -delta
-      const length = Math.max(1, Math.min(state.length + signedDelta,
-        wall.axis === 'x' ? props.floor.width : props.floor.depth))
+      const axisLimit = (wall.axis === 'x' ? props.floor.width : props.floor.depth) / 2
+      const anchor = state.endpoint === 'end' ? (wall.axis === 'x' ? state.x - state.length / 2 : state.z - state.length / 2)
+        : (wall.axis === 'x' ? state.x + state.length / 2 : state.z + state.length / 2)
+      const maxLength = state.endpoint === 'end' ? axisLimit - anchor + axisLimit : anchor + axisLimit
+      const length = Math.max(1, Math.min(state.length + signedDelta, maxLength))
       const actualDelta = length - state.length
       wall.length = round(length)
       if (wall.axis === 'x') wall.x = round(state.x + (state.endpoint === 'end' ? actualDelta : -actualDelta) / 2)

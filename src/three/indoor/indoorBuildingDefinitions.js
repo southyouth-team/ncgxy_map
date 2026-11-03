@@ -125,6 +125,38 @@ export function validateIndoorBuilding(building) {
  * 从校园建筑轮廓创建可编辑室内空间。
  * footprint 仅提供建筑占地边界；房间布局是明确标注的程序化初始模板，不代表实测室内图。
  */
+/**
+ * Resolve a building-local exterior entrance to an indoor wall and landing.
+ * Coordinates use the same local X/Z frame as the generated footprint.
+ */
+export function resolveIndoorEntrance(bounds, entrancePoint) {
+  if (!bounds || !entrancePoint ||
+    ![bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, entrancePoint.x, entrancePoint.z].every(Number.isFinite) ||
+    bounds.maxX <= bounds.minX || bounds.maxZ <= bounds.minZ) {
+    throw new TypeError('Invalid indoor entrance geometry')
+  }
+  const halfWidth = (bounds.maxX - bounds.minX) / 2
+  const halfDepth = (bounds.maxZ - bounds.minZ) / 2
+  const x = Math.max(-halfWidth, Math.min(halfWidth, entrancePoint.x))
+  const z = Math.max(-halfDepth, Math.min(halfDepth, entrancePoint.z))
+  const distances = [
+    { wall: 'west', distance: Math.abs(x + halfWidth), offset: z },
+    { wall: 'east', distance: Math.abs(halfWidth - x), offset: z },
+    { wall: 'north', distance: Math.abs(z + halfDepth), offset: x },
+    { wall: 'south', distance: Math.abs(halfDepth - z), offset: x },
+  ].sort((a, b) => a.distance - b.distance)
+  const nearest = distances[0]
+  const wall = nearest.wall
+  const offsetLimit = wall === 'east' || wall === 'west' ? halfDepth : halfWidth
+  const offset = Math.max(-offsetLimit, Math.min(offsetLimit, nearest.offset))
+  const inset = 2.2
+  const landing = wall === 'south' ? { x: offset, z: halfDepth - inset }
+    : wall === 'north' ? { x: offset, z: -halfDepth + inset }
+      : wall === 'east' ? { x: halfWidth - inset, z: offset }
+        : { x: -halfWidth + inset, z: offset }
+  return { wall, offset, landing, distanceToWall: nearest.distance }
+}
+
 export function createIndoorBuildingFromFootprint(footprint, options = {}) {
   if (!footprint?.id || !footprint?.bounds) throw new TypeError('建筑轮廓必须包含 id 和 bounds')
   const footprintWidth = Number(footprint.bounds.maxX) - Number(footprint.bounds.minX)
@@ -140,16 +172,19 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
   const corridorDepth = Math.max(2.4, Math.min(3.6, depth * 0.2))
   const roomDepth = Math.max(3, (depth - corridorDepth - 2) / 2)
   const roomWidth = Math.max(3, (width - 3) / 2)
+  const entrance = options.entrancePoint
+    ? resolveIndoorEntrance({ minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 }, options.entrancePoint)
+    : { wall: 'south', offset: 0, landing: { x: 0, z: depth / 2 - 2.2 } }
   const floors = Array.from({ length: floorCount }, (_, index) => {
     const level = index + 1
     return {
       level, width, depth, wallHeight: floorHeight - 0.45,
-      doors: level === 1 ? [{ wall: 'south', offset: 0, width: Math.min(2.4, width * 0.18) }] : [],
+      doors: level === 1 ? [{ wall: entrance.wall, offset: entrance.offset, width: Math.min(2.4, width * 0.18) }] : [],
       rooms: [
         { id: `${footprint.id}-${level}-room-a`, name: `空间 ${level}A`, x: -roomWidth / 2 - 0.5, z: -depth / 2 + roomDepth / 2 + 0.6, width: roomWidth, depth: roomDepth, doorWall: 'south', doorWidth: Math.min(1.5, roomWidth * 0.35), furniture: [] },
         { id: `${footprint.id}-${level}-room-b`, name: `空间 ${level}B`, x: roomWidth / 2 + 0.5, z: -depth / 2 + roomDepth / 2 + 0.6, width: roomWidth, depth: roomDepth, doorWall: 'south', doorWidth: Math.min(1.5, roomWidth * 0.35), furniture: [] },
       ],
-      spawnPoint: { x: 0, y: 1.7, z: depth / 2 - 1.6 },
+      spawnPoint: { ...entrance.landing, y: 1.7 },
       stairPoint: { x: width / 2 - 1.5, z: 0 },
     }
   })
@@ -173,6 +208,7 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
       expansion: { north: 0, south: 0, east: 0, west: 0 },
     },
     interiorNormalized: width !== footprintWidth || depth !== footprintDepth,
+    entrance: { wall: entrance.wall, offset: entrance.offset, source: options.entrancePoint ? 'building-local' : 'default-template' },
     floorHeight,
     exterior: { roofStyle: footprint.roofStyle || 'flat' },
     bounds: { minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 },

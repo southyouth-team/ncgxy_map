@@ -6,16 +6,63 @@ const props = defineProps({
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getCampusInteriorData } from '../data/campus/campusInteriors.js'
 import {
-  CAMPUS_AREAS,
-  CAMPUS_BUILDING_FOOTPRINTS,
+  CAMPUS_AREAS as LEGACY_CAMPUS_AREAS,
+  CAMPUS_BUILDING_FOOTPRINTS as LEGACY_CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_PLAYER_SPAWN_PIXEL,
-  CAMPUS_ROAD_CENTERLINES,
-  CAMPUS_ROAD_WIDTHS,
+  CAMPUS_ROAD_CENTERLINES as LEGACY_CAMPUS_ROAD_CENTERLINES,
+  CAMPUS_ROAD_WIDTHS as LEGACY_CAMPUS_ROAD_WIDTHS,
   getCampusFootprintBounds,
   pointInCampusArea,
   pointInCampusPolygon,
   circleIntersectsCampusPolygon,
 } from '../data/campus/campusLayout.js'
+import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
+
+// Canvas 2D 与后续 2.5D/3D 共用统一 GeoJSON 数据出口，不再直接读取独立渲染副本。
+const campusFeatureCollection = buildCampusGeoJSON()
+const openRing = ring => ring?.length > 1
+  ? ring.slice(0, ring.length - (ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1] ? 1 : 0))
+  : []
+const CAMPUS_AREAS = campusFeatureCollection.features
+  .filter(feature => feature.properties.featureType === 'area')
+  .map(feature => {
+    const rings = feature.geometry.coordinates
+    const outer = openRing(rings[0])
+    const xs = outer.map(point => point[0])
+    const ys = outer.map(point => point[1])
+    return {
+      id: feature.id,
+      name: feature.properties.name,
+      type: feature.properties.category,
+      confidence: feature.properties.confidence,
+      polygon: outer,
+      holes: rings.slice(1).map(openRing),
+      rect: feature.geometry.type === 'Polygon'
+        ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+        : null,
+    }
+  })
+const CAMPUS_ROAD_CENTERLINES = campusFeatureCollection.features
+  .filter(feature => feature.properties.featureType === 'road')
+  .map(feature => ({
+    id: feature.id,
+    name: feature.properties.name,
+    confidence: feature.properties.confidence,
+    points: feature.geometry.coordinates,
+  }))
+const CAMPUS_ROAD_WIDTHS = Object.fromEntries(
+  campusFeatureCollection.features
+    .filter(feature => feature.properties.featureType === 'road')
+    .map(feature => [feature.id, feature.properties.width]),
+)
+const CAMPUS_BUILDING_FOOTPRINTS = campusFeatureCollection.features
+  .filter(feature => feature.properties.featureType === 'building')
+  .map(feature => ({
+    id: feature.id,
+    label: feature.properties.name,
+    confidence: feature.properties.confidence,
+    polygon: openRing(feature.geometry.coordinates[0]),
+  }))
 
 const canvas = ref(null)
 const selected = ref(null)

@@ -116,6 +116,8 @@ export function addPixelFlowerPatch(THREE, parent, x, z, mats, count = 5) {
 export function addPixelBench(THREE, parent, x, z, mats) {
   const group = new THREE.Group()
   group.position.set(x, 0, z)
+  group.userData.objectType = 'bench'
+  group.userData.collisionRadius = 0.9
   const seat = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.16, 0.55), mats.wood)
   seat.position.y = 0.62
   const back = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.75, 0.14), mats.wood)
@@ -134,6 +136,8 @@ export function addPixelBench(THREE, parent, x, z, mats) {
 export function addPixelLamp(THREE, parent, x, z, mats) {
   const group = new THREE.Group()
   group.position.set(x, 0, z)
+  group.userData.objectType = 'lamp'
+  group.userData.collisionRadius = 0.24
   const pole = new THREE.Mesh(new THREE.BoxGeometry(0.13, 2.7, 0.13), mats.outline)
   pole.position.y = 1.35
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.32, 0.52), mats.windowTrim)

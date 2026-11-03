@@ -778,8 +778,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         minZ: bounds.min.z, maxZ: bounds.max.z,
       },
     }
-    const definition = createIndoorBuildingFromFootprint(footprint, options)
+    const definition = options.definition || createIndoorBuildingFromFootprint(footprint, options)
     return enterIndoorPrototype(definition)
+  }
+
+  function updateIndoorBuildingDefinition(definition) {
+    if (!indoorBuilding || !indoorGroup || !definition || definition.id !== indoorBuilding.id) return false
+    const errors = validateIndoorBuilding(definition)
+    if (errors.length) throw new TypeError(errors.join('；'))
+    const currentPosition = cameraRig.player.clone()
+    indoorBuilding = definition
+    const levels = definition.floors.map(item => item.level)
+    const nextLevel = levels.includes(currentIndoorFloor) ? currentIndoorFloor : levels[0]
+    buildIndoorFloor(nextLevel, { x: currentPosition.x, z: currentPosition.z })
+    cameraRig.player.y = currentPosition.y
+    cameraRig.updateThirdPersonDesired()
+    callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: levels, buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: null })
+    return true
   }
 
   function switchIndoorFloor(level) {
@@ -893,5 +908,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, updateIndoorBuildingDefinition, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

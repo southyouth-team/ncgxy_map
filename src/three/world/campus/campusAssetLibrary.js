@@ -406,6 +406,20 @@ export function createPixelBuilding(THREE, options = {}) {
     door.rotation.y = angle
     door.userData.objectType = 'building-entrance'
     group.add(doorFrame, door)
+
+    // 入口雨棚沿选定立面法线向外挑出，避免悬空或脱离不规则建筑墙面。
+    const canopy = new THREE.Mesh(
+      new THREE.BoxGeometry(doorWidth + 0.72, 0.14, 0.92),
+      materials.roofDark || materials.roof,
+    )
+    canopy.position.set(
+      centerX + normalX * 0.48,
+      doorHeight + 0.24,
+      centerZ + normalZ * 0.48,
+    )
+    canopy.rotation.y = angle
+    canopy.userData.objectType = 'building-entrance-canopy'
+    group.add(canopy)
     group.userData.entrance = { edgeIndex: entranceEdge.index, width: doorWidth, height: doorHeight, source: entranceEdgeIndex !== null && entranceEdgeIndex !== undefined && entranceEdgeIndex !== '' && Number.isInteger(Number(entranceEdgeIndex)) && Number(entranceEdgeIndex) >= 0 && Number(entranceEdgeIndex) < edges.length ? 'configured' : 'auto' }
   }
   outline.forEach((point, index) => {
@@ -447,6 +461,46 @@ export function createPixelBuilding(THREE, options = {}) {
       })
     }
   })
+  // 檐口沿 footprint 每条边生成，收口建筑墙顶，避免矩形檐口越界。
+  edges.forEach((edge) => {
+    if (edge.length < 0.2) return
+    const cornice = new THREE.Mesh(
+      new THREE.BoxGeometry(edge.length + 0.08, 0.16, 0.16),
+      materials.windowTrim,
+    )
+    cornice.position.set(
+      (edge.point.x + edge.next.x) / 2,
+      buildingHeight - 0.035,
+      -(edge.point.y + edge.next.y) / 2,
+    )
+    cornice.rotation.y = Math.atan2(edge.dy, edge.dx)
+    cornice.userData.objectType = 'building-cornice'
+    group.add(cornice)
+  })
+
+  // 双坡屋顶增加屋脊压顶；仅在真实生成双坡顶时绘制。
+  if (actualRoofStyle === 'gable' || actualRoofStyle === 'gable-span') {
+    const sideLengths = edges.map((edge) => edge.length)
+    const ordered = sideLengths[1] + sideLengths[3] > sideLengths[0] + sideLengths[2]
+      ? [outline[1], outline[2], outline[3], outline[0]]
+      : outline.slice(0, 4)
+    if (ordered.length === 4) {
+      const start = { x: (ordered[3].x + ordered[0].x) / 2, y: (ordered[3].y + ordered[0].y) / 2 }
+      const end = { x: (ordered[1].x + ordered[2].x) / 2, y: (ordered[1].y + ordered[2].y) / 2 }
+      const ridgeLength = Math.hypot(end.x - start.x, end.y - start.y)
+      if (ridgeLength > 0.2) {
+        const ridge = new THREE.Mesh(
+          new THREE.BoxGeometry(ridgeLength, 0.13, 0.18),
+          materials.roofDark || materials.roof,
+        )
+        ridge.position.set((start.x + end.x) / 2, buildingHeight + roofRise + 0.035, -(start.y + end.y) / 2)
+        ridge.rotation.y = Math.atan2(end.y - start.y, end.x - start.x)
+        ridge.userData.objectType = 'building-roof-ridge'
+        group.add(ridge)
+      }
+    }
+  }
+
   // 层间线沿建筑每条真实边段生成，避免用矩形轮廓覆盖不规则建筑。
   floorLayout.bandHeights.forEach((bandY) => {
     edges.forEach((edge) => {

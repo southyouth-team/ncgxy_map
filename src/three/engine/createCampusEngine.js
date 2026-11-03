@@ -884,19 +884,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig.setMode('thirdPerson')
     input.setMode('thirdPerson')
     buildIndoorFloor(definition.floors[0].level)
-    // 从实际门内落脚点进入，不再把玩家传送到楼层中央出生点。
-    const doorwayLanding = indoorGroup?.userData.exitInteractions?.[0]
-    const entranceDoor = indoorGroup?.userData.exits?.[0]
-    const entryOffset = 2.2
-    const entranceLanding = doorwayLanding && entranceDoor ? {
-      x: doorwayLanding.x + (entranceDoor.wall === 'west' ? entryOffset : entranceDoor.wall === 'east' ? -entryOffset : 0),
-      z: doorwayLanding.z + (entranceDoor.wall === 'south' ? -entryOffset : entranceDoor.wall === 'north' ? entryOffset : 0),
-    } : null
+    // 楼层生成器已将建筑外门映射为室内门洞；直接使用同一门洞计算出的出生点。
     const firstFloor = definition.floors.find(floor => floor.level === currentIndoorFloor)
-    if (entranceLanding && firstFloor) {
+    const entranceLanding = firstFloor?.spawnPoint
+    if (entranceLanding) {
       cameraRig.player.set(
         entranceLanding.x,
-        indoorGroup.position.y + (firstFloor.spawnPoint?.y ?? 1.7),
+        indoorGroup.position.y + (entranceLanding.y ?? 1.7),
         entranceLanding.z,
       )
       if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()

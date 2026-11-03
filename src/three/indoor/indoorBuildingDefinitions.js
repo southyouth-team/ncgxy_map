@@ -55,3 +55,44 @@ export function validateIndoorBuilding(building) {
   }
   return errors
 }
+
+/**
+ * 从校园建筑轮廓创建可编辑室内空间。
+ * footprint 仅提供建筑占地边界；房间布局是明确标注的程序化初始模板，不代表实测室内图。
+ */
+export function createIndoorBuildingFromFootprint(footprint, options = {}) {
+  if (!footprint?.id || !footprint?.bounds) throw new TypeError('建筑轮廓必须包含 id 和 bounds')
+  const width = Number(footprint.bounds.maxX) - Number(footprint.bounds.minX)
+  const depth = Number(footprint.bounds.maxZ) - Number(footprint.bounds.minZ)
+  if (!Number.isFinite(width) || !Number.isFinite(depth) || width < 8 || depth < 8) {
+    throw new TypeError('建筑轮廓尺寸不足，无法生成可行走室内空间')
+  }
+  const floorCount = Math.max(1, Math.min(30, Math.floor(Number(options.floors) || 1)))
+  const floorHeight = Math.max(2.8, Math.min(6, Number(options.floorHeight) || 3.6))
+  const corridorDepth = Math.max(2.4, Math.min(3.6, depth * 0.2))
+  const roomDepth = Math.max(3, (depth - corridorDepth - 2) / 2)
+  const roomWidth = Math.max(3, (width - 3) / 2)
+  const floors = Array.from({ length: floorCount }, (_, index) => {
+    const level = index + 1
+    return {
+      level, width, depth, wallHeight: floorHeight - 0.45,
+      doors: level === 1 ? [{ wall: 'south', offset: 0, width: Math.min(2.4, width * 0.18) }] : [],
+      rooms: [
+        { id: `${footprint.id}-${level}-room-a`, name: `空间 ${level}A`, x: -roomWidth / 2 - 0.5, z: -depth / 2 + roomDepth / 2 + 0.6, width: roomWidth, depth: roomDepth, doorWall: 'south', doorWidth: Math.min(1.5, roomWidth * 0.35), furniture: [] },
+        { id: `${footprint.id}-${level}-room-b`, name: `空间 ${level}B`, x: roomWidth / 2 + 0.5, z: -depth / 2 + roomDepth / 2 + 0.6, width: roomWidth, depth: roomDepth, doorWall: 'south', doorWidth: Math.min(1.5, roomWidth * 0.35), furniture: [] },
+      ],
+      spawnPoint: { x: 0, y: 1.7, z: depth / 2 - 1.6 },
+      stairPoint: { x: width / 2 - 1.5, z: 0 },
+    }
+  })
+  return {
+    id: footprint.id,
+    name: options.name || footprint.name || footprint.label || '未命名建筑',
+    prototype: true,
+    generatedFromFootprint: true,
+    layoutStatus: 'procedural-template',
+    floorHeight,
+    bounds: { minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 },
+    floors,
+  }
+}

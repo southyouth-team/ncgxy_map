@@ -203,11 +203,18 @@ export function drawPixelBuildingPreview(context, options = {}) {
   context.restore()
 }
 
+export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
+  if (!Array.isArray(edges) || !edges.length) return null
+  const index = Number(requestedIndex)
+  if (Number.isInteger(index) && index >= 0 && index < edges.length) return edges[index]
+  return edges.reduce((longest, edge) => edge.length > longest.length ? edge : longest, edges[0])
+}
+
 export function createPixelBuilding(THREE, options = {}) {
   const {
     footprint, width = 8, depth = 5, height,
     materials, wallMaterial, template = '教学楼',
-    label = 'Campus Building', confidence = 'unverified',
+    label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null,
   } = options
   const preset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
   const buildingHeight = Number(height || preset.height)
@@ -303,7 +310,7 @@ export function createPixelBuilding(THREE, options = {}) {
     const dy = next.y - point.y
     return { point, next, dx, dy, length: Math.hypot(dx, dy), index }
   })
-  const entranceEdge = edges.reduce((longest, edge) => edge.length > longest.length ? edge : longest, { length: 0 })
+  const entranceEdge = selectBuildingEntranceEdge(edges, entranceEdgeIndex) || { length: 0 }
   const doorWidth = Math.min(Number(preset.doorWidth || 0.9), Math.max(0.5, entranceEdge.length * 0.42))
   const doorHeight = Math.min(2.05, buildingHeight * 0.58)
   if (entranceEdge.length >= doorWidth * 1.6) {
@@ -326,7 +333,7 @@ export function createPixelBuilding(THREE, options = {}) {
     door.rotation.y = angle
     door.userData.objectType = 'building-entrance'
     group.add(doorFrame, door)
-    group.userData.entrance = { edgeIndex: entranceEdge.index, width: doorWidth, height: doorHeight }
+    group.userData.entrance = { edgeIndex: entranceEdge.index, width: doorWidth, height: doorHeight, source: Number.isInteger(Number(entranceEdgeIndex)) && Number(entranceEdgeIndex) >= 0 ? 'configured' : 'auto' }
   }
   outline.forEach((point, index) => {
     const next = outline[(index + 1) % outline.length]

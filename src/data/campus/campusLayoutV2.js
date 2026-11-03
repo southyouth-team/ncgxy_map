@@ -75,12 +75,45 @@ export function validateCalibration(calibration) {
   return true
 }
 
+/**
+ * 校验像素空间几何。Polygon 使用闭合环；LineString 至少两个点；Point 为单点。
+ * 不自动修复或猜测几何，避免标注错误被静默写入正式数据。
+ */
+export function validateCampusGeometry(geometry, imageWidth, imageHeight) {
+  if (!geometry || typeof geometry !== 'object') return false
+  if (!Number.isFinite(imageWidth) || imageWidth <= 0
+    || !Number.isFinite(imageHeight) || imageHeight <= 0) return false
+
+  const validPoint = (point) => Array.isArray(point)
+    && point.length === 2
+    && point.every(Number.isFinite)
+    && point[0] >= 0 && point[0] <= imageWidth
+    && point[1] >= 0 && point[1] <= imageHeight
+
+  if (geometry.type === 'Point') return validPoint(geometry.coordinates)
+  if (geometry.type === 'LineString') {
+    return Array.isArray(geometry.coordinates)
+      && geometry.coordinates.length >= 2
+      && geometry.coordinates.every(validPoint)
+  }
+  if (geometry.type === 'Polygon') {
+    if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length === 0) return false
+    return geometry.coordinates.every((ring) => Array.isArray(ring)
+      && ring.length >= 4
+      && ring.every(validPoint)
+      && ring[0][0] === ring[ring.length - 1][0]
+      && ring[0][1] === ring[ring.length - 1][1])
+  }
+  return false
+}
+
 /** 基础要素校验：所有要素必须可追溯且显式标记核验状态。 */
-export function validateCampusFeature(feature) {
+export function validateCampusFeature(feature, imageWidth, imageHeight) {
   if (!feature || typeof feature !== 'object') return false
   if (!feature.id || !feature.type) return false
   if (!['unverified', 'draft', 'verified'].includes(feature.status)) return false
   if (!['low', 'medium', 'high'].includes(feature.confidence)) return false
   if (!Array.isArray(feature.sourceRefs) || feature.sourceRefs.length === 0) return false
+  if (feature.geometry && !validateCampusGeometry(feature.geometry, imageWidth, imageHeight)) return false
   return true
 }

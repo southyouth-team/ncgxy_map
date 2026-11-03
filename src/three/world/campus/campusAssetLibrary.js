@@ -300,7 +300,7 @@ export function createPixelBuilding(THREE, options = {}) {
   if (contour.length > 2 && contour[0].distanceTo(contour[contour.length - 1]) < 0.001) contour.pop()
   const roofContours = [contour, ...(roofPoints.holes || [])]
   const triangulationPoints = roofContours.flat()
-  const roofPositions = []
+  let roofPositions = []
   const addRoofTriangle = (a, b, c) => {
     const ab = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z)
     const ac = new THREE.Vector3(c.x - a.x, c.y - a.y, c.z - a.z)
@@ -309,7 +309,7 @@ export function createPixelBuilding(THREE, options = {}) {
     roofPositions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
   }
   let actualRoofStyle = roofStyle
-  let roofPositions = roofStyle === 'pitched' ? createGableRoofVertices(contour, buildingHeight, roofRise) : null
+  roofPositions = roofStyle === 'pitched' ? createGableRoofVertices(contour, buildingHeight, roofRise) : null
   if (roofPositions) {
     actualRoofStyle = 'gable'
   } else {

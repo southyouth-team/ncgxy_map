@@ -79,4 +79,13 @@ describe('南昌工学院像素校园主空间底图', () => {
       }
     }
   })
+  it('区域命中检测会排除中央湖区内部的岛屿洞区', () => {
+    const centralLake = CAMPUS_AREAS.find(area => area.id === 'central-lake')
+    const islandPoint = [540, 230]
+    const waterPoint = [470, 220]
+    expect(pointInCampusPolygon(islandPoint, centralLake.holes[0])).toBe(true)
+    expect(pointInCampusArea(islandPoint, centralLake)).toBe(false)
+    expect(pointInCampusArea(waterPoint, centralLake)).toBe(true)
+  })
+
 })

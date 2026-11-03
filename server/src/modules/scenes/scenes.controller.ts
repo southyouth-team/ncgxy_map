@@ -69,6 +69,18 @@ export class ScenesController {
     return this.service.saveIndoorBuilding(req.user.id, campusId, mapId, buildingId, dto);
   }
 
+  @Get('indoor-buildings/:buildingId/versions/:revision')
+  @ApiOperation({ summary: '读取建筑室内布局指定历史版本快照' })
+  findIndoorBuildingVersion(
+    @Req() req: Request & { user: { id: string } },
+    @Param('campusId', ParseBigIntIdPipe) campusId: string,
+    @Param('mapId', ParseBigIntIdPipe) mapId: string,
+    @Param('buildingId') buildingId: string,
+    @Param('revision', ParseBigIntIdPipe) revision: string,
+  ) {
+    return this.service.findIndoorBuildingVersion(req.user.id, campusId, mapId, buildingId, revision);
+  }
+
   @Get('indoor-buildings/:buildingId/versions')
   @ApiOperation({ summary: '查询建筑室内布局历史版本' })
   findIndoorBuildingVersions(

@@ -69,7 +69,7 @@ export function planIndoorFloorRoute(building, startLevel, targetLevel) {
     const toPath = createStairPath(to.stairPoint, building.floorHeight || 4.2)
     if (!fromPath || !toPath) return null
     const fromLanding = direction > 0 ? fromPath.start : fromPath.end
-    const toLanding = direction > 0 ? toPath.end : toPath.start
+    const toLanding = direction > 0 ? toPath.start : toPath.end
     transitions.push({
       fromLevel: from.level,
       toLevel: to.level,

@@ -156,12 +156,9 @@ export function expandIndoorBuilding(definition, { side, amount = 2 } = {}) {
 
   next.footprint = { ...footprint, bounds, expansion }
   next.footprintSize = { width: bounds.maxX - bounds.minX, depth: bounds.maxZ - bounds.minZ }
-  next.bounds = {
-    minX: next.bounds.minX - shiftX - widthDelta / 2,
-    maxX: next.bounds.maxX - shiftX + widthDelta / 2,
-    minZ: next.bounds.minZ - shiftZ - depthDelta / 2,
-    maxZ: next.bounds.maxZ - shiftZ + depthDelta / 2,
-  }
+  const nextWidth = next.bounds.maxX - next.bounds.minX + widthDelta
+  const nextDepth = next.bounds.maxZ - next.bounds.minZ + depthDelta
+  next.bounds = { minX: -nextWidth / 2, maxX: nextWidth / 2, minZ: -nextDepth / 2, maxZ: nextDepth / 2 }
   next.floors = next.floors.map(floor => ({
     ...floor,
     width: floor.width + widthDelta,

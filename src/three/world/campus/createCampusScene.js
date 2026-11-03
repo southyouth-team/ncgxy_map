@@ -152,26 +152,24 @@ export function createCampusScene(THREE) {
     const bounds = mapRectToWorld(item.rect)
     const width = Math.max(4.2, bounds.width)
     const depth = Math.max(2.4, bounds.depth)
-    const height = item.confidence === 'medium' ? 4.2 : 3.4
+    const template = item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4]
     const group = createPixelBuilding(THREE, {
-      width, depth, height: item.height, template: item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4], materials: mats,
+      width, depth, height: item.height, template, materials: mats,
       wallMaterial: wallPalette[index % wallPalette.length],
       label: item.label || item.id,
       confidence: item.confidence || 'unverified',
     })
+    const buildingHeight = group.userData.buildingHeight || 3.8
     group.position.set(bounds.x, 0.16, bounds.z)
     group.userData.buildingId = item.id
     group.userData.displayName = item.label
-    const doorStep = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.18, 0.62), mats.stoneLight)
-    doorStep.position.set(0, 0.09, depth / 2 + 0.32)
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.8, width * 0.55), 0.38, 0.12), mats.wood)
-    sign.position.set(0, height - 0.82, depth / 2 + 0.12)
+    // 外轮廓与生成器最终采用的建筑高度一致，不再覆盖屋顶或门窗。
     const outline = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(width, height, depth)),
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(width, buildingHeight, depth)),
       new THREE.LineBasicMaterial({ color: '#6c5947' }),
     )
-    outline.position.y = height / 2
-    group.add(doorStep, sign, outline)
+    outline.position.y = buildingHeight / 2
+    group.add(outline)
     root.add(group)
   }
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)

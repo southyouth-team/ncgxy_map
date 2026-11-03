@@ -161,7 +161,7 @@ export function createRpgSampleScene(THREE) {
   building.userData.objectType = 'building'
   building.userData.buildingId = 'sample-teaching-building'
   building.userData.displayName = '现代教学楼'
-  building.userData.indoorEntrance = { x: 0, z: 5.35, radius: 2.15 }
+  building.userData.indoorEntrance = { x: 0, z: -5.35, radius: 2.15 }
   const buildingMaterials = {
     wall: materials.wall,
     wallCream: materials.wall,

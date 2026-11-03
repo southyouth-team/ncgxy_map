@@ -676,6 +676,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="pixel-header-actions">
         <div class="pixel-header-tag"><i></i> 南昌工学院 · 校园平面图重建</div>
+        <a href="?view=editor" class="pixel-build-link">进入校园建设 ↗</a>
         <a href="https://app.gaokaozhitongche.com/newsguide/h/Rg1KJO0N" target="_blank" rel="noreferrer" class="pixel-showcase-link">查看 2026 官方参考平面图 ↗</a>
       </div>
     </header>

@@ -60,6 +60,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let stairInteractionActive = false
   let nearIndoorRoom = null
   let nearIndoorExit = false
+  let indoorPromptKey = ''
   let activeIndoorRoom = null
   let roomReturnPosition = null
   let stairTransition = null
@@ -866,10 +867,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const point = indoorGroup.userData.stairPoint
       const exitPoint = indoorGroup.userData.exitInteractions?.[0]
       const nearExit = !activeIndoorRoom && exitPoint && Math.hypot(cameraRig.player.x - exitPoint.x, cameraRig.player.z - exitPoint.z) <= 1.7
-      if (Boolean(nearExit) !== nearIndoorExit) {
-        nearIndoorExit = Boolean(nearExit)
-        callbacks.onIndoorPromptChange?.(nearExit ? { visible: true, text: '按 E 离开教学楼' } : { visible: false })
-      }
+      nearIndoorExit = Boolean(nearExit)
       const nearStairs = !activeIndoorRoom && point && Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z) <= 2.4
       const nearestRoom = activeIndoorRoom ? null : (indoorGroup.userData.roomInteractions || [])
         .map(item => ({ item, distance: Math.hypot(cameraRig.player.x - item.approach.x, cameraRig.player.z - item.approach.z) }))
@@ -877,10 +875,28 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         .sort((a, b) => a.distance - b.distance)[0]?.item || null
       const nextRoom = nearestRoom ? { roomId: nearestRoom.roomId, roomName: nearestRoom.roomName } : null
       const roomChanged = nextRoom?.roomId !== nearIndoorRoom?.roomId
-      if (Boolean(nearStairs) !== stairInteractionActive || roomChanged) {
+      const stairChanged = Boolean(nearStairs) !== stairInteractionActive
+      if (stairChanged || roomChanged) {
         stairInteractionActive = Boolean(nearStairs)
         nearIndoorRoom = nextRoom
         callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: stairInteractionActive, nearRoom: nearIndoorRoom, activeRoom: activeIndoorRoom })
+      }
+      const levels = indoorBuilding?.floors.map(item => item.level).sort((a, b) => a - b) || []
+      const floorIndex = levels.indexOf(currentIndoorFloor)
+      const stairTarget = levels[floorIndex + 1] ?? levels[floorIndex - 1]
+      const prompt = activeIndoorRoom
+        ? { key: 'room-return', text: '按 E 返回走廊' }
+        : nearExit
+          ? { key: 'exit', text: '按 E 离开' + (indoorBuilding?.name || '建筑') }
+          : nearStairs && stairTarget !== undefined
+            ? { key: 'stairs-' + stairTarget, text: '按 E ' + (stairTarget > currentIndoorFloor ? '上楼至' : '下楼至') + ' ' + stairTarget + ' 层' }
+            : nearestRoom
+              ? { key: 'room-' + nearestRoom.roomId, text: '按 E 进入' + nearestRoom.roomName }
+              : null
+      const nextPromptKey = prompt?.key || ''
+      if (nextPromptKey !== indoorPromptKey) {
+        indoorPromptKey = nextPromptKey
+        callbacks.onIndoorPromptChange?.(prompt ? { visible: true, text: prompt.text } : { visible: false })
       }
     }
     const playerSprite = scene?.getObjectByName('CampusPlanPlayerSprite') || scene?.getObjectByName('PixelExplorerSprite')
@@ -1370,6 +1386,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     stairInteractionActive = false
     nearIndoorRoom = null
     nearIndoorExit = false
+    indoorPromptKey = ''
     callbacks.onIndoorPromptChange?.({ visible: false })
     activeIndoorRoom = null
     roomReturnPosition = null

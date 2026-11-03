@@ -179,6 +179,8 @@ describe('campus footprint indoor generation', () => {
     expect(building.id).toBe('west-north-01')
     expect(building.floors.map(floor => floor.level)).toEqual([1, 2, 3])
     expect(building.layoutStatus).toBe('procedural-template')
+    expect(building.exterior).toEqual({ roofStyle: 'flat' })
+    expect(building.floorHeight).toBe(3.8)
     expect(building.interiorNormalized).toBe(true)
     expect(building.footprintSize).toEqual({ width: 13, depth: 3 })
     for (const floor of building.floors) expect(validateIndoorFloor(floor)).toEqual([])

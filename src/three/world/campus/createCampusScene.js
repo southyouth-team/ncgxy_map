@@ -285,7 +285,7 @@ export function createCampusScene(THREE) {
       windowWidth: item.windowWidth,
       windowHeight: item.windowHeight,
       doorWidth: item.doorWidth,
-      entranceEdgeIndex: item.entranceEdgeIndex,
+      entranceEdgeIndex: group.userData.entrance?.edgeIndex ?? item.entranceEdgeIndex,
       footprint: localFootprint,
     }
     group.userData.foundationMesh = foundation

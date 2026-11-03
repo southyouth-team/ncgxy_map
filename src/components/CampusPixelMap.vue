@@ -178,14 +178,14 @@ function drawGround(ctx) {
     }
   }
 }
-function drawBuildings(ctx) {
-  const roofSets = [
+const BUILDING_ROOF_SETS = [
     { base: '#c17a5d', light: '#e9ad80', dark: '#925844' },
     { base: '#ae765c', light: '#dfaa7d', dark: '#805442' },
     { base: '#bd875c', light: '#edbd86', dark: '#8f5e43' },
     { base: '#a27a61', light: '#d9ad82', dark: '#765846' },
   ]
-  CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
+function drawBuilding(ctx, building, index) {
+  const roofSets = BUILDING_ROOF_SETS
     const [x1, y1, x2, y2] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
     const footprint = building.polygon || [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
     if (building.polygon) {
@@ -306,7 +306,6 @@ function drawBuildings(ctx) {
     ctx.strokeStyle = roof.dark
     ctx.lineWidth = 1
     ctx.strokeRect(x1 - 1.5, y1 - 1.5, w + 3, h + 3)
-  })
 }
 function drawTree(ctx, x, y, index) {
   const variant = index % 3
@@ -408,7 +407,6 @@ function buildBaseMap() {
   drawGround(ctx)
   drawAreas(ctx)
   drawRoads(ctx)
-  drawBuildings(ctx)
   drawLabels(ctx)
 }
 function render() {
@@ -432,6 +430,15 @@ function render() {
     depth: treeY + 2,
     draw: () => drawTree(ctx, treeX, treeY, index),
   }))
+  CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
+    const bounds = getCampusFootprintBounds(building)
+    if (!bounds) return
+    // 建筑以 footprint 最南侧作为深度锚点；绘制整个建筑单元，保持屋顶与立面完整。
+    depthQueue.push({
+      depth: bounds[3] + 1,
+      draw: () => drawBuilding(ctx, building, index),
+    })
+  })
   depthQueue.push({
     depth: player.value.y + 5,
     draw: () => drawExplorerCharacter(ctx, player.value),

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES } from '../three/world/campus/campusAssetLibrary.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
@@ -310,7 +311,9 @@ const selectedBuilding = computed(() => buildings.value.find((item) => item.id =
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
 const selectedArea = computed(() => areas.value.find((item) => item.id === selected.value.id))
 const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || selectedArea.value?.name || '未选择对象')
-const palette = ['教学楼','宿舍楼','办公楼','实验楼','图书馆','体育馆']
+const palette = CAMPUS_BUILDING_ASSET_CATALOG.map(item => item.template)
+const buildingPreset = item => CAMPUS_BUILDING_TEMPLATES[item?.template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
+const buildingWallColor = item => ({ wall: '#e7d2a5', wallCream: '#e7d2a5', wallPeach: '#d8a77d', wallMint: '#b8c99a' }[buildingPreset(item).wall] || '#e7d2a5')
 const areaColor = (type) => type === 'water' ? '#6bb8b4' : type === 'sports' ? '#b9b69f' : '#78936d'
 const polygonPath = (multiPolygon) => multiPolygon.flatMap((polygon) => polygon.map((ring) => 'M ' + ring.map((point) => point.join(' ')).join(' L ') + ' Z')).join(' ')
 const roadPath = (points) => {
@@ -698,10 +701,10 @@ function exportDocument() {
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
             <g v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)" @click.stop="selected={type:'building',id:item.id}">
-              <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="#e7d2a5" stroke="#75473e" stroke-width="2"/>
-              <path :d="'M '+(item.rect[0]+3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))+' L '+((item.rect[0]+item.rect[2])/2)+' '+(item.rect[1]-Math.max(3,(item.rect[3]-item.rect[1])*.12))+' L '+(item.rect[2]-3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))" fill="none" stroke="#a85f4e" stroke-width="5" stroke-linejoin="round"/>
+              <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" :fill="buildingWallColor(item)" stroke="#75473e" stroke-width="2"/>
+              <path :d="'M '+(item.rect[0]+3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))+' L '+((item.rect[0]+item.rect[2])/2)+' '+(item.rect[1]-Math.max(3,(item.rect[3]-item.rect[1])*(buildingPreset(item).roofRise/10)))+' L '+(item.rect[2]-3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))" fill="none" stroke="#a85f4e" stroke-width="5" stroke-linejoin="round"/>
               <g fill="#8bc3c5" stroke="#f3dfb5" stroke-width="1">
-                <rect v-for="n in Math.max(1,Math.min(4,Math.floor((item.rect[2]-item.rect[0])/18)))" :key="n" :x="item.rect[0]+(item.rect[2]-item.rect[0])*n/(Math.max(1,Math.min(4,Math.floor((item.rect[2]-item.rect[0])/18)))+1)-2" :y="item.rect[3]-Math.max(8,(item.rect[3]-item.rect[1])*.32)" width="4" height="5" rx=".5"/>
+                <rect v-for="n in Math.max(1,Math.min(5,Math.floor((item.rect[2]-item.rect[0])/18*buildingPreset(item).windowDensity)))" :key="n" :x="item.rect[0]+(item.rect[2]-item.rect[0])*n/(Math.max(1,Math.min(4,Math.floor((item.rect[2]-item.rect[0])/18)))+1)-2" :y="item.rect[3]-Math.max(8,(item.rect[3]-item.rect[1])*.32)" width="4" height="5" rx=".5"/>
               </g>
               <rect :x="(item.rect[0]+item.rect[2])/2-2.5" :y="item.rect[3]-Math.max(9,(item.rect[3]-item.rect[1])*.36)" width="5" height="9" fill="#76533d" stroke="#f3dfb5" stroke-width=".8"/>
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#f0e5ce" stroke-width="1" stroke-dasharray="3 3"/>

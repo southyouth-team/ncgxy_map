@@ -489,6 +489,22 @@ describe('indoor building definition', () => {
   })
 })
 
+describe('stair landing navigation connectivity', () => {
+  it('keeps both stair landings reachable from the floor for every orientation', () => {
+    for (const direction of ['south', 'north', 'east', 'west']) {
+      const floor = {
+        level: 1, width: 24, depth: 18, wallHeight: 3.4,
+        rooms: [],
+        stairPoint: { x: 8, z: 0, direction },
+      }
+      const group = createIndoorFloor(THREE, floor)
+      const path = group.userData.stairPath
+      expect(group.userData.navigationGraph.findPath({ x: 0, z: 0 }, path.start), direction).not.toBeNull()
+      expect(group.userData.navigationGraph.findPath({ x: 0, z: 0 }, path.end), direction).not.toBeNull()
+    }
+  })
+})
+
 describe('indoor stair construction', () => {
   it('creates a stair interaction point and visible stair steps', () => {
     const group = createIndoorFloor(THREE, { ...sample, stairPoint: { x: 10.5, z: 0 } })

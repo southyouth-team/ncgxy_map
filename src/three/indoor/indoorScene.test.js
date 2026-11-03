@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, isAtStairLanding, createStairPath, getStairStepHeight, getIndoorInteractionPrompt, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance, transformIndoorFootprint } from './indoorBuildingDefinitions.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance, transformIndoorFootprint, normalizeIndoorEntrancePoint } from './indoorBuildingDefinitions.js'
 
 
 const sample = {
@@ -558,6 +558,28 @@ describe('scaled building-local indoor footprint', () => {
     )).toThrow()
     expect(() => transformIndoorFootprint(
       { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, { x: 1, z: 1 }, { x: NaN, z: 0 },
+    )).toThrow()
+  })
+})
+
+describe('normalized indoor entrance projection', () => {
+  it('keeps the exterior entrance on the corresponding normalized wall', () => {
+    const narrowBounds = { minX: -6.5, maxX: 6.5, minZ: -1.5, maxZ: 1.5 }
+    expect(normalizeIndoorEntrancePoint(narrowBounds, { x: 1.2, z: 1.5 }, 13, 8))
+      .toEqual({ x: 1.2, z: 4 })
+    expect(normalizeIndoorEntrancePoint(narrowBounds, { x: -6.5, z: -0.8 }, 13, 8))
+      .toEqual({ x: -6.5, z: -0.8 })
+    const building = createIndoorBuildingFromFootprint({
+      id: 'entrance-projection',
+      bounds: narrowBounds,
+    }, { floors: 1, entrancePoint: { x: 1.2, z: 1.5 } })
+    expect(building.entrance.wall).toBe('south')
+    expect(building.floors[0].doors[0]).toMatchObject({ wall: 'south', offset: 1.2 })
+  })
+
+  it('rejects invalid normalization dimensions', () => {
+    expect(() => normalizeIndoorEntrancePoint(
+      { minX: -2, maxX: 2, minZ: -1, maxZ: 1 }, { x: 0, z: 1 }, 0, 8,
     )).toThrow()
   })
 })

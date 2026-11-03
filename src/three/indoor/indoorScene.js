@@ -29,18 +29,18 @@ export function getStairTraversalPoints(stairPath, direction) {
 }
 
 /** 根据楼梯配置生成与楼梯模型一致的上下平台坐标。 */
-export function createStairPath(stairPoint = {}) {
+export function createStairPath(stairPoint = {}, floorHeight = 4.2) {
   const x = Number(stairPoint.x)
   const z = Number(stairPoint.z)
   const direction = stairPoint.direction || 'south'
   const rotations = { south: 0, west: -Math.PI / 2, north: Math.PI, east: Math.PI / 2 }
-  if (!Number.isFinite(x) || !Number.isFinite(z) || !(direction in rotations)) return null
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(floorHeight) || floorHeight <= 0 || !(direction in rotations)) return null
   const rotation = rotations[direction]
   const rotate = localZ => ({
     x: Number((x + Math.sin(rotation) * localZ).toFixed(3)),
     z: Number((z + Math.cos(rotation) * localZ).toFixed(3)),
   })
-  return { start: rotate(-2.1), end: rotate(2.1), rise: 4.2, direction }
+  return { start: rotate(-2.1), end: rotate(2.1), rise: floorHeight, direction }
 }
 
 
@@ -65,8 +65,8 @@ export function planIndoorFloorRoute(building, startLevel, targetLevel) {
     if (Math.abs(to.level - from.level) !== 1 || !from.stairPoint || !to.stairPoint) return null
     const aligned = Math.hypot(from.stairPoint.x - to.stairPoint.x, from.stairPoint.z - to.stairPoint.z) <= 0.05
     if (!aligned) return null
-    const fromPath = createStairPath(from.stairPoint)
-    const toPath = createStairPath(to.stairPoint)
+    const fromPath = createStairPath(from.stairPoint, building.floorHeight || 4.2)
+    const toPath = createStairPath(to.stairPoint, building.floorHeight || 4.2)
     if (!fromPath || !toPath) return null
     const fromLanding = direction > 0 ? fromPath.start : fromPath.end
     const toLanding = direction > 0 ? toPath.end : toPath.start
@@ -406,7 +406,7 @@ export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}
   }
 }
 
-export function createIndoorFloor(THREE, floor) {
+export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
   const errors = validateIndoorFloor(floor)
   if (errors.length) throw new TypeError(errors.join('；'))
   const group = new THREE.Group()
@@ -600,24 +600,33 @@ export function createIndoorFloor(THREE, floor) {
   })
   const stairMaterial = new THREE.MeshStandardMaterial({ color: '#9a7958', roughness: 1 })
   const stairCount = 12
-  const stairRise = 4.2 / stairCount
+  const stairRise = floorHeight / stairCount
   const stairDepth = 4.2 / stairCount
   const rotated = Math.abs(Math.sin(stairRotation)) > 0.5
   for (let index = 0; index < stairCount; index += 1) {
     const localZ = -2.1 + (index + 0.5) * stairDepth
     const point = rotateStairPoint(0, localZ)
-    const step = addBox(THREE, group, 'indoor-stair-step', point.x, index * stairRise, point.z,
+    const step = addBox(THREE, group, 'indoor-stair-step', point.x, (index + 0.5) * stairRise, point.z,
       rotated ? stairDepth : 1.7, stairRise, rotated ? 1.7 : stairDepth, stairMaterial)
     if (index === 5) step.userData.interactionData = createIndoorInteractionData({
       id: `stair-${floor.level}`, name: '楼层楼梯', objectType: 'stairs', interactionType: 'navigate', action: 'change-floor',
       operationHint: '靠近楼梯后按 E 切换楼层', description: '连接相邻楼层；楼层切换由楼梯区域近距离 E 键触发',
     })
   }
-  const railMaterial = new THREE.MeshStandardMaterial({ color: '#6d5842', roughness: 1 })
+  const railMaterial = new THREE.MeshStandardMaterial({ color: '#6d5842', roughness: 0.9 })
+  const railAngle = -Math.atan2(floorHeight, 4.2)
   for (const offset of [-0.95, 0.95]) {
     const railCenter = rotateStairPoint(offset, 0)
-    addBox(THREE, group, 'indoor-stair-rail', railCenter.x, 0.25, railCenter.z,
-      rotated ? 4.4 : 0.12, 4.2, rotated ? 0.12 : 4.4, railMaterial)
+    const handrail = addBox(THREE, group, 'indoor-stair-rail', railCenter.x, floorHeight / 2 + 0.82, railCenter.z,
+      0.12, 0.12, 4.55, railMaterial)
+    handrail.rotation.x = railAngle
+    const postPositions = [-1.95, -0.65, 0.65, 1.95]
+    for (const localZ of postPositions) {
+      const postPoint = rotateStairPoint(offset, localZ)
+      const heightAtPoint = ((localZ + 2.1) / 4.2) * floorHeight
+      addBox(THREE, group, 'indoor-stair-rail-post', postPoint.x, heightAtPoint + 0.4, postPoint.z,
+        0.09, 0.8, 0.09, railMaterial)
+    }
     const railCorners = [
       rotateStairPoint(offset - 0.06, -2.2), rotateStairPoint(offset + 0.06, -2.2),
       rotateStairPoint(offset - 0.06, 2.2), rotateStairPoint(offset + 0.06, 2.2),
@@ -626,6 +635,14 @@ export function createIndoorFloor(THREE, floor) {
       minX: Math.min(...railCorners.map(point => point.x)), maxX: Math.max(...railCorners.map(point => point.x)),
       minZ: Math.min(...railCorners.map(point => point.z)), maxZ: Math.max(...railCorners.map(point => point.z)),
     })
+  }
+
+  // 上下平台分别与本层楼板、上一层楼板齐平，避免台阶悬空或嵌入。
+  const landingMaterial = new THREE.MeshStandardMaterial({ color: '#b7a98e', roughness: 1 })
+  for (const [localZ, centerY] of [[-2.55, -0.1], [2.55, floorHeight - 0.1]]) {
+    const landingPoint = rotateStairPoint(0, localZ)
+    addBox(THREE, group, 'indoor-stair-landing', landingPoint.x, centerY, landingPoint.z,
+      rotated ? 0.9 : 1.7, 0.2, rotated ? 1.7 : 0.9, landingMaterial)
   }
   group.userData.roomInteractions = getRoomInteractionPoints(floor)
   group.userData.exitInteractions = doors.map(door => {
@@ -637,7 +654,7 @@ export function createIndoorFloor(THREE, floor) {
     return { x: -halfW + distance, z: offset }
   })
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
-  group.userData.stairPath = createStairPath(stairPoint)
+  group.userData.stairPath = createStairPath(stairPoint, floorHeight)
   // 以实际碰撞障碍生成低分辨率导航网格，供室内可达性校验和后续寻路复用。
   const navigation = buildIndoorNavigationGraph(floor, collision, {
     roomInteractions: getRoomInteractionPoints(floor),

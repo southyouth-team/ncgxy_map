@@ -316,6 +316,10 @@ function render() {
     bottom: Math.min(500, (height - y) / scale + 16),
   }
   const depthQueue = []
+  ctx.save()
+  ctx.translate(500 + vectorAlignment.value.x, 250 + vectorAlignment.value.y)
+  ctx.scale(vectorAlignment.value.scale, vectorAlignment.value.scale)
+  ctx.translate(-500, -250)
   if (showBuildingFootprints.value) CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
     const bounds = getCampusFootprintBounds(building)
     if (!bounds || bounds[2] < visibleBounds.left || bounds[0] > visibleBounds.right
@@ -349,6 +353,7 @@ function render() {
     ctx.stroke()
     ctx.setLineDash([])
   }
+  ctx.restore()
   ctx.restore()
 }
 function resize() {
@@ -540,7 +545,11 @@ function pointerPosition(event) {
 }
 function hitTest(screenPoint) {
   const { scale, x, y } = mapToScreen()
-  const px = (screenPoint.x - x) / scale, py = (screenPoint.y - y) / scale
+  const screenX = (screenPoint.x - x) / scale
+  const screenY = (screenPoint.y - y) / scale
+  const alignment = vectorAlignment.value
+  const px = (screenX - 500 - alignment.x) / alignment.scale + 500
+  const py = (screenY - 250 - alignment.y) / alignment.scale + 250
   for (const building of CAMPUS_BUILDING_FOOTPRINTS) {
     const [l, t, r, b] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
     const inside = building.polygon

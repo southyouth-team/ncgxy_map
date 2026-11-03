@@ -378,6 +378,24 @@ function mapToScreen() {
   const y = (height - 500 * scale) / 2 + mapOffset.value.y
   return { scale, x, y }
 }
+function followPlayerCamera() {
+  const width = viewport.value.width, height = viewport.value.height
+  if (!width || !height) return
+  const { scale } = mapToScreen()
+  const baseX = (width - 1000 * scale) / 2
+  const baseY = (height - 500 * scale) / 2
+  // 角色保持在视口中心；地图边缘到达屏幕边缘后停止跟随，避免露出空白区域。
+  const minX = 18 - baseX
+  const maxX = width - 18 - 1000 * scale - baseX
+  const minY = 18 - baseY
+  const maxY = height - 18 - 500 * scale - baseY
+  const desiredX = width / 2 - baseX - player.value.x * scale
+  const desiredY = height / 2 - baseY - player.value.y * scale
+  mapOffset.value = {
+    x: minX <= maxX ? Math.max(minX, Math.min(maxX, desiredX)) : 0,
+    y: minY <= maxY ? Math.max(minY, Math.min(maxY, desiredY)) : 0,
+  }
+}
 function buildBaseMap() {
   if (baseMapCanvas) return
   baseMapCanvas = document.createElement('canvas')
@@ -503,6 +521,7 @@ function onExplorerKeydown(event) {
   player.value.direction = facing
   if (canPlayerMoveTo(nextX, player.value.y)) player.value.x = nextX
   if (canPlayerMoveTo(player.value.x, nextY)) player.value.y = nextY
+  followPlayerCamera()
   selected.value = null
   render()
 }
@@ -628,6 +647,11 @@ onBeforeUnmount(() => {
       @wheel="onWheel"
       @contextmenu.prevent
     />
+    <div style="position:absolute;top:18px;left:18px;z-index:3;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(250,248,230,.92);border:1px solid rgba(76,96,70,.22);border-radius:7px;box-shadow:0 3px 12px rgba(48,65,48,.12);pointer-events:none;font-size:12px;color:#405648;">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b9a60;box-shadow:0 0 0 3px rgba(107,154,96,.16);"></span>
+      <strong>探索模式</strong>
+      <span style="opacity:.7;">X {{ Math.round(player.x) }} · Y {{ Math.round(player.y) }}</span>
+    </div>
     <div class="pixel-map-controls">
       <button @click="zoomBy(1.2)" aria-label="放大">＋</button>
       <button @click="zoomBy(.84)" aria-label="缩小">－</button>
@@ -641,6 +665,6 @@ onBeforeUnmount(() => {
       <span>{{ selected.type === 'building' ? '建筑轮廓' : selected.type === 'water' ? '湖泊水域' : selected.type === 'sports' ? '运动场地' : '校园区域' }}</span>
       <em>位置数据：{{ selected.confidence === 'low' ? '待核验' : '近似标注' }}</em>
     </aside>
-    <footer class="pixel-footer"><span>NCGXY · CAMPUS MAP</span><span>WASD / 方向键移动角色 · 拖动浏览 / 滚轮缩放 / 点击查看</span></footer>
+    <footer class="pixel-footer"><span>NCGXY · CAMPUS MAP</span><span>WASD / 方向键移动 · 镜头跟随 · 拖动浏览 / 滚轮缩放</span></footer>
   </section>
 </template>

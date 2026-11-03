@@ -117,8 +117,12 @@ function moveDrag(event) {
     if (!furniture) return
     const maxX = room.width / 2 - furniture.width / 2 - 0.25
     const maxZ = room.depth / 2 - furniture.depth / 2 - 0.25
-    furniture.x = round(Math.max(-maxX, Math.min(maxX, state.x + dx)))
-    furniture.z = round(Math.max(-maxZ, Math.min(maxZ, state.z + dz)))
+    const nextX = round(Math.max(-maxX, Math.min(maxX, state.x + dx)))
+    const nextZ = round(Math.max(-maxZ, Math.min(maxZ, state.z + dz)))
+    const collides = (room.furniture || []).some(other => other.id !== furniture.id &&
+      Math.abs(nextX - other.x) < (furniture.width + other.width) / 2 + 0.12 &&
+      Math.abs(nextZ - other.z) < (furniture.depth + other.depth) / 2 + 0.12)
+    if (!collides) { furniture.x = nextX; furniture.z = nextZ }
     return
   }
   if (state.mode === 'move') {

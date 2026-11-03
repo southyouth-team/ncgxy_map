@@ -5,6 +5,7 @@ import {
   CAMPUS_ROAD_CENTERLINES,
   CAMPUS_ROAD_WIDTHS,
 } from './campusLayout.js'
+import { CAMPUS_BOUNDARY, CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_BUILDING_METADATA, buildCampusRoadGraph } from './campusInventory.js'
 
 /**
  * 统一校园空间数据出口。
@@ -51,6 +52,40 @@ function areaGeometry(area) {
 /** 构建 GeoJSON FeatureCollection 兼容结构；坐标为本项目定义的本地像素系，并非 RFC 7946 经纬度。 */
 export function buildCampusGeoJSON() {
   const features = []
+
+  features.push({
+    type: 'Feature',
+    id: CAMPUS_BOUNDARY.id,
+    properties: {
+      id: CAMPUS_BOUNDARY.id,
+      name: CAMPUS_BOUNDARY.name,
+      featureType: 'boundary',
+      confidence: CAMPUS_BOUNDARY.confidence,
+      verificationStatus: CAMPUS_BOUNDARY.verificationStatus,
+      source: CAMPUS_BOUNDARY.source,
+      boundaryStatus: CAMPUS_BOUNDARY.boundaryStatus,
+    },
+    geometry: { type: 'Polygon', coordinates: [closeRing(CAMPUS_BOUNDARY.polygon)] },
+  })
+
+  for (const gate of CAMPUS_GATES) {
+    features.push({
+      type: 'Feature',
+      id: gate.id,
+      properties: {
+        id: gate.id,
+        name: gate.name,
+        featureType: 'gate',
+        category: 'campus-entrance',
+        confidence: gate.confidence,
+        verificationStatus: gate.verificationStatus,
+        accessModes: gate.accessModes,
+        source: gate.source,
+        positionNote: gate.positionNote,
+      },
+      geometry: { type: 'Point', coordinates: [...gate.position] },
+    })
+  }
 
   for (const area of CAMPUS_AREAS) {
     const geometry = areaGeometry(area)
@@ -102,6 +137,11 @@ export function buildCampusGeoJSON() {
         confidence: building.confidence || 'low',
         verificationStatus: building.verified === true ? 'verified' : 'unverified',
         source: CAMPUS_SPATIAL_DATASET.source,
+        canonicalName: CAMPUS_BUILDING_METADATA[building.id]?.canonicalName ?? null,
+        useType: CAMPUS_BUILDING_METADATA[building.id]?.useType || 'unclassified',
+        identityStatus: CAMPUS_BUILDING_METADATA[building.id]?.identityStatus || 'pending',
+        footprintStatus: CAMPUS_BUILDING_METADATA[building.id]?.footprintStatus || 'approximate',
+        buildingNumber: CAMPUS_BUILDING_METADATA[building.id]?.buildingNumber ?? null,
       },
       geometry: { type: 'Polygon', coordinates: [ring] },
     })
@@ -127,6 +167,12 @@ function openRing(ring) {
  * 几何只从 FeatureCollection 派生，不在渲染端重复维护。
  */
 export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
+  const boundary = collection.features.find(feature => feature.properties.featureType === 'boundary') || null
+  const gates = collection.features
+    .filter(feature => feature.properties.featureType === 'gate')
+    .map(feature => ({ id: feature.id, name: feature.properties.name, position: feature.geometry.coordinates, confidence: feature.properties.confidence }))
+  const pois = CAMPUS_POIS.map(poi => ({ ...poi }))
+  const siteAreas = CAMPUS_SITE_AREAS.map(area => ({ ...area }))
   const areas = collection.features
     .filter(feature => feature.properties.featureType === 'area')
     .map(feature => {
@@ -167,7 +213,11 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
       polygon: openRing(feature.geometry.coordinates[0]),
     }))
 
-  return { areas, roads, buildings }
+  return { boundary, gates, areas, roads, buildings, pois, roadGraph: buildCampusRoadGraph(
+      collection.features.filter(feature => feature.properties.featureType === 'road'),
+      collection.features.filter(feature => feature.properties.featureType === 'gate'),
+    ),
+    siteAreas }
 }
 
 
@@ -277,13 +327,17 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
     }
 
     const geometry = feature?.geometry
-    if (!geometry || !['Polygon', 'LineString'].includes(geometry.type)) {
-      errors.push({ code: 'UNSUPPORTED_GEOMETRY', featureId, message: '仅允许 Polygon 或 LineString 几何' })
+    if (!geometry || !['Polygon', 'LineString', 'Point'].includes(geometry.type)) {
+      errors.push({ code: 'UNSUPPORTED_GEOMETRY', featureId, message: '仅允许 Polygon、LineString 或 Point 几何' })
       continue
     }
-    const expectedGeometry = properties.featureType === 'road' ? 'LineString' : 'Polygon'
-    if (['road', 'area', 'building'].includes(properties.featureType) && geometry.type !== expectedGeometry) {
+    const expectedGeometry = properties.featureType === 'road' ? 'LineString'
+      : ['gate', 'poi'].includes(properties.featureType) ? 'Point' : 'Polygon'
+    if (['road', 'area', 'building', 'boundary', 'gate', 'poi'].includes(properties.featureType) && geometry.type !== expectedGeometry) {
       errors.push({ code: 'GEOMETRY_TYPE_MISMATCH', featureId, message: `${properties.featureType} 要素应使用 ${expectedGeometry}` })
+    }
+    if (geometry.type === 'Point' && (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2 || !geometry.coordinates.slice(0, 2).every(Number.isFinite))) {
+      errors.push({ code: 'INVALID_POINT', featureId, message: 'Point 必须包含有效的 x、y 坐标' })
     }
     if (geometry.type === 'LineString' && (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2)) {
       errors.push({ code: 'INVALID_LINESTRING', featureId, message: '道路至少需要两个坐标点' })

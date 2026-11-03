@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CAMPUS_AREAS, CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_ROAD_CENTERLINES } from './campusLayout.js'
 import { buildCampusGeoJSON, getCampusSpatialLayers, validateCampusGeoJSON, CAMPUS_SPATIAL_DATASET } from './campusGeoJSON.js'
+import { CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_BUILDING_METADATA, buildCampusRoadGraph } from './campusInventory.js'
 
 describe('统一校园空间数据出口', () => {
   it('明确使用同一套参考图像像素坐标，不伪装成测绘坐标', () => {
@@ -13,7 +14,7 @@ describe('统一校园空间数据出口', () => {
     const collection = buildCampusGeoJSON()
     expect(collection.type).toBe('FeatureCollection')
     expect(collection.features).toHaveLength(
-      CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length,
+      CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length,
     )
     const ids = collection.features.map(feature => feature.id)
     expect(new Set(ids).size).toBe(ids.length)
@@ -44,6 +45,8 @@ describe('统一校园空间数据出口', () => {
   it('2D 与 2.5D 共用同一份派生图层，不再维护独立几何副本', () => {
     const collection = buildCampusGeoJSON()
     const layers = getCampusSpatialLayers(collection)
+    expect(layers.boundary).toBeTruthy()
+    expect(layers.gates).toHaveLength(CAMPUS_GATES.length)
     expect(layers.areas).toHaveLength(CAMPUS_AREAS.length)
     expect(layers.roads).toHaveLength(CAMPUS_ROAD_CENTERLINES.length)
     expect(layers.buildings).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
@@ -56,7 +59,7 @@ describe('统一校园空间数据出口', () => {
     const report = validateCampusGeoJSON()
     expect(report.valid).toBe(true)
     expect(report.errorCount).toBe(0)
-    expect(report.featureCount).toBe(CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length)
+    expect(report.featureCount).toBe(CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length)
   })
 
   it('质检能识别越界坐标、重复 ID 和无效道路宽度', () => {
@@ -84,6 +87,50 @@ describe('统一校园空间数据出口', () => {
     const report = validateCampusGeoJSON(invalid)
     expect(report.errors.map(error => error.code)).toContain('SELF_INTERSECTING_POLYGON_RING')
     expect(report.errors.map(error => error.code)).toContain('GEOMETRY_TYPE_MISMATCH')
+  })
+
+
+  it('输出校园边界与东门、南门 Point 要素，并保留低置信度标记', () => {
+    const collection = buildCampusGeoJSON()
+    const boundary = collection.features.find(feature => feature.properties.featureType === 'boundary')
+    expect(boundary.geometry.type).toBe('Polygon')
+    expect(boundary.properties.boundaryStatus).toBe('reference-outline-not-surveyed')
+    for (const gate of CAMPUS_GATES) {
+      const feature = collection.features.find(item => item.id === gate.id)
+      expect(feature.geometry.type).toBe('Point')
+      expect(feature.properties.verificationStatus).toBe('unverified')
+    }
+  })
+
+  it('绿地和广场进入场地台账，未完成定位的记录保持待核验', () => {
+    expect(CAMPUS_SITE_AREAS.map(area => area.category)).toContain('green-space')
+    expect(CAMPUS_SITE_AREAS.map(area => area.category)).toContain('plaza')
+    expect(CAMPUS_SITE_AREAS.every(area => area.geometry === null)).toBe(true)
+  })
+
+  it('POI 名称可追溯，未定位对象不得伪造坐标或建筑关联', () => {
+    expect(CAMPUS_POIS.length).toBeGreaterThanOrEqual(8)
+    expect(CAMPUS_POIS.every(poi => poi.nameStatus === 'source-confirmed')).toBe(true)
+    expect(CAMPUS_POIS.every(poi => poi.position === null && poi.buildingId === null && poi.locationStatus === 'pending')).toBe(true)
+  })
+
+  it('现有建筑 footprint 全部具备待核验元数据，不伪造正式楼栋名称', () => {
+    expect(Object.keys(CAMPUS_BUILDING_METADATA)).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
+    for (const metadata of Object.values(CAMPUS_BUILDING_METADATA)) {
+      expect(metadata.canonicalName).toBeNull()
+      expect(metadata.buildingNumber).toBeNull()
+      expect(metadata.identityStatus).toBe('pending')
+      expect(metadata.footprintStatus).toBe('approximate')
+    }
+  })
+
+  it('道路中心线可以派生连通图，边记录来源道路与长度', () => {
+    const graph = buildCampusRoadGraph()
+    expect(graph.nodes.length).toBeGreaterThan(0)
+    expect(graph.edges.length).toBeGreaterThan(0)
+    expect(graph.edges.every(edge => edge.length > 0 && edge.roadId && edge.from && edge.to)).toBe(true)
+    expect(graph.status).toBe('approximate-needs-field-verification')
+    expect(graph.gateLinks.map(link => link.gateId).sort()).toEqual(CAMPUS_GATES.map(gate => gate.id).sort())
   })
 
   it('道路输出为 LineString，建筑 footprint 输出为 Polygon', () => {

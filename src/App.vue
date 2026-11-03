@@ -351,6 +351,8 @@ function switchEditorView(mode, document) {
 }
 
 function closeEditor() {
+  // 从室内样板返回像素地图前，先释放室内场景并恢复室外角色快照。
+  engine?.exitIndoorPrototype()
   engine?.clearRpgPreview()
   showEditor.value = false
   editorViewMode.value = '2d'

@@ -147,6 +147,40 @@ export function createCampusScene(THREE) {
   }
   CAMPUS_AREAS.filter(area => area.type === 'sports' && area.rect).forEach(area => addSportsMarkings(area.rect, area.id))
 
+  // 重要公共空间使用原创像素字牌标注，帮助玩家建立校园方位感。
+  function addPixelLandmarkLabel(name, text, pixelX, pixelY, width = 10) {
+    const canvas = document.createElement('canvas')
+    canvas.width = 256
+    canvas.height = 64
+    const context = canvas.getContext('2d')
+    context.font = 'bold 30px "Microsoft YaHei", "Noto Sans CJK SC", sans-serif'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.lineJoin = 'round'
+    context.lineWidth = 7
+    context.strokeStyle = '#42533e'
+    context.strokeText(text, 128, 32)
+    context.fillStyle = '#fff4d4'
+    context.fillText(text, 128, 32)
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.magFilter = THREE.NearestFilter
+    texture.minFilter = THREE.NearestFilter
+    texture.colorSpace = THREE.SRGBColorSpace
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: texture, transparent: true, depthWrite: false, depthTest: true,
+    }))
+    const point = mapPixelToWorld(pixelX, pixelY)
+    sprite.name = 'campus-landmark-' + name
+    sprite.position.set(point.x, 3.1, point.z)
+    sprite.scale.set(width, width * 0.25, 1)
+    sprite.userData.objectType = 'landmark-label'
+    root.add(sprite)
+  }
+  addPixelLandmarkLabel('central-lake', '中央湖区', 545, 222, 10.5)
+  addPixelLandmarkLabel('west-lake', '西侧湖区', 220, 112, 8.5)
+  addPixelLandmarkLabel('north-east-sports', '运动场', 802, 105, 7.5)
+  addPixelLandmarkLabel('south-sports', '运动场', 475, 390, 8.5)
+
   const wallPalette = [mats.wall, mats.wallPeach, mats.wallMint, mats.wallCream]
   function addCampusBuilding(item, index) {
     const bounds = mapRectToWorld(item.rect)

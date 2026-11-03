@@ -136,6 +136,7 @@ function featureGeometry(type, item) {
 function beginFeatureDrag(event, type, item) {
   if (event.button !== 0 || tool.value !== 'select' || isLayerLocked(type)) return
   event.stopPropagation()
+  if (event.shiftKey) { toggleMultiSelection(type, item.id, event); return }
   const isMultiDrag = multiSelection.value.length > 1 && multiSelection.value.some(entry => entry.type === type && entry.id === item.id)
   if (!isMultiDrag) { multiSelection.value = []; selected.value = { type, id: item.id } }
   snapshot()

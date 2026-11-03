@@ -52,11 +52,15 @@ function moveDrag(event) {
   const room = props.floor?.rooms?.find(item => item.id === state.roomId)
   if (!room) return
   if (state.mode === 'move') {
-    room.x = Math.round((state.x + dx) * 10) / 10
-    room.z = Math.round((state.z + dz) * 10) / 10
+    const maxX = props.floor.width / 2 - room.width / 2
+    const maxZ = props.floor.depth / 2 - room.depth / 2
+    room.x = Math.round(Math.max(-maxX, Math.min(maxX, state.x + dx)) * 10) / 10
+    room.z = Math.round(Math.max(-maxZ, Math.min(maxZ, state.z + dz)) * 10) / 10
   } else {
-    const width = Math.max(2, state.width + dx)
-    const depth = Math.max(2, state.depth + dz)
+    const maxWidth = props.floor.width / 2 - state.x + state.width / 2
+    const maxDepth = props.floor.depth / 2 - state.z + state.depth / 2
+    const width = Math.min(maxWidth, Math.max(2, state.width + dx))
+    const depth = Math.min(maxDepth, Math.max(2, state.depth + dz))
     room.width = Math.round(width * 10) / 10
     room.depth = Math.round(depth * 10) / 10
     room.x = Math.round((state.x + (room.width - state.width) / 2) * 10) / 10

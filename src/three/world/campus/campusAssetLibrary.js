@@ -199,13 +199,7 @@ export function drawPixelBuildingPreview(context, options = {}) {
   context.strokeStyle = selected ? '#d69c43' : '#806b4b'
   context.lineWidth = selected ? 3 : 1.5
   context.strokeRect(px, py, pw, ph)
-  if (selected) {
-    context.setLineDash([4, 3])
-    context.strokeStyle = '#f2d98a'
-    context.lineWidth = 1
-    context.strokeRect(px - 3, py - 3, pw + 6, ph + 6)
-    context.setLineDash([])
-  }
+  // 选中态通过加粗边框表达，保持 Canvas mock 与轻量渲染环境兼容。
   context.restore()
 }
 

@@ -148,12 +148,12 @@ export function addPixelLamp(THREE, parent, x, z, mats) {
  * 仅负责视觉资产，不代表真实建筑测绘尺寸。
  */
 export const CAMPUS_BUILDING_TEMPLATES = Object.freeze({
-  '教学楼': { height: 4.2, windowDensity: 1, roofRise: 1.35, wall: 'wallCream', doorWidth: 0.9, windowWidth: 0.48, windowHeight: 0.62 },
-  '宿舍楼': { height: 4.8, windowDensity: 1.45, roofRise: 1.2, wall: 'wallPeach', doorWidth: 0.86, windowWidth: 0.42, windowHeight: 0.58 },
-  '办公楼': { height: 3.8, windowDensity: 1.15, roofRise: 1.25, wall: 'wall', doorWidth: 0.86, windowWidth: 0.58, windowHeight: 0.72 },
-  '实验楼': { height: 4.5, windowDensity: 0.9, roofRise: 1.4, wall: 'wallMint', doorWidth: 0.92, windowWidth: 0.52, windowHeight: 0.68 },
-  '图书馆': { height: 4.6, windowDensity: 0.7, roofRise: 1.55, wall: 'wallCream', doorWidth: 1.2, windowWidth: 0.82, windowHeight: 1.12 },
-  '体育馆': { height: 3.2, windowDensity: 0.35, roofRise: 1.8, wall: 'wallPeach', doorWidth: 1.5, windowWidth: 0.9, windowHeight: 0.42 },
+  '教学楼': { height: 4.2, windowDensity: 1, roofRise: 0.82, roofStyle: 'pitched', wall: 'wallCream', doorWidth: 0.9, windowWidth: 0.48, windowHeight: 0.62 },
+  '宿舍楼': { height: 4.8, windowDensity: 1.45, roofRise: 0.22, roofStyle: 'flat', wall: 'wallPeach', doorWidth: 0.86, windowWidth: 0.42, windowHeight: 0.58 },
+  '办公楼': { height: 3.8, windowDensity: 1.15, roofRise: 0.28, roofStyle: 'flat', wall: 'wall', doorWidth: 0.86, windowWidth: 0.58, windowHeight: 0.72 },
+  '实验楼': { height: 4.5, windowDensity: 0.9, roofRise: 0.5, roofStyle: 'pitched', wall: 'wallMint', doorWidth: 0.92, windowWidth: 0.52, windowHeight: 0.68 },
+  '图书馆': { height: 4.6, windowDensity: 0.7, roofRise: 0.18, roofStyle: 'glass', wall: 'wallCream', doorWidth: 1.2, windowWidth: 0.82, windowHeight: 1.12 },
+  '体育馆': { height: 3.2, windowDensity: 0.35, roofRise: 0.95, roofStyle: 'span', wall: 'wallPeach', doorWidth: 1.5, windowWidth: 0.9, windowHeight: 0.42 },
 })
 
 /**
@@ -231,20 +231,56 @@ export function createPixelBuilding(THREE, options = {}) {
   wall.receiveShadow = true
   group.add(wall)
 
-  // 屋顶必须复用建筑 footprint，不能再按外接矩形生成，否则不规则建筑会出现悬空屋顶。
-  // 使用同一 Shape 生成薄屋面，确保凹多边形、斜边建筑的屋顶边界与墙体完全一致。
-  const roofGeometry = new THREE.ExtrudeGeometry(shape, {
-    depth: 0.14,
-    bevelEnabled: false,
-    curveSegments: 1,
-  })
-  roofGeometry.rotateX(-Math.PI / 2)
-  const roof = new THREE.Mesh(roofGeometry, materials.roof)
-  roof.position.y = buildingHeight - 0.02
+  // 屋面始终从 footprint 三角剖分生成：边界顶点严格落在墙顶，凹多边形不会被外接矩形填平。
+  const roofStyle = preset.roofStyle || 'flat'
+  const roofRise = Math.max(0, Number(preset.roofRise || 0))
+  const roofPoints = shape.extractPoints(1)
+  const contour = roofPoints.shape.filter((point, index, points) => (
+    index === 0 || point.distanceTo(points[index - 1]) > 0.001
+  ))
+  if (contour.length > 2 && contour[0].distanceTo(contour[contour.length - 1]) < 0.001) contour.pop()
+  const roofPositions = []
+  const addRoofTriangle = (a, b, c) => {
+    const ab = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z)
+    const ac = new THREE.Vector3(c.x - a.x, c.y - a.y, c.z - a.z)
+    const normal = new THREE.Vector3().crossVectors(ab, ac)
+    if (normal.y < 0) [b, c] = [c, b]
+    roofPositions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
+  }
+  if (roofStyle === 'pitched' || roofStyle === 'span') {
+    const triangles = THREE.ShapeUtils.triangulateShape(contour, roofPoints.holes || [])
+    triangles.forEach(([ia, ib, ic]) => {
+      const points = [contour[ia], contour[ib], contour[ic]]
+      const center = points.reduce((sum, point) => ({ x: sum.x + point.x / 3, y: sum.y + point.y / 3 }), { x: 0, y: 0 })
+      const peak = new THREE.Vector3(center.x, buildingHeight + roofRise, -center.y)
+      for (let i = 0; i < 3; i += 1) {
+        const p1 = points[i]
+        const p2 = points[(i + 1) % 3]
+        addRoofTriangle(
+          new THREE.Vector3(p1.x, buildingHeight, -p1.y),
+          new THREE.Vector3(p2.x, buildingHeight, -p2.y),
+          peak.clone(),
+        )
+      }
+    })
+  } else {
+    const triangles = THREE.ShapeUtils.triangulateShape(contour, roofPoints.holes || [])
+    triangles.forEach(([ia, ib, ic]) => {
+      const points = [contour[ia], contour[ib], contour[ic]]
+      addRoofTriangle(...points.map(point => new THREE.Vector3(point.x, buildingHeight + 0.06, -point.y)))
+    })
+  }
+  const roofGeometry = new THREE.BufferGeometry()
+  roofGeometry.setAttribute('position', new THREE.Float32BufferAttribute(roofPositions, 3))
+  roofGeometry.computeVertexNormals()
+  const roofMaterial = roofStyle === 'glass' ? materials.window : materials.roof
+  const roof = new THREE.Mesh(roofGeometry, roofMaterial)
   roof.castShadow = true
   roof.receiveShadow = true
   roof.userData.objectType = 'building-roof'
+  roof.userData.roofStyle = roofStyle
   group.add(roof)
+  group.userData.roofStyle = roofStyle
 
   // 沿 footprint 的真实边段生成窗户，绝不使用外接矩形布置。
   // 先统一为不重复闭合点，避免最后一条边长度为 0。

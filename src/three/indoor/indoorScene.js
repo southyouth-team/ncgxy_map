@@ -24,7 +24,8 @@ export function validateIndoorFloor(floor) {
     Math.abs(spawn.x) > floor.width / 2 || Math.abs(spawn.z) > floor.depth / 2 || spawn.y < 0.5 || spawn.y > floor.wallHeight)) errors.push('spawnPoint 必须位于楼层范围内且高度有效')
   const stair = floor.stairPoint
   if (stair !== undefined && (!stair || !Number.isFinite(stair.x) || !Number.isFinite(stair.z) ||
-    Math.abs(stair.x) > floor.width / 2 - 1 || Math.abs(stair.z) > floor.depth / 2 - 2.2)) errors.push('stairPoint 必须位于楼层范围内并预留楼梯空间')
+    Math.abs(stair.x) > floor.width / 2 - 1 || Math.abs(stair.z) > floor.depth / 2 - 2.2 ||
+    !['south', 'west', 'north', 'east'].includes(stair.direction || 'south'))) errors.push('stairPoint 必须位于楼层范围内、预留楼梯空间且方向有效')
   for (const door of Array.isArray(floor.doors) ? floor.doors : []) {
     if (!['north', 'south', 'east', 'west'].includes(door.wall)) errors.push('门洞 wall 必须是 north/south/east/west')
     const wallLength = ['north', 'south'].includes(door.wall) ? floor.width : floor.depth
@@ -267,25 +268,36 @@ export function createIndoorFloor(THREE, floor) {
     })
   }
 
-  // 楼梯视觉模型；上下楼由近距离交互触发，不冒充完整楼梯物理。
-  const stairPoint = floor.stairPoint || { x: 9, z: 0 }
+  // 楼梯由共享的 stairPoint 驱动；direction 控制视觉朝向，楼层切换仍由楼梯交互触发。
+  const stairPoint = floor.stairPoint || { x: 9, z: 0, direction: 'south' }
+  const stairDirections = { south: 0, west: -Math.PI / 2, north: Math.PI, east: Math.PI / 2 }
+  const stairRotation = stairDirections[stairPoint.direction || 'south'] ?? 0
+  const stairGroup = new THREE.Group()
+  stairGroup.name = 'indoor-staircase'
+  stairGroup.position.set(stairPoint.x, 0, stairPoint.z)
+  stairGroup.rotation.y = stairRotation
+  group.add(stairGroup)
   const stairMaterial = new THREE.MeshStandardMaterial({ color: '#9a7958', roughness: 1 })
   const stairCount = 12
   const stairRise = 4.2 / stairCount
   const stairDepth = 4.2 / stairCount
   for (let index = 0; index < stairCount; index += 1) {
-    const z = stairPoint.z - 2.1 + (index + 0.5) * stairDepth
-    const step = addBox(THREE, group, 'indoor-stair-step', stairPoint.x, index * stairRise, z, 1.7, stairRise, stairDepth, stairMaterial)
+    const z = -2.1 + (index + 0.5) * stairDepth
+    const step = addBox(THREE, stairGroup, 'indoor-stair-step', 0, index * stairRise, z, 1.7, stairRise, stairDepth, stairMaterial)
     if (index === 5) step.userData.interactionData = createIndoorInteractionData({
       id: `stair-${floor.level}`, name: '楼层楼梯', objectType: 'stairs', interactionType: 'navigate', action: 'change-floor',
       operationHint: '靠近楼梯后按 E 切换楼层', description: '连接相邻楼层；楼层切换由楼梯区域近距离 E 键触发',
     })
   }
   const railMaterial = new THREE.MeshStandardMaterial({ color: '#6d5842', roughness: 1 })
+  const rotateStairPoint = (x, z) => ({
+    x: stairPoint.x + Math.cos(stairRotation) * x + Math.sin(stairRotation) * z,
+    z: stairPoint.z - Math.sin(stairRotation) * x + Math.cos(stairRotation) * z,
+  })
   for (const offset of [-0.95, 0.95]) {
-    const railX = stairPoint.x + offset
-    addBox(THREE, group, 'indoor-stair-rail', railX, 0.25, stairPoint.z, 0.12, 4.2, 4.4, railMaterial)
-    collision.push({ minX: railX - 0.06, maxX: railX + 0.06, minZ: stairPoint.z - 2.2, maxZ: stairPoint.z + 2.2 })
+    addBox(THREE, stairGroup, 'indoor-stair-rail', offset, 0.25, 0, 0.12, 4.2, 4.4, railMaterial)
+    const railCenter = rotateStairPoint(offset, 0)
+    collision.push({ minX: railCenter.x - 0.06, maxX: railCenter.x + 0.06, minZ: railCenter.z - 2.2, maxZ: railCenter.z + 2.2 })
   }
   group.userData.roomInteractions = getRoomInteractionPoints(floor)
   group.userData.exitInteractions = doors.map(door => {
@@ -296,8 +308,10 @@ export function createIndoorFloor(THREE, floor) {
     if (door.wall === 'east') return { x: halfW - distance, z: offset }
     return { x: -halfW + distance, z: offset }
   })
+  const stairStart = rotateStairPoint(0, -2.1)
+  const stairEnd = rotateStairPoint(0, 2.1)
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
-  group.userData.stairPath = { start: { x: stairPoint.x, z: stairPoint.z - 2.1 }, end: { x: stairPoint.x, z: stairPoint.z + 2.1 }, rise: 4.2 }
+  group.userData.stairPath = { start: stairStart, end: stairEnd, rise: 4.2, direction: stairPoint.direction || 'south' }
   group.userData.collisionObstacles = collision
   group.userData.spawnPoint = floor.spawnPoint || { x: 0, y: 1.7, z: 0 }
   group.userData.exits = doors.map(door => ({ ...door }))

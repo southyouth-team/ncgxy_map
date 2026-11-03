@@ -5,6 +5,7 @@ import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
   CAMPUS_ROAD_WIDTHS,
+  getCampusFootprintBounds,
   pointInCampusArea,
   pointInCampusPolygon,
 } from '../data/campus/campusLayout.js'
@@ -182,7 +183,43 @@ function drawBuildings(ctx) {
     { base: '#a27a61', light: '#d9ad82', dark: '#765846' },
   ]
   CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
-    const [x1, y1, x2, y2] = building.rect
+    const [x1, y1, x2, y2] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
+    const footprint = building.polygon || [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+    if (building.polygon) {
+      const w = x2 - x1, h = y2 - y1
+      const roof = roofSets[index % roofSets.length]
+      const facadeHeight = Math.max(3, Math.min(5, h * .24))
+      const roofHeight = h - facadeHeight
+      ctx.fillStyle = 'rgba(48,65,48,.22)'
+      polygon(ctx, footprint.map(([x, y]) => [x + 3, y + 4]))
+      ctx.fill()
+      polygon(ctx, footprint)
+      ctx.fillStyle = roof.dark
+      ctx.fill()
+      ctx.save()
+      polygon(ctx, footprint)
+      ctx.clip()
+      ctx.fillStyle = roof.base
+      ctx.fillRect(x1, y1, w, roofHeight)
+      ctx.fillStyle = roof.light
+      for (let stripeY = y1 + 3; stripeY < y1 + roofHeight - 1; stripeY += 4) {
+        ctx.fillRect(x1 + 3, stripeY, Math.max(1, w - 6), 1)
+      }
+      ctx.fillStyle = '#9b684f'
+      ctx.fillRect(x1, y1 + roofHeight, w, facadeHeight)
+      const windowCount = Math.max(2, Math.floor(w / 13))
+      for (let col = 0; col < windowCount; col++) {
+        const wx = x1 + 4 + col * ((w - 8) / windowCount)
+        ctx.fillStyle = '#536d70'
+        ctx.fillRect(wx, y1 + roofHeight + 1, 3, Math.max(1, facadeHeight - 2))
+      }
+      ctx.restore()
+      polygon(ctx, footprint)
+      ctx.strokeStyle = roof.dark
+      ctx.lineWidth = 1
+      ctx.stroke()
+      return
+    }
     const w = x2 - x1, h = y2 - y1
     const roof = roofSets[index % roofSets.length]
     const variant = index % 4
@@ -305,7 +342,7 @@ const TREE_SPOTS = (() => {
   for (let y = 80; y < 450; y += 24) {
     for (let x = 175; x < 830; x += 26) {
       if ((x * 17 + y * 29) % 23 > 3) continue
-      const nearBuilding = CAMPUS_BUILDING_FOOTPRINTS.some(({ rect: [l, t, r, b] }) => x > l - 9 && x < r + 9 && y > t - 9 && y < b + 9)
+      const nearBuilding = CAMPUS_BUILDING_FOOTPRINTS.some(building => { const [l, t, r, b] = getCampusFootprintBounds(building) || []; return x > l - 9 && x < r + 9 && y > t - 9 && y < b + 9 })
       const nearRoad = CAMPUS_ROAD_CENTERLINES.some(({ points }) => points.some(([px, py]) => Math.hypot(px - x, py - y) < 9))
       const inWater = CAMPUS_AREAS.some(area => area.type === 'water' && area.polygon && pointInCampusPolygon([x, y], area.polygon) && !(area.holes || []).some(hole => pointInCampusPolygon([x, y], hole)))
       if (!nearBuilding && !nearRoad && !inWater) spots.push([x, y])
@@ -373,13 +410,16 @@ function render() {
     if (target?.type !== 'building') continue
     const item = CAMPUS_BUILDING_FOOTPRINTS.find(b => b.id === target.id)
     if (!item) continue
-    const [l, t, r, b] = item.rect
+    const [l, t, r, b] = getCampusFootprintBounds(item) || [0, 0, 0, 0]
+    const footprint = item.polygon || [[l - 2, t - 2], [r + 2, t - 2], [r + 2, b + 2], [l - 2, b + 2]]
     ctx.fillStyle = target === selected.value ? 'rgba(255,231,142,.12)' : 'rgba(255,255,220,.08)'
-    ctx.fillRect(l - 2, t - 2, r - l + 4, b - t + 4)
+    polygon(ctx, footprint)
+    ctx.fill()
     ctx.strokeStyle = color
     ctx.lineWidth = lineWidth / scale
     ctx.setLineDash(target === selected.value ? [] : [3 / scale, 2 / scale])
-    ctx.strokeRect(l - 3, t - 4, r - l + 6, b - t + 8)
+    polygon(ctx, item.polygon || [[l - 3, t - 4], [r + 3, t - 4], [r + 3, b + 4], [l - 3, b + 4]])
+    ctx.stroke()
     ctx.setLineDash([])
   }
   ctx.restore()
@@ -401,8 +441,11 @@ function hitTest(screenPoint) {
   const { scale, x, y } = mapToScreen()
   const px = (screenPoint.x - x) / scale, py = (screenPoint.y - y) / scale
   for (const building of CAMPUS_BUILDING_FOOTPRINTS) {
-    const [l, t, r, b] = building.rect
-    if (px >= l - 3 && px <= r + 3 && py >= t - 4 && py <= b + 3) return { type: 'building', id: building.id, label: building.label, confidence: building.confidence }
+    const [l, t, r, b] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
+    const inside = building.polygon
+      ? pointInCampusPolygon([px, py], building.polygon)
+      : px >= l - 3 && px <= r + 3 && py >= t - 4 && py <= b + 3
+    if (inside) return { type: 'building', id: building.id, label: building.label, confidence: building.confidence }
   }
   for (const area of CAMPUS_AREAS) {
     if (pointInCampusArea([px, py], area)) return { type: area.type, id: area.id, name: area.name, confidence: area.confidence }

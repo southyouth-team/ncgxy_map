@@ -197,6 +197,20 @@ export function expandIndoorBuilding(definition, { side, amount = 2 } = {}) {
   if (side === 'south') bounds.maxZ += distance
   const shiftX = (bounds.minX + bounds.maxX - oldBounds.minX - oldBounds.maxX) / 2
   const shiftZ = (bounds.minZ + bounds.maxZ - oldBounds.minZ - oldBounds.maxZ) / 2
+  const oldPolygon = Array.isArray(footprint.polygon) && footprint.polygon.length >= 3
+    ? footprint.polygon : [
+      { x: oldBounds.minX, z: oldBounds.minZ }, { x: oldBounds.maxX, z: oldBounds.minZ },
+      { x: oldBounds.maxX, z: oldBounds.maxZ }, { x: oldBounds.minX, z: oldBounds.maxZ },
+    ]
+  const expansionTolerance = 0.01
+  const expandedPolygon = oldPolygon.map(point => {
+    const nextPoint = { x: point.x, z: point.z }
+    if (side === 'east' && Math.abs(point.x - oldBounds.maxX) <= expansionTolerance) nextPoint.x += distance
+    if (side === 'west' && Math.abs(point.x - oldBounds.minX) <= expansionTolerance) nextPoint.x -= distance
+    if (side === 'north' && Math.abs(point.z - oldBounds.minZ) <= expansionTolerance) nextPoint.z -= distance
+    if (side === 'south' && Math.abs(point.z - oldBounds.maxZ) <= expansionTolerance) nextPoint.z += distance
+    return { x: Math.round((nextPoint.x - shiftX) * 10) / 10, z: Math.round((nextPoint.z - shiftZ) * 10) / 10 }
+  })
   const widthDelta = bounds.maxX - bounds.minX - (oldBounds.maxX - oldBounds.minX)
   const depthDelta = bounds.maxZ - bounds.minZ - (oldBounds.maxZ - oldBounds.minZ)
 
@@ -205,6 +219,7 @@ export function expandIndoorBuilding(definition, { side, amount = 2 } = {}) {
   next.footprint = {
     ...footprint,
     bounds: { minX: -nextFootprintWidth / 2, maxX: nextFootprintWidth / 2, minZ: -nextFootprintDepth / 2, maxZ: nextFootprintDepth / 2 },
+    polygon: expandedPolygon,
     expansion,
   }
   next.footprintSize = { width: nextFootprintWidth, depth: nextFootprintDepth }

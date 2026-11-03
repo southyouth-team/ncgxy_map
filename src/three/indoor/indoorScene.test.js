@@ -133,7 +133,7 @@ describe('indoor building definition', () => {
   it('provides unique, ordered prototype floors with valid geometry', () => {
     const building = indoorBuildingDefinitions.teachingBlockPrototype
     expect(validateIndoorBuilding(building)).toEqual([])
-    expect(building.floors.map(floor => floor.level)).toEqual([1, 2])
+    expect(building.floors.map(floor => floor.level)).toEqual([1, 2, 3, 4])
     expect(building.floors.every(floor => floor.stairPoint)).toBe(true)
     for (const floor of building.floors) expect(validateIndoorFloor(floor)).toEqual([])
   })

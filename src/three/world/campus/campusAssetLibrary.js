@@ -207,8 +207,12 @@ export function drawPixelBuildingPreview(context, options = {}) {
  * 为简单凸四边形生成真正的双坡屋顶三角面。
  * 返回世界坐标 position 数组；凹多边形/非四边形返回 null，由调用方回退平顶。
  */
-export function createGableRoofVertices(points = [], baseHeight = 0, rise = 0.8) {
-  if (!Array.isArray(points) || points.length !== 4 || !Number.isFinite(baseHeight) || !Number.isFinite(rise) || rise <= 0) return null
+/**
+ * 计算受限双坡屋顶的统一轮廓与屋脊布局。
+ * 屋面三角面和屋脊装饰必须共用该结果，避免方向判断出现分叉。
+ */
+export function getGableRoofLayout(points = []) {
+  if (!Array.isArray(points) || points.length !== 4) return null
   const cross = (a, b, c) => (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
   const turns = points.map((point, index) => cross(point, points[(index + 1) % 4], points[(index + 2) % 4]))
   if (turns.some(value => Math.abs(value) < 1e-5) || !(turns.every(value => value > 0) || turns.every(value => value < 0))) return null
@@ -219,8 +223,22 @@ export function createGableRoofVertices(points = [], baseHeight = 0, rise = 0.8)
   })
   if (lengths[1] + lengths[3] > lengths[0] + lengths[2]) contour = [contour[1], contour[2], contour[3], contour[0]]
   const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
-  const ridgeStart = midpoint(contour[3], contour[0])
-  const ridgeEnd = midpoint(contour[1], contour[2])
+  return {
+    contour,
+    ridgeStart: midpoint(contour[3], contour[0]),
+    ridgeEnd: midpoint(contour[1], contour[2]),
+  }
+}
+
+/**
+ * 为简单凸四边形生成真正的双坡屋顶三角面。
+ * 返回世界坐标 position 数组；凹多边形/非四边形返回 null，由调用方回退平顶。
+ */
+export function createGableRoofVertices(points = [], baseHeight = 0, rise = 0.8) {
+  if (!Number.isFinite(baseHeight) || !Number.isFinite(rise) || rise <= 0) return null
+  const layout = getGableRoofLayout(points)
+  if (!layout) return null
+  const { contour, ridgeStart, ridgeEnd } = layout
   const world = (point, elevated = false) => [point.x, elevated ? baseHeight + rise : baseHeight, -point.y]
   const triangles = [
     [world(contour[0]), world(contour[1]), world(ridgeEnd, true)],
@@ -573,13 +591,9 @@ export function createPixelBuilding(THREE, options = {}) {
 
   // 双坡屋顶增加屋脊压顶；仅在真实生成双坡顶时绘制。
   if (actualRoofStyle === 'gable' || actualRoofStyle === 'gable-span') {
-    const sideLengths = edges.map((edge) => edge.length)
-    const ordered = sideLengths[1] + sideLengths[3] > sideLengths[0] + sideLengths[2]
-      ? [outline[1], outline[2], outline[3], outline[0]]
-      : outline.slice(0, 4)
-    if (ordered.length === 4) {
-      const start = { x: (ordered[3].x + ordered[0].x) / 2, y: (ordered[3].y + ordered[0].y) / 2 }
-      const end = { x: (ordered[1].x + ordered[2].x) / 2, y: (ordered[1].y + ordered[2].y) / 2 }
+    const ridgeLayout = getGableRoofLayout(outline)
+    if (ridgeLayout) {
+      const { ridgeStart: start, ridgeEnd: end } = ridgeLayout
       const ridgeLength = Math.hypot(end.x - start.x, end.y - start.y)
       if (ridgeLength > 0.2) {
         const ridge = new THREE.Mesh(

@@ -817,3 +817,41 @@ describe('teaching block prototype stair continuity', () => {
     expect(planIndoorFloorRoute(building, 4, 1)?.levels).toEqual([4, 3, 2, 1])
   })
 })
+
+
+describe('indoor navigation connectivity validation', () => {
+  it('accepts a graph when every exit, stair and room landmark is reachable', () => {
+    const graph = {
+      summary: { spawnReachable: true },
+      points: [
+        { id: 'spawn', type: 'spawn', reachableFromSpawn: true },
+        { id: 'exit:0', type: 'exit', reachableFromSpawn: true },
+        { id: 'stairs:lower-landing', type: 'stair-landing', reachableFromSpawn: true },
+        { id: 'room:101:approach', type: 'room-approach', reachableFromSpawn: true },
+      ],
+    }
+    expect(validateIndoorNavigationGraph(graph)).toEqual({ valid: true, errors: [] })
+  })
+
+  it('reports unreachable doors and stair landings instead of silently accepting them', () => {
+    const graph = {
+      summary: { spawnReachable: true },
+      points: [
+        { id: 'spawn', type: 'spawn', reachableFromSpawn: true },
+        { id: 'exit:0', type: 'exit', reachableFromSpawn: false },
+        { id: 'stairs:upper-landing', type: 'stair-landing', reachableFromSpawn: false },
+      ],
+    }
+    expect(validateIndoorNavigationGraph(graph)).toEqual({
+      valid: false,
+      errors: ['导航目标 exit:0 无法从出生点到达', '导航目标 stairs:upper-landing 无法从出生点到达'],
+    })
+  })
+
+  it('rejects a graph whose spawn point is outside the walkable grid', () => {
+    expect(validateIndoorNavigationGraph({ summary: { spawnReachable: false }, points: [] })).toEqual({
+      valid: false,
+      errors: ['室内出生点无法落入可行走导航网格'],
+    })
+  })
+})

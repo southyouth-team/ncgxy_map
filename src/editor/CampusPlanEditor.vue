@@ -975,12 +975,7 @@ function exportDocument() {
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
             <g v-if="layerStates.buildings.visible" v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)">
-              <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" :fill="buildingWallColor(item)" stroke="#75473e" stroke-width="2"/>
-              <path :d="'M '+(item.rect[0]+3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))+' L '+((item.rect[0]+item.rect[2])/2)+' '+(item.rect[1]-Math.max(3,(item.rect[3]-item.rect[1])*(buildingPreset(item).roofRise/10)))+' L '+(item.rect[2]-3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))" fill="none" stroke="#a85f4e" stroke-width="5" stroke-linejoin="round"/>
-              <g fill="#8bc3c5" stroke="#f3dfb5" stroke-width="1">
-                <rect v-for="n in Math.max(1,Math.min(5,Math.floor((item.rect[2]-item.rect[0])/18*buildingPreset(item).windowDensity)))" :key="n" :x="item.rect[0]+(item.rect[2]-item.rect[0])*n/(Math.max(1,Math.min(4,Math.floor((item.rect[2]-item.rect[0])/18)))+1)-2" :y="item.rect[3]-Math.max(8,(item.rect[3]-item.rect[1])*.32)" width="4" height="5" rx=".5"/>
-              </g>
-              <rect :x="(item.rect[0]+item.rect[2])/2-2.5" :y="item.rect[3]-Math.max(9,(item.rect[3]-item.rect[1])*.36)" width="5" height="9" fill="#76533d" stroke="#f3dfb5" stroke-width=".8"/>
+              <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="#c8a66e" fill-opacity=".42" stroke="#806b4b" stroke-width="2"/>
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#f0e5ce" stroke-width="1" stroke-dasharray="3 3"/>
               <text :x="(item.rect[0]+item.rect[2])/2" :y="(item.rect[1]+item.rect[3])/2+3" text-anchor="middle" font-size="8" fill="#514634">{{ item.label }}</text>
               <polygon v-if="selected.id===item.id" :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#e6a84c" stroke-width="2" stroke-dasharray="5 3"/>

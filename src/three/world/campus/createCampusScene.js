@@ -93,6 +93,23 @@ export function createCampusScene(THREE) {
     }
   }
 
+  // 低对比度像素水纹，使用固定坐标避免每次刷新随机跳动。
+  const waterRippleMaterial = mats.waterShallow
+  const waterRipples = [
+    [520, 135, 1.15], [600, 215, 0.85], [530, 318, 1.05], [470, 235, 0.72],
+    [188, 92, 0.8], [245, 122, 1.0], [220, 150, 0.7],
+  ]
+  waterRipples.forEach(([pixelX, pixelY, size], index) => {
+    const point = mapPixelToWorld(pixelX, pixelY)
+    const ripple = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9 * size, 0.035, 0.12 * size),
+      waterRippleMaterial,
+    )
+    ripple.name = 'pixel-water-ripple-' + index
+    ripple.position.set(point.x, 0.155, point.z)
+    root.add(ripple)
+  })
+
   for (const road of CAMPUS_ROAD_CENTERLINES) {
     const points = road.points.map(([px, py]) => {
       const point = mapPixelToWorld(px, py)

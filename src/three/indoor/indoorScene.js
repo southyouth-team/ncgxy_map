@@ -10,9 +10,10 @@ export function getIndoorInteractionPrompt({ activeRoom = null, nearExit = false
   if (activeRoom) return { key: 'room-return', text: '按 E 返回走廊' }
   if (nearExit) return { key: 'exit', text: '按 E 离开' + buildingName }
   if (nearStairs && Number.isInteger(stairTarget)) {
+    const ascending = stairTarget > 0
     return {
-      key: 'stairs-' + stairTarget,
-      text: '按 E ' + (stairTarget > 0 ? '前往' : '切换') + ' ' + Math.abs(stairTarget) + ' 层',
+      key: 'stairs-' + (ascending ? 'up-' : 'down-') + Math.abs(stairTarget),
+      text: '按 E ' + (ascending ? '上楼至' : '下楼至') + ' ' + Math.abs(stairTarget) + ' 层',
     }
   }
   if (nearRoom?.roomId) return { key: 'room-' + nearRoom.roomId, text: '按 E 进入' + (nearRoom.roomName || '房间') }

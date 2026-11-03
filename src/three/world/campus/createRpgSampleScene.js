@@ -158,6 +158,8 @@ export function createRpgSampleScene(THREE) {
   building.position.set(0, 0, -8)
   building.userData.objectType = 'building'
   building.userData.buildingId = 'sample-teaching-building'
+  // 室内入口锚点与门洞共用建筑局部坐标，供探索模式按距离触发 E 进入。
+  building.userData.indoorEntrance = { x: 0, z: 5.35, radius: 2.15 }
   addBox('teaching-building-foundation', 0, 0.18, 0, 15.5, 0.55, 9.2, materials.wallShade, building)
   addBox('teaching-building-main-volume', 0, 0.73, 0, 14.8, 5.8, 8.5, materials.wall, building)
   addBox('teaching-building-front-band', 0, 1.1, 4.28, 14.9, 0.2, 0.18, materials.trim, building)

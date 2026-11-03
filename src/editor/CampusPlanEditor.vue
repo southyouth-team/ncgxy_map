@@ -181,6 +181,31 @@ function alignSelection(mode) {
     else { entry.feature.footprint = moved; if (entry.type === 'building') entry.feature.rect = polygonBounds(moved) }
   })
 }
+function distributeSelection(axis) {
+  const targets = multiSelection.value.filter(entry => !isLayerLocked(entry.type) && layerStates.value[layerKey(entry.type)]?.visible).map(entry => {
+    const feature = featureCollection(entry.type).find(item => item.id === entry.id)
+    return feature ? { ...entry, feature, bounds: getFeatureBounds(entry.type, feature) } : null
+  }).filter(entry => entry && entry.bounds)
+  if (targets.length < 3) return
+  const startKey = axis === 'horizontal' ? 'left' : 'top'
+  const endKey = axis === 'horizontal' ? 'right' : 'bottom'
+  const sizeKey = axis === 'horizontal' ? 'width' : 'height'
+  targets.sort((a, b) => a.bounds[startKey] - b.bounds[startKey])
+  const totalSpan = targets[targets.length - 1].bounds[endKey] - targets[0].bounds[startKey]
+  const occupied = targets.reduce((sum, entry) => sum + entry.bounds[sizeKey], 0)
+  const gap = (totalSpan - occupied) / (targets.length - 1)
+  let cursor = targets[0].bounds[endKey] + gap
+  snapshot()
+  targets.slice(1).forEach(entry => {
+    const delta = cursor - entry.bounds[startKey]
+    const dx = axis === 'horizontal' ? delta : 0
+    const dy = axis === 'vertical' ? delta : 0
+    const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
+    if (entry.type === 'road') entry.feature.points = moved
+    else { entry.feature.footprint = moved; if (entry.type === 'building') entry.feature.rect = polygonBounds(moved) }
+    cursor += entry.bounds[sizeKey] + gap
+  })
+}
 function deleteSelectionBatch() {
   const targets = multiSelection.value.length ? [...multiSelection.value] : (selected.value.id ? [selected.value] : [])
   if (!targets.length) return
@@ -903,7 +928,7 @@ function exportDocument() {
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
-        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || !(Array.isArray(clipboardObject) ? clipboardObject.some(entry => !isLayerLocked(entry.type)) : !isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="alignSelection('right')" :disabled="multiSelection.length<2" title="右对齐">右对齐</button><button @click="alignSelection('bottom')" :disabled="multiSelection.length<2" title="底部对齐">底对齐</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || !(Array.isArray(clipboardObject) ? clipboardObject.some(entry => !isLayerLocked(entry.type)) : !isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="alignSelection('right')" :disabled="multiSelection.length<2" title="右对齐">右对齐</button><button @click="alignSelection('bottom')" :disabled="multiSelection.length<2" title="底部对齐">底对齐</button><button @click="distributeSelection('horizontal')" :disabled="multiSelection.length<3" title="水平等间距">水平分布</button><button @click="distributeSelection('vertical')" :disabled="multiSelection.length<3" title="垂直等间距">垂直分布</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
           <svg class="campus-map" :viewBox="canvasViewBox()" @pointerdown="startBoxSelection" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>

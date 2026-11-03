@@ -91,7 +91,7 @@ export class CameraRig {
       }
       if (mode === 'thirdPerson') {
         this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
-        this.thirdDistance = 15
+        this.thirdDistance = this.isometricRpg ? 24 : 15
         this.updateThirdPersonDesired()
       } else {
         // 从第三人称切入时沿用角色前进方向；从地图视角进入时默认朝向校园内部。

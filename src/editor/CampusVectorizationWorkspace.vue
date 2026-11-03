@@ -125,7 +125,16 @@ function onCanvasDoubleClick(event) {
   finishFeature()
 }
 function selectFeature(id) {
-  if (drawMode.value === 'select') selectedId.value = id
+  selectedId.value = id
+}
+function updateSelectedFeature(field, value) {
+  const feature = selectedFeature.value
+  if (!feature || !['name', 'status', 'confidence', 'sourceRefs'].includes(field)) return
+  snapshot()
+  feature[field] = field === 'sourceRefs'
+    ? value.split(',').map(item => item.trim()).filter(Boolean)
+    : value
+  message.value = '已更新要素属性：' + feature.name
 }
 function deleteSelected() {
   if (!selectedId.value) return
@@ -257,6 +266,13 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value) 
             </button>
             <p v-if="!features.length" class="muted">尚无已标注要素</p>
           </div>
+          <div v-if="selectedFeature" class="selected-feature-editor">
+            <h3>选中要素属性</h3>
+            <label>名称<input :value="selectedFeature.name" @change="updateSelectedFeature('name', $event.target.value)" /></label>
+            <label>核验状态<select :value="selectedFeature.status" @change="updateSelectedFeature('status', $event.target.value)"><option value="unverified">未核验</option><option value="draft">初步标注</option><option value="verified">已核验</option></select></label>
+            <label>置信度<select :value="selectedFeature.confidence" @change="updateSelectedFeature('confidence', $event.target.value)"><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
+            <label>来源引用（逗号分隔）<input :value="selectedFeature.sourceRefs.join(', ')" @change="updateSelectedFeature('sourceRefs', $event.target.value)" /></label>
+          </div>
           <button class="danger-button" :disabled="!selectedId" @click="deleteSelected">删除选中要素</button>
         </section>
       </aside>
@@ -297,6 +313,7 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value) 
 .vector-section input,.vector-section select{display:block;width:100%;margin-top:4px;padding:7px;border:1px solid #d8dfd5;border-radius:4px;background:#fff;color:#293a2e;font:12px Arial,"Microsoft YaHei",sans-serif}
 .hint{margin:10px 0;padding:8px;background:#f3f5ef;border-radius:4px;color:#788478;font-size:11px}
 .feature-list{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}.feature-list button{text-align:left;border:1px solid #e1e6de;border-radius:4px;padding:7px;background:#fff;color:#354639;cursor:pointer}.feature-list button.selected{border-color:#c8783b;background:#fff8ef}.feature-list strong,.feature-list small{display:block}.feature-list small{color:#879184;font-size:10px}
+.selected-feature-editor{margin:12px 0;padding:10px;background:#f6f8f3;border:1px solid #e1e7dc;border-radius:5px}.selected-feature-editor h3{margin:0 0 8px;font-size:12px}.selected-feature-editor label{display:block;margin:8px 0;font-size:11px;color:#647165}.selected-feature-editor input,.selected-feature-editor select{display:block;width:100%;margin-top:4px;padding:7px;border:1px solid #d8dfd5;border-radius:4px;background:#fff;color:#293a2e;font:12px Arial,'Microsoft YaHei',sans-serif}
 .danger-button{color:#a44737}
 .vector-canvas-wrap{min-width:0;min-height:0;display:flex;flex-direction:column;background:white;border:1px solid #dce2d8;border-radius:7px;overflow:hidden}
 .canvas-toolbar,.vector-status{display:flex;justify-content:space-between;padding:9px 12px;background:#f8faf6;color:#6d796d;font-size:11px;border-bottom:1px solid #e8ece5}

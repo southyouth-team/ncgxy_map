@@ -25,6 +25,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let outdoorCollisionWorld = null
   let indoorGroup = null
   let indoorBuilding = null
+  let indoorOutdoorTarget = null
+  let indoorOutdoorBase = null
   let currentIndoorFloor = null
   let stairInteractionActive = false
   let nearIndoorRoom = null
@@ -764,12 +766,35 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function syncOutdoorBuildingFootprint(definition) {
+    if (!indoorOutdoorTarget || !indoorOutdoorBase || !definition?.footprintSize) return false
+    const width = Number(definition.footprintSize.width)
+    const depth = Number(definition.footprintSize.depth)
+    if (!Number.isFinite(width) || !Number.isFinite(depth) || width <= 0 || depth <= 0) return false
+    const expansion = definition.footprint?.expansion || {}
+    const shiftX = (Number(expansion.east) - Number(expansion.west)) / 2
+    const shiftZ = (Number(expansion.south) - Number(expansion.north)) / 2
+    indoorOutdoorTarget.scale.x = indoorOutdoorBase.scale.x * width / indoorOutdoorBase.width
+    indoorOutdoorTarget.scale.z = indoorOutdoorBase.scale.z * depth / indoorOutdoorBase.depth
+    indoorOutdoorTarget.position.x = indoorOutdoorBase.position.x + shiftX
+    indoorOutdoorTarget.position.z = indoorOutdoorBase.position.z + shiftZ
+    indoorOutdoorTarget.updateMatrixWorld(true)
+    return true
+  }
+
   function enterIndoorBuilding(buildingId, options = {}) {
     if (!campus || !buildingId || indoorGroup) return false
     const target = campus.getObjectByName(String(buildingId)) || campus.children.find(object =>
       String(object.userData?.buildingId || object.userData?.featureId || object.userData?.sceneObjectId || '') === String(buildingId))
     if (!target) return false
     const bounds = new THREE.Box3().setFromObject(target)
+    indoorOutdoorTarget = target
+    indoorOutdoorBase = {
+      width: bounds.max.x - bounds.min.x,
+      depth: bounds.max.z - bounds.min.z,
+      position: target.position.clone(),
+      scale: target.scale.clone(),
+    }
     const footprint = {
       id: String(buildingId),
       name: options.name || target.userData?.name || target.name || '校园建筑',
@@ -791,6 +816,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!indoorBuilding || !indoorGroup || !definition || definition.id !== indoorBuilding.id) return false
     const errors = validateIndoorBuilding(definition)
     if (errors.length) throw new TypeError(errors.join('；'))
+    syncOutdoorBuildingFootprint(definition)
     const currentPosition = cameraRig.player.clone()
     indoorBuilding = definition
     const levels = definition.floors.map(item => item.level)
@@ -862,6 +888,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     stairTransition = null
     input.setMovementEnabled(true)
     indoorBuilding = null
+    indoorOutdoorTarget = null
+    indoorOutdoorBase = null
     currentIndoorFloor = null
     campus.visible = outdoorState.visible
     nearOutdoorEntrance = false

@@ -15,7 +15,8 @@ describe('indoor prompt resolver', () => {
   it('returns the highest-priority nearby interaction', () => {
     expect(getIndoorInteractionPrompt({ activeRoom: { id: 'a' }, nearExit: true }).key).toBe('room-return')
     expect(getIndoorInteractionPrompt({ nearExit: true, buildingName: 'Library' }).key).toBe('exit')
-    expect(getIndoorInteractionPrompt({ nearStairs: true, stairTarget: 3 }).key).toBe('stairs-3')
+    expect(getIndoorInteractionPrompt({ nearStairs: true, stairTarget: 3 }).key).toBe('stairs-up-3')
+    expect(getIndoorInteractionPrompt({ nearStairs: true, stairTarget: -1 }).key).toBe('stairs-down-1')
     expect(getIndoorInteractionPrompt({ nearRoom: { roomId: 'room-a' } }).key).toBe('room-room-a')
     expect(getIndoorInteractionPrompt()).toBeNull()
   })

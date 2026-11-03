@@ -5,6 +5,20 @@
  */
 export const INDOOR_STAIR_STEP_COUNT = 12
 
+/** 统一室内交互提示优先级，避免门、楼梯和房间入口同时抢占提示区域。 */
+export function getIndoorInteractionPrompt({ activeRoom = null, nearExit = false, nearStairs = false, stairTarget = null, nearRoom = null, buildingName = '建筑' } = {}) {
+  if (activeRoom) return { key: 'room-return', text: '按 E 返回走廊' }
+  if (nearExit) return { key: 'exit', text: '按 E 离开' + buildingName }
+  if (nearStairs && Number.isInteger(stairTarget)) {
+    return {
+      key: 'stairs-' + stairTarget,
+      text: '按 E ' + (stairTarget > 0 ? '前往' : '切换') + ' ' + Math.abs(stairTarget) + ' 层',
+    }
+  }
+  if (nearRoom?.roomId) return { key: 'room-' + nearRoom.roomId, text: '按 E 进入' + (nearRoom.roomName || '房间') }
+  return null
+}
+
 /** 将楼梯行走进度映射为逐级抬升的高度进度，避免角色沿斜线穿过台阶。 */
 export function getStairStepHeight(progress, rise, stepCount = INDOOR_STAIR_STEP_COUNT) {
   if (!Number.isFinite(progress) || !Number.isFinite(rise) || rise < 0 ||

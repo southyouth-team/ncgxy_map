@@ -275,6 +275,7 @@ describe('Campus map API (PostGIS integration)', () => {
       id: buildingId,
       name: '西北组团 01',
       floorHeight: 3.6,
+      exterior: { roofStyle: 'flat' },
       footprintSize: { width: 12, depth: 8 },
       footprint: {
         type: 'polygon',
@@ -296,6 +297,12 @@ describe('Campus map API (PostGIS integration)', () => {
       .put(url).set(auth).send({ revision: 0, definition }).expect(200);
     expect(Number(saved.body.revision)).toBe(1);
     expect(saved.body.definition.id).toBe(buildingId);
+    expect(saved.body.definition.exterior.roofStyle).toBe('flat');
+
+    await request(app.getHttpServer())
+      .put(url).set(auth)
+      .send({ revision: 1, definition: { ...definition, exterior: { roofStyle: 'unsupported' } } })
+      .expect(400);
 
     const loaded = await request(app.getHttpServer()).get(url).set(auth).expect(200);
     expect(Number(loaded.body.revision)).toBe(1);

@@ -47,6 +47,24 @@ describe('indoor floor contract', () => {
     expect(roomDoor.blockedZ).toBe(false)
   })
 
+  it('validates custom partition walls and their door openings', () => {
+    const floor = { ...sample, walls: [{ id: 'wall-a', axis: 'x', x: 0, z: 0, length: 10, thickness: 0.2, doorWidth: 1.4, doorOffset: 0 }] }
+    expect(validateIndoorFloor(floor)).toEqual([])
+    expect(validateIndoorFloor({ ...sample, walls: [{ id: 'wall-b', axis: 'x', x: 0, z: 10, length: 10, thickness: 0.2 }] }))
+      .toContain('墙体 wall-b 超出楼层边界')
+    expect(validateIndoorFloor({ ...sample, walls: [{ id: 'wall-c', axis: 'x', x: 0, z: 0, length: 10, doorWidth: 3, doorOffset: 0 }] }))
+      .toContain('墙体 wall-c 的门洞尺寸无效')
+  })
+
+  it('builds partition geometry with a passable doorway opening', () => {
+    const floor = { ...sample, rooms: [], walls: [{ id: 'partition-a', axis: 'x', x: 0, z: 0, length: 10, thickness: 0.2, doorWidth: 1.4, doorOffset: 0 }] }
+    const group = createIndoorFloor(THREE, floor)
+    const collision = new CollisionWorld({ minX: -12, maxX: 12, minZ: -9, maxZ: 9 }, group.userData.collisionObstacles, 0.25)
+    const result = collision.move({ x: 0, z: -3 }, 0, 6)
+    expect(result.z).toBeGreaterThan(2)
+    expect(result.blockedZ).toBe(false)
+  })
+
   it('rejects doors outside the floor wall and rooms outside floor bounds', () => {
     expect(validateIndoorFloor({ ...sample, doors: [{ wall: 'south', offset: 20, width: 2 }] }))
       .toContain('门洞 offset 超出墙体范围')

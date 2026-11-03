@@ -38,11 +38,17 @@ const selectedSceneObject = computed(() => sceneDocument.value?.objects?.find((i
 
 let engine
 
-const modes = [
-  { id: 'overview', label: '上帝视角', hint: '像素地图' },
-  { id: 'thirdPerson', label: '第三人称', hint: '跟随漫游' },
-  { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
-]
+const modes = isRpgSample
+  ? [
+      { id: 'overview', label: '场景总览', hint: '校园布局' },
+      { id: 'thirdPerson', label: 'RPG 探索', hint: '等距跟随' },
+      { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
+    ]
+  : [
+      { id: 'overview', label: '上帝视角', hint: '像素地图' },
+      { id: 'thirdPerson', label: '第三人称', hint: '跟随漫游' },
+      { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
+    ]
 
 function adjacentIndoorFloor(direction) {
   const levels = [...indoorFloors.value].sort((a, b) => a - b)
@@ -283,7 +289,7 @@ onBeforeUnmount(() => {
         </template>
         <template v-else-if="activeMode === 'thirdPerson'">
           <div class="control-row"><kbd>W A S D</kbd><span>控制角色移动</span></div>
-          <div class="control-row"><kbd>拖动</kbd><span>环绕角色旋转</span></div>
+          <div class="control-row"><kbd>拖动</kbd><span>调整等距镜头方向</span></div>
           <div class="control-row"><kbd>V</kbd><span>切换第一/第三人称</span></div>
           <div class="control-row"><kbd>滚轮</kbd><span>调整跟随距离</span></div>
         </template>

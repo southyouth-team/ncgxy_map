@@ -801,25 +801,30 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         depth,
         height: Number(definition.floorHeight) * definition.floors.length,
         floors: definition.floors.length,
-        label: rebuildOptions.label || indoorOutdoorTarget.name,
+        label: rebuildOptions.label || target.name,
       })
+      const foundation = target.userData.foundationMesh
       target.children.slice().forEach(child => {
-        child.geometry?.dispose?.()
+        if (child === foundation) return
+        child.traverse?.(object => {
+          object.geometry?.dispose?.()
+        })
         target.remove(child)
       })
-      while (rebuilt.children.length) target.add(rebuilt.children[0])
+      rebuilt.position.y = Number(target.userData.generatedBuildingBaseY || 0)
+      target.add(rebuilt)
+      target.userData.generatedBuildingShell = rebuilt
       for (const key of ['floorCount', 'floorHeight', 'buildingHeight', 'roofStyle', 'entrance']) {
         if (rebuilt.userData[key] !== undefined) target.userData[key] = rebuilt.userData[key]
       }
-      rebuilt.clear()
 
       // 基座使用同一轮廓挤出，避免扩建后出现矩形底座露边。
-      const foundation = target.userData.foundationMesh
       if (foundation) {
         foundation.geometry?.dispose?.()
-        const foundationGeometry = new THREE.ExtrudeGeometry(shape, { depth: 0.16, bevelEnabled: false, curveSegments: 1 })
+        const foundationGeometry = new THREE.ExtrudeGeometry(shape, { depth: 0.55, bevelEnabled: false, curveSegments: 1 })
         foundationGeometry.rotateX(-Math.PI / 2)
         foundation.geometry = foundationGeometry
+        foundation.position.set(0, 0.18, 0)
       }
       indoorOutdoorBase.geometryKey = geometryKey
       }

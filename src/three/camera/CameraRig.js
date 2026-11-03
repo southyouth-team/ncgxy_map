@@ -166,8 +166,10 @@ export class CameraRig {
     this.perspectiveCamera.updateProjectionMatrix()
   }
 
-  focusBounds(width, depth) {
+  focusBounds(width, depth, centerX = 0, centerZ = 0) {
     const span = Math.max(Number(width) || 80, Number(depth) || 60, 20) * 1.15
+    const targetX = Number.isFinite(centerX) ? centerX : 0
+    const targetZ = Number.isFinite(centerZ) ? centerZ : 0
     this.overviewSpan = span
     this.overviewCamera.left = -span * this.aspect / 2
     this.overviewCamera.right = span * this.aspect / 2
@@ -177,9 +179,9 @@ export class CameraRig {
     this.mode = 'overview'
     this.activateCamera(this.overviewCamera)
     this.transitioningToOverview = true
-    this.desiredTarget.set(0, 0, 0)
-    this.desiredPosition.set(0, span * 0.78, span * 0.78)
-    this.orbit.target.set(0, 0, 0)
+    this.desiredTarget.set(targetX, 0, targetZ)
+    this.desiredPosition.set(targetX, span * 0.78, targetZ + span * 0.78)
+    this.orbit.target.set(targetX, 0, targetZ)
   }
 
   focusCampus() {

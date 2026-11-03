@@ -7,8 +7,8 @@ export class CameraRig {
     this.domElement = domElement
     this.aspect = 1
     this.overviewSpan = 190
-    this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.1, 700)
-    this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 700)
+    this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.1, 3000)
+    this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 3000)
     this.camera = this.overviewCamera
     this.camera.position.set(0, 145, 145)
     this.target = new THREE.Vector3(0, 0, 0)

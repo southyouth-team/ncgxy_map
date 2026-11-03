@@ -584,6 +584,30 @@ function addRoad(event) {
   selected.value = { type: 'road', id }
   tool.value = 'select'
 }
+function updateBuildingMetric(metric, rawValue) {
+  const item = selectedBuilding.value
+  const value = Number(rawValue)
+  if (!item || !Number.isFinite(value)) return
+  const oldBounds = polygonBounds(item.footprint)
+  const oldWidth = Math.max(0.0001, oldBounds[2] - oldBounds[0])
+  const oldHeight = Math.max(0.0001, oldBounds[3] - oldBounds[1])
+  const nextBounds = [...oldBounds]
+  if (metric === 'x') nextBounds[0] = value
+  if (metric === 'y') nextBounds[1] = value
+  if (metric === 'width') nextBounds[2] = nextBounds[0] + Math.max(4, value)
+  if (metric === 'height') nextBounds[3] = nextBounds[1] + Math.max(4, value)
+  if (metric === 'x') nextBounds[2] = value + oldWidth
+  if (metric === 'y') nextBounds[3] = value + oldHeight
+  if (nextBounds.every((coordinate, index) => coordinate === oldBounds[index])) return
+  snapshot()
+  const nextWidth = nextBounds[2] - nextBounds[0]
+  const nextHeight = nextBounds[3] - nextBounds[1]
+  item.footprint = item.footprint.map(([x, y]) => [
+    nextBounds[0] + ((x - oldBounds[0]) / oldWidth) * nextWidth,
+    nextBounds[1] + ((y - oldBounds[1]) / oldHeight) * nextHeight,
+  ])
+  item.rect = polygonBounds(item.footprint)
+}
 function rotateBuilding() {
   const item = selectedBuilding.value
   if (!item) return
@@ -728,7 +752,15 @@ function exportDocument() {
         <div class="selected-card"><small>当前选中</small><strong>{{ selectedLabel }}</strong><span>{{ selected.type==='road' ? '道路 / LineString' : selected.type==='building' ? '建筑 / Footprint' : '请选择场景对象' }}</span></div>
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input v-model="selectedBuilding.label">
-          <label>建筑模板</label><select v-model="selectedBuilding.template"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>\n          <label>空间范围（像素坐标）</label><div class="coordinate-grid"><span>X₁ {{ Math.round(selectedBuilding.rect[0]) }}</span><span>Y₁ {{ Math.round(selectedBuilding.rect[1]) }}</span><span>X₂ {{ Math.round(selectedBuilding.rect[2]) }}</span><span>Y₂ {{ Math.round(selectedBuilding.rect[3]) }}</span></div>
+          <label>建筑模板</label><select v-model="selectedBuilding.template"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>
+          <label>位置与尺寸（地图像素）</label>
+          <div class="property-grid">
+            <label>X 位置<input type="number" :value="Math.round(selectedBuilding.rect[0])" @change="updateBuildingMetric('x',$event.target.value)"></label>
+            <label>Y 位置<input type="number" :value="Math.round(selectedBuilding.rect[1])" @change="updateBuildingMetric('y',$event.target.value)"></label>
+            <label>宽度<input type="number" min="4" :value="Math.round(selectedBuilding.rect[2]-selectedBuilding.rect[0])" @change="updateBuildingMetric('width',$event.target.value)"></label>
+            <label>高度<input type="number" min="4" :value="Math.round(selectedBuilding.rect[3]-selectedBuilding.rect[1])" @change="updateBuildingMetric('height',$event.target.value)"></label>
+          </div>
+          <small class="hint property-hint">输入数值后按 Enter 或离开输入框即可更新轮廓；支持撤销与自动保存。</small>
           <label>数据可信度</label><span class="confidence">{{ selectedBuilding.confidence || 'unverified' }}</span>
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。</p><button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
         </template>
@@ -748,7 +780,8 @@ function exportDocument() {
   </section>
 </template>
 
-<style scoped>\n.upload-control{display:block;padding:9px;margin:8px 0;background:#e8eddf;border:1px dashed #87977c;border-radius:6px;cursor:pointer}.upload-control input{display:block;width:100%;margin-top:6px;font-size:11px}.coordinate-grid button{grid-column:span 2}.map-stage svg{user-select:none}
+<style scoped>
+.upload-control{display:block;padding:9px;margin:8px 0;background:#e8eddf;border:1px dashed #87977c;border-radius:6px;cursor:pointer}.upload-control input{display:block;width:100%;margin-top:6px;font-size:11px}.coordinate-grid button{grid-column:span 2}.map-stage svg{user-select:none}
 .campus-editor{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;background:#e6dfc9;color:#3b4c37;font-family:Inter,"Microsoft YaHei",sans-serif}.editor-header{height:64px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#f8f7ef;border-bottom:1px solid #c9cbbb}.brand,.header-actions{display:flex;align-items:center;gap:12px}.brand-mark{display:grid;place-items:center;width:36px;height:36px;background:#315b43;color:#f4e8c9;font-weight:800}.brand strong,.brand small{display:block}.brand strong{font-size:14px}.brand small{font-size:9px;letter-spacing:1.4px;color:#788477;margin-top:4px}.header-actions button,.tool-panel button,.inspector button{border:1px solid #c9cbbb;background:#fffdf5;color:#344b3b;border-radius:3px;padding:8px 11px;font-size:12px;cursor:pointer}.header-actions button:disabled{opacity:.4}.header-actions .primary,.add-button{background:#315b43!important;color:#fff!important;border-color:#315b43!important}.zoom-value{font-size:11px;min-width:36px;text-align:center}.save-indicator{font-size:11px;color:#71816d;white-space:nowrap}.save-indicator.saving{color:#a07835}.save-indicator.error,.save-indicator.conflict{color:#a44e3d}.recognition-progress{margin:8px 0;padding:10px;background:#f8f4e9;border:1px solid #dfd2b4;border-radius:5px}.recognition-progress-head{display:flex;justify-content:space-between;font-size:11px;color:#6d5734}.recognition-progress-track{height:6px;margin:8px 0;background:#e7dfcf;border-radius:8px;overflow:hidden}.recognition-progress-track i{display:block;width:32%;height:100%;background:#b77b42;border-radius:8px;animation:recognition-slide 1.35s ease-in-out infinite alternate}.recognition-progress-track i.active{width:48%;background:#71945c}@keyframes recognition-slide{from{transform:translateX(0)}to{transform:translateX(205%)}}.recognition-progress small{display:block;font-size:10px;line-height:1.55;color:#786c56}.recognition-progress-tip{margin-top:4px;opacity:.8}.recognition-notice{padding:9px;background:#f0ead8;border:1px solid #ded2b4;border-radius:4px;margin:10px 0}.recognition-notice strong,.recognition-notice span{display:block}.recognition-notice strong{font-size:11px;color:#6e5b35}.recognition-notice span{font-size:10px;line-height:1.6;color:#81775f;margin-top:4px}.workspace{display:grid;grid-template-columns:190px minmax(0,1fr) 220px;min-height:0;flex:1}.tool-panel,.inspector{background:#f7f6ed;padding:17px 14px;border-right:1px solid #d1d2c5;overflow:auto}.inspector{border-right:0;border-left:1px solid #d1d2c5}.panel-title{font-size:11px;font-weight:800;letter-spacing:1px;color:#607363;margin:2px 0 13px}.tool-panel>button{width:100%;text-align:left;margin-bottom:7px}.tool-panel>button span{display:inline-block;width:23px;font-size:17px}.tool-panel>button.active{background:#e4eadc;border-color:#66866b}.panel-separator{height:1px;background:#d8d9cc;margin:17px 0}.tool-panel select,.inspector input:not([type=range]){width:100%;box-sizing:border-box;border:1px solid #c9cbbb;padding:8px;background:white;margin:7px 0 10px;color:#344b3b}.tool-panel label,.inspector label{display:block;font-size:11px;color:#69766a;margin:14px 0 5px}.tool-panel label b{float:right}.tool-panel input[type=range],.inspector input[type=range]{width:100%;accent-color:#527b58}.road-title{margin-top:22px}.hint{font-size:10px;line-height:1.7;color:#7b867a;margin-top:20px}.map-stage{display:flex;flex-direction:column;min-width:0;background:#d9dfc7}.stage-label{height:38px;display:flex;align-items:center;gap:8px;padding:0 16px;font-size:10px;font-weight:800;letter-spacing:1.1px;color:#4f6653}.stage-label em{font-style:normal;font-weight:400;letter-spacing:0;color:#899184}.live-dot{width:7px;height:7px;border-radius:50%;background:#72965c}.map-scroll{flex:1;min-height:0;overflow:hidden;position:relative;padding:0;touch-action:none;user-select:none;background-color:#d9dfc7;background-image:radial-gradient(#87987955 .7px,transparent .7px);background-size:16px 16px}.campus-map{display:block;width:100%;height:100%;background:#86a765;box-shadow:0 12px 35px #384a3528;touch-action:none;cursor:grab}.campus-map:active{cursor:grabbing}.building{cursor:move}.building:hover rect:first-child{stroke:#d69c43}.stage-footer{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:9px;color:#738071;background:#e8e9df}.selected-card{padding:12px;background:#e9eddf;border:1px solid #d1d9c8;margin-bottom:16px}.selected-card small,.selected-card strong,.selected-card span{display:block}.selected-card small{font-size:9px;color:#87917e}.selected-card strong{font-size:13px;margin:6px 0}.selected-card span{font-size:10px;color:#6e7d6e}.coordinate-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.coordinate-grid span{padding:7px;background:#eceee5;font-size:10px}.confidence{font-size:10px;color:#9a7542}.inspector .add-button,.inspector .danger-button{width:100%;margin-top:14px}.danger-button{border-color:#d8b7a9!important;color:#9b4d37!important;background:#fff8f4!important}.empty-inspector{font-size:11px;line-height:1.8;color:#879184;padding:20px 0}@media(max-width:900px){.workspace{grid-template-columns:150px minmax(0,1fr)}.inspector{display:none}.editor-header{padding:0 10px}.header-actions{gap:4px}.header-actions button{padding:7px}.brand small{display:none}}@media(max-width:600px){.workspace{grid-template-columns:112px minmax(0,1fr)}.tool-panel{padding:10px 7px}.tool-panel>button{font-size:10px;padding:7px 5px}.stage-footer span:last-child{display:none}.header-actions button:nth-child(3){display:none}}
 
 /* Workbench refresh: clearer hierarchy and directly discoverable editing actions */
@@ -791,6 +824,7 @@ function exportDocument() {
 .inspector-heading .panel-title{margin:0}.inspector-heading>span{font-size:8px;letter-spacing:1.2px;color:#a0aa9c}
 .selected-card{border-radius:8px;background:#eef3ea;border-color:#e0e8dc;padding:14px}
 .selected-card strong{color:#2e4e37;font-size:14px}
+.property-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.property-grid label{margin:4px 0 0;font-size:10px}.property-grid input{margin-top:5px!important;padding:7px!important;font-variant-numeric:tabular-nums}.property-hint{display:block;margin-top:8px}
 .inspector label{font-weight:600;color:#526653;margin-top:16px}
 .inspector input:not([type=range]),.inspector select{border-radius:5px}
 .inspector .add-button,.inspector .danger-button{border-radius:6px!important}

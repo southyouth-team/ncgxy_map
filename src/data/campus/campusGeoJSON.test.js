@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CAMPUS_AREAS, CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_ROAD_CENTERLINES } from './campusLayout.js'
-import { buildCampusGeoJSON, getCampusSpatialLayers, CAMPUS_SPATIAL_DATASET } from './campusGeoJSON.js'
+import { buildCampusGeoJSON, getCampusSpatialLayers, validateCampusGeoJSON, CAMPUS_SPATIAL_DATASET } from './campusGeoJSON.js'
 
 describe('统一校园空间数据出口', () => {
   it('明确使用同一套参考图像像素坐标，不伪装成测绘坐标', () => {
@@ -49,6 +49,28 @@ describe('统一校园空间数据出口', () => {
     expect(layers.buildings).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
     expect(layers.roads[0].points).toEqual(collection.features.find(feature => feature.id === layers.roads[0].id).geometry.coordinates)
     expect(layers.buildings[0].polygon[0]).toEqual(collection.features.find(feature => feature.id === layers.buildings[0].id).geometry.coordinates[0][0])
+  })
+
+
+  it('统一数据通过坐标、拓扑、来源和属性质检', () => {
+    const report = validateCampusGeoJSON()
+    expect(report.valid).toBe(true)
+    expect(report.errorCount).toBe(0)
+    expect(report.featureCount).toBe(CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length)
+  })
+
+  it('质检能识别越界坐标、重复 ID 和无效道路宽度', () => {
+    const collection = buildCampusGeoJSON()
+    const invalid = structuredClone(collection)
+    invalid.features[0].geometry.coordinates[0][0] = [-1, 900]
+    invalid.features[1].id = invalid.features[0].id
+    const road = invalid.features.find(feature => feature.properties.featureType === 'road')
+    road.properties.width = 0
+    const report = validateCampusGeoJSON(invalid)
+    expect(report.valid).toBe(false)
+    expect(report.errors.map(error => error.code)).toContain('COORDINATE_OUT_OF_BOUNDS')
+    expect(report.errors.map(error => error.code)).toContain('DUPLICATE_FEATURE_ID')
+    expect(report.errors.map(error => error.code)).toContain('INVALID_ROAD_WIDTH')
   })
 
   it('道路输出为 LineString，建筑 footprint 输出为 Polygon', () => {

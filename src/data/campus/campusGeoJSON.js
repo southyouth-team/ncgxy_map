@@ -169,3 +169,101 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
 
   return { areas, roads, buildings }
 }
+
+
+/**
+ * 校园空间数据静态质检。
+ * 返回结构化问题清单，不修改输入数据；可用于 CI、数据导入和编辑器保存前校验。
+ */
+export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset = CAMPUS_SPATIAL_DATASET) {
+  const errors = []
+  const warnings = []
+  const features = Array.isArray(collection?.features) ? collection.features : []
+  const seenIds = new Set()
+  const allowedConfidence = new Set(['low', 'medium', 'high'])
+  const allowedStatus = new Set(['verified', 'unverified'])
+
+  if (collection?.type !== 'FeatureCollection') {
+    errors.push({ code: 'INVALID_COLLECTION_TYPE', message: '根节点必须是 FeatureCollection' })
+  }
+  if (!Number.isFinite(dataset?.width) || !Number.isFinite(dataset?.height) || dataset.width <= 0 || dataset.height <= 0) {
+    errors.push({ code: 'INVALID_DATASET_BOUNDS', message: '数据集必须提供有效的图像宽高' })
+  }
+
+  const visitCoordinates = (value, featureId, path = 'geometry.coordinates') => {
+    if (!Array.isArray(value)) {
+      errors.push({ code: 'INVALID_COORDINATES', featureId, path, message: '坐标节点必须是数组' })
+      return
+    }
+    if (value.length >= 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
+      const [x, y] = value
+      if (x < 0 || y < 0 || x > dataset.width || y > dataset.height) {
+        errors.push({ code: 'COORDINATE_OUT_OF_BOUNDS', featureId, path, message: '坐标超出参考底图像素范围' })
+      }
+      if (value.length > 2 && !value.slice(2).every(Number.isFinite)) {
+        errors.push({ code: 'INVALID_COORDINATE_DIMENSION', featureId, path, message: '坐标附加维度必须为有限数值' })
+      }
+      return
+    }
+    value.forEach((child, index) => visitCoordinates(child, featureId, `${path}[${index}]`))
+  }
+
+  for (const [index, feature] of features.entries()) {
+    const featureId = feature?.id == null ? '' : String(feature.id)
+    if (!featureId) {
+      errors.push({ code: 'MISSING_FEATURE_ID', path: `features[${index}]`, message: 'Feature 缺少唯一 ID' })
+    } else if (seenIds.has(featureId)) {
+      errors.push({ code: 'DUPLICATE_FEATURE_ID', featureId, message: 'Feature ID 重复' })
+    } else {
+      seenIds.add(featureId)
+    }
+
+    const properties = feature?.properties || {}
+    if (!allowedConfidence.has(properties.confidence)) {
+      errors.push({ code: 'INVALID_CONFIDENCE', featureId, message: 'confidence 必须为 low、medium 或 high' })
+    }
+    if (!allowedStatus.has(properties.verificationStatus)) {
+      errors.push({ code: 'INVALID_VERIFICATION_STATUS', featureId, message: 'verificationStatus 必须为 verified 或 unverified' })
+    }
+    if (!properties.source) {
+      errors.push({ code: 'MISSING_SOURCE', featureId, message: 'Feature 必须记录数据来源' })
+    }
+
+    const geometry = feature?.geometry
+    if (!geometry || !['Polygon', 'LineString'].includes(geometry.type)) {
+      errors.push({ code: 'UNSUPPORTED_GEOMETRY', featureId, message: '仅允许 Polygon 或 LineString 几何' })
+      continue
+    }
+    if (geometry.type === 'LineString' && (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2)) {
+      errors.push({ code: 'INVALID_LINESTRING', featureId, message: '道路至少需要两个坐标点' })
+    }
+    if (geometry.type === 'Polygon') {
+      if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length === 0) {
+        errors.push({ code: 'INVALID_POLYGON', featureId, message: 'Polygon 至少需要一个外环' })
+      } else {
+        geometry.coordinates.forEach((ring, ringIndex) => {
+          if (!Array.isArray(ring) || ring.length < 4 ||
+            JSON.stringify(ring[0]) !== JSON.stringify(ring[ring.length - 1])) {
+            errors.push({ code: 'INVALID_POLYGON_RING', featureId, path: `geometry.coordinates[${ringIndex}]`, message: 'Polygon 环至少包含四个坐标且首尾闭合' })
+          }
+        })
+      }
+    }
+    if (properties.featureType === 'road' && (!Number.isFinite(properties.width) || properties.width <= 0)) {
+      errors.push({ code: 'INVALID_ROAD_WIDTH', featureId, message: '道路 width 必须为正数' })
+    }
+    visitCoordinates(geometry.coordinates, featureId)
+    if (properties.confidence === 'high' && properties.verificationStatus !== 'verified') {
+      warnings.push({ code: 'HIGH_CONFIDENCE_UNVERIFIED', featureId, message: '高置信度要素尚未完成核验，建议复查置信度标注' })
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    featureCount: features.length,
+    errorCount: errors.length,
+    warningCount: warnings.length,
+    errors,
+    warnings,
+  }
+}

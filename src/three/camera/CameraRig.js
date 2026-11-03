@@ -208,22 +208,36 @@ export class CameraRig {
     this.perspectiveCamera.updateProjectionMatrix()
   }
 
-  focusBounds(width, depth, centerX = 0, centerZ = 0) {
-    const span = Math.max(Number(width) || 80, Number(depth) || 60, 20) * 1.15
+  focusBounds(width, depth, centerX = 0, centerZ = 0, options = {}) {
+    // 正交相机的垂直视野需要同时容纳地图宽度和深度；窄屏时不能只按最大边长计算。
+    const aspect = Math.max(this.aspect, 0.1)
+    const fitHeight = Math.max(Number(depth) || 60, (Number(width) || 80) / aspect, 20)
+    const span = fitHeight * 1.15
     const targetX = Number.isFinite(centerX) ? centerX : 0
     const targetZ = Number.isFinite(centerZ) ? centerZ : 0
     this.overviewSpan = span
-    this.overviewCamera.left = -span * this.aspect / 2
-    this.overviewCamera.right = span * this.aspect / 2
+    this.overviewCamera.left = -span * aspect / 2
+    this.overviewCamera.right = span * aspect / 2
     this.overviewCamera.top = span / 2
     this.overviewCamera.bottom = -span / 2
     this.overviewCamera.updateProjectionMatrix()
     this.mode = 'overview'
     this.activateCamera(this.overviewCamera)
-    this.transitioningToOverview = true
     this.desiredTarget.set(targetX, 0, targetZ)
     this.desiredPosition.set(targetX, span * 0.78, targetZ + span * 0.78)
     this.orbit.target.set(targetX, 0, targetZ)
+
+    if (options.immediate) {
+      // 完整校园预览只按最终边界取景一次，不先展示小样板再做二次缩放。
+      this.camera.position.copy(this.desiredPosition)
+      this.currentPosition.copy(this.desiredPosition)
+      this.currentTarget.copy(this.desiredTarget)
+      this.camera.lookAt(this.currentTarget)
+      this.transitioningToOverview = false
+      this.orbit.enabled = true
+    } else {
+      this.transitioningToOverview = true
+    }
   }
 
   focusCampus() {

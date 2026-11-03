@@ -38,6 +38,7 @@ describe('南昌工学院像素校园主空间底图', () => {
     expect(CAMPUS_BUILDING_FOOTPRINTS.length).toBeGreaterThanOrEqual(45)
     const ids = CAMPUS_BUILDING_FOOTPRINTS.map(item => item.id)
     expect(new Set(ids).size).toBe(ids.length)
+    expect(CAMPUS_BUILDING_FOOTPRINTS.every(item => item.confidence === 'low')).toBe(true)
     for (const item of CAMPUS_BUILDING_FOOTPRINTS) {
       const [left, top, right, bottom] = item.rect
       expect(right).toBeGreaterThan(left)

@@ -359,7 +359,6 @@ export class ScenesService {
         const next = points[(index + 1) % points.length];
         return sum + point.x * next.z - next.x * point.z;
       }, 0)) / 2;
-      if (area < 1) throw new BadRequestException('建筑轮廓面积过小');
       const cross = (p: any, q: any, r: any) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
       for (let i = 0; i < points.length; i++) {
         const a = points[i], b = points[(i + 1) % points.length];
@@ -372,6 +371,7 @@ export class ScenesService {
           }
         }
       }
+      if (area < 1) throw new BadRequestException('建筑轮廓面积过小');
       const expansion = footprint.expansion || {};
       for (const side of ['north','south','east','west']) {
         const amount = Number(expansion[side] || 0);

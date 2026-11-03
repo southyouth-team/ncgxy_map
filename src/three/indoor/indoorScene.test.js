@@ -370,6 +370,33 @@ describe('indoor floor contract', () => {
     )).toBe(true)
   })
 
+  it('plans a continuous walk through room doorways on all four wall orientations', () => {
+    const cases = [
+      { wall: 'south', spawnPoint: { x: 0, y: 1.7, z: 7.5 }, plane: 'z', value: 3, sign: -1 },
+      { wall: 'north', spawnPoint: { x: 0, y: 1.7, z: -7.5 }, plane: 'z', value: -3, sign: 1 },
+      { wall: 'east', spawnPoint: { x: 10.5, y: 1.7, z: 0 }, plane: 'x', value: 4, sign: -1 },
+      { wall: 'west', spawnPoint: { x: -10.5, y: 1.7, z: 0 }, plane: 'x', value: -4, sign: 1 },
+    ]
+    for (const item of cases) {
+      const floor = {
+        ...sample,
+        spawnPoint: item.spawnPoint,
+        doors: [],
+        rooms: [{ ...sample.rooms[0], x: 0, z: 0, doorWall: item.wall, doorWidth: 1.6 }],
+      }
+      const group = createIndoorFloor(THREE, floor)
+      const interaction = group.userData.roomInteractions[0]
+      const route = group.userData.navigationGraph.findPath(item.spawnPoint, interaction.inside)
+      expect(route, item.wall).not.toBeNull()
+      expect(route?.length, item.wall).toBeGreaterThan(3)
+      const crossedDoorPlane = route?.some(point =>
+        Math.abs(point[item.plane] - item.value) <= 0.35 &&
+        Math.abs(point[item.plane === 'z' ? 'x' : 'z']) <= 0.35,
+      )
+      expect(crossedDoorPlane, item.wall).toBe(true)
+    }
+  })
+
   it('marks a room landmark disconnected when its doorway is blocked by a wall', () => {
     const blockedFloor = {
       ...sample,

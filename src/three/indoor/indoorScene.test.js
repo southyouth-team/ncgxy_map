@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { indoorBuildingDefinitions, validateIndoorBuilding } from './indoorBuildingDefinitions.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from './indoorBuildingDefinitions.js'
 
 
 const sample = {
@@ -128,5 +128,28 @@ describe('indoor stair construction', () => {
     expect(throughCenter.blockedZ).toBe(false)
     const intoRail = collision.move({ x: 8.8, z: 0 }, 1, 0)
     expect(intoRail.blockedX).toBe(true)
+  })
+})
+
+
+describe('campus footprint indoor generation', () => {
+  it('creates editable procedural floors from an approximate campus footprint', () => {
+    const building = createIndoorBuildingFromFootprint({
+      id: 'west-north-01',
+      label: '西北组团 01',
+      bounds: { minX: -6.5, maxX: 6.5, minZ: -1.5, maxZ: 1.5 },
+    }, { floors: 3, floorHeight: 3.8 })
+    expect(building.id).toBe('west-north-01')
+    expect(building.floors.map(floor => floor.level)).toEqual([1, 2, 3])
+    expect(building.layoutStatus).toBe('procedural-template')
+    expect(building.interiorNormalized).toBe(true)
+    expect(building.footprintSize).toEqual({ width: 13, depth: 3 })
+    for (const floor of building.floors) expect(validateIndoorFloor(floor)).toEqual([])
+    expect(validateIndoorBuilding(building)).toEqual([])
+  })
+
+  it('rejects invalid campus footprints', () => {
+    expect(() => createIndoorBuildingFromFootprint({ id: 'bad', bounds: { minX: 2, maxX: 1, minZ: 0, maxZ: 2 } }))
+      .toThrow('建筑轮廓尺寸无效')
   })
 })

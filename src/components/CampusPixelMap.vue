@@ -4,6 +4,8 @@ import {
   CAMPUS_AREAS,
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
+  pointInCampusArea,
+  pointInCampusPolygon,
 } from '../data/campus/campusLayout.js'
 
 const canvas = ref(null)
@@ -297,16 +299,6 @@ function drawTrees(ctx) {
     }
   })
 }
-function pointInPolygon(point, ring) {
-  let inside = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i], [xj, yj] = ring[j]
-    const intersect = ((yi > point[1]) !== (yj > point[1])) && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi
-    if (intersect) inside = !inside
-  }
-  return inside
-}
-
 const TREE_SPOTS = (() => {
   const spots = []
   for (let y = 80; y < 450; y += 24) {
@@ -314,7 +306,7 @@ const TREE_SPOTS = (() => {
       if ((x * 17 + y * 29) % 23 > 3) continue
       const nearBuilding = CAMPUS_BUILDING_FOOTPRINTS.some(({ rect: [l, t, r, b] }) => x > l - 9 && x < r + 9 && y > t - 9 && y < b + 9)
       const nearRoad = CAMPUS_ROAD_CENTERLINES.some(({ points }) => points.some(([px, py]) => Math.hypot(px - x, py - y) < 9))
-      const inWater = CAMPUS_AREAS.some(area => area.type === 'water' && area.polygon && pointInPolygon([x, y], area.polygon) && !(area.holes || []).some(hole => pointInPolygon([x, y], hole)))
+      const inWater = CAMPUS_AREAS.some(area => area.type === 'water' && area.polygon && pointInCampusPolygon([x, y], area.polygon) && !(area.holes || []).some(hole => pointInCampusPolygon([x, y], hole)))
       if (!nearBuilding && !nearRoad && !inWater) spots.push([x, y])
     }
   }
@@ -412,11 +404,7 @@ function hitTest(screenPoint) {
     if (px >= l - 3 && px <= r + 3 && py >= t - 4 && py <= b + 3) return { type: 'building', id: building.id, label: building.label, confidence: building.confidence }
   }
   for (const area of CAMPUS_AREAS) {
-    if (area.rect) {
-      const [l, t, r, b] = area.rect
-      if (px >= l && px <= r && py >= t && py <= b) return { type: area.type, id: area.id, name: area.name, confidence: area.confidence }
-    }
-    if (area.polygon && pointInPolygon([px, py], area.polygon)) return { type: area.type, id: area.id, name: area.name, confidence: area.confidence }
+    if (pointInCampusArea([px, py], area)) return { type: area.type, id: area.id, name: area.name, confidence: area.confidence }
   }
   return null
 }

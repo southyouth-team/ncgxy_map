@@ -77,7 +77,8 @@ export function validateIndoorBuilding(building) {
   const errors = []
   if (!building || typeof building !== 'object') return ['建筑配置必须是对象']
   if (!building.id) errors.push('建筑必须包含 id')
-  if (!Number.isFinite(building.floorHeight) || building.floorHeight < 2.5) errors.push('floorHeight 必须大于等于 2.5')
+  if (!Number.isFinite(building.floorHeight) || building.floorHeight < 2.5 || building.floorHeight > 10) errors.push('floorHeight 必须在 2.5 至 10 之间')
+  if (building.exterior && !['flat', 'glass', 'pitched', 'span'].includes(building.exterior.roofStyle)) errors.push('exterior.roofStyle 必须是 flat/glass/pitched/span')
   if (!Array.isArray(building.floors) || building.floors.length === 0) errors.push('建筑必须至少包含一个楼层')
   if (building.footprint) {
     if (!building.footprint.bounds || !['rect', 'polygon'].includes(building.footprint.type)) errors.push('建筑占地类型或边界无效')

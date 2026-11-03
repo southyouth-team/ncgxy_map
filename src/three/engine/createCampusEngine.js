@@ -808,6 +808,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         target.remove(child)
       })
       while (rebuilt.children.length) target.add(rebuilt.children[0])
+      for (const key of ['floorCount', 'floorHeight', 'buildingHeight', 'roofStyle', 'entrance']) {
+        if (rebuilt.userData[key] !== undefined) target.userData[key] = rebuilt.userData[key]
+      }
       rebuilt.clear()
 
       // 基座使用同一轮廓挤出，避免扩建后出现矩形底座露边。

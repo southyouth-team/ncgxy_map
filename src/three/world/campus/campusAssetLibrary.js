@@ -1,4 +1,4 @@
-// 星露谷式校园像素资产工坊：所有素材均为程序化原创占位资产，可被后续 GLB/Sprite 资源替换。
+// 等距像素风校园像素资产工坊：所有素材均为程序化原创占位资产，可被后续 GLB/Sprite 资源替换。
 export function createCampusMaterials(THREE) {
   const makePixelTexture = (base, accents, seed = 1) => {
     const canvas = document.createElement('canvas')
@@ -146,7 +146,7 @@ export function addPixelLamp(THREE, parent, x, z, mats) {
 }
 
 /**
- * 统一的星露谷风格建筑生成器。
+ * 统一的等距像素风格建筑生成器。
  * footprint 使用建筑局部 X/Z 平面坐标，shape 的 Y 轴代表 -Z。
  * 仅负责视觉资产，不代表真实建筑测绘尺寸。
  */
@@ -416,7 +416,7 @@ export function createPixelBuilding(THREE, options = {}) {
   const facadeMaterial = wallMaterial || materials[preset.wall] || materials.wall
   const group = new THREE.Group()
   group.name = label
-  group.userData.assetStyle = 'stardew-pixel-campus'
+  group.userData.assetStyle = 'isometric-pixel-campus'
   group.userData.confidence = confidence
   const shape = footprint && typeof footprint.getPoints === 'function' ? footprint : new THREE.Shape([
     new THREE.Vector2(-width / 2, -depth / 2),

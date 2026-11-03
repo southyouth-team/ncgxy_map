@@ -33,6 +33,23 @@ export const CAMPUS_PLAN_REFERENCE = {
 const bounds = CAMPUS_PLAN_REFERENCE.mapBounds
 const scale = CAMPUS_PLAN_REFERENCE.worldWidth / (bounds.right - bounds.left)
 
+/** 将道路/路径中心线转换为 Three.js 地面坐标点列。 */
+export function mapPolylineToWorld(points) {
+  if (!Array.isArray(points)) return []
+  return points.map(([x, y]) => mapPixelToWorld(x, y))
+}
+
+/** 将道路中心线及宽度转换为统一世界空间数据，供 3D 渲染、碰撞和寻路复用。 */
+export function mapRoadToWorld(road) {
+  if (!road || !Array.isArray(road.points)) return null
+  return {
+    id: road.id,
+    confidence: road.confidence,
+    points: mapPolylineToWorld(road.points),
+    width: (CAMPUS_ROAD_WIDTHS[road.id] || 12) * scale,
+  }
+}
+
 /** 判断图像坐标点是否落在闭合环内（射线法）。 */
 export function pointInCampusPolygon(point, ring) {
   if (!Array.isArray(ring) || ring.length < 3) return false
@@ -234,6 +251,11 @@ export const CAMPUS_ROAD_CENTERLINES = [
     points: [[270, 360], [315, 365], [360, 380], [400, 405], [430, 430]],
   },
 ]
+
+/** 道路图面宽度（像素）；统一作为 2D 绘制与 3D 地面宽度的唯一数据源。 */
+export const CAMPUS_ROAD_WIDTHS = Object.freeze(Object.fromEntries(
+  CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.id.includes('perimeter') ? 15 : 12]),
+))
 
 /**
  * 从平面图中可辨识的建筑轮廓近似标注。

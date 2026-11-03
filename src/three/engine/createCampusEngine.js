@@ -90,7 +90,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
     scene = new THREE.Scene()
     scene.background = new THREE.Color('#b9d0c2')
-    scene.fog = new THREE.Fog('#b9d0c2', 115, 310)
+    // 暂不启用线性雾效：低角度视线会让远处地面在固定深度区间内
+    // 出现横向雾化分界，视觉上像场景被水平裁切；先保持背景色统一以排除该因素。
+    scene.fog = null
 
     renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false })
     // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。

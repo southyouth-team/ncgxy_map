@@ -72,6 +72,7 @@ export function createCampusEngine(container, callbacks = {}) {
     // 从明确标记为建筑的场景对象提取世界包围盒，避免把道路、树木等误判为墙体。
     campus.updateMatrixWorld(true)
     const buildingObstacles = []
+    const circularObstacles = []
     const cameraObstacleRoots = []
     campus.traverse((object) => {
       if (!(object.userData?.buildingId || object.userData?.objectType === 'building')) return
@@ -88,12 +89,11 @@ export function createCampusEngine(container, callbacks = {}) {
       const radius = Number(object.userData?.collisionRadius)
       if (!(radius > 0)) return
       const position = object.getWorldPosition(new THREE.Vector3())
-      buildingObstacles.push({
-        minX: position.x - radius, maxX: position.x + radius,
-        minZ: position.z - radius, maxZ: position.z + radius,
-      })
+      circularObstacles.push({ x: position.x, z: position.z, radius })
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    // 树木、长椅和路灯使用圆形碰撞体，避免 AABB 方形外扩占用过多步行空间。
+    for (const obstacle of circularObstacles) collisionWorld.addCircleObstacle(obstacle)
     // 湖水不可通行；中央湖区保留 holes 中定义的岛屿步行区域。
     for (const area of CAMPUS_AREAS.filter(item => item.type === 'water' && item.polygon?.length >= 3)) {
       const toWorldRing = ring => ring.map(([x, y]) => {

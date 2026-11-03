@@ -277,9 +277,13 @@ describe('Campus map API (PostGIS integration)', () => {
       floorHeight: 3.6,
       footprintSize: { width: 12, depth: 8 },
       footprint: {
-        type: 'rect',
+        type: 'polygon',
         source: 'campus-plan',
         bounds: { minX: -6, maxX: 6, minZ: -4, maxZ: 4 },
+        polygon: [
+          { x: -6, z: -4 }, { x: 6, z: -4 },
+          { x: 6, z: 4 }, { x: -6, z: 4 },
+        ],
         expansion: { north: 0, south: 0, east: 2, west: 0 },
       },
       layoutStatus: 'procedural-template',

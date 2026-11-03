@@ -413,7 +413,8 @@ export function createCampusEngine(container, callbacks = {}) {
     cameraRig.player.z = safeSpawn.z
     cameraRig?.focusBounds(groundWidth, groundDepth, centerX, centerZ)
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
-    else if (cameraRig.mode === 'thirdPerson') cameraRig.updateThirdPersonDesired()    return true
+    else if (cameraRig.mode === 'thirdPerson') cameraRig.updateThirdPersonDesired()
+    return true
   }
 
   function onScenePointerDown(event) {

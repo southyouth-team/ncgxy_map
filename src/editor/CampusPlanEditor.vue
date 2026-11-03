@@ -116,6 +116,31 @@ const areas = ref(CAMPUS_AREAS.map((item) => ({
 })))
 const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item.points.map((point) => [...point]) })))
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
+const multiSelection = ref([])
+const selectionCount = computed(() => multiSelection.value.length || (selected.value.id ? 1 : 0))
+function toggleMultiSelection(type, id, event) {
+  if (!event?.shiftKey) { multiSelection.value = []; selected.value = { type, id }; return false }
+  const index = multiSelection.value.findIndex(item => item.type === type && item.id === id)
+  if (index >= 0) multiSelection.value.splice(index, 1)
+  else if (!isLayerLocked(type)) multiSelection.value.push({ type, id })
+  selected.value = multiSelection.value.at(-1) || { type: '', id: '' }
+  return true
+}
+function clearMultiSelection() { multiSelection.value = [] }
+function deleteSelectionBatch() {
+  const targets = multiSelection.value.length ? [...multiSelection.value] : (selected.value.id ? [selected.value] : [])
+  if (!targets.length) return
+  const deletable = targets.filter(item => !isLayerLocked(item.type))
+  if (!deletable.length) return
+  snapshot()
+  const ids = { building: new Set(), road: new Set(), area: new Set() }
+  deletable.forEach(item => ids[item.type]?.add(item.id))
+  buildings.value = buildings.value.filter(item => !ids.building.has(item.id))
+  roads.value = roads.value.filter(item => !ids.road.has(item.id))
+  areas.value = areas.value.filter(item => !ids.area.has(item.id))
+  selected.value = { type: '', id: '' }
+  multiSelection.value = []
+}
 // 图层状态仅控制编辑视图与交互，不写入地图业务数据。
 const layerStates = ref({ buildings: { visible: true, locked: false }, roads: { visible: true, locked: false }, areas: { visible: true, locked: false } })
 const clipboardObject = ref(null)
@@ -148,7 +173,8 @@ function handleEditorKeydown(event) {
   const modifier = event.ctrlKey || event.metaKey
   if (modifier && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); return }
   if (modifier && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteCopied(); return }
-  if ((event.key === 'Delete' || event.key === 'Backspace') && selected.value.id) { event.preventDefault(); deleteSelected() }
+  if ((event.key === 'Delete' || event.key === 'Backspace') && (selected.value.id || multiSelection.value.length)) { event.preventDefault(); deleteSelected() }
+  if (event.key === 'Escape') { clearMultiSelection(); selected.value = { type: '', id: '' } }
 }
 const tool = ref('select')
 const scale = ref(1)
@@ -541,7 +567,7 @@ function point(event) {
 function startBuildingDrag(event, item) {
   if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('building')) return
   event.stopPropagation()
-  selected.value = { type: 'building', id: item.id }
+  if (toggleMultiSelection('building', item.id, event)) return
   snapshot()
   const p = point(event)
   drag.value = { type: 'building', id: item.id, start: p, footprint: item.footprint.map((point) => [...point]) }
@@ -550,7 +576,7 @@ function startBuildingDrag(event, item) {
 function startAreaDrag(event, area) {
   if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('area')) return
   event.stopPropagation()
-  selected.value = { type: 'area', id: area.id }
+  if (toggleMultiSelection('area', area.id, event)) return
   snapshot()
   const p = point(event)
   drag.value = { type: 'area', id: area.id, start: p, footprint: area.footprint.map((vertex) => [...vertex]) }
@@ -567,7 +593,7 @@ function startPolygonVertexDrag(event, type, item, index) {
 function startRoadNodeDrag(event, road, index) {
   if (event.button !== 0 || isLayerLocked('road')) return
   event.stopPropagation()
-  selected.value = { type: 'road', id: road.id }
+  if (toggleMultiSelection('road', road.id, event)) return
   snapshot()
   drag.value = { type: 'node', id: road.id, index }
   event.currentTarget.setPointerCapture?.(event.pointerId)
@@ -688,6 +714,7 @@ function removeRoadNode(index) {
   road.points.splice(index, 1)
 }
 function deleteSelected() {
+  if (multiSelection.value.length > 1) { deleteSelectionBatch(); return }
   if (!selected.value.id || isLayerLocked(selected.value.type)) return
   snapshot()
   if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
@@ -775,11 +802,11 @@ function exportDocument() {
         <div class="panel-title road-title">道路工具</div>
         <label>道路宽度 <b>{{ roadWidth }} px</b></label><input v-model.number="roadWidth" type="range" min="4" max="24">
         <button class="add-button" @click="addRoad">＋ 新建道路</button>
-        <p class="hint">快捷键：Ctrl/Cmd + C 复制，Ctrl/Cmd + V 粘贴，Delete 删除。复制对象后会在右下方偏移 24 像素生成副本。</p><p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
+        <p class="hint">快捷键：Shift + 点击多选；Ctrl/Cmd + C 复制，Ctrl/Cmd + V 粘贴，Delete 批量删除，Esc 清空选择。复制对象后会在右下方偏移 24 像素生成副本。</p><p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
-        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><button @click="copySelected" :disabled="!selected.id || isLayerLocked(selected.type)">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || (clipboardObject && isLayerLocked(clipboardObject.type))">粘贴</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id || isLayerLocked(selected.type)">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || (clipboardObject && isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
           <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
@@ -787,18 +814,18 @@ function exportDocument() {
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
             <rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="#86a765"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#grass-pattern)" opacity=".42"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
-            <g v-if="layerStates.areas.visible" v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="!isLayerLocked('area') && (selected={type:'area',id:area.id})">
+            <g v-if="layerStates.areas.visible" v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)" @click.stop="!isLayerLocked('area') && toggleMultiSelection('area',area.id,$event)">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
             <g v-if="showGrid"><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#map-grid)"/></g>
             <path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
             <g v-if="layerStates.roads.visible" v-for="road in roads" :key="road.id" class="map-feature">
-              <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="!isLayerLocked('road') && (selected={type:'road',id:road.id})"/>
+              <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" @click.stop="!isLayerLocked('road') && toggleMultiSelection('road',road.id,$event)"/>
               <path v-if="selected.id===road.id" :d="roadPath(road.points)" fill="none" stroke="#d59a43" :stroke-width="Math.max(2,(road.width || 13)*0.18)" stroke-linecap="round" pointer-events="none"/>
               <g v-if="selected.id===road.id"><circle v-for="(node,index) in road.points" :key="index" :cx="node[0]" :cy="node[1]" r="5" fill="#f0bc61" stroke="#3c4a3d" stroke-width="2" @pointerdown="startRoadNodeDrag($event,road,index)" @dblclick.stop="removeRoadNode(index)"/></g>
             </g>
-            <g v-if="layerStates.buildings.visible" v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)" @click.stop="!isLayerLocked('building') && (selected={type:'building',id:item.id})">
+            <g v-if="layerStates.buildings.visible" v-for="item in buildings" :key="item.id" class="building map-feature" @pointerdown="startBuildingDrag($event,item)" @click.stop="!isLayerLocked('building') && toggleMultiSelection('building',item.id,$event)">
               <polygon :points="item.footprint.map(p=>p.join(',')).join(' ')" :fill="buildingWallColor(item)" stroke="#75473e" stroke-width="2"/>
               <path :d="'M '+(item.rect[0]+3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))+' L '+((item.rect[0]+item.rect[2])/2)+' '+(item.rect[1]-Math.max(3,(item.rect[3]-item.rect[1])*(buildingPreset(item).roofRise/10)))+' L '+(item.rect[2]-3)+' '+(item.rect[1]+Math.max(5,(item.rect[3]-item.rect[1])*.22))" fill="none" stroke="#a85f4e" stroke-width="5" stroke-linejoin="round"/>
               <g fill="#8bc3c5" stroke="#f3dfb5" stroke-width="1">
@@ -893,7 +920,7 @@ function exportDocument() {
 .inspector-heading .panel-title{margin:0}.inspector-heading>span{font-size:8px;letter-spacing:1.2px;color:#a0aa9c}
 .selected-card{border-radius:8px;background:#eef3ea;border-color:#e0e8dc;padding:14px}
 .selected-card strong{color:#2e4e37;font-size:14px}
-.layer-panel{margin:0 0 4px}.layer-panel>.panel-title{margin-bottom:9px}.layer-panel>.panel-title small{font-size:8px;color:#a0aa9c;letter-spacing:1px}.layer-row{display:flex;align-items:center;gap:6px;padding:8px 6px;margin:5px 0;background:#fff;border:1px solid #e3e8df;border-radius:6px}.layer-row.hidden{opacity:.58;background:#f1f2ed}.layer-row.locked{border-color:#d8c7a8;background:#fbf7ed}.layer-icon{display:grid;place-items:center;width:25px;height:25px;border-radius:5px;background:#edf2e9;color:#48694d}.layer-name{flex:1;min-width:0}.layer-name b,.layer-name small{display:block}.layer-name b{font-size:10px;color:#425845}.layer-name small{margin-top:3px;font-size:9px;color:#8a9587}.layer-action{width:25px;height:25px;padding:0!important;border-radius:4px!important;font-size:13px!important}.layer-help{display:block;font-size:9px;line-height:1.6;color:#879184;margin:8px 2px 0}.property-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.property-grid label{margin:4px 0 0;font-size:10px}.property-grid input{margin-top:5px!important;padding:7px!important;font-variant-numeric:tabular-nums}.property-hint{display:block;margin-top:8px}
+.selection-count{font-size:10px;color:#637b67;white-space:nowrap}.layer-panel{margin:0 0 4px}.layer-panel>.panel-title{margin-bottom:9px}.layer-panel>.panel-title small{font-size:8px;color:#a0aa9c;letter-spacing:1px}.layer-row{display:flex;align-items:center;gap:6px;padding:8px 6px;margin:5px 0;background:#fff;border:1px solid #e3e8df;border-radius:6px}.layer-row.hidden{opacity:.58;background:#f1f2ed}.layer-row.locked{border-color:#d8c7a8;background:#fbf7ed}.layer-icon{display:grid;place-items:center;width:25px;height:25px;border-radius:5px;background:#edf2e9;color:#48694d}.layer-name{flex:1;min-width:0}.layer-name b,.layer-name small{display:block}.layer-name b{font-size:10px;color:#425845}.layer-name small{margin-top:3px;font-size:9px;color:#8a9587}.layer-action{width:25px;height:25px;padding:0!important;border-radius:4px!important;font-size:13px!important}.layer-help{display:block;font-size:9px;line-height:1.6;color:#879184;margin:8px 2px 0}.property-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.property-grid label{margin:4px 0 0;font-size:10px}.property-grid input{margin-top:5px!important;padding:7px!important;font-variant-numeric:tabular-nums}.property-hint{display:block;margin-top:8px}
 .inspector label{font-weight:600;color:#526653;margin-top:16px}
 .inspector input:not([type=range]),.inspector select{border-radius:5px}
 .inspector .add-button,.inspector .danger-button{border-radius:6px!important}

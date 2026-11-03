@@ -359,7 +359,7 @@ export function normalizeBuildingParameters(preset = {}, overrides = {}) {
   const height = read('height', Number(preset.height) || 4, 1, 80)
   const floors = Math.min(
     Math.max(1, Math.floor(read('floors', Number(preset.floors) || 1, 1, 30))),
-    Math.max(1, Math.floor(height / 1.8)),
+    Math.max(1, Math.floor(height / 0.8)),
   )
   const roofStyle = ['flat', 'pitched', 'span', 'glass'].includes(overrides.roofStyle)
     ? overrides.roofStyle

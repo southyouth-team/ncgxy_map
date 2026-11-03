@@ -676,7 +676,8 @@ function pointInsidePolygon(point, polygon) {
 function segmentsIntersect(a, b, c, d) {
   const cross = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
   const ab1 = cross(a, b, c), ab2 = cross(a, b, d), cd1 = cross(c, d, a), cd2 = cross(c, d, b)
-  return ab1 * ab2 <= 0 && cd1 * cd2 <= 0
+  const overlaps = Math.max(Math.min(a[0], b[0]), Math.min(c[0], d[0])) <= Math.min(Math.max(a[0], b[0]), Math.max(c[0], d[0])) && Math.max(Math.min(a[1], b[1]), Math.min(c[1], d[1])) <= Math.min(Math.max(a[1], b[1]), Math.max(c[1], d[1]))
+  return overlaps && ab1 * ab2 <= 0 && cd1 * cd2 <= 0
 }
 function featureMatchesBox(type, feature, rect, contain) {
   const points = type === 'road' ? feature.points : feature.footprint

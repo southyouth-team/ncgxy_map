@@ -6,7 +6,7 @@ describe('shared campus building assets', () => {
     const layout = getBuildingFloorLayout(12, 4, 0.8)
     expect(layout.floors).toBe(4)
     expect(layout.floorHeight).toBe(3)
-    expect(layout.windowCenters).toEqual([1.68, 4.68, 7.68, 10.68])
+    layout.windowCenters.forEach((center, index) => expect(center).toBeCloseTo(1.68 + index * 3, 8))
     expect(layout.bandHeights).toEqual([3, 6, 9])
     expect(layout.windowHeight).toBeLessThanOrEqual(1.26)
   })

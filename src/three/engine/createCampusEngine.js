@@ -472,9 +472,42 @@ export function createCampusEngine(container, callbacks = {}) {
     }
     const hits = raycaster.intersectObjects(campus.children, true)
     let target = hits[0]?.object || null
-    while (target && target !== campus && !target.userData?.featureId) target = target.parent
-    if (!target || target === campus || !target.userData?.featureId) return clearSelection()
-    selectObject(target.userData.featureId)
+    while (target && target !== campus
+      && !target.userData?.featureId
+      && !target.userData?.buildingId
+      && target.userData?.objectType !== 'landmark-label') target = target.parent
+    if (!target || target === campus) return clearSelection()
+    if (target.userData?.featureId) selectObject(target.userData.featureId)
+    else selectCampusObject(target)
+  }
+
+  function selectCampusObject(target) {
+    if (!target || target === campus) return clearSelection()
+    if (selectedFeatureObject === target) return
+    restoreSelectionHighlight()
+    selectedIndoorObject = null
+    selectedFeatureObject = target
+    target.traverse((object) => {
+      if (!object.isMesh || !object.material) return
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      object.userData.selectionOriginalMaterials = materials.map((material) => ({
+        color: material.emissive?.getHex?.() ?? 0,
+        intensity: material.emissiveIntensity ?? 1,
+      }))
+      materials.forEach((material) => {
+        if (material.emissive) {
+          material.emissive.set('#f0b84d')
+          material.emissiveIntensity = 0.65
+        }
+      })
+    })
+    callbacks.onObjectSelected?.({
+      featureId: null,
+      buildingId: target.userData.buildingId || null,
+      sceneObjectId: null,
+      objectType: target.userData.objectType || (target.userData.buildingId ? 'building' : 'campus-object'),
+      name: target.userData.displayName || target.name || '校园对象',
+    })
   }
 
   function selectIndoorObject(target) {

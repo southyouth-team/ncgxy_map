@@ -158,7 +158,8 @@ function getFeatureBounds(type, feature) {
   const points = type === 'road' ? feature.points : feature.footprint
   if (!points || !points.length) return null
   const xs = points.map(point => point[0]), ys = points.map(point => point[1])
-  return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) }
+  const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys)
+  return { left, right, top, bottom, width: right - left, height: bottom - top }
 }
 function alignSelection(mode) {
   const targets = multiSelection.value.filter(entry => !isLayerLocked(entry.type)).map(entry => {

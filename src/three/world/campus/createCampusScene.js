@@ -174,6 +174,7 @@ export function createCampusScene(THREE) {
     sprite.position.set(point.x, 3.1, point.z)
     sprite.scale.set(width, width * 0.25, 1)
     sprite.userData.objectType = 'landmark-label'
+    sprite.userData.displayName = text
     root.add(sprite)
   }
   addPixelLandmarkLabel('central-lake', '中央湖区', 545, 222, 10.5)
@@ -196,6 +197,7 @@ export function createCampusScene(THREE) {
     const buildingHeight = group.userData.buildingHeight || 3.8
     group.position.set(bounds.x, 0.16, bounds.z)
     group.userData.buildingId = item.id
+    group.userData.objectType = 'building'
     group.userData.displayName = item.label
     // 外轮廓与生成器最终采用的建筑高度一致，不再覆盖屋顶或门窗。
     const outline = new THREE.LineSegments(

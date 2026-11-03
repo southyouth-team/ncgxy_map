@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, isAtStairLanding, createStairPath, getStairStepHeight, getIndoorInteractionPrompt, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, isAtStairLanding, createStairPath, getStairStepHeight, getIndoorInteractionPrompt, buildIndoorNavigationGraph, validateIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance, transformIndoorFootprint, normalizeIndoorEntrancePoint } from './indoorBuildingDefinitions.js'
 

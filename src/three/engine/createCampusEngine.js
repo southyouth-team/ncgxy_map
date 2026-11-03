@@ -1172,6 +1172,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       ...options,
       floors: options.floors ?? options.floorsData?.length ?? target.userData?.floorCount ?? 1,
       floorHeight: options.floorHeight ?? target.userData?.floorHeight ?? 3.6,
+      doorWidth: options.doorWidth ?? target.userData?.rebuildOptions?.doorWidth,
       entrancePoint: transformedFootprint.entrancePoint,
     }
     const generated = createIndoorBuildingFromFootprint(footprint, generationOptions)

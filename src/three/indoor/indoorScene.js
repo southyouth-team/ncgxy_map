@@ -466,6 +466,21 @@ export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}
   }
 }
 
+/**
+ * 检查室内导航图中的出生点、出口、楼梯和房间入口是否与出生点处于同一连通分量。
+ * 该结果用于数据验收，不会把不可达目标伪装成可交互目标。
+ */
+export function validateIndoorNavigationGraph(graph) {
+  if (!graph || !graph.summary || !Array.isArray(graph.points)) {
+    return { valid: false, errors: ['室内导航图结构无效'] }
+  }
+  const errors = []
+  if (!graph.summary.spawnReachable) errors.push('室内出生点无法落入可行走导航网格')
+  const disconnected = graph.points.filter(point => point.type !== 'spawn' && !point.reachableFromSpawn)
+  for (const point of disconnected) errors.push(`导航目标 ${point.id} 无法从出生点到达`)
+  return { valid: errors.length === 0, errors }
+}
+
 export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
   const errors = validateIndoorFloor(floor)
   if (errors.length) throw new TypeError(errors.join('；'))
@@ -731,6 +746,7 @@ export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
   })
   group.userData.navigationGraph = navigation
   group.userData.navigationSummary = navigation.summary
+  group.userData.navigationValidation = validateIndoorNavigationGraph(navigation)
   group.userData.collisionObstacles = collision
   group.userData.spawnPoint = floor.spawnPoint || { x: 0, y: 1.7, z: 0 }
   group.userData.exits = doors.map(door => ({ ...door }))

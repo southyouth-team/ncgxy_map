@@ -549,11 +549,12 @@ export function createIndoorFloor(THREE, floor) {
     roomInteractions: getRoomInteractionPoints(floor),
     stairPoint,
     exitInteractions: doors.map(door => {
+      const offset = Number(door.offset) || 0
       const distance = 1.15
-      if (door.wall === 'south') return { x: Number(door.offset) || 0, z: halfD + distance }
-      if (door.wall === 'north') return { x: Number(door.offset) || 0, z: -halfD - distance }
-      if (door.wall === 'east') return { x: halfW + distance, z: Number(door.offset) || 0 }
-      return { x: -halfW - distance, z: Number(door.offset) || 0 }
+      if (door.wall === 'south') return { x: offset, z: halfD - distance }
+      if (door.wall === 'north') return { x: offset, z: -halfD + distance }
+      if (door.wall === 'east') return { x: halfW - distance, z: offset }
+      return { x: -halfW + distance, z: offset }
     }),
   })
   group.userData.navigationGraph = navigation

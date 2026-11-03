@@ -102,6 +102,42 @@ export function createCampusScene(THREE) {
     root.add(path)
   }
 
+  // 运动场边线与中心标记：让校园远景中的场地具备明确的运动设施识别度。
+  function addSportsMarkings(rect, id) {
+    const [left, top, right, bottom] = rect
+    const inset = 4
+    const corners = [
+      [left + inset, top + inset], [right - inset, top + inset],
+      [right - inset, bottom - inset], [left + inset, bottom - inset],
+    ]
+    const toVector = ([x, y]) => {
+      const point = mapPixelToWorld(x, y)
+      return new THREE.Vector3(point.x, 0.19, point.z)
+    }
+    const material = new THREE.LineBasicMaterial({ color: '#f1e8cf', transparent: true, opacity: 0.82 })
+    const addLine = (points, loop = false) => {
+      const geometry = new THREE.BufferGeometry().setFromPoints(points.map(toVector))
+      const line = new THREE.Line(geometry, material)
+      line.name = 'sports-marking-' + id
+      line.userData.objectType = 'sports-marking'
+      root.add(line)
+    }
+    addLine(corners, true)
+    const centerX = (left + right) / 2
+    const centerY = (top + bottom) / 2
+    addLine([[centerX, top + inset], [centerX, bottom - inset]])
+    const radius = Math.min(right - left, bottom - top) * 0.16
+    const circle = Array.from({ length: 25 }, (_, index) => {
+      const angle = index / 24 * Math.PI * 2
+      return [centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius]
+    })
+    addLine(circle)
+    const boxDepth = (bottom - top) * 0.12
+    addLine([[left + inset, centerY - boxDepth], [left + inset + (right - left) * 0.18, centerY - boxDepth], [left + inset + (right - left) * 0.18, centerY + boxDepth], [left + inset, centerY + boxDepth]])
+    addLine([[right - inset, centerY - boxDepth], [right - inset - (right - left) * 0.18, centerY - boxDepth], [right - inset - (right - left) * 0.18, centerY + boxDepth], [right - inset, centerY + boxDepth]])
+  }
+  CAMPUS_AREAS.filter(area => area.type === 'sports' && area.rect).forEach(area => addSportsMarkings(area.rect, area.id))
+
   const wallPalette = [mats.wall, mats.wallPeach, mats.wallMint, mats.wallCream]
   function addCampusBuilding(item, index) {
     const bounds = mapRectToWorld(item.rect)
@@ -109,7 +145,7 @@ export function createCampusScene(THREE) {
     const depth = Math.max(2.4, bounds.depth)
     const height = item.confidence === 'medium' ? 4.2 : 3.4
     const group = createPixelBuilding(THREE, {
-      width, depth, height: item.height || (item.confidence === 'medium' ? 4.2 : undefined), template: item.template || item.label, materials: mats,
+      width, depth, height: item.height || (item.confidence === 'medium' ? 4.2 : undefined), template: item.template || ['教学楼', '宿舍楼', '实验楼', '办公楼'][index % 4], materials: mats,
       wallMaterial: wallPalette[index % wallPalette.length],
       label: item.label || item.id,
       confidence: item.confidence || 'unverified',
@@ -136,21 +172,28 @@ export function createCampusScene(THREE) {
     [225,420,0.92],[330,430,1.05],[485,435,0.9],[75,220,1],[85,260,0.95],[570,180,0.9],
     [155,205,0.78],[315,335,0.82],[405,245,0.88],[460,360,0.9],[125,385,0.78],[545,420,0.82],
     [350,115,0.75],[205,120,0.78],
+    [185,215,0.82],[205,175,0.78],[235,170,0.88],[265,180,0.82],[300,225,0.78],
+    [315,245,0.9],[345,260,0.86],[355,300,0.92],[335,340,0.88],[290,365,0.82],
+    [205,380,0.86],[245,395,0.9],[285,410,0.82],[365,405,0.88],[405,420,0.92],
+    [445,430,0.82],[475,410,0.9],[515,385,0.86],[555,385,0.92],[575,320,0.82],
+    [560,245,0.9],[535,205,0.86],[500,185,0.82],[460,185,0.9],[420,185,0.82],
+    [380,155,0.88],[345,145,0.82],[305,145,0.9],[270,135,0.82],[235,145,0.88],
+    [155,285,0.82],[135,315,0.88],[120,350,0.82],[90,375,0.9],[70,405,0.82],
   ]
   treePositions.forEach(([px, py, scale], index) => {
     const point = mapPixelToWorld(px, py)
     addPixelTree(THREE, root, point.x, point.z, scale, index, mats)
   })
-  const flowerPositions = [[150,245],[300,190],[340,315],[465,205],[500,390],[205,395],[90,185]]
+  const flowerPositions = [[150,245],[300,190],[340,315],[465,205],[500,390],[205,395],[90,185],[220,205],[275,175],[320,300],[360,355],[430,365],[485,235],[540,285],[165,345],[250,420],[390,430],[520,430]]
   flowerPositions.forEach(([px, py], index) => {
     const point = mapPixelToWorld(px, py)
     addPixelFlowerPatch(THREE, root, point.x, point.z, mats, index % 2 ? 4 : 6)
   })
-  ;[[260,175],[430,390],[115,275]].forEach(([px, py]) => {
+  ;[[260,175],[430,390],[115,275],[315,355],[475,365],[215,420]].forEach(([px, py]) => {
     const point = mapPixelToWorld(px, py)
     addPixelBench(THREE, root, point.x, point.z, mats)
   })
-  ;[[175,180],[390,185],[510,320],[275,405]].forEach(([px, py]) => {
+  ;[[175,180],[390,185],[510,320],[275,405],[245,205],[330,245],[365,330],[445,410],[550,365],[135,350],[205,415]].forEach(([px, py]) => {
     const point = mapPixelToWorld(px, py)
     addPixelLamp(THREE, root, point.x, point.z, mats)
   })

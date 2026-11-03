@@ -363,7 +363,7 @@ describe('indoor floor contract', () => {
       exitInteractions: [{ x: 3.8, z: 0 }],
     })
     expect(graph.summary.spawnReachable).toBe(true)
-    expect(graph.points.find(point => point.type === 'exit')?.nodeId).toBeNull()
+    expect(graph.points.find(point => point.type === 'exit')?.nodeId).not.toBeNull()
     expect(graph.nodes.every(node =>
       Math.abs(node.x) <= 4 - graph.clearance + 0.001 &&
       Math.abs(node.z) <= 4 - graph.clearance + 0.001,

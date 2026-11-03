@@ -206,6 +206,110 @@ export function getRoomInteractionPoints(floor) {
  * 构建单层室内空间。doors 是外墙门洞定义：
  * { wall: 'north'|'south'|'east'|'west', offset, width }，offset 从墙体中心沿墙方向计。
  */
+export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}) {
+  const step = 0.5
+  const clearance = 0.42
+  const halfW = floor.width / 2
+  const halfD = floor.depth / 2
+  const polygon = Array.isArray(floor.footprintPolygon) ? floor.footprintPolygon : null
+  const isInsidePolygon = (x, z) => {
+    if (!polygon || polygon.length < 3) return true
+    let inside = false
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const a = polygon[i], b = polygon[j]
+      const crosses = (a.z > z) !== (b.z > z) &&
+        x < ((b.x - a.x) * (z - a.z)) / ((b.z - a.z) || 1e-9) + a.x
+      if (crosses) inside = !inside
+    }
+    return inside
+  }
+  const isBlocked = (x, z) => obstacles.some(obstacle => {
+    if (![obstacle.minX, obstacle.maxX, obstacle.minZ, obstacle.maxZ].every(Number.isFinite)) return false
+    return x + clearance > obstacle.minX && x - clearance < obstacle.maxX &&
+      z + clearance > obstacle.minZ && z - clearance < obstacle.maxZ
+  })
+  const nodes = []
+  const lookup = new Map()
+  const columns = Math.floor(floor.width / step)
+  const rows = Math.floor(floor.depth / step)
+  for (let iz = 0; iz <= rows; iz += 1) {
+    const z = -halfD + iz * step
+    for (let ix = 0; ix <= columns; ix += 1) {
+      const x = -halfW + ix * step
+      if (!isInsidePolygon(x, z) || isBlocked(x, z)) continue
+      const id = nodes.length
+      nodes.push({ id, x: Number(x.toFixed(3)), z: Number(z.toFixed(3)), neighbors: [] })
+      lookup.set(ix + ':' + iz, id)
+    }
+  }
+  for (let iz = 0; iz <= rows; iz += 1) {
+    for (let ix = 0; ix <= columns; ix += 1) {
+      const id = lookup.get(ix + ':' + iz)
+      if (id === undefined) continue
+      const node = nodes[id]
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const neighbor = lookup.get((ix + dx) + ':' + (iz + dz))
+        if (neighbor !== undefined) node.neighbors.push(neighbor)
+      }
+    }
+  }
+  const nearestNode = point => {
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.z) || !nodes.length) return null
+    let nearest = null, distanceSquared = Infinity
+    for (const node of nodes) {
+      const dx = node.x - point.x, dz = node.z - point.z
+      const distance = dx * dx + dz * dz
+      if (distance < distanceSquared) { nearest = node; distanceSquared = distance }
+    }
+    return distanceSquared <= 1.1 * 1.1 ? nearest.id : null
+  }
+  const components = new Int32Array(nodes.length).fill(-1)
+  let componentCount = 0
+  for (const node of nodes) {
+    if (components[node.id] !== -1) continue
+    const queue = [node.id]
+    components[node.id] = componentCount
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const current = nodes[queue[cursor]]
+      for (const neighbor of current.neighbors) {
+        if (components[neighbor] !== -1) continue
+        components[neighbor] = componentCount
+        queue.push(neighbor)
+      }
+    }
+    componentCount += 1
+  }
+  const points = [
+    { id: 'spawn', type: 'spawn', point: floor.spawnPoint || { x: 0, z: 0 } },
+    ...(landmarks.roomInteractions || []).flatMap(room => [
+      { id: 'room:' + room.roomId + ':approach', type: 'room-approach', point: room.approach },
+      { id: 'room:' + room.roomId + ':inside', type: 'room-inside', point: room.inside },
+    ]),
+    ...(landmarks.stairPoint ? [{ id: 'stairs', type: 'stairs', point: landmarks.stairPoint }] : []),
+    ...(landmarks.exitInteractions || []).map((point, index) => ({ id: 'exit:' + index, type: 'exit', point })),
+  ].map(item => {
+    const nodeId = nearestNode(item.point)
+    return { id: item.id, type: item.type, point: item.point, nodeId, reachableFromSpawn: false }
+  })
+  const spawnNode = points.find(item => item.type === 'spawn')?.nodeId
+  const spawnComponent = spawnNode === null || spawnNode === undefined ? -1 : components[spawnNode]
+  for (const point of points) {
+    point.reachableFromSpawn = point.nodeId !== null && spawnComponent >= 0 && components[point.nodeId] === spawnComponent
+  }
+  return {
+    step,
+    clearance,
+    nodes,
+    points,
+    summary: {
+      nodeCount: nodes.length,
+      componentCount,
+      spawnReachable: spawnNode !== null && spawnNode !== undefined,
+      disconnectedPoints: points.filter(point => !point.reachableFromSpawn).map(point => point.id),
+    },
+  }
+}
+
 export function createIndoorFloor(THREE, floor) {
   const errors = validateIndoorFloor(floor)
   if (errors.length) throw new TypeError(errors.join('；'))
@@ -440,6 +544,20 @@ export function createIndoorFloor(THREE, floor) {
   const stairEnd = rotateStairPoint(0, 2.1)
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
   group.userData.stairPath = { start: stairStart, end: stairEnd, rise: 4.2, direction: stairPoint.direction || 'south' }
+  // 以实际碰撞障碍生成低分辨率导航网格，供室内可达性校验和后续寻路复用。
+  const navigation = buildIndoorNavigationGraph(floor, collision, {
+    roomInteractions: getRoomInteractionPoints(floor),
+    stairPoint,
+    exitInteractions: doors.map(door => {
+      const distance = 1.15
+      if (door.wall === 'south') return { x: Number(door.offset) || 0, z: halfD + distance }
+      if (door.wall === 'north') return { x: Number(door.offset) || 0, z: -halfD - distance }
+      if (door.wall === 'east') return { x: halfW + distance, z: Number(door.offset) || 0 }
+      return { x: -halfW - distance, z: Number(door.offset) || 0 }
+    }),
+  })
+  group.userData.navigationGraph = navigation
+  group.userData.navigationSummary = navigation.summary
   group.userData.collisionObstacles = collision
   group.userData.spawnPoint = floor.spawnPoint || { x: 0, y: 1.7, z: 0 }
   group.userData.exits = doors.map(door => ({ ...door }))

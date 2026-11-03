@@ -337,3 +337,30 @@ export const CAMPUS_BUILDING_FOOTPRINTS = [
   { id: 'south-east-04', label: '东南组团 04', rect: [726, 350, 778, 364], confidence: 'medium' },
   { id: 'south-east-05', label: '东南组团 05', rect: [726, 376, 778, 390], confidence: 'medium' },
 ]
+
+/** 判断圆形角色碰撞体是否与校园多边形相交，避免只采样中心点时擦边穿墙。 */
+export function circleIntersectsCampusPolygon(center, radius, ring) {
+  if (!Array.isArray(center) || center.length < 2 ||
+    !center.every(Number.isFinite) || !Number.isFinite(radius) || radius < 0 ||
+    !Array.isArray(ring) || ring.length < 3) return false
+  if (pointInCampusPolygon(center, ring)) return true
+
+  const [cx, cy] = center
+  const radiusSquared = radius * radius
+  for (let index = 0; index < ring.length; index++) {
+    const [ax, ay] = ring[index]
+    const [bx, by] = ring[(index + 1) % ring.length]
+    const dx = bx - ax
+    const dy = by - ay
+    const lengthSquared = dx * dx + dy * dy
+    const projection = lengthSquared > 0
+      ? Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / lengthSquared))
+      : 0
+    const nearestX = ax + projection * dx
+    const nearestY = ay + projection * dy
+    const distanceX = cx - nearestX
+    const distanceY = cy - nearestY
+    if (distanceX * distanceX + distanceY * distanceY <= radiusSquared) return true
+  }
+  return false
+}

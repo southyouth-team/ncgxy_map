@@ -83,10 +83,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       cameraObstacleRoots.push(object)
       const bounds = new THREE.Box3().setFromObject(object)
       if (bounds.isEmpty()) return
-      buildingObstacles.push({
-        minX: bounds.min.x, maxX: bounds.max.x,
-        minZ: bounds.min.z, maxZ: bounds.max.z,
-      })
+      if (isRpgSample && object.userData?.buildingId === 'sample-teaching-building') {
+        // 样板教学楼按墙体分段碰撞，正门中间留出通行口；不再用整栋 AABB 封死入口。
+        const centerX = (bounds.min.x + bounds.max.x) / 2
+        const frontZ = bounds.max.z
+        const doorHalfWidth = 1.12
+        const wallDepth = 0.72
+        buildingObstacles.push(
+          { minX: bounds.min.x, maxX: centerX - doorHalfWidth, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
+          { minX: centerX + doorHalfWidth, maxX: bounds.max.x, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
+          { minX: bounds.min.x, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: bounds.min.z + 0.55 },
+          { minX: bounds.min.x, maxX: bounds.min.x + 0.55, minZ: bounds.min.z, maxZ: frontZ },
+          { minX: bounds.max.x - 0.55, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: frontZ },
+        )
+      } else {
+        buildingObstacles.push({
+          minX: bounds.min.x, maxX: bounds.max.x,
+          minZ: bounds.min.z, maxZ: bounds.max.z,
+        })
+      }
     })
     // 树冠用于视觉遮挡，碰撞仅按树干半径计算，避免把整片树冠误判成墙。
     campus.traverse((object) => {

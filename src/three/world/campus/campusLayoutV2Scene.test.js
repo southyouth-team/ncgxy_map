@@ -35,6 +35,6 @@ describe('campusLayoutV2Scene', () => {
       id: 'bad-gate', type: 'entrance', status: 'draft', confidence: 'low',
       sourceRefs: ['survey'], geometry: { type: 'Point', coordinates: [700, 20] },
     })
-    expect(() => campusLayoutV2ToSceneFeatures(documentData)).toThrow('文档校验失败')
+    expect(() => campusLayoutV2ToSceneFeatures(documentData)).toThrow('V2 校园数据校验失败')
   })
 })

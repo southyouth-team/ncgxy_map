@@ -340,6 +340,11 @@ export class ScenesService {
           Number(bounds.maxZ) - Number(bounds.minZ) > 500) {
         throw new BadRequestException('建筑占地边界无效');
       }
+      if (footprintSize &&
+          (Math.abs(Number(bounds.maxX) - Number(bounds.minX) - Number(footprintSize.width)) > 0.01 ||
+           Math.abs(Number(bounds.maxZ) - Number(bounds.minZ) - Number(footprintSize.depth)) > 0.01)) {
+        throw new BadRequestException('建筑占地边界与占地尺寸不一致');
+      }
       const expansion = footprint.expansion || {};
       for (const side of ['north','south','east','west']) {
         const amount = Number(expansion[side] || 0);

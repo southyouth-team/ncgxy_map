@@ -4,6 +4,7 @@ import {
   CAMPUS_AREAS,
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
+  CAMPUS_ROAD_WIDTHS,
   pointInCampusArea,
   pointInCampusPolygon,
 } from '../data/campus/campusLayout.js'
@@ -42,7 +43,7 @@ function polygon(ctx, points) {
 function drawRoads(ctx) {
   for (const road of CAMPUS_ROAD_CENTERLINES) {
     const pts = road.points
-    const perimeter = road.id.includes('perimeter')
+    const roadWidth = CAMPUS_ROAD_WIDTHS[road.id] || 12
     ctx.lineCap = 'square'
     ctx.lineJoin = 'round'
     ctx.beginPath()
@@ -50,13 +51,13 @@ function drawRoads(ctx) {
 
     // 三层道路结构：草绿色路缘、浅色人行边带、暖灰色路面。
     ctx.strokeStyle = '#71866b'
-    ctx.lineWidth = perimeter ? 15 : 12
+    ctx.lineWidth = roadWidth
     ctx.stroke()
     ctx.strokeStyle = '#c6c99f'
-    ctx.lineWidth = perimeter ? 12 : 9
+    ctx.lineWidth = roadWidth * .8
     ctx.stroke()
     ctx.strokeStyle = perimeter ? '#d5c69e' : '#e2d4ad'
-    ctx.lineWidth = perimeter ? 8 : 5.5
+    ctx.lineWidth = roadWidth * (road.id.includes('perimeter') ? .53 : .46)
     ctx.stroke()
 
     // 断续的像素路面标线，避免连续虚线造成现代公路感。

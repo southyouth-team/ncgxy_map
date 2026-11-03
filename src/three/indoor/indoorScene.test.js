@@ -183,6 +183,9 @@ describe('indoor floor contract', () => {
     expect(graph.points.find(point => point.id === 'room:classroom-101:approach')?.reachableFromSpawn).toBe(true)
     expect(graph.points.find(point => point.id === 'room:classroom-101:inside')?.reachableFromSpawn).toBe(true)
     expect(graph.points.find(point => point.id === 'exit:0')?.reachableFromSpawn).toBe(true)
+    const route = graph.findPath({ x: 0, z: 0 }, { x: -5, z: 1.85 })
+    expect(route?.length).toBeGreaterThan(2)
+    expect(route?.[0]).toMatchObject({ x: 0, z: 0 })
     expect(group.userData.navigationSummary).toEqual(graph.summary)
   })
 
@@ -199,6 +202,7 @@ describe('indoor floor contract', () => {
     })
     expect(graph.points.find(point => point.id === 'room:isolated:inside')?.reachableFromSpawn).toBe(false)
     expect(graph.summary.disconnectedPoints).toContain('room:isolated:inside')
+    expect(graph.findPath({ x: 0, z: 0 }, { x: -8, z: 2 })).toBeNull()
   })
 
   it('requires integer floor levels', () => {

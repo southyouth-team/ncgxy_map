@@ -1,6 +1,5 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
-import { createCampusLayoutV2Scene } from '../world/campus/campusLayoutV2Scene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
@@ -463,31 +462,6 @@ export function createCampusEngine(container, callbacks = {}) {
   }
 
 
-  function previewCampusLayoutV2(documentData) {
-    if (!scene) throw new Error('三维场景尚未初始化')
-    const group = createCampusLayoutV2Scene(THREE, documentData)
-    clearRpgPreview()
-    editorPreviewActive = true
-    rpgPreviewGroup = group
-    scene.add(group)
-    if (campus) campus.visible = false
-    loadedBuildingModels.forEach(model => { model.visible = false })
-    const bounds = new THREE.Box3().setFromObject(group)
-    if (!bounds.isEmpty()) {
-      const size = bounds.getSize(new THREE.Vector3())
-      const center = bounds.getCenter(new THREE.Vector3())
-      const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(Math.max(20, size.x + 12), Math.max(20, size.z + 12)),
-        new THREE.MeshStandardMaterial({ color: '#8eae69', roughness: 1 }),
-      )
-      ground.rotation.x = -Math.PI / 2
-      ground.position.set(center.x, -0.12, center.z)
-      group.add(ground)
-      cameraRig?.focusBounds(Math.max(20, size.x + 12), Math.max(20, size.z + 12), center.x, center.z)
-    }
-    return { featureCount: group.userData.featureCount }
-  }
-
   function onScenePointerDown(event) {
     if (event.button !== 0 || (cameraRig?.mode !== 'overview' && !indoorGroup)) { pointerStart = null; return }
     pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
@@ -814,5 +788,5 @@ export function createCampusEngine(container, callbacks = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, previewCampusLayoutV2, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

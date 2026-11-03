@@ -49,6 +49,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
   let pointerStart = null
+  let navigationVisualGroup = null
+  let navigationWasActive = false
 
   async function init() {
     if (!container) throw new Error('未找到三维场景容器')
@@ -485,6 +487,54 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+
+  function clearNavigationVisuals() {
+    if (!navigationVisualGroup) return
+    scene?.remove(navigationVisualGroup)
+    disposeObjectGroup(navigationVisualGroup)
+    navigationVisualGroup = null
+  }
+
+  function showNavigationVisuals(path) {
+    clearNavigationVisuals()
+    if (!Array.isArray(path) || path.length < 2) return
+    navigationVisualGroup = new THREE.Group()
+    navigationVisualGroup.name = 'IndoorNavigationVisuals'
+    const points = path.map(point => new THREE.Vector3(point.x, 0.075, point.z))
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: 0xf5c85b, transparent: true, opacity: 0.95 }),
+    )
+    navigationVisualGroup.add(line)
+    const target = path[path.length - 1]
+    const marker = new THREE.Mesh(
+      new THREE.RingGeometry(0.28, 0.42, 20),
+      new THREE.MeshBasicMaterial({ color: 0xffdf78, side: THREE.DoubleSide }),
+    )
+    marker.rotation.x = -Math.PI / 2
+    marker.position.set(target.x, 0.09, target.z)
+    navigationVisualGroup.add(marker)
+    scene.add(navigationVisualGroup)
+  }
+
+  function navigateIndoorTo(point) {
+    const graph = indoorGroup?.userData.navigationGraph
+    const route = graph?.findPath(
+      { x: cameraRig.player.x, z: cameraRig.player.z },
+      { x: point.x, z: point.z },
+    )
+    if (route?.length > 1 && input.setNavigationPath(route)) {
+      showNavigationVisuals(route)
+      navigationWasActive = true
+      callbacks.onIndoorPromptChange?.({ visible: false })
+      return true
+    }
+    input.setNavigationPath(null)
+    clearNavigationVisuals()
+    navigationWasActive = false
+    callbacks.onIndoorPromptChange?.({ visible: true, text: '该位置不可到达，请选择走廊或房间入口' })
+    return false
+  }
 
   function onScenePointerDown(event) {
     if (event.button !== 0 || (cameraRig?.mode !== 'overview' && !indoorGroup)) { pointerStart = null; return }

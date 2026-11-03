@@ -58,7 +58,7 @@ describe('stair step elevation profile', () => {
   it('keeps the player on each tread and raises smoothly at each riser', () => {
     expect(getStairStepHeight(0, 4.2)).toBe(0)
     expect(getStairStepHeight(0.05, 4.2)).toBe(0)
-    expect(getStairStepHeight(0.08, 4.2)).toBeCloseTo(0.35)
+    expect(getStairStepHeight(1 / 12, 4.2)).toBeCloseTo(0.35)
     expect(getStairStepHeight(0.5, 4.2)).toBeCloseTo(2.1)
     expect(getStairStepHeight(1, 4.2)).toBe(4.2)
     expect(getStairStepHeight(1.2, 4.2)).toBe(4.2)

@@ -205,8 +205,9 @@ export function drawPixelBuildingPreview(context, options = {}) {
 
 export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
   if (!Array.isArray(edges) || !edges.length) return null
+  const hasRequestedIndex = requestedIndex !== null && requestedIndex !== undefined && requestedIndex !== ''
   const index = Number(requestedIndex)
-  if (Number.isInteger(index) && index >= 0 && index < edges.length) return edges[index]
+  if (hasRequestedIndex && Number.isInteger(index) && index >= 0 && index < edges.length) return edges[index]
   return edges.reduce((longest, edge) => edge.length > longest.length ? edge : longest, edges[0])
 }
 
@@ -333,7 +334,7 @@ export function createPixelBuilding(THREE, options = {}) {
     door.rotation.y = angle
     door.userData.objectType = 'building-entrance'
     group.add(doorFrame, door)
-    group.userData.entrance = { edgeIndex: entranceEdge.index, width: doorWidth, height: doorHeight, source: Number.isInteger(Number(entranceEdgeIndex)) && Number(entranceEdgeIndex) >= 0 ? 'configured' : 'auto' }
+    group.userData.entrance = { edgeIndex: entranceEdge.index, width: doorWidth, height: doorHeight, source: entranceEdgeIndex !== null && entranceEdgeIndex !== undefined && entranceEdgeIndex !== '' && Number.isInteger(Number(entranceEdgeIndex)) && Number(entranceEdgeIndex) >= 0 && Number(entranceEdgeIndex) < edges.length ? 'configured' : 'auto' }
   }
   outline.forEach((point, index) => {
     const next = outline[(index + 1) % outline.length]

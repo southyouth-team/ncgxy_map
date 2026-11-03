@@ -61,6 +61,7 @@ const sceneSource = ref(null)
 const sceneSaving = ref(false)
 const sceneSaveMessage = ref('')
 const selectedSceneObject = computed(() => sceneDocument.value?.objects?.find((item) => item.id === selectedObject.value?.sceneObjectId) || null)
+const campusPlanDocument = ref(null)
 
 let engine
 
@@ -380,6 +381,28 @@ function toggleHelp() {
   panel?.classList.toggle('is-visible')
 }
 
+async function loadHomepagePlanDocument() {
+  try {
+    const headers = { 'X-Dev-User-Id': DEV_USER_ID }
+    const request = async (path) => {
+      const response = await fetch(`${API_BASE}${path}`, { headers })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.message || `地图服务请求失败：HTTP ${response.status}`)
+      return payload
+    }
+    const campuses = await request('/campuses')
+    const campus = campuses.find((item) => item.slug === 'ncgxy')
+    if (!campus) return
+    const maps = await request(`/campuses/${campus.id}/maps`)
+    const map = maps.find((item) => item.slug === 'main') || maps[0]
+    if (!map) return
+    const saved = await request(`/campuses/${campus.id}/maps/${map.id}/scene/plan`)
+    if (saved.document?.coordinateSystem === 'campus-plan-pixel') campusPlanDocument.value = saved.document
+  } catch (error) {
+    console.warn('[CampusPlan] 首页未能读取编辑器文档，暂用基础空间数据：', error.message)
+  }
+}
+
 onMounted(async () => {
   updateViewportState()
   window.addEventListener('resize', updateViewportState)
@@ -388,6 +411,7 @@ onMounted(async () => {
   // 当前默认入口使用轻量 Canvas 2D 像素地图；Three.js 不再随首页启动。
   // 保留原三维引擎代码，后续作为独立预览能力按需启用。
   if (!showEditor.value) {
+    await loadHomepagePlanDocument()
     loading.value = false
     engineReady.value = false
     return
@@ -443,7 +467,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isRpgSample } ]">
-    <CampusPixelMap v-if="!showEditor" :initial-player-position="returnPixelPosition" @enter-building="openBuildingFromPixelMap" />
+    <CampusPixelMap v-if="!showEditor" :initial-player-position="returnPixelPosition" :plan-document="campusPlanDocument" @enter-building="openBuildingFromPixelMap" />
     <div ref="viewport" class="scene-viewport" v-show="showEditor && editorViewMode === '3d'"></div>
     <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 

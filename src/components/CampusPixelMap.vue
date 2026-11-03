@@ -1,9 +1,10 @@
 <script setup>
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 const emit = defineEmits(['enter-building'])
 const props = defineProps({
   initialPlayerPosition: { type: Object, default: null },
+  planDocument: { type: Object, default: null },
 })
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getCampusInteriorData } from '../data/campus/campusInteriors.js'
 import {
   CAMPUS_PLAN_REFERENCE,
@@ -17,8 +18,28 @@ import { getCampusSpatialLayers } from '../data/campus/campusGeoJSON.js'
 import { getReferenceImageContainRect, hasMatchingReferenceAspectRatio } from '../data/campus/campusReferenceImage.js'
 
 // Canvas 2D 与 Three.js 共用同一组从统一 FeatureCollection 派生的空间图层。
-const { boundary: CAMPUS_BOUNDARY, gates: CAMPUS_GATES, areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS } = getCampusSpatialLayers()
-const CAMPUS_ROAD_WIDTHS = Object.fromEntries(CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.width]))
+const baseSpatialLayers = getCampusSpatialLayers()
+let CAMPUS_BOUNDARY = baseSpatialLayers.boundary
+let CAMPUS_GATES = baseSpatialLayers.gates
+let CAMPUS_AREAS = baseSpatialLayers.areas
+let CAMPUS_ROAD_CENTERLINES = baseSpatialLayers.roads
+let CAMPUS_BUILDING_FOOTPRINTS = baseSpatialLayers.buildings
+let CAMPUS_ROAD_WIDTHS = Object.fromEntries(CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.width]))
+
+watch(() => props.planDocument, (document) => {
+  if (document?.coordinateSystem !== 'campus-plan-pixel') return
+  if (Array.isArray(document.areas)) CAMPUS_AREAS = document.areas.map(area => ({ ...area, polygon: area.polygon || area.footprint || [], holes: area.holes || [], rect: area.rect || null }))
+  if (Array.isArray(document.roads)) CAMPUS_ROAD_CENTERLINES = document.roads.map(road => ({ ...road, points: (road.points || []).map(point => [...point]), width: Number(road.width) > 0 ? Number(road.width) : 12 }))
+  if (Array.isArray(document.buildings)) CAMPUS_BUILDING_FOOTPRINTS = document.buildings.map(building => {
+    const points = building.footprint || building.polygon || []
+    const polygon = points.length ? points : [[building.rect?.[0] || 0, building.rect?.[1] || 0], [building.rect?.[2] || 0, building.rect?.[1] || 0], [building.rect?.[2] || 0, building.rect?.[3] || 0], [building.rect?.[0] || 0, building.rect?.[3] || 0]]
+    const xs = polygon.map(point => point[0]), ys = polygon.map(point => point[1])
+    return { ...building, polygon, rect: building.rect || [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] }
+  })
+  CAMPUS_ROAD_WIDTHS = Object.fromEntries(CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.width]))
+  baseMapCanvas = null
+  render()
+})
 
 const canvas = ref(null)
 const selected = ref(null)

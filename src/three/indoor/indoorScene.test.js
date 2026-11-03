@@ -299,3 +299,34 @@ describe('campus footprint indoor generation', () => {
       .toThrow('建筑轮廓尺寸无效')
   })
 })
+
+
+describe('building expansion layout', () => {
+  const createExpandableBuilding = () => createIndoorBuildingFromFootprint({
+    id: 'test-expansion-building',
+    name: '扩建测试楼',
+    bounds: { minX: -10, maxX: 10, minZ: -8, maxZ: 8 },
+  }, { floors: 2 })
+
+  it.each(['north', 'south', 'east', 'west'])('creates a usable room when expanding to the %s', (side) => {
+    const expanded = expandIndoorBuilding(createExpandableBuilding(), { side, amount: 4 })
+    expect(expanded.floors).toHaveLength(2)
+    for (const floor of expanded.floors) {
+      const expansionRoom = floor.rooms.find(room => room.id.startsWith(`expansion-${side}-f${floor.level}-`))
+      expect(expansionRoom).toBeTruthy()
+      expect(expansionRoom.doorWidth).toBeGreaterThan(0)
+      expect(expansionRoom.furniture).toEqual([])
+      expect(expansionRoom.x - expansionRoom.width / 2).toBeGreaterThanOrEqual(-floor.width / 2)
+      expect(expansionRoom.x + expansionRoom.width / 2).toBeLessThanOrEqual(floor.width / 2)
+      expect(expansionRoom.z - expansionRoom.depth / 2).toBeGreaterThanOrEqual(-floor.depth / 2)
+      expect(expansionRoom.z + expansionRoom.depth / 2).toBeLessThanOrEqual(floor.depth / 2)
+    }
+    expect(validateIndoorBuilding(expanded)).toEqual([])
+  })
+
+  it('keeps narrow extensions open instead of creating an unusably narrow room', () => {
+    const expanded = expandIndoorBuilding(createExpandableBuilding(), { side: 'east', amount: 2 })
+    expect(expanded.floors[0].rooms.some(room => room.id.startsWith('expansion-'))).toBe(false)
+    expect(validateIndoorBuilding(expanded)).toEqual([])
+  })
+})

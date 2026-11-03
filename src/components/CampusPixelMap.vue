@@ -22,6 +22,7 @@ const selected = ref(null)
 const hovered = ref(null)
 const zoom = ref(1)
 const showReferenceImage = ref(true)
+const referenceOpacity = ref(0.88)
 const showVectorOverlay = ref(true)
 const showBuildingFootprints = ref(false)
 const mapOffset = ref({ x: 0, y: 0 })
@@ -187,7 +188,7 @@ function drawGround(ctx) {
   ctx.fillRect(0, 0, 1000, 500)
   if (showReferenceImage.value && referenceMapReady && referenceMapImage.naturalWidth > 0) {
     ctx.save()
-    ctx.globalAlpha = 0.88
+    ctx.globalAlpha = referenceOpacity.value
     ctx.drawImage(referenceMapImage, 0, 0, 1000, 500)
     ctx.restore()
   }
@@ -670,6 +671,7 @@ onBeforeUnmount(() => {
       <button :class="{ active: showReferenceImage }" @click="showReferenceImage = !showReferenceImage; baseMapCanvas = null; render()">原图</button>
       <button :class="{ active: showVectorOverlay }" @click="showVectorOverlay = !showVectorOverlay; baseMapCanvas = null; render()">道路/水域</button>
       <button :class="{ active: showBuildingFootprints }" @click="showBuildingFootprints = !showBuildingFootprints; render()">建筑候选（未校准）</button>
+      <label style="display:flex;align-items:center;gap:6px;padding:0 8px;font-size:12px;color:#405648;white-space:nowrap;">原图透明度 <input v-model.number="referenceOpacity" type="range" min="0.15" max="1" step="0.05" style="width:88px;accent-color:#58765c;" @input="baseMapCanvas = null; render()" /> {{ Math.round(referenceOpacity * 100) }}%</label>
       <button @click="zoomBy(1.2)" aria-label="放大">＋</button>
       <button @click="zoomBy(.84)" aria-label="缩小">－</button>
       <button @click="resetView">复位</button>

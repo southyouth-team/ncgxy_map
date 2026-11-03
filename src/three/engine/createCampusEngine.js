@@ -12,6 +12,35 @@ import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
 import { createCampusMaterials, createPixelBuilding, validateBuildingFootprint } from '../world/campus/campusAssetLibrary.js'
 
+function getObjectLocalBounds(THREE, root) {
+  root.updateWorldMatrix(true, true)
+  const inverseRoot = new THREE.Matrix4().copy(root.matrixWorld).invert()
+  const bounds = new THREE.Box3()
+  let hasGeometry = false
+  root.traverse(object => {
+    if (!object.isMesh || !object.geometry) return
+    if (!object.geometry.boundingBox) object.geometry.computeBoundingBox()
+    if (!object.geometry.boundingBox) return
+    const relativeMatrix = new THREE.Matrix4().multiplyMatrices(inverseRoot, object.matrixWorld)
+    const localGeometryBounds = object.geometry.boundingBox.clone().applyMatrix4(relativeMatrix)
+    bounds.union(localGeometryBounds)
+    hasGeometry = true
+  })
+  if (!hasGeometry) {
+    const worldBounds = new THREE.Box3().setFromObject(root)
+    const corners = []
+    for (const x of [worldBounds.min.x, worldBounds.max.x]) {
+      for (const y of [worldBounds.min.y, worldBounds.max.y]) {
+        for (const z of [worldBounds.min.z, worldBounds.max.z]) {
+          corners.push(root.worldToLocal(new THREE.Vector3(x, y, z)))
+        }
+      }
+    }
+    corners.forEach(point => bounds.expandByPoint(point))
+  }
+  return bounds
+}
+
 export function createCampusEngine(container, callbacks = {}, options = {}) {
   const isRpgSample = options.sceneType === 'rpg-sample'
   let renderer
@@ -1043,9 +1072,16 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const center = worldPolygon.reduce((sum, point) => ({ x: sum.x + point.x / worldPolygon.length, z: sum.z + point.z / worldPolygon.length }), { x: 0, z: 0 })
       const middle = { x: (entranceStart.x + entranceEnd.x) / 2, z: (entranceStart.z + entranceEnd.z) / 2 }
       const outwardLength = Math.hypot(middle.x - center.x, middle.z - center.z) || 1
+      // 入口交互点存为建筑局部坐标；旋转、缩放后仍可正确反算到世界位置。
+      const worldEntrance = new THREE.Vector3(
+        middle.x + (middle.x - center.x) / outwardLength * 1.15,
+        indoorOutdoorTarget.position.y,
+        middle.z + (middle.z - center.z) / outwardLength * 1.15,
+      )
+      const localEntrance = indoorOutdoorTarget.worldToLocal(worldEntrance)
       indoorOutdoorTarget.userData.indoorEntrance = {
-        x: middle.x - indoorOutdoorTarget.position.x + (middle.x - center.x) / outwardLength * 1.15,
-        z: middle.z - indoorOutdoorTarget.position.z + (middle.z - center.z) / outwardLength * 1.15,
+        x: localEntrance.x,
+        z: localEntrance.z,
         radius: 2.15,
       }
     } else if (indoorOutdoorBase.collisionIndex >= 0 && outdoorCollisionWorld?.obstacles[indoorOutdoorBase.collisionIndex]) {
@@ -1099,6 +1135,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     target.position.copy(baseline.position)
     target.scale.copy(baseline.scale)
     target.updateMatrixWorld(true)
+    // 室内尺寸使用建筑自身局部坐标计算，避免旋转建筑的世界 AABB 被放大。
+    const localBounds = getObjectLocalBounds(THREE, target)
     const bounds = new THREE.Box3().setFromObject(target)
     indoorOutdoorTarget = target
     if (!Number.isInteger(baseline.collisionIndex)) {
@@ -1124,8 +1162,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       id: String(buildingId),
       name: options.name || target.userData?.name || target.name || '校园建筑',
       bounds: {
-        minX: bounds.min.x, maxX: bounds.max.x,
-        minZ: bounds.min.z, maxZ: bounds.max.z,
+        minX: localBounds.min.x, maxX: localBounds.max.x,
+        minZ: localBounds.min.z, maxZ: localBounds.max.z,
       },
     }
     // 默认室内楼层数和层高优先继承室外建筑生成器参数，避免第一次编辑就把原建筑压扁。

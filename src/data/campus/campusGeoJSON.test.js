@@ -1,0 +1,49 @@
+import { describe, expect, it } from 'vitest'
+import { CAMPUS_AREAS, CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_ROAD_CENTERLINES } from './campusLayout.js'
+import { buildCampusGeoJSON, CAMPUS_SPATIAL_DATASET } from './campusGeoJSON.js'
+
+describe('统一校园空间数据出口', () => {
+  it('明确使用同一套参考图像像素坐标，不伪装成测绘坐标', () => {
+    expect(CAMPUS_SPATIAL_DATASET.coordinateSystem).toBe('NCGXY_REFERENCE_IMAGE_PIXEL')
+    expect(CAMPUS_SPATIAL_DATASET.coordinateUnit).toBe('pixel')
+    expect(CAMPUS_SPATIAL_DATASET.accuracyNote).toContain('非测绘成果')
+  })
+
+  it('将现有区域、道路和建筑输出为唯一 FeatureCollection', () => {
+    const collection = buildCampusGeoJSON()
+    expect(collection.type).toBe('FeatureCollection')
+    expect(collection.features).toHaveLength(
+      CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length,
+    )
+    const ids = collection.features.map(feature => feature.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(collection.features.filter(feature => feature.properties.featureType === 'building')).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
+    expect(collection.features.filter(feature => feature.properties.featureType === 'road')).toHaveLength(CAMPUS_ROAD_CENTERLINES.length)
+  })
+
+  it('所有面几何闭合，中央湖区洞区作为内环保留', () => {
+    const collection = buildCampusGeoJSON()
+    for (const feature of collection.features.filter(item => item.geometry.type === 'Polygon')) {
+      for (const ring of feature.geometry.coordinates) {
+        expect(ring.length).toBeGreaterThanOrEqual(4)
+        expect(ring[0]).toEqual(ring[ring.length - 1])
+      }
+    }
+    const lake = collection.features.find(feature => feature.id === 'central-lake')
+    expect(lake.geometry.coordinates).toHaveLength(2)
+  })
+
+  it('所有要素均携带来源、置信度和核验状态', () => {
+    for (const feature of buildCampusGeoJSON().features) {
+      expect(feature.properties.source).toBeTruthy()
+      expect(['low', 'medium', 'high']).toContain(feature.properties.confidence)
+      expect(['verified', 'unverified']).toContain(feature.properties.verificationStatus)
+    }
+  })
+
+  it('道路输出为 LineString，建筑 footprint 输出为 Polygon', () => {
+    const features = buildCampusGeoJSON().features
+    expect(features.find(feature => feature.id === CAMPUS_ROAD_CENTERLINES[0].id).geometry.type).toBe('LineString')
+    expect(features.find(feature => feature.id === CAMPUS_BUILDING_FOOTPRINTS[0].id).geometry.type).toBe('Polygon')
+  })
+})

@@ -6,6 +6,7 @@ const props = defineProps({
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getCampusInteriorData } from '../data/campus/campusInteriors.js'
 import {
+  CAMPUS_PLAN_REFERENCE,
   CAMPUS_PLAYER_SPAWN_PIXEL,
   getCampusFootprintBounds,
   pointInCampusArea,
@@ -35,14 +36,28 @@ let dpr = 1
 let baseMapCanvas = null
 // 直接加载公开指南中的校园原始平面图，作为真实布局底图；矢量层用于后续逐项校准。
 const referenceMapImage = new Image()
-let referenceMapReady = false
+const referenceMapReady = ref(false)
+const referenceMapDimensions = ref({ width: 0, height: 0 })
+const referenceMapAspectMismatch = computed(() => {
+  const { width, height } = referenceMapDimensions.value
+  if (!width || !height) return false
+  const actualRatio = width / height
+  const expectedRatio = CAMPUS_PLAN_REFERENCE.image.width / CAMPUS_PLAN_REFERENCE.image.height
+  return Math.abs(actualRatio - expectedRatio) / expectedRatio > 0.005
+})
 referenceMapImage.onload = () => {
-  referenceMapReady = true
+  referenceMapDimensions.value = {
+    width: referenceMapImage.naturalWidth,
+    height: referenceMapImage.naturalHeight,
+  }
+  referenceMapReady.value = true
   baseMapCanvas = null
   render()
 }
 referenceMapImage.onerror = () => {
-  referenceMapReady = false
+  referenceMapReady.value = false
+  referenceMapDimensions.value = { width: 0, height: 0 }
+  baseMapCanvas = null
   render()
 }
 const pressedMovementKeys = new Set()
@@ -226,7 +241,7 @@ function drawGround(ctx) {
   // 优先显示指南原始校园平面图，避免当前近似矢量数据掩盖真实布局。
   ctx.fillStyle = '#eeeee7'
   ctx.fillRect(0, 0, 1000, 500)
-  if (showReferenceImage.value && referenceMapReady && referenceMapImage.naturalWidth > 0) {
+  if (showReferenceImage.value && referenceMapReady.value && referenceMapImage.naturalWidth > 0) {
     ctx.save()
     ctx.globalAlpha = referenceOpacity.value
     ctx.drawImage(referenceMapImage, 0, 0, 1000, 500)
@@ -685,7 +700,7 @@ function openShowcase() {
 function resetView() { zoom.value = 1; mapOffset.value = { x: 0, y: 0 }; render() }
 function zoomBy(value) { zoom.value = Math.max(.72, Math.min(3.2, zoom.value * value)); render() }
 onMounted(() => {
-  referenceMapImage.src = 'https://mmbiz.qpic.cn/sz_mmbiz_jpg/I7CrcZW85viauJhPE5oxIic650acadic3zicLbM1kQ4eHcz4fbdYMNw0QliaiapzFkyBOakxlRcZINmMyD2DO1ib6Da2agZD6iaKM9RhmA1mkh3H8Pc/640?from=appmsg&wx_fmt=jpeg'
+  referenceMapImage.src = CAMPUS_PLAN_REFERENCE.image.sourceImageUrl
   resizeObserver = new ResizeObserver(resize)
   if (canvas.value) resizeObserver.observe(canvas.value)
   window.addEventListener('resize', resize)
@@ -739,7 +754,7 @@ onBeforeUnmount(() => {
     <div style="position:absolute;top:18px;left:18px;z-index:3;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(250,248,230,.92);border:1px solid rgba(76,96,70,.22);border-radius:7px;box-shadow:0 3px 12px rgba(48,65,48,.12);pointer-events:none;font-size:12px;color:#405648;">
       <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b9a60;box-shadow:0 0 0 3px rgba(107,154,96,.16);"></span>
       <strong>平面图模式</strong>
-      <span style="opacity:.7;">{{ referenceMapReady ? '原始平面图已加载' : '原始平面图加载中 / 不可用' }} · 建筑候选尚未逐栋校准 · 矢量层仅供位置比对</span>
+      <span style="opacity:.7;">{{ referenceMapReady ? `原始平面图 ${referenceMapDimensions.width}×${referenceMapDimensions.height}` : '原始平面图加载中 / 不可用' }}{{ referenceMapAspectMismatch ? ' · 原图宽高比与坐标基准不一致，需重新校准' : '' }} · 建筑候选尚未逐栋校准 · 矢量层仅供位置比对</span>
     </div>
     <div class="pixel-map-controls">
       <button :class="{ active: showReferenceImage }" @click="showReferenceImage = !showReferenceImage; baseMapCanvas = null; render()">原图</button>

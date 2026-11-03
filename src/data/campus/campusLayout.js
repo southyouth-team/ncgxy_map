@@ -153,6 +153,26 @@ export const CAMPUS_ROAD_CENTERLINES = [
     confidence: 'low',
     points: [[180, 365], [235, 355], [300, 365], [370, 385], [450, 405], [530, 410]],
   },
+  {
+    id: 'lake-north-walkway',
+    confidence: 'low',
+    points: [[165, 190], [205, 180], [250, 184], [290, 205], [330, 210], [375, 205]],
+  },
+  {
+    id: 'lake-east-walkway',
+    confidence: 'low',
+    points: [[290, 238], [315, 260], [330, 290], [320, 330], [300, 350]],
+  },
+  {
+    id: 'east-campus-connector',
+    confidence: 'low',
+    points: [[375, 205], [380, 245], [385, 290], [405, 335], [450, 380]],
+  },
+  {
+    id: 'west-campus-connector',
+    confidence: 'low',
+    points: [[165, 255], [150, 285], [150, 325], [175, 355], [220, 375]],
+  },
 ]
 
 /**

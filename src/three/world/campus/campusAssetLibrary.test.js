@@ -124,6 +124,10 @@ describe('shared campus building assets', () => {
     expect(roof.geometry.boundingBox.min.z).toBeCloseTo(-5, 5)
     expect(roof.geometry.boundingBox.max.z).toBeCloseTo(5, 5)
     expect(building.children.filter(child => child.userData.objectType === 'building-cornice')).toHaveLength(6)
+    const entranceWalls = building.children.filter(child => child.userData.objectType === 'building-wall' && child.userData.edgeIndex === 0)
+    expect(entranceWalls).toHaveLength(3)
+    expect(entranceWalls.some(child => child.geometry.parameters.height < 7.2)).toBe(true)
+    expect(building.children.filter(child => child.userData.objectType === 'building-wall')).toHaveLength(8)
     expect(building.userData.floorCount).toBe(2)
   })
 

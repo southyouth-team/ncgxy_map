@@ -169,6 +169,13 @@ export function createRpgSampleScene(THREE) {
     addBox('tree-crown-dark', 0, 1.55, 0, 2.6, 1.5, 2.45, materials.leafDark, tree)
     addBox('tree-crown-main', 0, 2.15, 0, 2.35, 1.5, 2.25, materials.leaf, tree)
     addBox('tree-crown-highlight', -0.18, 2.85, -0.12, 1.65, 0.75, 1.65, materials.leafLight, tree)
+    // 外轮廓加入不对称叶簇，形成像素树冠的阶梯边缘，而不是完整方盒。
+    addBox('tree-leaf-cluster-west', -1.05, 1.9, 0.18, 0.72, 0.72, 1.15, materials.leaf, tree)
+    addBox('tree-leaf-cluster-east', 1.02, 2.0, -0.12, 0.78, 0.82, 0.95, materials.leafDark, tree)
+    addBox('tree-leaf-cluster-front', 0.28, 2.18, 1.02, 0.95, 0.68, 0.62, materials.leafLight, tree)
+    addBox('tree-leaf-cluster-back', -0.42, 2.5, -0.98, 0.82, 0.62, 0.58, materials.leaf, tree)
+    addBox('tree-trunk-root-west', -0.22, 0.05, 0.08, 0.34, 0.42, 0.42, materials.trunk, tree)
+    addBox('tree-trunk-root-east', 0.2, 0.05, -0.08, 0.32, 0.35, 0.38, materials.trunk, tree)
     root.add(tree)
   }
   ;[[-12, -12], [12, -12], [-17, 2], [17, 2], [-12, 14], [12, 14]].forEach(([x, z], i) => addTree(x, z, i % 2 ? 0.9 : 1.05))

@@ -157,6 +157,7 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
     },
     interiorNormalized: width !== footprintWidth || depth !== footprintDepth,
     floorHeight,
+    exterior: { roofStyle: footprint.roofStyle || 'flat' },
     bounds: { minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 },
     floors,
   }

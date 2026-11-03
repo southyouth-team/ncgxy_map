@@ -443,7 +443,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="showcase-actions">
-        <span class="topbar-status"><span class="status-dot"></span> 宝可梦风格 · 2.5D 校园样板</span>
+        <span class="topbar-status"><span class="status-dot"></span> {{ indoorPrototypeActive ? '室内空间样板 · 非实测布局' : '宝可梦风格 · 2.5D 校园样板' }}</span>
         <button class="showcase-back" @click="closeEditor">返回 2D 地图</button>
       </div>
     </header>

@@ -239,6 +239,8 @@ export function createPixelBuilding(THREE, options = {}) {
     index === 0 || point.distanceTo(points[index - 1]) > 0.001
   ))
   if (contour.length > 2 && contour[0].distanceTo(contour[contour.length - 1]) < 0.001) contour.pop()
+  const roofContours = [contour, ...(roofPoints.holes || [])]
+  const triangulationPoints = roofContours.flat()
   const roofPositions = []
   const addRoofTriangle = (a, b, c) => {
     const ab = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z)
@@ -250,7 +252,7 @@ export function createPixelBuilding(THREE, options = {}) {
   if (roofStyle === 'pitched' || roofStyle === 'span') {
     const triangles = THREE.ShapeUtils.triangulateShape(contour, roofPoints.holes || [])
     triangles.forEach(([ia, ib, ic]) => {
-      const points = [contour[ia], contour[ib], contour[ic]]
+      const points = [triangulationPoints[ia], triangulationPoints[ib], triangulationPoints[ic]]
       const center = points.reduce((sum, point) => ({ x: sum.x + point.x / 3, y: sum.y + point.y / 3 }), { x: 0, y: 0 })
       const peak = new THREE.Vector3(center.x, buildingHeight + roofRise, -center.y)
       for (let i = 0; i < 3; i += 1) {

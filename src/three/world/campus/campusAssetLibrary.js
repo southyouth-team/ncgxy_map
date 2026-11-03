@@ -309,9 +309,9 @@ export function createPixelBuilding(THREE, options = {}) {
     roofPositions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
   }
   let actualRoofStyle = roofStyle
-  roofPositions = roofStyle === 'pitched' ? createGableRoofVertices(contour, buildingHeight, roofRise) : null
+  roofPositions = (roofStyle === 'pitched' || roofStyle === 'span') ? createGableRoofVertices(contour, buildingHeight, roofRise) : null
   if (roofPositions) {
-    actualRoofStyle = 'gable'
+    actualRoofStyle = roofStyle === 'span' ? 'gable-span' : 'gable'
   } else {
     // 复杂轮廓、内环及暂不支持的跨度屋顶均安全回退到贴合 footprint 的平顶。
     actualRoofStyle = roofStyle === 'glass' ? 'glass' : 'flat'
@@ -332,6 +332,35 @@ export function createPixelBuilding(THREE, options = {}) {
   roof.userData.roofStyle = actualRoofStyle
   group.add(roof)
   group.userData.roofStyle = actualRoofStyle
+
+  // 图书馆玻璃屋顶：沿真实轮廓边界及三角剖分内部边生成框架，不使用外接矩形。
+  if (actualRoofStyle === 'glass') {
+    const triangles = THREE.ShapeUtils.triangulateShape(contour, roofPoints.holes || [])
+    const edgeKeys = new Set()
+    triangles.forEach(([ia, ib, ic]) => {
+      [[ia, ib], [ib, ic], [ic, ia]].forEach(([aIndex, bIndex]) => {
+        const key = [Math.min(aIndex, bIndex), Math.max(aIndex, bIndex)].join(':')
+        if (edgeKeys.has(key)) return
+        edgeKeys.add(key)
+        const a = triangulationPoints[aIndex]
+        const b = triangulationPoints[bIndex]
+        if (!a || !b) return
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const length = Math.hypot(dx, dy)
+        if (length < 0.15) return
+        const beam = new THREE.Mesh(
+          new THREE.BoxGeometry(length, 0.075, 0.075),
+          materials.windowTrim,
+        )
+        beam.position.set((a.x + b.x) / 2, buildingHeight + 0.12, -(a.y + b.y) / 2)
+        beam.rotation.y = Math.atan2(dy, dx)
+        beam.userData.objectType = 'building-roof-frame'
+        group.add(beam)
+      })
+    })
+    group.userData.roofFrame = 'triangulated'
+  }
 
   // 沿 footprint 的真实边段生成窗户，绝不使用外接矩形布置。
   // 先统一为不重复闭合点，避免最后一条边长度为 0。

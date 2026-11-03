@@ -14,6 +14,7 @@ import {
   mapPolygonToWorld,
   pointInCampusArea,
   pointInCampusPolygon,
+  circleIntersectsCampusPolygon,
 } from './campusLayout.js'
 
 describe('南昌工学院像素校园主空间底图', () => {
@@ -116,6 +117,14 @@ describe('南昌工学院像素校园主空间底图', () => {
     expect(pointInCampusPolygon(islandPoint, centralLake.holes[0])).toBe(true)
     expect(pointInCampusArea(islandPoint, centralLake)).toBe(false)
     expect(pointInCampusArea(waterPoint, centralLake)).toBe(true)
+  })
+
+  it('检测角色圆形碰撞体与多边形边界的相交，而不只检测采样点是否在内部', () => {
+    const footprint = [[10, 10], [30, 10], [30, 30], [10, 30]]
+    expect(circleIntersectsCampusPolygon([8, 20], 2.1, footprint)).toBe(true)
+    expect(circleIntersectsCampusPolygon([7, 20], 2.1, footprint)).toBe(false)
+    expect(circleIntersectsCampusPolygon([20, 20], 1, footprint)).toBe(true)
+    expect(circleIntersectsCampusPolygon([8, 20], -1, footprint)).toBe(false)
   })
 
 })

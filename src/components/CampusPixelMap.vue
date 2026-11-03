@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   CAMPUS_AREAS,
   CAMPUS_BUILDING_FOOTPRINTS,
-  CAMPUS_PLAN_REFERENCE,
   CAMPUS_ROAD_CENTERLINES,
 } from '../data/campus/campusLayout.js'
 
@@ -12,7 +11,6 @@ const selected = ref(null)
 const zoom = ref(1)
 const mapOffset = ref({ x: 0, y: 0 })
 const viewport = ref({ width: 0, height: 0 })
-const mapBounds = CAMPUS_PLAN_REFERENCE.mapBounds
 let resizeObserver
 let dragState = null
 let dpr = 1
@@ -150,18 +148,7 @@ function drawBuildings(ctx) {
   }
 }
 function drawTrees(ctx) {
-  const spots = []
-  for (let y = 80; y < 450; y += 24) {
-    for (let x = 175; x < 830; x += 26) {
-      const hash = (x * 17 + y * 29) % 23
-      if (hash > 3) continue
-      const nearBuilding = CAMPUS_BUILDING_FOOTPRINTS.some(({ rect: [l, t, r, b] }) => x > l - 9 && x < r + 9 && y > t - 9 && y < b + 9)
-      const nearRoad = CAMPUS_ROAD_CENTERLINES.some(({ points }) => points.some(([px, py]) => Math.hypot(px - x, py - y) < 9))
-      const inWater = CAMPUS_AREAS.some(a => a.type === 'water' && a.polygon && pointInPolygon([x, y], a.polygon) && !(a.holes || []).some(h => pointInPolygon([x, y], h)))
-      if (!nearBuilding && !nearRoad && !inWater) spots.push([x, y])
-    }
-  }
-  for (const [x, y] of spots) {
+  for (const [x, y] of TREE_SPOTS) {
     ctx.fillStyle = 'rgba(51,77,54,.2)'
     ctx.fillRect(x - 4, y + 2, 10, 5)
     ctx.fillStyle = '#557b52'
@@ -181,6 +168,21 @@ function pointInPolygon(point, ring) {
   }
   return inside
 }
+
+const TREE_SPOTS = (() => {
+  const spots = []
+  for (let y = 80; y < 450; y += 24) {
+    for (let x = 175; x < 830; x += 26) {
+      if ((x * 17 + y * 29) % 23 > 3) continue
+      const nearBuilding = CAMPUS_BUILDING_FOOTPRINTS.some(({ rect: [l, t, r, b] }) => x > l - 9 && x < r + 9 && y > t - 9 && y < b + 9)
+      const nearRoad = CAMPUS_ROAD_CENTERLINES.some(({ points }) => points.some(([px, py]) => Math.hypot(px - x, py - y) < 9))
+      const inWater = CAMPUS_AREAS.some(area => area.type === 'water' && area.polygon && pointInPolygon([x, y], area.polygon) && !(area.holes || []).some(hole => pointInPolygon([x, y], hole)))
+      if (!nearBuilding && !nearRoad && !inWater) spots.push([x, y])
+    }
+  }
+  return spots
+})()
+
 function drawLabels(ctx) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'

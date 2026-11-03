@@ -51,9 +51,9 @@ const indoorHistoryOpen = ref(false)
 const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
 const indoorBuildingId = computed(() => indoorDefinition.value?.id || selectedBuildingId.value)
 const initialView = new URLSearchParams(window.location.search).get('view')
-const isRpgSample = false
-const showEditor = ref(initialView === 'editor')
-const editorViewMode = ref('2d')
+const isRpgSample = initialView === 'showcase'
+const showEditor = ref(initialView === 'editor' || isRpgSample)
+const editorViewMode = ref(isRpgSample ? '3d' : '2d')
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
 const sceneRevision = ref(0)

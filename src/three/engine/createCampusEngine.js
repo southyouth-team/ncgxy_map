@@ -730,7 +730,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function buildIndoorFloor(level, transitionPosition = null) {
     const floor = indoorBuilding?.floors.find(item => item.level === level)
     if (!floor) return false
-    const group = createIndoorFloor(THREE, floor)
+    const floorDefinition = indoorBuilding.footprint?.polygon?.length >= 3
+      ? { ...floor, footprintPolygon: indoorBuilding.footprint.polygon.map(point => ({ x: point.x, z: point.z })) }
+      : floor
+    const group = createIndoorFloor(THREE, floorDefinition)
     group.position.y = (level - 1) * indoorBuilding.floorHeight
     scene.add(group)
     if (indoorGroup) { scene.remove(indoorGroup); disposeObjectGroup(indoorGroup) }

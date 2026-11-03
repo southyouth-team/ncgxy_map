@@ -56,6 +56,25 @@ describe('indoor floor contract', () => {
       .toContain('墙体 wall-c 的门洞尺寸无效')
   })
 
+  it('builds polygon floor slabs and one exterior wall per footprint edge', () => {
+    const polygonFloor = {
+      ...sample,
+      rooms: [],
+      doors: [],
+      footprintPolygon: [
+        { x: -12, z: -9 }, { x: 12, z: -9 }, { x: 12, z: 5 },
+        { x: 4, z: 9 }, { x: -12, z: 9 },
+      ],
+    }
+    const group = createIndoorFloor(THREE, polygonFloor)
+    const slab = group.children.find(child => child.name === 'indoor-floor-slab')
+    const exteriorWalls = group.children.filter(child => child.name.startsWith('indoor-wall-outline-'))
+    expect(slab).toBeTruthy()
+    expect(slab.geometry.attributes.position.count).toBeGreaterThan(5)
+    expect(exteriorWalls).toHaveLength(5)
+    expect(group.userData.collisionObstacles.length).toBeGreaterThanOrEqual(5)
+  })
+
   it('builds partition geometry with a passable doorway opening', () => {
     const floor = { ...sample, rooms: [], walls: [{ id: 'partition-a', axis: 'x', x: 0, z: 0, length: 10, thickness: 0.2, doorWidth: 1.4, doorOffset: 0 }] }
     const group = createIndoorFloor(THREE, floor)

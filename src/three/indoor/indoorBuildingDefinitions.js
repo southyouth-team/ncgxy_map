@@ -1,3 +1,4 @@
+import { validateIndoorFloor } from './indoorScene.js'
 /** 室内建筑数据定义（演示样板），未经测绘不得标注为真实校园数据。 */
 export const indoorBuildingDefinitions = {
   teachingBlockPrototype: {
@@ -52,6 +53,7 @@ export function validateIndoorBuilding(building) {
   for (const floor of Array.isArray(building.floors) ? building.floors : []) {
     if (levels.has(floor.level)) errors.push('楼层编号重复：' + floor.level)
     levels.add(floor.level)
+    for (const error of validateIndoorFloor(floor)) errors.push('楼层 ' + floor.level + '：' + error)
   }
   return errors
 }

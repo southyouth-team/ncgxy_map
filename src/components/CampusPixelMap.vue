@@ -308,37 +308,38 @@ function drawBuildings(ctx) {
     ctx.strokeRect(x1 - 1.5, y1 - 1.5, w + 3, h + 3)
   })
 }
-function drawTrees(ctx) {
-  TREE_SPOTS.forEach(([x, y], index) => {
-    const variant = index % 3
-    ctx.fillStyle = 'rgba(51,77,54,.2)'
-    ctx.fillRect(x - 5, y + 3, 11, 4)
-    ctx.fillStyle = '#496e4b'
-    ctx.fillRect(x - 4, y - 4, 9, 8)
-    if (variant === 0) {
-      ctx.fillRect(x - 7, y - 2, 4, 5)
-      ctx.fillRect(x + 4, y - 1, 4, 5)
-      ctx.fillStyle = '#6f9d60'
-      ctx.fillRect(x - 5, y - 8, 11, 7)
-      ctx.fillStyle = '#a3c982'
-      ctx.fillRect(x - 2, y - 8, 4, 2)
-      ctx.fillRect(x + 3, y - 5, 2, 2)
-    } else if (variant === 1) {
-      ctx.fillStyle = '#638d59'
-      ctx.fillRect(x - 5, y - 8, 10, 8)
-      ctx.fillStyle = '#8eb66d'
-      ctx.fillRect(x - 3, y - 10, 7, 5)
-      ctx.fillStyle = '#b3cf85'
-      ctx.fillRect(x - 2, y - 9, 3, 2)
-    } else {
-      ctx.fillStyle = '#527c50'
-      ctx.fillRect(x - 6, y - 6, 12, 8)
-      ctx.fillStyle = '#82aa66'
-      ctx.fillRect(x - 3, y - 10, 8, 7)
-      ctx.fillStyle = '#b0ca80'
-      ctx.fillRect(x - 1, y - 9, 3, 2)
-    }
-  })
+function drawTree(ctx, x, y, index) {
+  const variant = index % 3
+  // 树木锚点位于树干底部，树冠向上延伸，便于按 Y 深度排序。
+  ctx.fillStyle = 'rgba(51,77,54,.2)'
+  ctx.fillRect(x - 5, y + 1, 11, 4)
+  ctx.fillStyle = '#765b3d'
+  ctx.fillRect(x - 1, y - 2, 3, 6)
+  ctx.fillStyle = '#496e4b'
+  ctx.fillRect(x - 4, y - 4, 9, 8)
+  if (variant === 0) {
+    ctx.fillRect(x - 7, y - 2, 4, 5)
+    ctx.fillRect(x + 4, y - 1, 4, 5)
+    ctx.fillStyle = '#6f9d60'
+    ctx.fillRect(x - 5, y - 8, 11, 7)
+    ctx.fillStyle = '#a3c982'
+    ctx.fillRect(x - 2, y - 8, 4, 2)
+    ctx.fillRect(x + 3, y - 5, 2, 2)
+  } else if (variant === 1) {
+    ctx.fillStyle = '#638d59'
+    ctx.fillRect(x - 5, y - 8, 10, 8)
+    ctx.fillStyle = '#8eb66d'
+    ctx.fillRect(x - 3, y - 10, 7, 5)
+    ctx.fillStyle = '#b3cf85'
+    ctx.fillRect(x - 2, y - 9, 3, 2)
+  } else {
+    ctx.fillStyle = '#527c50'
+    ctx.fillRect(x - 6, y - 6, 12, 8)
+    ctx.fillStyle = '#82aa66'
+    ctx.fillRect(x - 3, y - 10, 8, 7)
+    ctx.fillStyle = '#b0ca80'
+    ctx.fillRect(x - 1, y - 9, 3, 2)
+  }
 }
 const TREE_SPOTS = (() => {
   const spots = []
@@ -407,7 +408,6 @@ function buildBaseMap() {
   drawGround(ctx)
   drawAreas(ctx)
   drawRoads(ctx)
-  drawTrees(ctx)
   drawBuildings(ctx)
   drawLabels(ctx)
 }
@@ -427,8 +427,17 @@ function render() {
   ctx.scale(scale, scale)
   ctx.imageSmoothingEnabled = false
   if (baseMapCanvas) ctx.drawImage(baseMapCanvas, 0, 0)
-  drawExplorerCharacter(ctx, player.value)
-  drawForegroundTreeCanopies(ctx, player.value)
+  // 树木与角色使用同一条 Y 深度队列，按脚底锚点排序，避免角色始终浮在树冠上方。
+  const depthQueue = TREE_SPOTS.map(([treeX, treeY], index) => ({
+    depth: treeY + 2,
+    draw: () => drawTree(ctx, treeX, treeY, index),
+  }))
+  depthQueue.push({
+    depth: player.value.y + 5,
+    draw: () => drawExplorerCharacter(ctx, player.value),
+  })
+  depthQueue.sort((a, b) => a.depth - b.depth)
+  for (const item of depthQueue) item.draw()
   for (const [target, color, lineWidth] of [[hovered.value, '#fff8cf', 1.5], [selected.value, '#f6d66e', 2.5]]) {
     if (target?.type !== 'building') continue
     const item = CAMPUS_BUILDING_FOOTPRINTS.find(b => b.id === target.id)
@@ -494,21 +503,6 @@ function drawExplorerCharacter(ctx, actor) {
     ctx.fillRect(-4, -13, 8, 2)
   }
   ctx.restore()
-}
-function drawForegroundTreeCanopies(ctx, actor) {
-  // 仅重绘角色后方且与角色发生空间重叠的树冠，形成基础前后遮挡。
-  for (let index = 0; index < TREE_SPOTS.length; index++) {
-    const [x, y] = TREE_SPOTS[index]
-    if (actor.y >= y + 2 || Math.abs(actor.x - x) > 10 || y - actor.y > 18) continue
-    const variant = index % 3
-    ctx.fillStyle = variant === 1 ? '#638d59' : variant === 2 ? '#527c50' : '#6f9d60'
-    ctx.fillRect(x - 5, y - 8, 10, 7)
-    if (variant === 0) ctx.fillRect(x - 7, y - 2, 14, 5)
-    if (variant === 1) ctx.fillRect(x - 3, y - 10, 7, 5)
-    if (variant === 2) ctx.fillRect(x - 3, y - 10, 8, 7)
-    ctx.fillStyle = '#a3c982'
-    ctx.fillRect(x - 2, y - 8, 4, 2)
-  }
 }
 function canPlayerMoveTo(x, y) {
   if (x < 8 || x > 992 || y < 8 || y > 492) return false

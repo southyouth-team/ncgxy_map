@@ -1172,7 +1172,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       floors: options.floors ?? options.floorsData?.length ?? target.userData?.floorCount ?? 1,
       floorHeight: options.floorHeight ?? target.userData?.floorHeight ?? 3.6,
       // 建筑本地坐标中的入口点决定室内门墙与门内出生位置。
-      entrancePoint: options.entrancePoint || target.userData?.indoorEntrance || null,
+      entrancePoint: options.entrancePoint || (target.userData?.indoorEntrance ? {
+        // 生成室内模板以局部包围盒中心为原点，入口点需同步平移到该坐标系。
+        x: target.userData.indoorEntrance.x - (localBounds.min.x + localBounds.max.x) / 2,
+        z: target.userData.indoorEntrance.z - (localBounds.min.z + localBounds.max.z) / 2,
+      } : null),
     }
     const generated = createIndoorBuildingFromFootprint(footprint, generationOptions)
     const definition = options.definition || (Array.isArray(options.floorsData) && options.floorsData.length

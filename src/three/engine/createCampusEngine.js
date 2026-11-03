@@ -63,6 +63,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let indoorPromptKey = ''
   let activeIndoorRoom = null
   let roomReturnPosition = null
+  let pendingRoomTransition = null
   let stairTransition = null
   let outdoorState = null
   let nearOutdoorEntrance = false
@@ -772,24 +773,22 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       return
     }
     if (activeIndoorRoom && roomReturnPosition) {
-      cameraRig.player.set(roomReturnPosition.x, roomReturnPosition.y, roomReturnPosition.z)
-      activeIndoorRoom = null
-      roomReturnPosition = null
-      nearIndoorRoom = null
-      cameraRig.updateThirdPersonDesired()
-      callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: stairInteractionActive, nearRoom: null, activeRoom: null })
+      if (pendingRoomTransition) return
+      pendingRoomTransition = { type: 'exit' }
+      if (!navigateIndoorTo(roomReturnPosition)) pendingRoomTransition = null
       return
     }
     if (nearIndoorRoom) {
+      if (pendingRoomTransition) return
       const interaction = indoorGroup.userData.roomInteractions?.find(item => item.roomId === nearIndoorRoom.roomId)
       if (!interaction) return
       roomReturnPosition = { x: cameraRig.player.x, y: cameraRig.player.y, z: cameraRig.player.z }
-      activeIndoorRoom = { id: interaction.roomId, name: interaction.roomName }
+      pendingRoomTransition = { type: 'enter', roomId: interaction.roomId, roomName: interaction.roomName }
       nearIndoorRoom = null
-      cameraRig.player.x = interaction.inside.x
-      cameraRig.player.z = interaction.inside.z
-      cameraRig.updateThirdPersonDesired()
-      callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: activeIndoorRoom })
+      if (!navigateIndoorTo(interaction.inside)) {
+        pendingRoomTransition = null
+        roomReturnPosition = null
+      }
       return
     }
     if (stairInteractionActive && indoorBuilding) {
@@ -814,6 +813,26 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     previousTime = time
     if (stairTransition) updateStairTransition(delta)
     else input?.update(delta)
+    if (pendingRoomTransition) {
+      const completed = input?.consumeNavigationPathCompletion?.() || false
+      if (completed) {
+        const transition = pendingRoomTransition
+        pendingRoomTransition = null
+        if (transition.type === 'enter') {
+          activeIndoorRoom = { id: transition.roomId, name: transition.roomName }
+          callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: activeIndoorRoom })
+        } else {
+          activeIndoorRoom = null
+          roomReturnPosition = null
+          nearIndoorRoom = null
+          callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: stairInteractionActive, nearRoom: null, activeRoom: null })
+        }
+      } else if (!input?.navigationPath) {
+        // 玩家手动接管或路线被碰撞阻断时，取消未完成的房间切换，不传送角色。
+        pendingRoomTransition = null
+        if (!activeIndoorRoom) roomReturnPosition = null
+      }
+    }
     if (navigationWasActive && !input?.navigationPath) {
       navigationWasActive = false
       clearNavigationVisuals()
@@ -964,6 +983,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     nearIndoorRoom = null
     activeIndoorRoom = null
     roomReturnPosition = null
+    pendingRoomTransition = null
     callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: null })
     return true
   }
@@ -1389,6 +1409,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     callbacks.onIndoorPromptChange?.({ visible: false })
     activeIndoorRoom = null
     roomReturnPosition = null
+    pendingRoomTransition = null
     stairTransition = null
     pendingIndoorFloorTarget = null
     input.setMovementEnabled(true)

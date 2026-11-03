@@ -50,6 +50,10 @@ describe('南昌工学院像素校园主空间底图', () => {
     expect(spawnY).toBeGreaterThan(CAMPUS_PLAN_REFERENCE.mapBounds.top)
     expect(spawnY).toBeLessThan(CAMPUS_PLAN_REFERENCE.mapBounds.bottom)
     expect(centralLake.polygon.some(([x, y]) => Math.hypot(x - spawnX, y - spawnY) < 20)).toBe(false)
+    for (const field of CAMPUS_AREAS.filter(area => area.type === 'sports' && area.rect)) {
+      const [left, top, right, bottom] = field.rect
+      expect(spawnX > left && spawnX < right && spawnY > top && spawnY < bottom).toBe(false)
+    }
   })
 
   it('道路和水体控制点均位于校园底图范围内', () => {

@@ -296,8 +296,14 @@ export function createIndoorFloor(THREE, floor) {
   })
   for (const offset of [-0.95, 0.95]) {
     addBox(THREE, stairGroup, 'indoor-stair-rail', offset, 0.25, 0, 0.12, 4.2, 4.4, railMaterial)
-    const railCenter = rotateStairPoint(offset, 0)
-    collision.push({ minX: railCenter.x - 0.06, maxX: railCenter.x + 0.06, minZ: railCenter.z - 2.2, maxZ: railCenter.z + 2.2 })
+    const railCorners = [
+      rotateStairPoint(offset - 0.06, -2.2), rotateStairPoint(offset + 0.06, -2.2),
+      rotateStairPoint(offset - 0.06, 2.2), rotateStairPoint(offset + 0.06, 2.2),
+    ]
+    collision.push({
+      minX: Math.min(...railCorners.map(point => point.x)), maxX: Math.max(...railCorners.map(point => point.x)),
+      minZ: Math.min(...railCorners.map(point => point.z)), maxZ: Math.max(...railCorners.map(point => point.z)),
+    })
   }
   group.userData.roomInteractions = getRoomInteractionPoints(floor)
   group.userData.exitInteractions = doors.map(door => {

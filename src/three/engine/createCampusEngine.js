@@ -39,6 +39,7 @@ export function createCampusEngine(container, callbacks = {}) {
   let selectedIndoorObject = null
   let loadedSceneData = null
   let rpgPreviewGroup = null
+  let editorPreviewActive = false
   let loadedBuildingModels = []
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
@@ -126,6 +127,7 @@ export function createCampusEngine(container, callbacks = {}) {
         .then((result) => {
           loadedBuildingModels = result.models || []
           for (const model of loadedBuildingModels) {
+            model.visible = !editorPreviewActive
             model.userData.objectType = 'building'
             model.updateMatrixWorld(true)
             const bounds = new THREE.Box3().setFromObject(model)
@@ -176,6 +178,7 @@ export function createCampusEngine(container, callbacks = {}) {
   }
 
   function clearRpgPreview() {
+    editorPreviewActive = false
     if (rpgPreviewGroup) {
       scene?.remove(rpgPreviewGroup)
       disposeObjectGroup(rpgPreviewGroup)
@@ -198,6 +201,7 @@ export function createCampusEngine(container, callbacks = {}) {
   function previewRpgMap(document) {
     if (!scene || !document?.grid || !Array.isArray(document.layers)) return false
     clearRpgPreview()
+    editorPreviewActive = true
     const width = Number(document.grid.width), height = Number(document.grid.height)
     if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) return false
     const unit = Number(document.worldUnitsPerTile) > 0 ? Number(document.worldUnitsPerTile) : 1
@@ -245,6 +249,7 @@ export function createCampusEngine(container, callbacks = {}) {
   function previewCampusPlan(document) {
     if (!scene || !document || !Array.isArray(document.buildings) || !Array.isArray(document.roads)) return false
     clearRpgPreview()
+    editorPreviewActive = true
     rpgPreviewGroup = new THREE.Group()
     rpgPreviewGroup.name = 'CampusPlanLivePreview'
 

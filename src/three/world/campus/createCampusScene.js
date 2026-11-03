@@ -96,7 +96,7 @@ export function createCampusScene(THREE) {
   // 低对比度像素水纹，使用固定坐标避免每次刷新随机跳动。
   const waterRippleMaterial = mats.waterShallow
   const waterRipples = [
-    [520, 135, 1.15], [600, 215, 0.85], [530, 318, 1.05], [470, 235, 0.72],
+    [520, 135, 1.15], [610, 220, 0.85], [530, 318, 1.05], [470, 235, 0.72],
     [188, 92, 0.8], [245, 122, 1.0], [220, 150, 0.7],
   ]
   waterRipples.forEach(([pixelX, pixelY, size], index) => {

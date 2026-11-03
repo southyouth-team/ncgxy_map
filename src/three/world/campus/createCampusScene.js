@@ -265,6 +265,12 @@ export function createCampusScene(THREE) {
     group.userData.objectType = 'building'
     group.userData.displayName = item.label
     group.userData.footprintType = item.polygon ? 'polygon' : 'rect'
+    if (item.polygon) {
+      group.userData.collisionPolygon = item.polygon.map(([pixelX, pixelY]) => {
+        const point = mapPixelToWorld(pixelX, pixelY)
+        return [point.x, point.z]
+      })
+    }
     group.userData.rebuildOptions = {
       materials: mats,
       wallMaterial: wallPalette[index % wallPalette.length],

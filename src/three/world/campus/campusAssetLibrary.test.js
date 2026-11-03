@@ -1,7 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout } from './campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, drawPixelBuildingPreview, selectBuildingEntranceEdge, getBuildingFloorLayout, createGableRoofVertices } from './campusAssetLibrary.js'
 
 describe('shared campus building assets', () => {
+  it('creates a ridge-based gable roof for a convex rectangular footprint', () => {
+    const vertices = createGableRoofVertices([
+      { x: -4, y: -2 }, { x: 4, y: -2 }, { x: 4, y: 2 }, { x: -4, y: 2 },
+    ], 4, 1.2)
+    expect(vertices).toHaveLength(36)
+    const ys = vertices.filter((value, index) => index % 3 === 1)
+    expect(Math.max(...ys)).toBeCloseTo(5.2, 6)
+    expect(Math.min(...ys)).toBe(4)
+  })
+  it('falls back for unsupported concave or non-quadrilateral roof outlines', () => {
+    expect(createGableRoofVertices([
+      { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 2, y: 1 }, { x: 0, y: 4 },
+    ], 4, 1)).toBeNull()
+    expect(createGableRoofVertices([{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }], 4, 1)).toBeNull()
+  })
   it('calculates consistent floor heights, window levels and floor bands', () => {
     const layout = getBuildingFloorLayout(12, 4, 0.8)
     expect(layout.floors).toBe(4)

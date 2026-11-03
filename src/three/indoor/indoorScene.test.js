@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, getStairStepHeight, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance } from './indoorBuildingDefinitions.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance, transformIndoorFootprint } from './indoorBuildingDefinitions.js'
 
 
 const sample = {
@@ -392,6 +392,36 @@ describe('indoor stair construction', () => {
   })
 })
 
+
+describe('scaled building-local indoor footprint', () => {
+  it('scales footprint bounds and recenters the entrance for non-uniform and negative scale', () => {
+    expect(transformIndoorFootprint(
+      { minX: -4, maxX: 6, minZ: -3, maxZ: 5 },
+      { x: 2, z: 0.5 },
+      { x: 1, z: 4 },
+    )).toEqual({
+      bounds: { minX: -8, maxX: 12, minZ: -1.5, maxZ: 2.5 },
+      entrancePoint: { x: 2, z: 1.5 },
+    })
+    expect(transformIndoorFootprint(
+      { minX: -4, maxX: 6, minZ: -3, maxZ: 5 },
+      { x: -1, z: 2 },
+      { x: 2, z: 1 },
+    )).toEqual({
+      bounds: { minX: -6, maxX: 4, minZ: -6, maxZ: 10 },
+      entrancePoint: { x: -2, z: 2 },
+    })
+  })
+
+  it('rejects zero scale and invalid local geometry', () => {
+    expect(() => transformIndoorFootprint(
+      { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, { x: 0, z: 1 },
+    )).toThrow()
+    expect(() => transformIndoorFootprint(
+      { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, { x: 1, z: 1 }, { x: NaN, z: 0 },
+    )).toThrow()
+  })
+})
 
 describe('building-local entrance mapping', () => {
   const bounds = { minX: -7.5, maxX: 7.5, minZ: -4.5, maxZ: 4.5 }

@@ -687,10 +687,12 @@ describe('campus footprint indoor generation', () => {
       id: 'linked-building', floorHeight: 3.6,
       floors: [
         { ...sample, level: 1, stairPoint: { x: 8, z: 0, direction: 'south' } },
-        { ...sample, level: 2, stairPoint: { x: 8, z: 0, direction: 'south' } },
+        { ...sample, level: 2, stairPoint: { x: 8, z: 0, direction: 'north' } },
       ],
     }
     expect(validateIndoorBuilding(building)).toEqual([])
+    const sameDirection = { ...building, floors: [building.floors[0], { ...building.floors[1], stairPoint: { x: 8, z: 0, direction: 'south' } }] }
+    expect(validateIndoorBuilding(sameDirection)).toContain('楼层 1 与 2 的楼梯平台未连续衔接')
     const misaligned = { ...building, floors: [building.floors[0], { ...building.floors[1], stairPoint: { x: 4, z: 0 } }] }
     expect(validateIndoorBuilding(misaligned)).toContain('楼层 2 的楼梯连接点未与其他楼层对齐')
     const missing = { ...building, floors: [building.floors[0], { ...building.floors[1], stairPoint: undefined }] }

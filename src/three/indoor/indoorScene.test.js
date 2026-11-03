@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, getStairStepHeight, getIndoorInteractionPrompt, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, isAtStairLanding, createStairPath, getStairStepHeight, getIndoorInteractionPrompt, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance, transformIndoorFootprint } from './indoorBuildingDefinitions.js'
 
@@ -33,6 +33,22 @@ describe('stair traversal endpoints', () => {
   it('rejects invalid directions or incomplete stair paths', () => {
     expect(getStairTraversalPoints(path, 0)).toBeNull()
     expect(getStairTraversalPoints({ start: path.start }, 1)).toBeNull()
+  })
+})
+
+describe('stair landing proximity', () => {
+  const landing = { x: 4, z: -2 }
+
+  it('only starts a stair transition when the player reaches the landing', () => {
+    expect(isAtStairLanding({ x: 4.1, z: -2.1 }, landing)).toBe(true)
+    expect(isAtStairLanding({ x: 4.2, z: -2 }, landing)).toBe(false)
+    expect(isAtStairLanding({ x: 4, z: -2 }, landing)).toBe(true)
+  })
+
+  it('supports a configured tolerance and rejects invalid positions', () => {
+    expect(isAtStairLanding({ x: 4.4, z: -2 }, landing, 0.5)).toBe(true)
+    expect(isAtStairLanding({ x: 4.4, z: -2 }, landing, -1)).toBe(false)
+    expect(isAtStairLanding({ x: Number.NaN, z: -2 }, landing)).toBe(false)
   })
 })
 

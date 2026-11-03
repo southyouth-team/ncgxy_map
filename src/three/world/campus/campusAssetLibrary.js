@@ -456,10 +456,15 @@ export function createPixelBuilding(THREE, options = {}) {
     roofPositions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
   }
   let actualRoofStyle = roofStyle
-  roofPositions = (roofStyle === 'pitched' || roofStyle === 'span') ? createGableRoofVertices(contour, buildingHeight, roofRise) : null
-  if (roofPositions) {
+  const gableRoofPositions = (roofStyle === 'pitched' || roofStyle === 'span')
+    ? createGableRoofVertices(contour, buildingHeight, roofRise)
+    : null
+  if (Array.isArray(gableRoofPositions) && gableRoofPositions.length > 0) {
+    roofPositions = gableRoofPositions
     actualRoofStyle = roofStyle === 'span' ? 'gable-span' : 'gable'
   } else {
+    // 平顶与复杂轮廓回退路径必须保留可 push 的数组。
+    roofPositions = []
     // 复杂轮廓、内环及暂不支持的跨度屋顶均安全回退到贴合 footprint 的平顶。
     actualRoofStyle = roofStyle === 'glass' ? 'glass' : 'flat'
     const triangles = THREE.ShapeUtils.triangulateShape(contour, roofPoints.holes || [])

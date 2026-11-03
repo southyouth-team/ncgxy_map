@@ -60,6 +60,7 @@ export function createCampusMaterials(THREE) {
     leafLight: material('#79a65b'),
     leafDark: material('#365f45'),
     trunk: material('#806044'),
+    treeShadow: new THREE.MeshBasicMaterial({ color: '#40543b', transparent: true, opacity: 0.24, depthWrite: false }),
     flowerPink: material('#e58e91'),
     flowerYellow: material('#edc66e'),
     flowerWhite: material('#f3e7c8'),
@@ -74,6 +75,9 @@ export function addPixelTree(THREE, parent, x, z, scale = 1, variant = 0, mats) 
   group.scale.setScalar(scale)
   group.userData.objectType = 'tree'
   group.userData.collisionRadius = 0.32 * scale
+  const shadow = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.035, 1.85), mats.treeShadow)
+  shadow.position.y = 0.035
+  group.add(shadow)
   const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.48, 1.45, 0.48), mats.trunk)
   trunk.position.y = 0.72
   trunk.castShadow = true

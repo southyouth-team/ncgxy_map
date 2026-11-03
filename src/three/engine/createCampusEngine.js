@@ -841,10 +841,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 室外碰撞体与重建后的建筑包围盒同步。
     if (!(isRpgSample && indoorOutdoorTarget.userData?.buildingId === 'sample-teaching-building') &&
         indoorOutdoorBase.collisionIndex >= 0 && outdoorCollisionWorld?.obstacles[indoorOutdoorBase.collisionIndex]) {
-      const bounds = new THREE.Box3().setFromObject(indoorOutdoorTarget)
-      outdoorCollisionWorld.obstacles[indoorOutdoorBase.collisionIndex] = {
-        minX: bounds.min.x, maxX: bounds.max.x,
-        minZ: bounds.min.z, maxZ: bounds.max.z,
+      if (rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
+        const worldPolygon = polygon.map(point => {
+          const worldPoint = indoorOutdoorTarget.localToWorld(new THREE.Vector3(point.x, 0, point.z))
+          return { x: worldPoint.x, z: worldPoint.z }
+        })
+        const xs = worldPolygon.map(point => point.x)
+        const zs = worldPolygon.map(point => point.z)
+        outdoorCollisionWorld.obstacles[indoorOutdoorBase.collisionIndex] = {
+          polygon: worldPolygon,
+          holes: [],
+          minX: Math.min(...xs), maxX: Math.max(...xs),
+          minZ: Math.min(...zs), maxZ: Math.max(...zs),
+        }
+      } else {
+        const bounds = new THREE.Box3().setFromObject(indoorOutdoorTarget)
+        outdoorCollisionWorld.obstacles[indoorOutdoorBase.collisionIndex] = {
+          minX: bounds.min.x, maxX: bounds.max.x,
+          minZ: bounds.min.z, maxZ: bounds.max.z,
+        }
       }
     }
     cameraRig?.setObstructionObjects([

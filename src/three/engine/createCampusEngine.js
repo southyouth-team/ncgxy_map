@@ -778,9 +778,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         minZ: bounds.min.z, maxZ: bounds.max.z,
       },
     }
-    const definition = options.definition || createIndoorBuildingFromFootprint(footprint, options)
+    const generated = createIndoorBuildingFromFootprint(footprint, options)
+    const definition = options.definition || (Array.isArray(options.floorsData) && options.floorsData.length
+      ? { ...generated, floors: options.floorsData, floorHeight: Number(options.floorHeight) || generated.floorHeight }
+      : generated)
     return enterIndoorPrototype(definition)
   }
+
+  function getIndoorBuildingDefinition() { return indoorBuilding ? JSON.parse(JSON.stringify(indoorBuilding)) : null }
 
   function updateIndoorBuildingDefinition(definition) {
     if (!indoorBuilding || !indoorGroup || !definition || definition.id !== indoorBuilding.id) return false
@@ -908,5 +913,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, updateIndoorBuildingDefinition, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

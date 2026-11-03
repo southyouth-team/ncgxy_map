@@ -72,10 +72,10 @@ describe('multi-floor navigation planning', () => {
   const building = {
     floorHeight: 4.2,
     floors: [
-      { level: 1, stairPoint: { x: 8, z: 0 } },
-      { level: 2, stairPoint: { x: 8, z: 0 } },
-      { level: 3, stairPoint: { x: 8, z: 0 } },
-      { level: 4, stairPoint: { x: 8, z: 0 } },
+      { level: 1, stairPoint: { x: 8, z: 0, direction: 'south' } },
+      { level: 2, stairPoint: { x: 8, z: 0, direction: 'north' } },
+      { level: 3, stairPoint: { x: 8, z: 0, direction: 'south' } },
+      { level: 4, stairPoint: { x: 8, z: 0, direction: 'north' } },
     ],
   }
 
@@ -84,15 +84,18 @@ describe('multi-floor navigation planning', () => {
       levels: [1, 2, 3, 4],
       transitions: [
         { fromLevel: 1, toLevel: 2, direction: 1, connector: { rise: 4.2, from: { level: 1, point: { x: 8, z: -2.1 } }, to: { level: 2, point: { x: 8, z: 2.1 } } } },
-        { fromLevel: 2, toLevel: 3, direction: 1, connector: { from: { level: 2, point: { x: 8, z: -2.1 } }, to: { level: 3, point: { x: 8, z: 2.1 } } } },
+        { fromLevel: 2, toLevel: 3, direction: 1, connector: { from: { level: 2, point: { x: 8, z: 2.1 } }, to: { level: 3, point: { x: 8, z: -2.1 } } } },
         { fromLevel: 3, toLevel: 4, direction: 1, connector: { from: { level: 3, point: { x: 8, z: -2.1 } }, to: { level: 4, point: { x: 8, z: 2.1 } } } },
       ],
     })
     expect(planIndoorFloorRoute(building, 4, 1)?.transitions[0].connector).toEqual({
-      from: { level: 4, point: { x: 8, z: 2.1 } },
-      to: { level: 3, point: { x: 8, z: -2.1 } },
+      from: { level: 4, point: { x: 8, z: -2.1 } },
+      to: { level: 3, point: { x: 8, z: 2.1 } },
     })
     expect(planIndoorFloorRoute(building, 4, 1)?.levels).toEqual([4, 3, 2, 1])
+    const ascending = planIndoorFloorRoute(building, 1, 4).transitions
+    expect(ascending[0].connector.to.point).toEqual(ascending[1].connector.from.point)
+    expect(ascending[1].connector.to.point).toEqual(ascending[2].connector.from.point)
     expect(planIndoorFloorRoute(building, 2, 2)).toEqual({ levels: [2], transitions: [] })
   })
 

@@ -7,7 +7,8 @@ import IndoorFloorPlanEditor from './components/IndoorFloorPlanEditor.vue'
 import BuildingFootprintEditor from './components/BuildingFootprintEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
-import { CAMPUS_BUILDING_FOOTPRINTS, mapPixelToWorld } from './data/campus/campusLayout.js'
+import { CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAN_REFERENCE, mapPixelToWorld } from './data/campus/campusLayout.js'
+import { getCampusSpatialLayers } from './data/campus/campusGeoJSON.js'
 import { expandIndoorBuilding } from './three/indoor/indoorBuildingDefinitions.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
@@ -405,6 +406,33 @@ async function loadHomepagePlanDocument() {
   }
 }
 
+function getShowcasePlanDocument() {
+  if (campusPlanDocument.value?.coordinateSystem === 'campus-plan-pixel') {
+    return campusPlanDocument.value
+  }
+  // 尚未保存过编辑文档时，直接把当前平面底图的统一空间图层转换成预览文档。
+  // 这样 2.5D 至少能完整展示现有建筑、道路和区域，而不是继续显示独立样板地图。
+  const layers = getCampusSpatialLayers()
+  const bounds = CAMPUS_PLAN_REFERENCE.mapBounds
+  return {
+    schemaVersion: 2,
+    coordinateSystem: 'campus-plan-pixel',
+    units: 'pixel',
+    workspaceBounds: {
+      minX: bounds.left,
+      minY: bounds.top,
+      maxX: bounds.right,
+      maxY: bounds.bottom,
+    },
+    areas: layers.areas,
+    roads: layers.roads,
+    buildings: layers.buildings.map(building => ({
+      ...building,
+      footprint: building.polygon,
+    })),
+  }
+}
+
 onMounted(async () => {
   updateViewportState()
   window.addEventListener('resize', updateViewportState)
@@ -419,6 +447,8 @@ onMounted(async () => {
     return
   }
   try {
+    // 2.5D 展示入口优先读取编辑器已保存的平面文档；无服务端文档时使用统一静态空间数据。
+    if (isRpgSample && !requestedBuildingId) await loadHomepagePlanDocument()
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },
@@ -452,6 +482,11 @@ onMounted(async () => {
       },
     }, { sceneType: requestedBuildingId ? 'campus' : (isRpgSample ? 'rpg-sample' : 'campus'), initialPlayerPosition: returnWorldPosition })
     await engine.init()
+    if (isRpgSample && !requestedBuildingId) {
+      const planDocument = getShowcasePlanDocument()
+      const applied = engine.previewCampusPlan(planDocument)
+      if (!applied) console.warn('[CampusPlan] 2.5D 预览未能应用平面地图文档')
+    }
     if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'

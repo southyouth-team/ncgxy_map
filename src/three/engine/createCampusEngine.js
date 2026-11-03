@@ -422,6 +422,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           return new THREE.Vector2(p.x, -p.z)
         })
         const shape = new THREE.Shape(points)
+        for (const hole of area.holes || []) {
+          if (!Array.isArray(hole) || hole.length < 3) continue
+          const holePoints = hole.map(([x, y]) => {
+            const point = calibratedPoint(x, y)
+            return new THREE.Vector2(point.x, -point.z)
+          })
+          shape.holes.push(new THREE.Path(holePoints))
+        }
         const mesh = new THREE.Mesh(
           new THREE.ShapeGeometry(shape),
           new THREE.MeshStandardMaterial({ color: area.type === 'water' ? '#68b9b5' : '#a4bd83', roughness: 1 }),

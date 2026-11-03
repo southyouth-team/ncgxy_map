@@ -86,15 +86,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (isRpgSample && object.userData?.buildingId === 'sample-teaching-building') {
         // 样板教学楼按墙体分段碰撞，正门中间留出通行口；不再用整栋 AABB 封死入口。
         const centerX = (bounds.min.x + bounds.max.x) / 2
-        const frontZ = bounds.max.z
-        const doorHalfWidth = 1.12
-        const wallDepth = 0.72
+        // 按建筑墙体实际位置生成碰撞边界，屋檐和台阶不参与墙体定位。
+        const frontZ = object.position.z + 4.28
+        const backZ = object.position.z - 4.28
+        const sideWidth = 0.55
+        const doorHalfWidth = 1.08
+        const wallDepth = 0.5
         buildingObstacles.push(
           { minX: bounds.min.x, maxX: centerX - doorHalfWidth, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
           { minX: centerX + doorHalfWidth, maxX: bounds.max.x, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
-          { minX: bounds.min.x, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: bounds.min.z + 0.55 },
-          { minX: bounds.min.x, maxX: bounds.min.x + 0.55, minZ: bounds.min.z, maxZ: frontZ },
-          { minX: bounds.max.x - 0.55, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: frontZ },
+          { minX: bounds.min.x, maxX: bounds.max.x, minZ: backZ - 0.12, maxZ: backZ + wallDepth },
+          { minX: bounds.min.x, maxX: bounds.min.x + sideWidth, minZ: backZ, maxZ: frontZ },
+          { minX: bounds.max.x - sideWidth, maxX: bounds.max.x, minZ: backZ, maxZ: frontZ },
         )
       } else {
         buildingObstacles.push({

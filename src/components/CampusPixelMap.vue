@@ -167,33 +167,12 @@ function drawAreas(ctx) {
   }
 }
 function drawGround(ctx) {
-  ctx.fillStyle = palette.grass
+  // 平面图核对阶段使用中性底色，不叠加随机草地纹理与装饰性花簇。
+  ctx.fillStyle = '#eeeee7'
   ctx.fillRect(0, 0, 1000, 500)
-
-  // 低对比度草地 tile 纹理：保持大面积底色干净，近看有像素颗粒。
-  for (let y = 0; y < 500; y += 16) {
-    for (let x = 0; x < 1000; x += 16) {
-      const seed = (x * 13 + y * 7) % 29
-      if (seed < 7) {
-        ctx.fillStyle = seed % 3 === 0 ? palette.grassDark : palette.grassLight
-        ctx.fillRect(x + 2, y + 3, 3 + (seed % 2), 2)
-        if (seed % 4 === 0) ctx.fillRect(x + 9, y + 9, 2, 2)
-      }
-    }
-  }
-
-  // 稀疏的野花与浅色草簇，让空地有自然变化，不干扰建筑轮廓。
-  for (let y = 12; y < 490; y += 31) {
-    for (let x = 12; x < 990; x += 37) {
-      const seed = (x * 19 + y * 23) % 41
-      if (seed === 2 || seed === 11) {
-        ctx.fillStyle = seed === 2 ? '#e6d99a' : '#d8e0ad'
-        ctx.fillRect(x, y, 2, 2)
-        ctx.fillStyle = '#7f9d69'
-        ctx.fillRect(x + 2, y + 2, 2, 2)
-      }
-    }
-  }
+  ctx.strokeStyle = '#c8c9bd'
+  ctx.lineWidth = 1
+  ctx.strokeRect(153, 49, 691, 417)
 }
 const BUILDING_ROOF_SETS = [
     { base: '#89999b', light: '#cbd5d0', dark: '#52666b' },
@@ -493,10 +472,6 @@ function render() {
       draw: () => drawBuilding(ctx, building, index),
     })
   })
-  depthQueue.push({
-    depth: player.value.y + 5,
-    draw: () => drawExplorerCharacter(ctx, player.value),
-  })
   depthQueue.sort((a, b) => a.depth - b.depth)
   for (const item of depthQueue) item.draw()
   for (const [target, color, lineWidth] of [[hovered.value, '#fff8cf', 1.5], [selected.value, '#f6d66e', 2.5]]) {
@@ -515,28 +490,7 @@ function render() {
     ctx.stroke()
     ctx.setLineDash([])
   }
-  // 选中建筑时在地图上直接标出室内样板入口，避免入口能力只藏在右侧信息卡中。
-  if (selected.value?.type === 'building') {
-    const building = CAMPUS_BUILDING_FOOTPRINTS.find(item => item.id === selected.value.id)
-    const bounds = building && getCampusFootprintBounds(building)
-    if (bounds) {
-      const markerX = (bounds[0] + bounds[2]) / 2
-      const markerY = Math.max(14, bounds[1] - 17)
-      ctx.save()
-      ctx.font = 'bold 10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const label = '进入室内样板  ↗'
-      const labelWidth = ctx.measureText(label).width + 16
-      roundedRect(ctx, markerX - labelWidth / 2, markerY - 8, labelWidth, 16, 4)
-      ctx.fillStyle = '#315f49'
-      ctx.fill()
-      ctx.strokeStyle = '#f5f1d9'
-      ctx.lineWidth = 1
-      ctx.stroke()
-      ctx.fillStyle = '#fffdf0'
-      ctx.fillText(label, markerX, markerY)
-      ctx.restore()
+  ctx.restore()
     }
   }
   ctx.restore()
@@ -839,8 +793,7 @@ onBeforeUnmount(() => {
         <div><strong>南昌工学院</strong><span>NANCHANG INSTITUTE OF TECHNOLOGY</span></div>
       </div>
       <div class="pixel-header-actions">
-        <div class="pixel-header-tag"><i></i> RPG 校园探索 · WASD / 方向键移动</div>
-        <button class="pixel-showcase-link" @click="openShowcase">进入 3D 场景预览 <span>↗</span></button>
+        <div class="pixel-header-tag"><i></i> 南昌工学院 · 校园平面图重建</div>
       </div>
     </header>
     <canvas
@@ -858,15 +811,15 @@ onBeforeUnmount(() => {
     />
     <div style="position:absolute;top:18px;left:18px;z-index:3;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(250,248,230,.92);border:1px solid rgba(76,96,70,.22);border-radius:7px;box-shadow:0 3px 12px rgba(48,65,48,.12);pointer-events:none;font-size:12px;color:#405648;">
       <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b9a60;box-shadow:0 0 0 3px rgba(107,154,96,.16);"></span>
-      <strong>探索模式</strong>
-      <span style="opacity:.7;">X {{ Math.round(player.x) }} · Y {{ Math.round(player.y) }}</span>
+      <strong>平面图模式</strong>
+      <span style="opacity:.7;">2026 级新生报到指南底图 · 近似数字化</span>
     </div>
     <div class="pixel-map-controls">
       <button @click="zoomBy(1.2)" aria-label="放大">＋</button>
       <button @click="zoomBy(.84)" aria-label="缩小">－</button>
       <button @click="resetView">复位</button>
     </div>
-    <div class="pixel-mobile-pad" aria-label="触屏方向控制">
+    <div v-if="false" class="pixel-mobile-pad" aria-label="触屏方向控制">
       <button class="pixel-mobile-key pixel-key-up" aria-label="向上移动" @pointerdown="onTouchMovementStart('arrowup', $event)" @pointerup="onTouchMovementEnd('arrowup')" @pointercancel="onTouchMovementEnd('arrowup')" @lostpointercapture="onTouchMovementEnd('arrowup')">▲</button>
       <button class="pixel-mobile-key pixel-key-left" aria-label="向左移动" @pointerdown="onTouchMovementStart('arrowleft', $event)" @pointerup="onTouchMovementEnd('arrowleft')" @pointercancel="onTouchMovementEnd('arrowleft')" @lostpointercapture="onTouchMovementEnd('arrowleft')">◀</button>
       <button class="pixel-mobile-key pixel-key-down" aria-label="向下移动" @pointerdown="onTouchMovementStart('arrowdown', $event)" @pointerup="onTouchMovementEnd('arrowdown')" @pointercancel="onTouchMovementEnd('arrowdown')" @lostpointercapture="onTouchMovementEnd('arrowdown')">▼</button>
@@ -879,9 +832,8 @@ onBeforeUnmount(() => {
       <strong>{{ selectedTitle }}</strong>
       <span>{{ selected.type === 'building' ? '建筑轮廓' : selected.type === 'water' ? '湖泊水域' : selected.type === 'sports' ? '运动场地' : '校园区域' }}</span>
       <em>位置数据：{{ selected.confidence === 'low' ? '待核验' : '近似标注' }}</em>
-      <em v-if="selected.type === 'building'">室内数据：{{ getCampusInteriorData(selected.id)?.status === 'ready' ? '已配置' : '可生成样板 · 非实测布局' }}</em>
-      <button v-if="selected.type === 'building'" type="button" style="margin-top:10px;padding:9px 12px;border:1px solid #9bad91;border-radius:6px;background:#edf2e4;color:#405648;font:inherit;font-size:12px;cursor:pointer" @click="emit('enter-building', { buildingId: selected.id, playerPosition: { x: player.x, y: player.y } })">进入室内探索样板 ↗</button>
+      
     </aside>
-    <footer class="pixel-footer"><span>NCGXY · CAMPUS MAP</span><span>WASD / 方向键移动 · 镜头跟随 · 拖动浏览 / 滚轮缩放</span></footer>
+    <footer class="pixel-footer"><span>NCGXY · CAMPUS PLAN / V1</span><span>底图来源：2026 级新生报到指南 · 拖动浏览 / 滚轮缩放 · 建筑与道路位置持续校准</span></footer>
   </section>
 </template>

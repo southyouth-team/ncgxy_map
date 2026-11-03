@@ -935,18 +935,26 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const width = Number(definition.footprintSize.width)
     const depth = Number(definition.footprintSize.depth)
     if (!Number.isFinite(width) || !Number.isFinite(depth) || width <= 0 || depth <= 0) return false
+    const target = indoorOutdoorTarget
+    const rootScale = target.scale
+    if (Math.abs(rootScale.x) < 1e-6 || Math.abs(rootScale.y) < 1e-6 || Math.abs(rootScale.z) < 1e-6) return false
+    const localWidth = width / Math.abs(rootScale.x)
+    const localDepth = depth / Math.abs(rootScale.z)
     const expansion = definition.footprint?.expansion || {}
     const shiftX = (Number(expansion.east) - Number(expansion.west)) / 2
     const shiftZ = (Number(expansion.south) - Number(expansion.north)) / 2
-    const polygon = definition.footprint?.polygon
-    const rebuildOptions = indoorOutdoorTarget.userData?.rebuildOptions
+    const scaledPolygon = definition.footprint?.polygon
+    const polygon = Array.isArray(scaledPolygon)
+      ? scaledPolygon.map(point => ({ x: point.x / rootScale.x, z: point.z / rootScale.z }))
+      : scaledPolygon
+    const rebuildOptions = target.userData?.rebuildOptions
 
     // 对程序化校园建筑按真实多边形重新生成建筑实体，不再用 scale 把矩形模型硬拉伸。
     if (rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
-      const target = indoorOutdoorTarget
+      const localFloorHeight = Number(definition.floorHeight) / Math.abs(rootScale.y)
       const geometryKey = JSON.stringify({
-        polygon, width, depth,
-        height: Number(definition.floorHeight) * definition.floors.length,
+        polygon, width: localWidth, depth: localDepth,
+        height: localFloorHeight * definition.floors.length,
         floors: definition.floors.length,
         roofStyle: definition.exterior?.roofStyle || rebuildOptions.roofStyle || 'flat',
       })
@@ -958,9 +966,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const rebuilt = createPixelBuilding(THREE, {
         ...rebuildOptions,
         footprint: shape,
-        width,
-        depth,
-        height: Number(definition.floorHeight) * definition.floors.length,
+        width: localWidth,
+        depth: localDepth,
+        height: localFloorHeight * definition.floors.length,
         floors: definition.floors.length,
         roofStyle: definition.exterior?.roofStyle || rebuildOptions.roofStyle || 'flat',
         label: rebuildOptions.label || target.name,
@@ -993,11 +1001,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       indoorOutdoorBase.geometryKey = geometryKey
       }
       target.scale.copy(indoorOutdoorBase.scale)
-      target.position.set(
-        indoorOutdoorBase.position.x + shiftX,
-        indoorOutdoorBase.position.y,
-        indoorOutdoorBase.position.z + shiftZ,
-      )
+      const worldShift = new THREE.Vector3(shiftX, 0, shiftZ).applyQuaternion(target.quaternion)
+      target.position.copy(indoorOutdoorBase.position).add(worldShift)
       if (target.userData.foundationMesh) {
         const foundation = target.userData.foundationMesh
         if (foundation.parent === target) {
@@ -1010,10 +1015,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
     } else {
       // 非程序化模型（含 RPG 样板手工建筑）暂保留原有包围盒缩放路径。
-      indoorOutdoorTarget.scale.x = indoorOutdoorBase.scale.x * width / indoorOutdoorBase.width
-      indoorOutdoorTarget.scale.z = indoorOutdoorBase.scale.z * depth / indoorOutdoorBase.depth
-      indoorOutdoorTarget.position.x = indoorOutdoorBase.position.x + shiftX
-      indoorOutdoorTarget.position.z = indoorOutdoorBase.position.z + shiftZ
+      indoorOutdoorTarget.scale.x = indoorOutdoorBase.scale.x * localWidth / indoorOutdoorBase.width
+      indoorOutdoorTarget.scale.z = indoorOutdoorBase.scale.z * localDepth / indoorOutdoorBase.depth
+      const worldShift = new THREE.Vector3(shiftX, 0, shiftZ).applyQuaternion(indoorOutdoorTarget.quaternion)
+      indoorOutdoorTarget.position.copy(indoorOutdoorBase.position).add(worldShift)
     }
     indoorOutdoorTarget.updateMatrixWorld(true)
 

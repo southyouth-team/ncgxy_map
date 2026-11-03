@@ -814,12 +814,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     target.updateMatrixWorld(true)
     const bounds = new THREE.Box3().setFromObject(target)
     indoorOutdoorTarget = target
-    const collisionIndex = outdoorCollisionWorld?.obstacles.findIndex(obstacle =>
-      !obstacle.circle && !obstacle.polygon &&
-      Math.abs(obstacle.minX - baseline.bounds.minX) < 0.001 &&
-      Math.abs(obstacle.maxX - baseline.bounds.maxX) < 0.001 &&
-      Math.abs(obstacle.minZ - baseline.bounds.minZ) < 0.001 &&
-      Math.abs(obstacle.maxZ - baseline.bounds.maxZ) < 0.001) ?? -1
+    if (!Number.isInteger(baseline.collisionIndex)) {
+      baseline.collisionIndex = outdoorCollisionWorld?.obstacles.findIndex(obstacle =>
+        !obstacle.circle && !obstacle.polygon &&
+        Math.abs(obstacle.minX - baseline.bounds.minX) < 0.001 &&
+        Math.abs(obstacle.maxX - baseline.bounds.maxX) < 0.001 &&
+        Math.abs(obstacle.minZ - baseline.bounds.minZ) < 0.001 &&
+        Math.abs(obstacle.maxZ - baseline.bounds.maxZ) < 0.001) ?? -1
+    }
+    const collisionIndex = baseline.collisionIndex
     indoorOutdoorBase = {
       width: baseline.width,
       depth: baseline.depth,

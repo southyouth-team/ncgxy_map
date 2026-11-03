@@ -26,6 +26,9 @@ let resizeObserver
 let dragState = null
 let dpr = 1
 let baseMapCanvas = null
+const pressedMovementKeys = new Set()
+let movementFrameId = 0
+let lastMovementFrameTime = 0
 const selectedTitle = computed(() => selected.value?.label || selected.value?.name || '校园')
 const initialX = Number(props.initialPlayerPosition?.x)
 const initialY = Number(props.initialPlayerPosition?.y)
@@ -34,7 +37,8 @@ const player = ref({
   y: Number.isFinite(initialY) ? initialY : CAMPUS_PLAYER_SPAWN_PIXEL[1],
   direction: 'down', walkFrame: 0,
 })
-const PLAYER_SPEED = 3.2
+// 按时间步进而不是依赖键盘自动重复频率，确保不同系统下移动速度一致。
+const PLAYER_SPEED = 108 // 地图像素 / 秒
 const palette = {
   grass: '#a9c78b', grassLight: '#b8d49a', grassDark: '#91b477',
   roadEdge: '#87977b', road: '#d9c99f', roadMark: '#eee3c7',
@@ -554,32 +558,90 @@ function canPlayerMoveTo(x, y) {
     )
   )
 }
+const MOVEMENT_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'])
+
+function isEditableTarget(target) {
+  return target instanceof HTMLElement
+    && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName))
+}
+
 function onExplorerKeydown(event) {
-  if (event.altKey || event.ctrlKey || event.metaKey || event.repeat && !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(event.key)) return
+  if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return
   const key = event.key.toLowerCase()
-  const directions = {
-    arrowup: [0, -1, 'up'], w: [0, -1, 'up'],
-    arrowdown: [0, 1, 'down'], s: [0, 1, 'down'],
-    arrowleft: [-1, 0, 'left'], a: [-1, 0, 'left'],
-    arrowright: [1, 0, 'right'], d: [1, 0, 'right'],
-  }
-  const direction = directions[key]
-  if (!direction) return
+  if (!MOVEMENT_KEYS.has(key)) return
   event.preventDefault()
-  const [rawDx, rawDy, facing] = direction
-  const length = Math.hypot(rawDx, rawDy) || 1
-  const dx = rawDx / length, dy = rawDy / length
-  const nextX = player.value.x + dx * PLAYER_SPEED
-  const nextY = player.value.y + dy * PLAYER_SPEED
-  player.value.direction = facing
-  const previousX = player.value.x, previousY = player.value.y
-  if (canPlayerMoveTo(nextX, player.value.y)) player.value.x = nextX
-  if (canPlayerMoveTo(player.value.x, nextY)) player.value.y = nextY
-  player.value.walking = player.value.x !== previousX || player.value.y !== previousY
-  if (player.value.walking) player.value.walkFrame++
-  followPlayerCamera()
-  selected.value = null
+  pressedMovementKeys.add(key)
+  if (!movementFrameId) {
+    lastMovementFrameTime = 0
+    movementFrameId = requestAnimationFrame(updateExplorerMovement)
+  }
+}
+
+function onExplorerKeyup(event) {
+  pressedMovementKeys.delete(event.key.toLowerCase())
+  if (!pressedMovementKeys.size) {
+    player.value.walking = false
+    render()
+  }
+}
+
+function updateExplorerMovement(timestamp) {
+  movementFrameId = 0
+  if (!pressedMovementKeys.size) {
+    lastMovementFrameTime = 0
+    player.value.walking = false
+    render()
+    return
+  }
+
+  // 首帧只建立时间基准；单帧最大步长限制为 50ms，避免切后台后角色瞬移。
+  const delta = lastMovementFrameTime ? Math.min((timestamp - lastMovementFrameTime) / 1000, 0.05) : 0
+  lastMovementFrameTime = timestamp
+  const up = pressedMovementKeys.has('arrowup') || pressedMovementKeys.has('w')
+  const down = pressedMovementKeys.has('arrowdown') || pressedMovementKeys.has('s')
+  const left = pressedMovementKeys.has('arrowleft') || pressedMovementKeys.has('a')
+  const right = pressedMovementKeys.has('arrowright') || pressedMovementKeys.has('d')
+  let dx = Number(right) - Number(left)
+  let dy = Number(down) - Number(up)
+
+  if (dx || dy) {
+    const length = Math.hypot(dx, dy)
+    dx /= length
+    dy /= length
+    if (Math.abs(dx) > Math.abs(dy)) player.value.direction = dx < 0 ? 'left' : 'right'
+    else player.value.direction = dy < 0 ? 'up' : 'down'
+
+    const distance = PLAYER_SPEED * delta
+    const nextX = player.value.x + dx * distance
+    const nextY = player.value.y + dy * distance
+    const previousX = player.value.x
+    const previousY = player.value.y
+    // 分轴碰撞检测允许角色沿墙滑动，不会因斜向碰撞完全卡死。
+    if (canPlayerMoveTo(nextX, player.value.y)) player.value.x = nextX
+    if (canPlayerMoveTo(player.value.x, nextY)) player.value.y = nextY
+    player.value.walking = player.value.x !== previousX || player.value.y !== previousY
+    if (player.value.walking) {
+      player.value.walkFrame++
+      selected.value = null
+      followPlayerCamera()
+    }
+  } else {
+    player.value.walking = false
+  }
+
   render()
+  movementFrameId = requestAnimationFrame(updateExplorerMovement)
+}
+
+function clearMovementInput() {
+  pressedMovementKeys.clear()
+  if (movementFrameId) cancelAnimationFrame(movementFrameId)
+  movementFrameId = 0
+  lastMovementFrameTime = 0
+  if (player.value.walking) {
+    player.value.walking = false
+    render()
+  }
 }
 function pointerPosition(event) {
   const rect = canvas.value.getBoundingClientRect()
@@ -669,12 +731,17 @@ onMounted(() => {
   if (canvas.value) resizeObserver.observe(canvas.value)
   window.addEventListener('resize', resize)
   window.addEventListener('keydown', onExplorerKeydown)
+  window.addEventListener('keyup', onExplorerKeyup)
+  window.addEventListener('blur', clearMovementInput)
   resize()
 })
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   window.removeEventListener('resize', resize)
   window.removeEventListener('keydown', onExplorerKeydown)
+  window.removeEventListener('keyup', onExplorerKeyup)
+  window.removeEventListener('blur', clearMovementInput)
+  clearMovementInput()
 })
 </script>
 

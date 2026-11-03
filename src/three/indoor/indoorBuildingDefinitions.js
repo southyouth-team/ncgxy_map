@@ -43,12 +43,46 @@ export const indoorBuildingDefinitions = {
     ],
   },
 }
+function polygonArea(points) {
+  return Math.abs(points.reduce((sum, point, index) => {
+    const next = points[(index + 1) % points.length]
+    return sum + point.x * next.z - next.x * point.z
+  }, 0)) / 2
+}
+function segmentsIntersect(a, b, c, d) {
+  const cross = (p, q, r) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x)
+  const ab1 = cross(a, b, c), ab2 = cross(a, b, d)
+  const cd1 = cross(c, d, a), cd2 = cross(c, d, b)
+  return ab1 * ab2 < -1e-8 && cd1 * cd2 < -1e-8
+}
+function validateFootprintPolygon(footprint) {
+  const points = footprint?.polygon
+  if (!Array.isArray(points) || points.length < 3 || points.length > 32) return ['建筑轮廓必须包含 3 至 32 个顶点']
+  if (points.some(point => !Number.isFinite(point?.x) || !Number.isFinite(point?.z))) return ['建筑轮廓顶点坐标无效']
+  if (polygonArea(points) < 1) return ['建筑轮廓面积过小或顶点顺序无效']
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length]
+    if (Math.hypot(a.x - b.x, a.z - b.z) < 0.25) return ['建筑轮廓存在重合或过近顶点']
+    for (let j = i + 1; j < points.length; j++) {
+      if (j === i || j === (i + 1) % points.length || i === (j + 1) % points.length) continue
+      if (segmentsIntersect(a, b, points[j], points[(j + 1) % points.length])) return ['建筑轮廓不能自相交']
+    }
+  }
+  const bounds = footprint.bounds
+  if (points.some(point => point.x < bounds.minX - 0.01 || point.x > bounds.maxX + 0.01 || point.z < bounds.minZ - 0.01 || point.z > bounds.maxZ + 0.01)) return ['建筑轮廓顶点超出占地包围范围']
+  return []
+}
+
 export function validateIndoorBuilding(building) {
   const errors = []
   if (!building || typeof building !== 'object') return ['建筑配置必须是对象']
   if (!building.id) errors.push('建筑必须包含 id')
   if (!Number.isFinite(building.floorHeight) || building.floorHeight < 2.5) errors.push('floorHeight 必须大于等于 2.5')
   if (!Array.isArray(building.floors) || building.floors.length === 0) errors.push('建筑必须至少包含一个楼层')
+  if (building.footprint) {
+    if (!building.footprint.bounds || !['rect', 'polygon'].includes(building.footprint.type)) errors.push('建筑占地类型或边界无效')
+    else errors.push(...validateFootprintPolygon(building.footprint))
+  }
   const levels = new Set()
   const floors = Array.isArray(building.floors) ? building.floors : []
   for (const floor of floors) {
@@ -110,9 +144,15 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
     layoutStatus: 'procedural-template',
     footprintSize: { width: footprintWidth, depth: footprintDepth },
     footprint: {
-      type: 'rect',
+      type: 'polygon',
       source: footprint.source || 'campus-plan',
       bounds: { minX: -footprintWidth / 2, maxX: footprintWidth / 2, minZ: -footprintDepth / 2, maxZ: footprintDepth / 2 },
+      polygon: [
+        { x: -footprintWidth / 2, z: -footprintDepth / 2 },
+        { x: footprintWidth / 2, z: -footprintDepth / 2 },
+        { x: footprintWidth / 2, z: footprintDepth / 2 },
+        { x: -footprintWidth / 2, z: footprintDepth / 2 },
+      ],
       expansion: { north: 0, south: 0, east: 0, west: 0 },
     },
     interiorNormalized: width !== footprintWidth || depth !== footprintDepth,

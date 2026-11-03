@@ -37,12 +37,12 @@ export function createRpgSampleScene(THREE) {
     }
   }
   // 校园主路与通往教学楼的石板支路。
-  addBox('main-campus-road-edge', 0, 0.012, 8, 48, 0.05, 5.4, materials.pathDark)
-  addBox('main-campus-road', 0, 0.06, 8, 48, 0.04, 4.9, materials.path)
-  addBox('building-walkway-edge', 0, 0.012, 1.7, 5.8, 0.05, 9.2, materials.pathDark)
-  addBox('building-walkway', 0, 0.06, 1.7, 5.2, 0.04, 9.2, materials.pathLight)
+  addBox('main-campus-road-edge', 0, 0.012, 8, 48, 0.015, 5.4, materials.pathDark)
+  addBox('main-campus-road', 0, 0.027, 8, 48, 0.015, 4.9, materials.path)
+  addBox('building-walkway-edge', 0, 0.012, 1.7, 5.8, 0.015, 9.2, materials.pathDark)
+  addBox('building-walkway', 0, 0.027, 1.7, 5.2, 0.015, 9.2, materials.pathLight)
   for (let z = -2.2; z < 6; z += 1.35) {
-    addBox('walkway-joint', 0, 0.101, z, 5.1, 0.008, 0.055, materials.pathDark)
+    addBox('walkway-joint', 0, 0.043, z, 5.1, 0.006, 0.055, materials.pathDark)
   }
   // 教学楼：墙体、分层窗户、门廊与双坡屋顶组成完整体块。
   const building = new THREE.Group()
@@ -148,14 +148,14 @@ export function createRpgSampleScene(THREE) {
   const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false })
   const sprite = new THREE.Sprite(spriteMaterial)
   sprite.name = 'PixelExplorerSprite'
-  sprite.position.set(0, 1.35, 14)
+  sprite.position.set(0, 1.262, 14)
   sprite.scale.set(1.65, 2.5, 1)
   root.add(sprite)
   root.userData.playerSpawn = { x: 0, z: 14 }
   root.userData.walkableBounds = { minX: -25, maxX: 25, minZ: -19, maxZ: 19 }
   root.userData.sampleBounds = { width: 62, depth: 54 }
   root.userData.updatePlayerAnimation = (moving, time, dx = 0, dz = 0) => {
-    sprite.position.y = moving ? 1.38 + Math.abs(Math.sin(time * 12)) * 0.07 : 1.35
+    sprite.position.y = moving ? 1.292 + Math.abs(Math.sin(time * 12)) * 0.05 : 1.262
     let row = 0 // 默认朝向镜头
     if (Math.abs(dx) > Math.abs(dz)) row = dx < 0 ? 1 : 2
     else if (Math.abs(dz) > 0.0001) row = dz < 0 ? 3 : 0

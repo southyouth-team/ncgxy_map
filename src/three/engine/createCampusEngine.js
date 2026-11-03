@@ -92,6 +92,17 @@ export function createCampusEngine(container, callbacks = {}) {
     if (playerSprite) cameraRig.player.set(playerSprite.position.x, 1.7, playerSprite.position.z)
     // 从明确标记为建筑的场景对象提取世界包围盒，避免把道路、树木等误判为墙体。
     campus.updateMatrixWorld(true)
+    // GIS 场景按实际地面/要素包围盒计算漫游边界，避免固定 150×105 范围把可走区域截断。
+    if (campus.userData.isGISDriven) {
+      const campusBounds = new THREE.Box3().setFromObject(campus)
+      if (!campusBounds.isEmpty()) {
+        const padding = 6
+        campus.userData.walkableBounds = {
+          minX: campusBounds.min.x - padding, maxX: campusBounds.max.x + padding,
+          minZ: campusBounds.min.z - padding, maxZ: campusBounds.max.z + padding,
+        }
+      }
+    }
     const buildingObstacles = []
     campus.traverse((object) => {
       if (!(object.userData?.buildingId || object.userData?.objectType === 'building')) return
@@ -371,14 +382,33 @@ export function createCampusEngine(container, callbacks = {}) {
       })
       group.position.set(centerX, 0.16, centerZ)
       group.userData.campusBuildingId = building.id
+      group.userData.objectType = 'building'
       group.userData.displayName = building.label
       rpgPreviewGroup.add(group)
     }
 
     scene.add(rpgPreviewGroup)
     if (campus) campus.visible = false
+    // 编辑器实时预览使用当前文档的地面边界和建筑碰撞体，不能沿用旧校园场景的碰撞数据。
+    const previewBounds = {
+      minX: centerX - groundWidth / 2, maxX: centerX + groundWidth / 2,
+      minZ: centerZ - groundDepth / 2, maxZ: centerZ + groundDepth / 2,
+    }
+    const previewObstacles = []
+    rpgPreviewGroup.updateMatrixWorld(true)
+    rpgPreviewGroup.traverse(object => {
+      if (object.userData?.objectType !== 'building') return
+      const bounds = new THREE.Box3().setFromObject(object)
+      if (!bounds.isEmpty()) previewObstacles.push({ minX: bounds.min.x, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: bounds.max.z })
+    })
+    collisionWorld = new CollisionWorld(previewBounds, previewObstacles, 0.62)
+    input.collisionWorld = collisionWorld
+    const safeSpawn = collisionWorld.resolvePosition(cameraRig.player)
+    cameraRig.player.x = safeSpawn.x
+    cameraRig.player.z = safeSpawn.z
     cameraRig?.focusBounds(groundWidth, groundDepth, centerX, centerZ)
-    return true
+    if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
+    else if (cameraRig.mode === 'thirdPerson') cameraRig.updateThirdPersonDesired()    return true
   }
 
   function onScenePointerDown(event) {

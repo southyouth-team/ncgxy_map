@@ -7,7 +7,7 @@ import IndoorFloorPlanEditor from './components/IndoorFloorPlanEditor.vue'
 import BuildingFootprintEditor from './components/BuildingFootprintEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
-import { CAMPUS_BUILDING_FOOTPRINTS } from './data/campus/campusLayout.js'
+import { CAMPUS_BUILDING_FOOTPRINTS, mapPixelToWorld } from './data/campus/campusLayout.js'
 import { expandIndoorBuilding } from './three/indoor/indoorBuildingDefinitions.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
@@ -36,6 +36,7 @@ const returnPixelY = Number(initialUrlParams.get('returnY'))
 const returnPixelPosition = Number.isFinite(returnPixelX) && Number.isFinite(returnPixelY)
   ? { x: returnPixelX, y: returnPixelY }
   : null
+const returnWorldPosition = returnPixelPosition ? mapPixelToWorld(returnPixelPosition.x, returnPixelPosition.y) : null
 const selectedBuildingId = ref(CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId) ? requestedBuildingId : (CAMPUS_BUILDING_FOOTPRINTS[0]?.id || ''))
 const indoorFloorCount = ref(3)
 const indoorEntryBusy = ref(false)
@@ -409,7 +410,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: requestedBuildingId ? 'campus' : (isRpgSample ? 'rpg-sample' : 'campus') })
+    }, { sceneType: requestedBuildingId ? 'campus' : (isRpgSample ? 'rpg-sample' : 'campus'), initialPlayerPosition: returnWorldPosition })
     await engine.init()
     if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {

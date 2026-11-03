@@ -83,6 +83,16 @@ export function createCampusEngine(container, callbacks = {}) {
         minZ: bounds.min.z, maxZ: bounds.max.z,
       })
     })
+    // 树冠用于视觉遮挡，碰撞仅按树干半径计算，避免把整片树冠误判成墙。
+    campus.traverse((object) => {
+      const radius = Number(object.userData?.collisionRadius)
+      if (!(radius > 0)) return
+      const position = object.getWorldPosition(new THREE.Vector3())
+      buildingObstacles.push({
+        minX: position.x - radius, maxX: position.x + radius,
+        minZ: position.z - radius, maxZ: position.z + radius,
+      })
+    })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
     // 湖水不可通行；中央湖区保留 holes 中定义的岛屿步行区域。
     for (const area of CAMPUS_AREAS.filter(item => item.type === 'water' && item.polygon?.length >= 3)) {

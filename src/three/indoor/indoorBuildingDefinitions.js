@@ -109,9 +109,69 @@ export function createIndoorBuildingFromFootprint(footprint, options = {}) {
     generatedFromFootprint: true,
     layoutStatus: 'procedural-template',
     footprintSize: { width: footprintWidth, depth: footprintDepth },
+    footprint: {
+      type: 'rect',
+      source: footprint.source || 'campus-plan',
+      bounds: { minX: -footprintWidth / 2, maxX: footprintWidth / 2, minZ: -footprintDepth / 2, maxZ: footprintDepth / 2 },
+      expansion: { north: 0, south: 0, east: 0, west: 0 },
+    },
     interiorNormalized: width !== footprintWidth || depth !== footprintDepth,
     floorHeight,
     bounds: { minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 },
     floors,
   }
+}
+
+/**
+ * 按指定方向扩建矩形建筑占地，并同步平移室内构件的局部坐标。
+ * amount 为场景单位；不伪造真实测绘尺寸，调用方应在保存前进行人工确认。
+ */
+export function expandIndoorBuilding(definition, { side, amount = 2 } = {}) {
+  if (!definition || !['north', 'south', 'east', 'west'].includes(side)) {
+    throw new TypeError('扩建方向必须是 north/south/east/west')
+  }
+  const distance = Number(amount)
+  if (!Number.isFinite(distance) || distance <= 0 || distance > 50) {
+    throw new RangeError('单次扩建尺寸必须大于 0 且不超过 50')
+  }
+  const next = JSON.parse(JSON.stringify(definition))
+  const footprint = next.footprint || {
+    type: 'rect',
+    source: 'legacy-layout',
+    bounds: { minX: -next.footprintSize.width / 2, maxX: next.footprintSize.width / 2, minZ: -next.footprintSize.depth / 2, maxZ: next.footprintSize.depth / 2 },
+    expansion: { north: 0, south: 0, east: 0, west: 0 },
+  }
+  const expansion = { north: 0, south: 0, east: 0, west: 0, ...(footprint.expansion || {}) }
+  expansion[side] += distance
+  const oldBounds = footprint.bounds
+  const bounds = { ...oldBounds }
+  if (side === 'east') bounds.maxX += distance
+  if (side === 'west') bounds.minX -= distance
+  if (side === 'north') bounds.minZ -= distance
+  if (side === 'south') bounds.maxZ += distance
+  const shiftX = (bounds.minX + bounds.maxX - oldBounds.minX - oldBounds.maxX) / 2
+  const shiftZ = (bounds.minZ + bounds.maxZ - oldBounds.minZ - oldBounds.maxZ) / 2
+  const widthDelta = bounds.maxX - bounds.minX - (oldBounds.maxX - oldBounds.minX)
+  const depthDelta = bounds.maxZ - bounds.minZ - (oldBounds.maxZ - oldBounds.minZ)
+
+  next.footprint = { ...footprint, bounds, expansion }
+  next.footprintSize = { width: bounds.maxX - bounds.minX, depth: bounds.maxZ - bounds.minZ }
+  next.bounds = {
+    minX: next.bounds.minX - shiftX - widthDelta / 2,
+    maxX: next.bounds.maxX - shiftX + widthDelta / 2,
+    minZ: next.bounds.minZ - shiftZ - depthDelta / 2,
+    maxZ: next.bounds.maxZ - shiftZ + depthDelta / 2,
+  }
+  next.floors = next.floors.map(floor => ({
+    ...floor,
+    width: floor.width + widthDelta,
+    depth: floor.depth + depthDelta,
+    rooms: floor.rooms.map(room => ({ ...room, x: room.x - shiftX, z: room.z - shiftZ })),
+    walls: (floor.walls || []).map(wall => ({ ...wall, x: wall.x - shiftX, z: wall.z - shiftZ })),
+    spawnPoint: floor.spawnPoint ? { ...floor.spawnPoint, x: floor.spawnPoint.x - shiftX, z: floor.spawnPoint.z - shiftZ } : floor.spawnPoint,
+    stairPoint: floor.stairPoint ? { ...floor.stairPoint, x: floor.stairPoint.x - shiftX, z: floor.stairPoint.z - shiftZ } : floor.stairPoint,
+  }))
+  next.interiorNormalized = false
+  next.expansionStatus = 'user-expanded-unverified'
+  return next
 }

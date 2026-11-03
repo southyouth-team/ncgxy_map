@@ -787,8 +787,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function focusCampus() {
     cameraRig?.focusCampus()
-    const spawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
-    input?.resetPosition(spawn)
+    const spawn = isRpgSample ? campus?.userData.playerSpawn : mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
+    input?.resetPosition(spawn || { x: 0, z: 14 })
   }
 
   function dispose() {

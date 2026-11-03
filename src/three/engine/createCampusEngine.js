@@ -780,6 +780,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorOutdoorTarget.position.x = indoorOutdoorBase.position.x + shiftX
     indoorOutdoorTarget.position.z = indoorOutdoorBase.position.z + shiftZ
     indoorOutdoorTarget.updateMatrixWorld(true)
+    // 室外碰撞体与建筑包围盒同步，避免扩建后角色仍按旧占地碰撞。
+    if (!(isRpgSample && indoorOutdoorTarget.userData?.buildingId === 'sample-teaching-building') &&
+        indoorOutdoorBase.collisionIndex >= 0 && outdoorCollisionWorld?.obstacles[indoorOutdoorBase.collisionIndex]) {
+      const bounds = new THREE.Box3().setFromObject(indoorOutdoorTarget)
+      outdoorCollisionWorld.obstacles[indoorOutdoorBase.collisionIndex] = {
+        minX: bounds.min.x, maxX: bounds.max.x,
+        minZ: bounds.min.z, maxZ: bounds.max.z,
+      }
+    }
     return true
   }
 
@@ -794,6 +803,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       baseline = {
         width: originalBounds.max.x - originalBounds.min.x,
         depth: originalBounds.max.z - originalBounds.min.z,
+        bounds: { minX: originalBounds.min.x, maxX: originalBounds.max.x, minZ: originalBounds.min.z, maxZ: originalBounds.max.z },
         position: target.position.clone(),
         scale: target.scale.clone(),
       }
@@ -804,9 +814,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     target.updateMatrixWorld(true)
     const bounds = new THREE.Box3().setFromObject(target)
     indoorOutdoorTarget = target
+    const collisionIndex = outdoorCollisionWorld?.obstacles.findIndex(obstacle =>
+      !obstacle.circle && !obstacle.polygon &&
+      Math.abs(obstacle.minX - baseline.bounds.minX) < 0.001 &&
+      Math.abs(obstacle.maxX - baseline.bounds.maxX) < 0.001 &&
+      Math.abs(obstacle.minZ - baseline.bounds.minZ) < 0.001 &&
+      Math.abs(obstacle.maxZ - baseline.bounds.maxZ) < 0.001) ?? -1
     indoorOutdoorBase = {
       width: baseline.width,
       depth: baseline.depth,
+      bounds: baseline.bounds,
+      collisionIndex,
       position: baseline.position.clone(),
       scale: baseline.scale.clone(),
     }

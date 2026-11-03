@@ -640,7 +640,14 @@ function exportDocument() {
     </header>
     <div class="workspace">
       <aside class="tool-panel">
-        <div class="panel-title">场景工具</div>
+        <div class="sidebar-overview"><div class="sidebar-kicker">WORKSPACE</div><strong>场景构建</strong><span>从资产库开始搭建校园地图</span><div class="sidebar-stats"><div><b>{{ buildings.length }}</b><small>建筑</small></div><div><b>{{ roads.length }}</b><small>道路</small></div><div><b>{{ areas.length }}</b><small>区域</small></div></div></div>
+        <div class="panel-title">编辑工具</div>
+        <div class="tool-grid">
+          <button :class="{active:tool==='select'}" @click="tool='select'"><span>↖</span>选择移动</button>
+          <button :class="{active:tool==='building'}" @click="tool='building'"><span>▰</span>建筑摆放</button>
+          <button :class="{active:tool==='road'}" @click="tool='road'"><span>⌁</span>道路绘制</button>
+        </div>
+        <div class="panel-separator"></div>
         <div class="panel-title">底图与校准</div>
         <label class="upload-control">上传校园底图（PNG/JPG/WebP，≤15MB）<input type="file" accept="image/png,image/jpeg,image/webp" @change="uploadReferenceImage" /></label>
         <template v-if="referenceImage">
@@ -668,20 +675,18 @@ function exportDocument() {
         <small v-if="persistenceMessage" class="hint">{{ persistenceMessage }}</small>
         <button v-if="revisionConflict" class="danger-button" @click="exportDocument">导出本地版本</button>
         <button v-if="revisionConflict" class="add-button" @click="reloadEditorDocument">重新加载服务端版本</button>
-        <button :class="{active:tool==='select'}" @click="tool='select'"><span>↖</span>选择 / 移动</button>
-        <button :class="{active:tool==='building'}" @click="tool='building'"><span>▰</span>建筑摆放</button>
-        <button :class="{active:tool==='road'}" @click="tool='road'"><span>⌁</span>道路编辑</button>
-        <div class="panel-separator"></div>
-        <div class="panel-title">建筑资源库</div>
-        <select v-model="newBuilding"><option v-for="item in palette" :key="item">{{ item }}</option></select>
-        <button class="add-button" @click="addBuilding">＋ 放置建筑</button>
+        <div class="panel-title asset-title">建筑资产库 <small>{{ palette.length }} 种</small></div>
+        <div class="asset-grid">
+          <button v-for="item in palette" :key="item" :class="{selected:newBuilding===item}" @click="newBuilding=item;tool='building';addBuilding()"><span class="asset-glyph">▦</span><b>{{ item }}</b><small>点击放置</small></button>
+        </div>
         <div class="panel-title road-title">道路工具</div>
         <label>道路宽度 <b>{{ roadWidth }} px</b></label><input v-model.number="roadWidth" type="range" min="4" max="24">
         <button class="add-button" @click="addRoad">＋ 新建道路</button>
         <p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
       </aside>
       <main class="map-stage">
-        <div class="stage-label"><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>示意坐标 · 非米制</em></div>
+        <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
           <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>
@@ -719,7 +724,7 @@ function exportDocument() {
         <footer class="stage-footer"><span>工作区 {{ workspaceBounds.width }} × {{ workspaceBounds.height }} · 底图为参考图层，工作区可无限平移 · 空白处拖动 / 空格+拖动 / 中键拖动 / 滚轮缩放</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路 · {{ areas.length }} 个区域</span><span>坐标：可超出原图范围的编辑单位</span></footer>
       </main>
       <aside class="inspector">
-        <div class="panel-title">属性检查器</div>
+        <div class="inspector-heading"><div class="panel-title">属性检查器</div><span>PROPERTIES</span></div>
         <div class="selected-card"><small>当前选中</small><strong>{{ selectedLabel }}</strong><span>{{ selected.type==='road' ? '道路 / LineString' : selected.type==='building' ? '建筑 / Footprint' : '请选择场景对象' }}</span></div>
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input v-model="selectedBuilding.label">
@@ -737,7 +742,7 @@ function exportDocument() {
           <label>道路宽度</label><input v-model.number="selectedRoad.width" type="range" min="4" max="24">
           <button class="add-button" @click="addRoadNode">＋ 添加道路控制点</button><p class="hint">拖动控制点调整曲线；点击控制点删除（至少保留 2 个）。道路采用平滑曲线显示。</p><button class="danger-button" @click="deleteSelected">删除道路</button>
         </template>
-        <div v-else class="empty-inspector">在校园平面图中选择一栋建筑或一条道路。</div>
+        <div v-else class="empty-inspector"><span class="empty-inspector-icon">⌖</span><strong>尚未选择对象</strong><p>在画布中点击建筑、道路或区域，即可查看并编辑对应属性。</p></div>
       </aside>
     </div>
   </section>
@@ -745,4 +750,54 @@ function exportDocument() {
 
 <style scoped>\n.upload-control{display:block;padding:9px;margin:8px 0;background:#e8eddf;border:1px dashed #87977c;border-radius:6px;cursor:pointer}.upload-control input{display:block;width:100%;margin-top:6px;font-size:11px}.coordinate-grid button{grid-column:span 2}.map-stage svg{user-select:none}
 .campus-editor{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;background:#e6dfc9;color:#3b4c37;font-family:Inter,"Microsoft YaHei",sans-serif}.editor-header{height:64px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#f8f7ef;border-bottom:1px solid #c9cbbb}.brand,.header-actions{display:flex;align-items:center;gap:12px}.brand-mark{display:grid;place-items:center;width:36px;height:36px;background:#315b43;color:#f4e8c9;font-weight:800}.brand strong,.brand small{display:block}.brand strong{font-size:14px}.brand small{font-size:9px;letter-spacing:1.4px;color:#788477;margin-top:4px}.header-actions button,.tool-panel button,.inspector button{border:1px solid #c9cbbb;background:#fffdf5;color:#344b3b;border-radius:3px;padding:8px 11px;font-size:12px;cursor:pointer}.header-actions button:disabled{opacity:.4}.header-actions .primary,.add-button{background:#315b43!important;color:#fff!important;border-color:#315b43!important}.zoom-value{font-size:11px;min-width:36px;text-align:center}.save-indicator{font-size:11px;color:#71816d;white-space:nowrap}.save-indicator.saving{color:#a07835}.save-indicator.error,.save-indicator.conflict{color:#a44e3d}.recognition-progress{margin:8px 0;padding:10px;background:#f8f4e9;border:1px solid #dfd2b4;border-radius:5px}.recognition-progress-head{display:flex;justify-content:space-between;font-size:11px;color:#6d5734}.recognition-progress-track{height:6px;margin:8px 0;background:#e7dfcf;border-radius:8px;overflow:hidden}.recognition-progress-track i{display:block;width:32%;height:100%;background:#b77b42;border-radius:8px;animation:recognition-slide 1.35s ease-in-out infinite alternate}.recognition-progress-track i.active{width:48%;background:#71945c}@keyframes recognition-slide{from{transform:translateX(0)}to{transform:translateX(205%)}}.recognition-progress small{display:block;font-size:10px;line-height:1.55;color:#786c56}.recognition-progress-tip{margin-top:4px;opacity:.8}.recognition-notice{padding:9px;background:#f0ead8;border:1px solid #ded2b4;border-radius:4px;margin:10px 0}.recognition-notice strong,.recognition-notice span{display:block}.recognition-notice strong{font-size:11px;color:#6e5b35}.recognition-notice span{font-size:10px;line-height:1.6;color:#81775f;margin-top:4px}.workspace{display:grid;grid-template-columns:190px minmax(0,1fr) 220px;min-height:0;flex:1}.tool-panel,.inspector{background:#f7f6ed;padding:17px 14px;border-right:1px solid #d1d2c5;overflow:auto}.inspector{border-right:0;border-left:1px solid #d1d2c5}.panel-title{font-size:11px;font-weight:800;letter-spacing:1px;color:#607363;margin:2px 0 13px}.tool-panel>button{width:100%;text-align:left;margin-bottom:7px}.tool-panel>button span{display:inline-block;width:23px;font-size:17px}.tool-panel>button.active{background:#e4eadc;border-color:#66866b}.panel-separator{height:1px;background:#d8d9cc;margin:17px 0}.tool-panel select,.inspector input:not([type=range]){width:100%;box-sizing:border-box;border:1px solid #c9cbbb;padding:8px;background:white;margin:7px 0 10px;color:#344b3b}.tool-panel label,.inspector label{display:block;font-size:11px;color:#69766a;margin:14px 0 5px}.tool-panel label b{float:right}.tool-panel input[type=range],.inspector input[type=range]{width:100%;accent-color:#527b58}.road-title{margin-top:22px}.hint{font-size:10px;line-height:1.7;color:#7b867a;margin-top:20px}.map-stage{display:flex;flex-direction:column;min-width:0;background:#d9dfc7}.stage-label{height:38px;display:flex;align-items:center;gap:8px;padding:0 16px;font-size:10px;font-weight:800;letter-spacing:1.1px;color:#4f6653}.stage-label em{font-style:normal;font-weight:400;letter-spacing:0;color:#899184}.live-dot{width:7px;height:7px;border-radius:50%;background:#72965c}.map-scroll{flex:1;min-height:0;overflow:hidden;position:relative;padding:0;touch-action:none;user-select:none;background-color:#d9dfc7;background-image:radial-gradient(#87987955 .7px,transparent .7px);background-size:16px 16px}.campus-map{display:block;width:100%;height:100%;background:#86a765;box-shadow:0 12px 35px #384a3528;touch-action:none;cursor:grab}.campus-map:active{cursor:grabbing}.building{cursor:move}.building:hover rect:first-child{stroke:#d69c43}.stage-footer{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:9px;color:#738071;background:#e8e9df}.selected-card{padding:12px;background:#e9eddf;border:1px solid #d1d9c8;margin-bottom:16px}.selected-card small,.selected-card strong,.selected-card span{display:block}.selected-card small{font-size:9px;color:#87917e}.selected-card strong{font-size:13px;margin:6px 0}.selected-card span{font-size:10px;color:#6e7d6e}.coordinate-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.coordinate-grid span{padding:7px;background:#eceee5;font-size:10px}.confidence{font-size:10px;color:#9a7542}.inspector .add-button,.inspector .danger-button{width:100%;margin-top:14px}.danger-button{border-color:#d8b7a9!important;color:#9b4d37!important;background:#fff8f4!important}.empty-inspector{font-size:11px;line-height:1.8;color:#879184;padding:20px 0}@media(max-width:900px){.workspace{grid-template-columns:150px minmax(0,1fr)}.inspector{display:none}.editor-header{padding:0 10px}.header-actions{gap:4px}.header-actions button{padding:7px}.brand small{display:none}}@media(max-width:600px){.workspace{grid-template-columns:112px minmax(0,1fr)}.tool-panel{padding:10px 7px}.tool-panel>button{font-size:10px;padding:7px 5px}.stage-footer span:last-child{display:none}.header-actions button:nth-child(3){display:none}}
+
+/* Workbench refresh: clearer hierarchy and directly discoverable editing actions */
+.campus-editor{background:#e9e8df;color:#293b30}
+.editor-header{height:68px;padding:0 24px;background:#fbfbf7;border-bottom:1px solid #d8ddd3;box-shadow:0 2px 10px #293b3008}
+.brand-mark{width:38px;height:38px;border-radius:8px;background:#254f3b}
+.header-actions{gap:7px}.header-actions button{border-radius:6px;padding:8px 12px;font-weight:600}
+.workspace{grid-template-columns:248px minmax(0,1fr) 284px;background:#e9e8df}
+.tool-panel,.inspector{padding:18px 16px;background:#fbfbf7;border-color:#dce1d8}
+.sidebar-overview{padding:15px;margin:-2px -2px 20px;background:#eef2e9;border:1px solid #e0e7dc;border-radius:9px}
+.sidebar-kicker{font-size:9px;letter-spacing:1.6px;font-weight:800;color:#83917f}
+.sidebar-overview>strong{display:block;margin-top:7px;font-size:18px;color:#294632}
+.sidebar-overview>span{display:block;margin-top:5px;font-size:10px;color:#7b887a}
+.sidebar-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:14px}
+.sidebar-stats>div{padding:8px 5px;text-align:center;background:#fff;border:1px solid #e4e9e0;border-radius:6px}
+.sidebar-stats b,.sidebar-stats small{display:block}.sidebar-stats b{font-size:16px;color:#315b43}.sidebar-stats small{margin-top:3px;font-size:9px;color:#879184}
+.panel-title{display:flex;align-items:center;justify-content:space-between;margin:5px 0 11px;color:#435d49;font-size:11px}
+.tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.tool-grid button{min-height:60px!important;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;padding:9px!important;border-radius:7px!important;font-weight:600}
+.tool-grid button span{font-size:18px;width:auto!important;color:#56745a}
+.tool-grid button.active{background:#e8f0e6!important;border-color:#729477!important;color:#28533a!important;box-shadow:inset 0 0 0 1px #729477}
+.asset-title small{font-size:9px;font-weight:500;color:#8b9587}
+.asset-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.asset-grid button{min-height:78px!important;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;padding:9px!important;border-radius:7px!important;background:#fff!important}
+.asset-grid button.selected{border-color:#719276!important;background:#edf3e9!important}
+.asset-glyph{display:grid;place-items:center;width:25px;height:25px;border-radius:6px;background:#e8eee4;color:#436b4d;font-size:17px}
+.asset-grid b{font-size:10px}.asset-grid small{font-size:9px;color:#899286}
+.map-stage{background:#e7ebdf}
+.stage-label{height:42px;justify-content:space-between;padding:0 18px;background:#f8faf5;border-bottom:1px solid #dce3d7;color:#49624d}
+.stage-label>div{display:flex;align-items:center;gap:8px}.stage-coordinates{font-size:10px;color:#879285;font-weight:500;letter-spacing:0}
+.canvas-toolbar{height:46px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:#fff;border-bottom:1px solid #e0e5dc}
+.canvas-tool-group{display:flex;align-items:center;gap:5px}
+.canvas-toolbar button{padding:6px 10px;border:1px solid #e1e6dd;border-radius:5px;background:#fff;color:#506653;font-size:10px;cursor:pointer}
+.canvas-toolbar button.active{background:#e9f1e7;border-color:#88a28a;color:#315b43;font-weight:700}
+.canvas-toolbar button:disabled{opacity:.35;cursor:not-allowed}
+.map-scroll{background-color:#e7ebdf;background-image:radial-gradient(#7b927755 .8px,transparent .8px);background-size:18px 18px}
+.campus-map{box-shadow:0 8px 28px #344a351c}
+.stage-footer{height:34px;background:#f8faf5;border-top:1px solid #dce3d7;font-size:9px}
+.inspector-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.inspector-heading .panel-title{margin:0}.inspector-heading>span{font-size:8px;letter-spacing:1.2px;color:#a0aa9c}
+.selected-card{border-radius:8px;background:#eef3ea;border-color:#e0e8dc;padding:14px}
+.selected-card strong{color:#2e4e37;font-size:14px}
+.inspector label{font-weight:600;color:#526653;margin-top:16px}
+.inspector input:not([type=range]),.inspector select{border-radius:5px}
+.inspector .add-button,.inspector .danger-button{border-radius:6px!important}
+.empty-inspector{padding:28px 12px;text-align:center;border:1px dashed #d7dfd3;border-radius:8px;color:#849080}
+.empty-inspector-icon{display:block;font-size:28px;color:#9bad98}
+.empty-inspector strong{display:block;margin-top:10px;font-size:12px;color:#526653}
+.empty-inspector p{font-size:10px;line-height:1.7}
+@media(max-width:1100px){.workspace{grid-template-columns:205px minmax(0,1fr) 240px}}
+@media(max-width:760px){.workspace{grid-template-columns:132px minmax(0,1fr)}.tool-panel{padding:10px 8px}.asset-grid{grid-template-columns:1fr}.sidebar-overview{padding:9px}.sidebar-stats{gap:3px}.sidebar-stats>div{padding:6px 2px}.canvas-toolbar{padding:0 6px}.canvas-toolbar button{padding:6px}.stage-coordinates{display:none}}
 </style>

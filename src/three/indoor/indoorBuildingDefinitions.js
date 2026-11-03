@@ -43,6 +43,21 @@ export const indoorBuildingDefinitions = {
     ],
   },
 }
+ 
+// 样板教学楼提供四层可探索空间；三、四层沿用二层标准教室布局并生成独立 ID。
+for (const level of [3, 4]) {
+  const template = indoorBuildingDefinitions.teachingBlockPrototype.floors[1]
+  const floor = JSON.parse(JSON.stringify(template))
+  floor.level = level
+  floor.rooms = floor.rooms.map(room => ({
+    ...room,
+    id: room.id.replace(/^classroom-2/, `classroom-${level}`),
+    name: room.name.replace(/^教室 2/, `教室 ${level}`),
+    furniture: (room.furniture || []).map(item => ({ ...item, id: `${item.id}-f${level}` })),
+  }))
+  indoorBuildingDefinitions.teachingBlockPrototype.floors.push(floor)
+}
+
 function polygonArea(points) {
   return Math.abs(points.reduce((sum, point, index) => {
     const next = points[(index + 1) % points.length]

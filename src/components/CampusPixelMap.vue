@@ -180,201 +180,30 @@ const BUILDING_ROOF_SETS = [
     { base: '#9ba9a4', light: '#d7ddd2', dark: '#61716e' },
     { base: '#87949a', light: '#c7d0d1', dark: '#53646b' },
   ]
-function drawBuilding(ctx, building, index) {
-  const roofSets = BUILDING_ROOF_SETS
-    const [x1, y1, x2, y2] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
-    const footprint = building.polygon || [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-    if (building.polygon) {
-      const w = x2 - x1, h = y2 - y1
-      const roof = roofSets[index % roofSets.length]
-      const facadeHeight = Math.max(3, Math.min(5, h * .24))
-      const roofHeight = h - facadeHeight
-      ctx.fillStyle = 'rgba(48,65,48,.22)'
-      polygon(ctx, footprint.map(([x, y]) => [x + 3, y + 4]))
-      ctx.fill()
-      polygon(ctx, footprint)
-      ctx.fillStyle = roof.dark
-      ctx.fill()
-      ctx.save()
-      polygon(ctx, footprint)
-      ctx.clip()
-      ctx.fillStyle = roof.base
-      ctx.fillRect(x1, y1, w, roofHeight)
-      ctx.fillStyle = roof.light
-      for (let stripeY = y1 + 3; stripeY < y1 + roofHeight - 1; stripeY += 4) {
-        ctx.fillRect(x1 + 3, stripeY, Math.max(1, w - 6), 1)
-      }
-      // 不规则建筑轮廓仍按原 footprint 裁切，右侧立面阴影不会越出占地边界。
-      if (w >= 16) {
-        ctx.fillStyle = '#52666b'
-        ctx.fillRect(x2 - 4, y1 + 2, 4, h - 2)
-        ctx.fillStyle = '#70858a'
-        ctx.fillRect(x2 - 4, y1 + roofHeight, 2, facadeHeight)
-      }
-      ctx.fillStyle = '#829694'
-      ctx.fillRect(x1, y1 + roofHeight, w - (w >= 16 ? 4 : 0), facadeHeight)
-      const facadeWidth = w - (w >= 16 ? 4 : 0)
-      const windowCount = Math.max(2, Math.floor(facadeWidth / 13))
-      for (let col = 0; col < windowCount; col++) {
-        const wx = x1 + 4 + col * ((facadeWidth - 8) / windowCount)
-        ctx.fillStyle = '#355b68'
-        ctx.fillRect(wx, y1 + roofHeight + 1, 3, Math.max(1, facadeHeight - 2))
-        ctx.fillStyle = '#d2e7d9'
-        ctx.fillRect(wx + 1, y1 + roofHeight + 1, 1, 1)
-      }
-      ctx.restore()
-      polygon(ctx, footprint)
-      ctx.strokeStyle = roof.dark
-      ctx.lineWidth = 1
-      ctx.stroke()
-      return
-    }
-    const w = x2 - x1, h = y2 - y1
-    const roof = roofSets[index % roofSets.length]
-    const variant = index % 4
-    const facadeHeight = Math.max(3, Math.min(5, h * .24))
-    const roofHeight = h - facadeHeight
-
-    // 轻量投影与现代教学楼主体，统一从左上方受光。
-    ctx.fillStyle = 'rgba(48,65,48,.22)'
-    ctx.fillRect(x1 + 3, y1 + 4, w + 1, h + 1)
-    ctx.fillStyle = roof.dark
-    ctx.fillRect(x1 - 1, y1 - 1, w + 2, h + 2)
-    ctx.fillStyle = roof.base
-    ctx.fillRect(x1, y1, w, roofHeight)
-    ctx.fillStyle = roof.light
-    ctx.fillRect(x1 + 1, y1 + 1, Math.max(2, w - 2), 1)
-    ctx.fillStyle = roof.dark
-    ctx.fillRect(x1, y1 + roofHeight - 1, w, 1)
-
-    // 屋顶纹理按楼栋轮换，保持像素语言一致但避免复制粘贴感。
-    if (variant === 0) {
-      ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + 5, y1 + 3, Math.max(6, w * .32), 2)
-      ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + w - 9, y1 + 3, 4, 3)
-      ctx.fillStyle = '#ead0a0'
-      ctx.fillRect(x1 + w - 8, y1 + 3, 2, 1)
-    } else if (variant === 1) {
-      ctx.fillStyle = roof.light
-      for (let stripeY = y1 + 3; stripeY < y1 + roofHeight - 1; stripeY += 4) {
-        ctx.fillRect(x1 + 3, stripeY, w - 6, 1)
-      }
-      ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + w * .48, y1 + 3, 2, Math.max(3, roofHeight - 5))
-    } else if (variant === 2) {
-      ctx.fillStyle = '#6e7770'
-      ctx.fillRect(x1 + w * .55, y1 + 3, Math.max(4, w * .2), Math.max(3, roofHeight - 5))
-      ctx.fillStyle = '#b9d1c1'
-      ctx.fillRect(x1 + w * .55 + 1, y1 + 4, Math.max(2, w * .2 - 2), 1)
-      ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + 4, y1 + roofHeight - 4, w - 8, 1)
-    } else {
-      ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + w * .3, y1 + 3, w * .4, Math.max(3, roofHeight - 6))
-      ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + w * .3 + 2, y1 + 4, w * .4 - 4, 1)
-    }
-
-    // 屋顶檐口、屋脊与角部高光，形成更清晰的像素建筑轮廓。
-    if (w >= 14 && roofHeight >= 7) {
-      ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + 2, y1 + roofHeight * .52, w - 4, 1)
-      ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + 2, y1 + roofHeight * .52 - 1, w - 4, 1)
-      ctx.fillRect(x1 + 2, y1 + 2, 2, 2)
-      ctx.fillRect(x1 + w - 4, y1 + 2, 2, 2)
-    }
-    if (w >= 22 && roofHeight >= 10) {
-      // 小型屋顶附属结构：不代表真实设施，仅用于区分建筑剪影。
-      ctx.fillStyle = roof.dark
-      ctx.fillRect(x1 + w * .68, y1 + 3, 5, 4)
-      ctx.fillStyle = roof.light
-      ctx.fillRect(x1 + w * .68 + 1, y1 + 3, 3, 1)
-    }
-
-    // 采用浅灰混凝土立面与蓝灰玻璃窗；朝向不明确时不虚构入口方向。
-    const facadeY = y1 + roofHeight
-    // 右侧阴影面压在 footprint 内部，强化楼体厚度但不改变可通行边界。
-    if (w >= 16) {
-      ctx.fillStyle = '#52666b'
-      ctx.fillRect(x2 - 4, y1 + 2, 4, h - 2)
-      ctx.fillStyle = '#70858a'
-      ctx.fillRect(x2 - 4, facadeY, 2, facadeHeight)
-    }
-    ctx.fillStyle = '#829694'
-    ctx.fillRect(x1, facadeY, w - (w >= 16 ? 4 : 0), facadeHeight)
-    ctx.fillStyle = '#d1dbd3'
-    ctx.fillRect(x1, facadeY, 2, facadeHeight)
-    const facadeWidth = w - (w >= 16 ? 4 : 0)
-    const windowCount = Math.max(2, Math.floor(facadeWidth / 13))
-    for (let col = 0; col < windowCount; col++) {
-      const wx = x1 + 4 + col * ((facadeWidth - 8) / windowCount)
-      ctx.fillStyle = '#355b68'
-      ctx.fillRect(wx, facadeY + 1, 3, Math.max(1, facadeHeight - 2))
-      ctx.fillStyle = '#d2e7d9'
-      ctx.fillRect(wx + 1, facadeY + 1, 1, 1)
-      if (facadeHeight >= 5) {
-        ctx.fillStyle = '#52666b'
-        ctx.fillRect(wx, facadeY + facadeHeight - 1, 3, 1)
-      }
-    }
-    // 楼层水平分隔线，给低矮教学楼增加可读的立面尺度。
-    if (facadeHeight >= 5) {
-      ctx.fillStyle = '#a9bbb4'
-      ctx.fillRect(x1 + 2, facadeY + Math.floor(facadeHeight / 2), facadeWidth - 4, 1)
-    }
-    ctx.strokeStyle = roof.dark
+function drawBuilding(ctx, building) {
+  const bounds = getCampusFootprintBounds(building)
+  if (!bounds) return
+  const footprint = building.polygon || [
+    [bounds[0], bounds[1]], [bounds[2], bounds[1]],
+    [bounds[2], bounds[3]], [bounds[0], bounds[3]],
+  ]
+  // 当前阶段只表达建筑真实占地轮廓，不虚构屋顶、窗户、楼层和入口。
+  polygon(ctx, footprint)
+  ctx.fillStyle = '#b9b7ad'
+  ctx.fill()
+  ctx.strokeStyle = '#666f6a'
+  ctx.lineWidth = 1.35
+  ctx.stroke()
+  if (building.confidence === 'low') {
+    ctx.save()
+    ctx.strokeStyle = '#a47b4e'
     ctx.lineWidth = 1
-    ctx.strokeRect(x1 - 1.5, y1 - 1.5, w + 3, h + 3)
-}
-function drawTree(ctx, x, y, index) {
-  const variant = index % 3
-  // 树木锚点位于树干底部，树冠向上延伸，便于按 Y 深度排序。
-  ctx.fillStyle = 'rgba(51,77,54,.2)'
-  ctx.fillRect(x - 5, y + 1, 11, 4)
-  ctx.fillStyle = '#765b3d'
-  ctx.fillRect(x - 1, y - 2, 3, 6)
-  ctx.fillStyle = '#496e4b'
-  ctx.fillRect(x - 4, y - 4, 9, 8)
-  if (variant === 0) {
-    ctx.fillRect(x - 7, y - 2, 4, 5)
-    ctx.fillRect(x + 4, y - 1, 4, 5)
-    ctx.fillStyle = '#6f9d60'
-    ctx.fillRect(x - 5, y - 8, 11, 7)
-    ctx.fillStyle = '#a3c982'
-    ctx.fillRect(x - 2, y - 8, 4, 2)
-    ctx.fillRect(x + 3, y - 5, 2, 2)
-  } else if (variant === 1) {
-    ctx.fillStyle = '#638d59'
-    ctx.fillRect(x - 5, y - 8, 10, 8)
-    ctx.fillStyle = '#8eb66d'
-    ctx.fillRect(x - 3, y - 10, 7, 5)
-    ctx.fillStyle = '#b3cf85'
-    ctx.fillRect(x - 2, y - 9, 3, 2)
-  } else {
-    ctx.fillStyle = '#527c50'
-    ctx.fillRect(x - 6, y - 6, 12, 8)
-    ctx.fillStyle = '#82aa66'
-    ctx.fillRect(x - 3, y - 10, 8, 7)
-    ctx.fillStyle = '#b0ca80'
-    ctx.fillRect(x - 1, y - 9, 3, 2)
+    ctx.setLineDash([3, 2])
+    polygon(ctx, footprint)
+    ctx.stroke()
+    ctx.restore()
   }
 }
-const TREE_SPOTS = (() => {
-  const spots = []
-  for (let y = 80; y < 450; y += 24) {
-    for (let x = 175; x < 830; x += 26) {
-      if ((x * 17 + y * 29) % 23 > 3) continue
-      const nearBuilding = CAMPUS_BUILDING_FOOTPRINTS.some(building => { const [l, t, r, b] = getCampusFootprintBounds(building) || []; return x > l - 9 && x < r + 9 && y > t - 9 && y < b + 9 })
-      const nearRoad = CAMPUS_ROAD_CENTERLINES.some(({ points }) => points.some(([px, py]) => Math.hypot(px - x, py - y) < 9))
-      const inWater = CAMPUS_AREAS.some(area => area.type === 'water' && area.polygon && pointInCampusPolygon([x, y], area.polygon) && !(area.holes || []).some(hole => pointInCampusPolygon([x, y], hole)))
-      if (!nearBuilding && !nearRoad && !inWater) spots.push([x, y])
-    }
-  }
-  return spots
-})()
-
 function drawLabels(ctx) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -454,14 +283,6 @@ function render() {
     bottom: Math.min(500, (height - y) / scale + 16),
   }
   const depthQueue = []
-  TREE_SPOTS.forEach(([treeX, treeY], index) => {
-    if (treeX < visibleBounds.left || treeX > visibleBounds.right
-      || treeY < visibleBounds.top || treeY > visibleBounds.bottom) return
-    depthQueue.push({
-      depth: treeY + 2,
-      draw: () => drawTree(ctx, treeX, treeY, index),
-    })
-  })
   CAMPUS_BUILDING_FOOTPRINTS.forEach((building, index) => {
     const bounds = getCampusFootprintBounds(building)
     if (!bounds || bounds[2] < visibleBounds.left || bounds[0] > visibleBounds.right
@@ -469,7 +290,7 @@ function render() {
     // 建筑以 footprint 最南侧作为深度锚点；绘制整个建筑单元，保持屋顶与立面完整。
     depthQueue.push({
       depth: bounds[3] + 1,
-      draw: () => drawBuilding(ctx, building, index),
+      draw: () => drawBuilding(ctx, building),
     })
   })
   depthQueue.sort((a, b) => a.depth - b.depth)

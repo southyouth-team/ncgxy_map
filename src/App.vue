@@ -480,7 +480,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: requestedBuildingId ? 'campus' : (isRpgSample ? 'rpg-sample' : 'campus'), initialPlayerPosition: returnWorldPosition })
+    }, { sceneType: requestedBuildingId ? 'campus' : (isRpgSample ? 'rpg-sample' : 'campus'), initialPlayerPosition: returnWorldPosition, deferInitialFocus: isRpgSample && !requestedBuildingId })
     await engine.init()
     if (isRpgSample && !requestedBuildingId) {
       const planDocument = getShowcasePlanDocument()

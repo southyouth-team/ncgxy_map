@@ -1,8 +1,9 @@
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 export class CameraRig {
-  constructor(THREE, domElement) {
+  constructor(THREE, domElement, options = {}) {
     this.THREE = THREE
+    this.isometricRpg = Boolean(options.isometricRpg)
     this.domElement = domElement
     this.aspect = 1
     this.overviewSpan = 190
@@ -17,8 +18,8 @@ export class CameraRig {
     this.desiredTarget = this.target.clone()
     this.mode = 'overview'
     this.thirdYaw = 0.35
-    this.thirdPitch = 0.32
-    this.thirdDistance = 15
+    this.thirdPitch = this.isometricRpg ? 0.72 : 0.32
+    this.thirdDistance = this.isometricRpg ? 24 : 15
     this.firstYaw = 0
     this.firstPitch = -0.12
     this.player = new THREE.Vector3(0, 1.7, 24)
@@ -77,7 +78,13 @@ export class CameraRig {
       this.desiredPosition.set(0, 145, 145)
       this.desiredTarget.set(0, 0, 0)
     } else {
-      if (previousCamera !== this.perspectiveCamera) {
+      if (this.isometricRpg && mode === 'thirdPerson') {
+        this.activateCamera(this.overviewCamera)
+        this.thirdPitch = 0.72
+        this.thirdDistance = 24
+        this.overviewCamera.zoom = 2.15
+        this.overviewCamera.updateProjectionMatrix()
+      } else if (previousCamera !== this.perspectiveCamera) {
         this.perspectiveCamera.position.copy(previousCamera.position)
         this.perspectiveCamera.quaternion.copy(previousCamera.quaternion)
         this.activateCamera(this.perspectiveCamera)
@@ -110,6 +117,10 @@ export class CameraRig {
       this.player.z + Math.cos(this.thirdYaw) * horizontal,
     )
     this.desiredTarget.set(this.player.x, this.player.y + 0.7, this.player.z)
+    if (this.isometricRpg && this.camera === this.overviewCamera) {
+      this.overviewCamera.zoom = Math.max(1.1, Math.min(3.1, 51.6 / this.thirdDistance))
+      this.overviewCamera.updateProjectionMatrix()
+    }
   }
 
   updateFirstPersonDesired() {
@@ -124,7 +135,9 @@ export class CameraRig {
 
   rotateThird(dx, dy) {
     this.thirdYaw -= dx * 0.004
-    this.thirdPitch = Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
+    this.thirdPitch = this.isometricRpg
+      ? Math.max(0.58, Math.min(0.92, this.thirdPitch + dy * 0.002))
+      : Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
 
@@ -135,7 +148,7 @@ export class CameraRig {
   }
 
   zoomThird(delta) {
-    this.thirdDistance = Math.max(6, Math.min(32, this.thirdDistance + delta * 0.012))
+    this.thirdDistance = Math.max(12, Math.min(this.isometricRpg ? 38 : 32, this.thirdDistance + delta * 0.012))
     this.updateThirdPersonDesired()
   }
 
@@ -219,7 +232,13 @@ export class CameraRig {
     this.transitioningToOverview = true
     this.orbit.target.set(0, 0, 0)
     this.applyIsometricOrientation()
-    this.player.set(0, 1.7, 24)
+    this.player.set(0, 1.7, this.isometricRpg ? 14 : 24)
+    if (this.isometricRpg) {
+      this.thirdPitch = 0.72
+      this.thirdDistance = 24
+      this.overviewCamera.zoom = 1
+      this.overviewCamera.updateProjectionMatrix()
+    }
   }
 
   dispose() {

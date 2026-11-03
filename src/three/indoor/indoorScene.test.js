@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, createStairPath, getStairStepHeight, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding, resolveIndoorEntrance } from './indoorBuildingDefinitions.js'
 
 
 const sample = {
@@ -392,6 +392,33 @@ describe('indoor stair construction', () => {
   })
 })
 
+
+describe('building-local entrance mapping', () => {
+  const bounds = { minX: -7.5, maxX: 7.5, minZ: -4.5, maxZ: 4.5 }
+
+  it('maps a south-facing exterior entrance to the matching indoor doorway and landing', () => {
+    expect(resolveIndoorEntrance(bounds, { x: 0, z: 5.35 })).toMatchObject({
+      wall: 'south', offset: 0, landing: { x: 0, z: 2.3 },
+    })
+  })
+
+  it('maps entrances on each cardinal wall and clamps the door offset to the wall', () => {
+    expect(resolveIndoorEntrance(bounds, { x: -8, z: 1.25 })).toMatchObject({
+      wall: 'west', offset: 1.25, landing: { x: -5.3, z: 1.25 },
+    })
+    expect(resolveIndoorEntrance(bounds, { x: 8, z: -8 })).toMatchObject({
+      wall: 'east', offset: -4.5, landing: { x: 5.3, z: -4.5 },
+    })
+    expect(resolveIndoorEntrance(bounds, { x: 2.4, z: -5 })).toMatchObject({
+      wall: 'north', offset: 2.4, landing: { x: 2.4, z: -2.3 },
+    })
+  })
+
+  it('rejects missing or invalid entrance coordinates', () => {
+    expect(() => resolveIndoorEntrance(bounds, null)).toThrow()
+    expect(() => resolveIndoorEntrance(bounds, { x: Number.NaN, z: 0 })).toThrow()
+  })
+})
 
 describe('campus footprint indoor generation', () => {
   it('creates editable procedural floors from an approximate campus footprint', () => {

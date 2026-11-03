@@ -113,6 +113,7 @@ describe('indoor stair construction', () => {
     const group = createIndoorFloor(THREE, { ...sample, stairPoint: { x: 10.5, z: 0 } })
     expect(group.userData.stairPoint).toEqual({ x: 10.5, z: 0 })
     expect(group.userData.roomInteractions).toHaveLength(1)
+    expect(group.userData.exitInteractions).toEqual([{ x: 0, z: 7.85 }])
     expect(group.userData.roomInteractions[0].roomId).toBe('classroom-101')
     expect(group.userData.stairPath.start).toEqual({ x: 10.5, z: -2.1 })
     expect(group.userData.stairPath.end).toEqual({ x: 10.5, z: 2.1 })

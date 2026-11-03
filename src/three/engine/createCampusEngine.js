@@ -507,6 +507,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         selectIndoorObject(indoorTarget)
         return
       }
+      // 点击室内地面时沿导航网格寻路；墙体、家具和楼梯仍由碰撞世界兜底。
+      const floorHit = indoorHits.find(hit => hit.object.name === 'indoor-floor-slab')
+      if (floorHit) {
+        const graph = indoorGroup.userData.navigationGraph
+        const route = graph?.findPath(
+          { x: cameraRig.player.x, z: cameraRig.player.z },
+          { x: floorHit.point.x, z: floorHit.point.z },
+        )
+        if (route?.length > 1) {
+          input.setNavigationPath(route)
+          callbacks.onIndoorPromptChange?.({ visible: false })
+        } else {
+          input.setNavigationPath(null)
+          callbacks.onIndoorPromptChange?.({ visible: true, text: '该位置不可到达，请选择走廊或房间入口' })
+        }
+        return
+      }
     }
     const hits = raycaster.intersectObjects(campus.children, true)
     let target = hits[0]?.object || null

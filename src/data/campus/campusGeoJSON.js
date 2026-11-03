@@ -48,7 +48,7 @@ function areaGeometry(area) {
   return { type: 'Polygon', coordinates: [outer, ...holes] }
 }
 
-/** 构建符合 RFC 7946 FeatureCollection 结构的校园平面数据。 */
+/** 构建 GeoJSON FeatureCollection 兼容结构；坐标为本项目定义的本地像素系，并非 RFC 7946 经纬度。 */
 export function buildCampusGeoJSON() {
   const features = []
 
@@ -113,4 +113,59 @@ export function buildCampusGeoJSON() {
     metadata: CAMPUS_SPATIAL_DATASET,
     features,
   }
+}
+
+function openRing(ring) {
+  if (!Array.isArray(ring) || ring.length < 4) return []
+  const first = ring[0]
+  const last = ring[ring.length - 1]
+  return ring.slice(0, ring.length - (first[0] === last[0] && first[1] === last[1] ? 1 : 0))
+}
+
+/**
+ * 返回供 Canvas 2D 与 Three.js 消费的统一空间图层视图。
+ * 几何只从 FeatureCollection 派生，不在渲染端重复维护。
+ */
+export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
+  const areas = collection.features
+    .filter(feature => feature.properties.featureType === 'area')
+    .map(feature => {
+      const rings = feature.geometry.coordinates
+      const polygon = openRing(rings[0])
+      const xs = polygon.map(point => point[0])
+      const ys = polygon.map(point => point[1])
+      const category = feature.properties.category
+      return {
+        id: feature.id,
+        name: feature.properties.name,
+        type: category,
+        confidence: feature.properties.confidence,
+        polygon,
+        holes: rings.slice(1).map(openRing),
+        rect: category === 'sports'
+          ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+          : null,
+      }
+    })
+
+  const roads = collection.features
+    .filter(feature => feature.properties.featureType === 'road')
+    .map(feature => ({
+      id: feature.id,
+      name: feature.properties.name,
+      confidence: feature.properties.confidence,
+      points: feature.geometry.coordinates,
+      width: feature.properties.width,
+    }))
+
+  const buildings = collection.features
+    .filter(feature => feature.properties.featureType === 'building')
+    .map(feature => ({
+      id: feature.id,
+      label: feature.properties.name,
+      confidence: feature.properties.confidence,
+      polygon: openRing(feature.geometry.coordinates[0]),
+    }))
+
+  return { areas, roads, buildings }
 }

@@ -1,7 +1,9 @@
 import {
-  CAMPUS_PLAN_REFERENCE, CAMPUS_AREAS, CAMPUS_ROAD_CENTERLINES,
-  CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
+  CAMPUS_PLAN_REFERENCE, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
+import { getCampusSpatialLayers } from '../../../data/campus/campusGeoJSON.js'
+
+const { areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS } = getCampusSpatialLayers()
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
   addPixelBench, addPixelLamp, createPixelBuilding,

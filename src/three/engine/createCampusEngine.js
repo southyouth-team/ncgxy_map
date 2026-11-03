@@ -716,6 +716,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     previousTime = time
     if (stairTransition) updateStairTransition(delta)
     else input?.update(delta)
+    if (navigationWasActive && !input?.navigationPath) {
+      navigationWasActive = false
+      clearNavigationVisuals()
+    }
     if (!indoorGroup && cameraRig?.player && isRpgSample) {
       const entrance = campus?.getObjectByName('sample-teaching-building')?.userData?.indoorEntrance
       if (entrance) {
@@ -792,6 +796,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function buildIndoorFloor(level, transitionPosition = null) {
+    input?.setNavigationPath(null)
+    navigationWasActive = false
+    clearNavigationVisuals()
     const floor = indoorBuilding?.floors.find(item => item.level === level)
     if (!floor) return false
     const floorDefinition = indoorBuilding.footprint?.polygon?.length >= 3
@@ -1154,6 +1161,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function exitIndoorPrototype() {
+    input?.setNavigationPath(null)
+    navigationWasActive = false
+    clearNavigationVisuals()
     if (!indoorGroup || !outdoorState) return false
     scene.remove(indoorGroup)
     disposeObjectGroup(indoorGroup)
@@ -1206,6 +1216,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer?.domElement?.removeEventListener('pointerdown', onScenePointerDown)
     renderer?.domElement?.removeEventListener('pointerup', onScenePointerUp)
     clearSelection()
+    clearNavigationVisuals()
     clearRpgPreview()
     if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()

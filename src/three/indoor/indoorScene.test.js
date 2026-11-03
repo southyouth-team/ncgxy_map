@@ -91,6 +91,7 @@ describe('multi-floor navigation planning', () => {
     expect(planIndoorFloorRoute(building, 4, 1)?.transitions[0].connector).toEqual({
       from: { level: 4, point: { x: 8, z: -2.1 } },
       to: { level: 3, point: { x: 8, z: 2.1 } },
+      rise: 4.2,
     })
     expect(planIndoorFloorRoute(building, 4, 1)?.levels).toEqual([4, 3, 2, 1])
     const ascending = planIndoorFloorRoute(building, 1, 4).transitions

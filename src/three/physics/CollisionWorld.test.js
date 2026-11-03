@@ -49,6 +49,14 @@ describe('CollisionWorld', () => {
     expect(collision.move({ x: -2, z: 0 }, 2, 0).x).toBe(-1.75)
   })
 
+  it('uses circular collision for trees, benches and lamps without blocking square corners', () => {
+    const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 }, [], 0.5)
+    expect(collision.addCircleObstacle({ x: 0, z: 0, radius: 1 })).toBe(true)
+    expect(collision.isBlocked(1.4, 1.4)).toBe(false)
+    expect(collision.isBlocked(1.4, 0)).toBe(true)
+    expect(collision.addCircleObstacle({ x: 0, z: 0, radius: -1 })).toBe(false)
+  })
+
   it('rejects invalid dynamic obstacles', () => {
     const collision = new CollisionWorld({ minX: -5, maxX: 5, minZ: -5, maxZ: 5 })
     expect(collision.addObstacle({ minX: 2, maxX: 1, minZ: 0, maxZ: 1 })).toBe(false)

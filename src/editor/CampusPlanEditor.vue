@@ -118,6 +118,38 @@ const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 // 图层状态仅控制编辑视图与交互，不写入地图业务数据。
 const layerStates = ref({ buildings: { visible: true, locked: false }, roads: { visible: true, locked: false }, areas: { visible: true, locked: false } })
+const clipboardObject = ref(null)
+let duplicateSequence = 0
+function copySelected() {
+  if (!selected.value.id || isLayerLocked(selected.value.type)) return
+  const collection = selected.value.type === 'building' ? buildings.value : selected.value.type === 'road' ? roads.value : areas.value
+  const item = collection.find(entry => entry.id === selected.value.id)
+  if (!item) return
+  clipboardObject.value = { type: selected.value.type, item: JSON.parse(JSON.stringify(item)) }
+}
+function pasteCopied() {
+  const copied = clipboardObject.value
+  if (!copied || isLayerLocked(copied.type)) return
+  const clone = JSON.parse(JSON.stringify(copied.item))
+  duplicateSequence += 1
+  clone.id = `copy-${copied.type}-${Date.now()}-${duplicateSequence}`
+  if (Array.isArray(clone.footprint)) clone.footprint = clone.footprint.map(([x, y]) => [x + 24, y + 24])
+  if (Array.isArray(clone.points)) clone.points = clone.points.map(([x, y]) => [x + 24, y + 24])
+  if (Array.isArray(clone.rect)) clone.rect = [clone.rect[0] + 24, clone.rect[1] + 24, clone.rect[2] + 24, clone.rect[3] + 24]
+  snapshot()
+  const collection = copied.type === 'building' ? buildings.value : copied.type === 'road' ? roads.value : areas.value
+  collection.push(clone)
+  selected.value = { type: copied.type, id: clone.id }
+  tool.value = 'select'
+}
+function handleEditorKeydown(event) {
+  const target = event.target
+  if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return
+  const modifier = event.ctrlKey || event.metaKey
+  if (modifier && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); return }
+  if (modifier && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteCopied(); return }
+  if ((event.key === 'Delete' || event.key === 'Backspace') && selected.value.id) { event.preventDefault(); deleteSelected() }
+}
 const tool = ref('select')
 const scale = ref(1)
 const pan = ref({ x: 0, y: 0 })
@@ -452,6 +484,7 @@ function onWindowKeyDown(event) {
 function onWindowKeyUp(event) { if (event.code === 'Space') spacePressed.value = false }
 function preventCanvasContextMenu(event) { event.preventDefault() }
 onMounted(() => {
+  window.addEventListener('keydown', handleEditorKeydown)
   window.addEventListener('keydown', onWindowKeyDown)
   loadEditorDocument()
   window.addEventListener('keyup', onWindowKeyUp)
@@ -479,6 +512,7 @@ onMounted(() => {
   }
 })
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleEditorKeydown)
   window.removeEventListener('keydown', onWindowKeyDown)
   canvasResizeObserver?.disconnect()
   if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
@@ -741,11 +775,11 @@ function exportDocument() {
         <div class="panel-title road-title">道路工具</div>
         <label>道路宽度 <b>{{ roadWidth }} px</b></label><input v-model.number="roadWidth" type="range" min="4" max="24">
         <button class="add-button" @click="addRoad">＋ 新建道路</button>
-        <p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
+        <p class="hint">快捷键：Ctrl/Cmd + C 复制，Ctrl/Cmd + V 粘贴，Delete 删除。复制对象后会在右下方偏移 24 像素生成副本。</p><p class="hint">拖动建筑调整位置；选择道路后拖动控制点调整走向。当前底图来自已有校园空间标注，非测绘数据。</p>
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
-        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button></div><div class="canvas-tool-group"><button @click="copySelected" :disabled="!selected.id || selectedLayerLocked">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || (clipboardObject && isLayerLocked(clipboardObject.type))">粘贴</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
           <svg class="campus-map" :viewBox="canvasViewBox()" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : null">
             <defs>

@@ -254,6 +254,14 @@ export function createIndoorFloor(THREE, floor) {
     collision.push({ minX: railX - 0.06, maxX: railX + 0.06, minZ: stairPoint.z - 2.2, maxZ: stairPoint.z + 2.2 })
   }
   group.userData.roomInteractions = getRoomInteractionPoints(floor)
+  group.userData.exitInteractions = doors.map(door => {
+    const offset = Number(door.offset) || 0
+    const distance = 1.15
+    if (door.wall === 'south') return { x: offset, z: halfD - distance }
+    if (door.wall === 'north') return { x: offset, z: -halfD + distance }
+    if (door.wall === 'east') return { x: halfW - distance, z: offset }
+    return { x: -halfW + distance, z: offset }
+  })
   group.userData.stairPoint = { x: stairPoint.x, z: stairPoint.z }
   group.userData.stairPath = { start: { x: stairPoint.x, z: stairPoint.z - 2.1 }, end: { x: stairPoint.x, z: stairPoint.z + 2.1 }, rise: 4.2 }
   group.userData.collisionObstacles = collision

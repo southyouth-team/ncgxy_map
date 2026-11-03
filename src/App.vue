@@ -82,6 +82,17 @@ function adjacentIndoorFloor(direction) {
   return levels[index + direction]
 }
 
+function openSelectedBuildingInCampus() {
+  if (!selectedBuildingId.value) return
+  // RPG 样板场景与真实校园场景是两套 sceneType；进入室内前切换到校园底图场景。
+  const url = new URL(window.location.href)
+  url.searchParams.set('view', 'showcase')
+  url.searchParams.set('buildingId', selectedBuildingId.value)
+  url.searchParams.delete('returnX')
+  url.searchParams.delete('returnY')
+  window.location.assign(url)
+}
+
 async function enterSelectedBuilding() {
   if (!selectedBuildingId.value || indoorEntryBusy.value || !engine) return
   indoorEntryBusy.value = true
@@ -521,13 +532,14 @@ onBeforeUnmount(() => {
       <button class="reset-button" @click="focusCampus"><span>↗</span> 重置视角</button>
     </div>
 
-    <div v-if="!isRpgSample && !indoorPrototypeActive && engineReady" class="building-indoor-launcher">
-      <label>建筑空间预览</label>
-      <select v-model="selectedBuildingId">
+    <div v-if="!indoorPrototypeActive && engineReady" class="building-indoor-launcher" style="position:fixed;left:24px;bottom:24px;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:min(560px,calc(100vw - 48px));padding:14px 16px;background:rgba(29,43,38,.96);border:1px solid rgba(218,202,151,.65);border-radius:8px;box-shadow:0 10px 32px rgba(20,35,28,.28);color:#f3eedb">
+      <label style="font-size:13px;font-weight:700;white-space:nowrap">进入建筑室内样板</label>
+      <select v-model="selectedBuildingId" aria-label="选择建筑" style="min-width:150px;max-width:220px;padding:8px 10px;background:#f4f0df;border:1px solid #a79b72;border-radius:4px;color:#263b32">
         <option v-for="building in CAMPUS_BUILDING_FOOTPRINTS" :key="building.id" :value="building.id">{{ building.label }}</option>
       </select>
-      <input v-model.number="indoorFloorCount" type="number" min="1" max="30" aria-label="生成楼层数">
-      <button :disabled="indoorEntryBusy" @click="enterSelectedBuilding">{{ indoorEntryBusy ? '生成中…' : '生成室内并进入' }}</button>
+      <label style="font-size:12px;color:#d7d2bd">楼层 <input v-model.number="indoorFloorCount" type="number" min="1" max="30" aria-label="生成楼层数" style="width:54px;margin-left:4px;padding:7px 5px;background:#f4f0df;border:1px solid #a79b72;border-radius:4px;color:#263b32"></label>
+      <button :disabled="indoorEntryBusy" style="padding:9px 14px;background:#c5ae70;border:1px solid #e4d49e;border-radius:4px;color:#26352d;font-weight:700;cursor:pointer" @click="isRpgSample ? openSelectedBuildingInCampus() : enterSelectedBuilding()">{{ indoorEntryBusy ? '生成中…' : '生成室内并进入 ↗' }}</button>
+      <span style="flex-basis:100%;font-size:11px;color:#c8c7b6">程序生成的交互样板，非真实测绘室内数据</span>
     </div>
     <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }}F / {{ indoorFloors.length }} 层</span><select aria-label="切换楼层" :value="indoorFloor" @change="engine?.navigateToIndoorFloor(Number($event.target.value))"><option v-for="floor in indoorFloors" :key="floor" :value="floor">{{ floor }}F</option></select><button @click="indoorEditorOpen = !indoorEditorOpen">{{ indoorEditorOpen ? "关闭编辑" : "编辑室内" }}</button></div>
     <aside v-if="indoorPrototypeActive && indoorEditorOpen" class="indoor-layout-editor">

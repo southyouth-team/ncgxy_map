@@ -226,6 +226,31 @@ describe('indoor floor contract', () => {
       expect(Math.hypot(result.x - item.start.x, result.z - item.start.z), item.wall).toBeGreaterThan(2)
     }
   })
+  it('registers solid classroom furniture as collision obstacles', () => {
+    const floor = {
+      ...sample,
+      rooms: [{
+        ...sample.rooms[0],
+        furniture: [
+          { id: 'desk-a', type: 'desk', x: 0, z: 0, width: 2, depth: 1, height: 0.9 },
+          { id: 'board-a', type: 'board', x: 0, z: -2.2, width: 3, depth: 0.12, height: 1.2 },
+        ],
+      }],
+    }
+    const group = createIndoorFloor(THREE, floor)
+    const desk = group.userData.collisionObstacles.find(item =>
+      item.minX === -6 && item.maxX === -4 && item.minZ === -0.5 && item.maxZ === 0.5)
+    expect(desk).toBeDefined()
+    const collision = new CollisionWorld(
+      { minX: -12, maxX: 12, minZ: -9, maxZ: 9 },
+      group.userData.collisionObstacles,
+      0.35,
+    )
+    const movement = collision.move({ x: -7, z: 0 }, 4, 0)
+    expect(movement.blockedX).toBe(true)
+    expect(movement.x).toBeLessThan(-5)
+  })
+
   it('validates custom partition walls and their door openings', () => {
     const floor = { ...sample, walls: [{ id: 'wall-a', axis: 'x', x: 0, z: 0, length: 10, thickness: 0.2, doorWidth: 1.4, doorOffset: 0 }] }
     expect(validateIndoorFloor(floor)).toEqual([])

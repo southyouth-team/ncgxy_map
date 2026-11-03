@@ -349,6 +349,27 @@ describe('indoor floor contract', () => {
     expect(group.userData.navigationSummary).toEqual(graph.summary)
   })
 
+  it('keeps polygon navigation nodes clear of footprint walls', () => {
+    const floor = {
+      level: 1, width: 10, depth: 10, wallHeight: 3,
+      rooms: [],
+      footprintPolygon: [
+        { x: -4, z: -4 }, { x: 4, z: -4 },
+        { x: 4, z: 4 }, { x: -4, z: 4 },
+      ],
+      spawnPoint: { x: 0, y: 1.7, z: 0 },
+    }
+    const graph = buildIndoorNavigationGraph(floor, [], {
+      exitInteractions: [{ x: 3.8, z: 0 }],
+    })
+    expect(graph.summary.spawnReachable).toBe(true)
+    expect(graph.points.find(point => point.type === 'exit')?.nodeId).toBeNull()
+    expect(graph.nodes.every(node =>
+      Math.abs(node.x) <= 4 - graph.clearance + 0.001 &&
+      Math.abs(node.z) <= 4 - graph.clearance + 0.001,
+    )).toBe(true)
+  })
+
   it('marks a room landmark disconnected when its doorway is blocked by a wall', () => {
     const blockedFloor = {
       ...sample,

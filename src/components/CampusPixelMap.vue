@@ -14,6 +14,7 @@ import {
   getCampusFootprintBounds,
   pointInCampusArea,
   pointInCampusPolygon,
+  circleIntersectsCampusPolygon,
 } from '../data/campus/campusLayout.js'
 
 const canvas = ref(null)
@@ -581,7 +582,7 @@ function canPlayerMoveTo(x, y) {
   for (const building of CAMPUS_BUILDING_FOOTPRINTS) {
     const [left, top, right, bottom] = getCampusFootprintBounds(building) || [0, 0, 0, 0]
     const blocked = building.polygon
-      ? samples.some(point => pointInCampusPolygon(point, building.polygon))
+      ? circleIntersectsCampusPolygon([x, y], Math.hypot(radiusX, radiusY), building.polygon)
       : x + radiusX >= left - 2 && x - radiusX <= right + 2
         && y + radiusY >= top - 2 && y - radiusY <= bottom + 2
     if (blocked) return false

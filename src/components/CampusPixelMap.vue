@@ -14,6 +14,7 @@ const viewport = ref({ width: 0, height: 0 })
 let resizeObserver
 let dragState = null
 let dpr = 1
+let baseMapCanvas = null
 const selectedTitle = computed(() => selected.value?.label || selected.value?.name || '校园')
 const palette = {
   grass: '#a9c78b', grassLight: '#b8d49a', grassDark: '#91b477',
@@ -213,16 +214,36 @@ function drawBuildings(ctx) {
   })
 }
 function drawTrees(ctx) {
-  for (const [x, y] of TREE_SPOTS) {
+  TREE_SPOTS.forEach(([x, y], index) => {
+    const variant = index % 3
     ctx.fillStyle = 'rgba(51,77,54,.2)'
-    ctx.fillRect(x - 4, y + 2, 10, 5)
-    ctx.fillStyle = '#557b52'
-    ctx.fillRect(x - 4, y - 6, 9, 8)
-    ctx.fillStyle = '#79a96b'
-    ctx.fillRect(x - 2, y - 9, 7, 6)
-    ctx.fillStyle = '#9bc47d'
-    ctx.fillRect(x - 1, y - 8, 3, 2)
-  }
+    ctx.fillRect(x - 5, y + 3, 11, 4)
+    ctx.fillStyle = '#496e4b'
+    ctx.fillRect(x - 4, y - 4, 9, 8)
+    if (variant === 0) {
+      ctx.fillRect(x - 7, y - 2, 4, 5)
+      ctx.fillRect(x + 4, y - 1, 4, 5)
+      ctx.fillStyle = '#6f9d60'
+      ctx.fillRect(x - 5, y - 8, 11, 7)
+      ctx.fillStyle = '#a3c982'
+      ctx.fillRect(x - 2, y - 8, 4, 2)
+      ctx.fillRect(x + 3, y - 5, 2, 2)
+    } else if (variant === 1) {
+      ctx.fillStyle = '#638d59'
+      ctx.fillRect(x - 5, y - 8, 10, 8)
+      ctx.fillStyle = '#8eb66d'
+      ctx.fillRect(x - 3, y - 10, 7, 5)
+      ctx.fillStyle = '#b3cf85'
+      ctx.fillRect(x - 2, y - 9, 3, 2)
+    } else {
+      ctx.fillStyle = '#527c50'
+      ctx.fillRect(x - 6, y - 6, 12, 8)
+      ctx.fillStyle = '#82aa66'
+      ctx.fillRect(x - 3, y - 10, 8, 7)
+      ctx.fillStyle = '#b0ca80'
+      ctx.fillRect(x - 1, y - 9, 3, 2)
+    }
+  })
 }
 function pointInPolygon(point, ring) {
   let inside = false
@@ -272,9 +293,25 @@ function mapToScreen() {
   const y = (height - 500 * scale) / 2 + mapOffset.value.y
   return { scale, x, y }
 }
+function buildBaseMap() {
+  if (baseMapCanvas) return
+  baseMapCanvas = document.createElement('canvas')
+  baseMapCanvas.width = 1000
+  baseMapCanvas.height = 500
+  const ctx = baseMapCanvas.getContext('2d')
+  if (!ctx) return
+  ctx.imageSmoothingEnabled = false
+  drawGround(ctx)
+  drawRoads(ctx)
+  drawAreas(ctx)
+  drawTrees(ctx)
+  drawBuildings(ctx)
+  drawLabels(ctx)
+}
 function render() {
   const el = canvas.value
   if (!el || !viewport.value.width || !viewport.value.height) return
+  buildBaseMap()
   const ctx = el.getContext('2d')
   const width = viewport.value.width, height = viewport.value.height
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -286,12 +323,7 @@ function render() {
   ctx.translate(x, y)
   ctx.scale(scale, scale)
   ctx.imageSmoothingEnabled = false
-  drawGround(ctx)
-  drawRoads(ctx)
-  drawAreas(ctx)
-  drawTrees(ctx)
-  drawBuildings(ctx)
-  drawLabels(ctx)
+  if (baseMapCanvas) ctx.drawImage(baseMapCanvas, 0, 0)
   if (selected.value?.type === 'building') {
     const item = CAMPUS_BUILDING_FOOTPRINTS.find(b => b.id === selected.value.id)
     if (item) {

@@ -223,7 +223,7 @@ function roomLabel(room) { return room.name || '未命名空间' }
         <text :x="room.px" :y="room.py + 13" text-anchor="middle" class="room-size">{{ room.width.toFixed(1) }} × {{ room.depth.toFixed(1) }} m</text>
         <circle v-if="selectedRoomId === room.id" :cx="room.px + room.pw/2" :cy="room.py + room.ph/2" r="7" class="resize-handle" @pointerdown="startDrag($event, room, 'resize')"/>
       </g>
-      <g class="stair-marker" @pointerdown="startStairDrag" :transform="'translate(' + (origin.x + (floor.stairPoint?.x || 0) * scale) + ' ' + (origin.z + (floor.stairPoint?.z || 0) * scale) + ')'">
+      <g class="stair-marker" @pointerdown="startStairDrag" :transform="'translate(' + (origin.x + (floor.stairPoint?.x || 0) * scale) + ' ' + (origin.z + (floor.stairPoint?.z || 0) * scale) + ') rotate(' + ({ south: 0, west: -90, north: 180, east: 90 }[floor.stairPoint?.direction || 'south']) + ')'">
         <rect x="-18" y="-13" width="36" height="26" rx="3"/><text text-anchor="middle" y="4">楼梯</text>
       </g>
       <g class="spawn-marker" :transform="'translate(' + (origin.x + (floor.spawnPoint?.x || 0) * scale) + ' ' + (origin.z + (floor.spawnPoint?.z || 0) * scale) + ')'">

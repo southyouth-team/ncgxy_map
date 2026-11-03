@@ -128,8 +128,16 @@ function expandCurrentBuilding(side) {
   }
 }
 
+function updateBuildingHeight() {
+  const definition = indoorDefinition.value
+  if (!definition) return
+  definition.floorHeight = Math.max(2.8, Math.min(6, Number(definition.floorHeight) || 3.6))
+  definition.floors.forEach(floor => { floor.wallHeight = definition.floorHeight - 0.45 })
+  refreshIndoorLayout()
+}
+
 function refreshIndoorLayout() {
-  try { engine?.updateIndoorBuildingDefinition(indoorDefinition.value); indoorFloors.value = indoorDefinition.value.floors.map(floor => floor.level).sort((a,b) => a-b); indoorEditorMessage.value = '布局已更新，记得保存' }
+  try { engine?.updateIndoorBuildingDefinition(indoorDefinition.value); indoorFloors.value = indoorDefinition.value.floors.map(floor => floor.level).sort((a,b) => a-b); indoorEditorMessage.value = '建筑几何与室内布局已同步，记得保存' }
   catch (error) { indoorEditorMessage.value = error?.message || '布局校验失败' }
 }
 
@@ -498,6 +506,20 @@ onBeforeUnmount(() => {
     <aside v-if="indoorPrototypeActive && indoorEditorOpen" class="indoor-layout-editor">
       <header><strong>室内空间编辑器</strong><small>建筑 {{ indoorBuildingId }} · {{ indoorFloor }}F</small></header>
       <div class="indoor-editor-actions"><button @click="addIndoorFloor">＋ 增加楼层</button><button :disabled="indoorFloors.length <= 1" @click="removeIndoorFloor">删除当前层</button><button @click="addIndoorRoom">＋ 添加房间</button></div>
+      <section class="indoor-footprint-tools">
+        <strong>建筑外观与层高</strong>
+        <div class="indoor-room-fields">
+          <label>层高（米）<input v-model.number="indoorDefinition.floorHeight" type="number" min="2.8" max="6" step="0.1" @change="updateBuildingHeight"></label>
+          <label>屋顶样式
+            <select v-model="indoorDefinition.exterior.roofStyle" @change="refreshIndoorLayout">
+              <option value="flat">现代平屋顶</option>
+              <option value="glass">玻璃屋顶</option>
+              <option value="pitched">双坡屋顶（规则轮廓）</option>
+            </select>
+          </label>
+        </div>
+        <small>当前建筑 {{ indoorDefinition.floors.length }} 层 · 总高度约 {{ (indoorDefinition.floorHeight * indoorDefinition.floors.length).toFixed(1) }} 米；复杂轮廓的双坡顶会安全回退为平顶</small>
+      </section>
       <section class="indoor-footprint-tools">
         <strong>建筑占地扩建</strong>
         <small>按校园底图建筑轮廓为基准；每次向指定方向扩展 2 个场景单位</small>

@@ -58,6 +58,24 @@ export function validateIndoorFloor(floor) {
       (!Number.isFinite(wall.doorWidth) || wall.doorWidth < 0.7 || wall.doorWidth > wall.length ||
        Math.abs(Number(wall.doorOffset) || 0) + wall.doorWidth / 2 > wall.length / 2)) errors.push(`墙体 ${wall.id} 的门洞尺寸无效`)
   }
+  const roomList = Array.isArray(floor.rooms) ? floor.rooms : []
+  for (let i = 0; i < roomList.length; i += 1) {
+    const room = roomList[i]
+    for (const other of roomList.slice(i + 1)) {
+      const overlapX = (room.width + other.width) / 2 - Math.abs(room.x - other.x)
+      const overlapZ = (room.depth + other.depth) / 2 - Math.abs(room.z - other.z)
+      if (overlapX > 0.05 && overlapZ > 0.05) errors.push('房间 ' + room.id + ' 与 ' + other.id + ' 存在重叠')
+    }
+    const items = Array.isArray(room.furniture) ? room.furniture : []
+    for (let j = 0; j < items.length; j += 1) {
+      const item = items[j]
+      for (const other of items.slice(j + 1)) {
+        const itemOverlapX = (item.width + other.width) / 2 - Math.abs(item.x - other.x)
+        const itemOverlapZ = (item.depth + other.depth) / 2 - Math.abs(item.z - other.z)
+        if (itemOverlapX > 0.05 && itemOverlapZ > 0.05) errors.push('房间 ' + room.id + ' 的家具 ' + item.id + ' 与 ' + other.id + ' 存在重叠')
+      }
+    }
+  }
   for (const room of Array.isArray(floor.rooms) ? floor.rooms : []) {
     if (!room.id || !room.name) errors.push('房间必须包含 id 和 name')
     if (![room.x, room.z, room.width, room.depth].every(Number.isFinite) || room.width <= 0 || room.depth <= 0) {

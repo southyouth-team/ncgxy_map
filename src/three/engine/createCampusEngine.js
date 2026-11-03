@@ -5,7 +5,7 @@ import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor } from '../indoor/indoorScene.js'
-import { indoorBuildingDefinitions, validateIndoorBuilding } from '../indoor/indoorBuildingDefinitions.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
@@ -746,9 +746,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
-  function enterIndoorPrototype() {
+  function enterIndoorPrototype(definitionOverride = null) {
     if (!scene || indoorGroup) return false
-    const definition = indoorBuildingDefinitions.teachingBlockPrototype
+    const definition = definitionOverride || indoorBuildingDefinitions.teachingBlockPrototype
     const errors = validateIndoorBuilding(definition)
     if (errors.length) throw new TypeError(errors.join('；'))
     indoorBuilding = definition
@@ -762,6 +762,24 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig.thirdDistance = 8
     cameraRig.updateThirdPersonDesired()
     return true
+  }
+
+  function enterIndoorBuilding(buildingId, options = {}) {
+    if (!campus || !buildingId || indoorGroup) return false
+    const target = campus.getObjectByName(String(buildingId)) || campus.children.find(object =>
+      String(object.userData?.buildingId || object.userData?.featureId || object.userData?.sceneObjectId || '') === String(buildingId))
+    if (!target) return false
+    const bounds = new THREE.Box3().setFromObject(target)
+    const footprint = {
+      id: String(buildingId),
+      name: options.name || target.userData?.name || target.name || '校园建筑',
+      bounds: {
+        minX: bounds.min.x, maxX: bounds.max.x,
+        minZ: bounds.min.z, maxZ: bounds.max.z,
+      },
+    }
+    const definition = createIndoorBuildingFromFootprint(footprint, options)
+    return enterIndoorPrototype(definition)
   }
 
   function switchIndoorFloor(level) {
@@ -875,5 +893,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

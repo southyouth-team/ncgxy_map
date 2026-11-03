@@ -897,6 +897,20 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       )
       indoorOutdoorTarget.userData.collisionObstacleCount = wallObstacles.length
       indoorOutdoorBase.collisionCount = wallObstacles.length
+      const baseline = outdoorBuildingBaselines.get(indoorOutdoorTarget)
+      if (baseline) baseline.collisionCount = wallObstacles.length
+      // 入口交互点跟随配置的入口边移动，避免扩建或拖动轮廓后仍提示旧门洞位置。
+      const entranceIndex = Math.max(0, Math.min(worldPolygon.length - 1, Number(rebuildOptions?.entranceEdgeIndex || 0)))
+      const entranceStart = worldPolygon[entranceIndex]
+      const entranceEnd = worldPolygon[(entranceIndex + 1) % worldPolygon.length]
+      const center = worldPolygon.reduce((sum, point) => ({ x: sum.x + point.x / worldPolygon.length, z: sum.z + point.z / worldPolygon.length }), { x: 0, z: 0 })
+      const middle = { x: (entranceStart.x + entranceEnd.x) / 2, z: (entranceStart.z + entranceEnd.z) / 2 }
+      const outwardLength = Math.hypot(middle.x - center.x, middle.z - center.z) || 1
+      indoorOutdoorTarget.userData.indoorEntrance = {
+        x: middle.x - indoorOutdoorTarget.position.x + (middle.x - center.x) / outwardLength * 1.15,
+        z: middle.z - indoorOutdoorTarget.position.z + (middle.z - center.z) / outwardLength * 1.15,
+        radius: 2.15,
+      }
     } else if (indoorOutdoorBase.collisionIndex >= 0 && outdoorCollisionWorld?.obstacles[indoorOutdoorBase.collisionIndex]) {
       if (rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
         const worldPolygon = polygon.map(point => {

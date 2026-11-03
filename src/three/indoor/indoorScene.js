@@ -60,6 +60,14 @@ export function getStairTraversalPoints(stairPath, direction) {
   return { entry, exit }
 }
 
+/** 判断角色是否真正到达楼梯平台，避免在接近平台时发生位置瞬移。 */
+export function isAtStairLanding(position, landing, tolerance = 0.16) {
+  if (!position || !landing ||
+    ![position.x, position.z, landing.x, landing.z, tolerance].every(Number.isFinite) ||
+    tolerance < 0) return false
+  return Math.hypot(position.x - landing.x, position.z - landing.z) <= tolerance
+}
+
 /** 根据楼梯配置生成与楼梯模型一致的上下平台坐标。 */
 export function createStairPath(stairPoint = {}, floorHeight = 4.2) {
   const x = Number(stairPoint.x)

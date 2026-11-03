@@ -341,6 +341,10 @@ export function createPixelBuilding(THREE, options = {}) {
     new THREE.Vector2(width / 2, depth / 2),
     new THREE.Vector2(-width / 2, depth / 2),
   ])
+  const footprintValidation = validateBuildingFootprint(shape.extractPoints(1).shape)
+  if (!footprintValidation.valid) {
+    throw new TypeError(`建筑“${label}”轮廓无效：${footprintValidation.errors.join('；')}`)
+  }
   const wall = new THREE.Mesh(
     new THREE.ExtrudeGeometry(shape, { depth: buildingHeight, bevelEnabled: false, curveSegments: 1 }),
     facadeMaterial,

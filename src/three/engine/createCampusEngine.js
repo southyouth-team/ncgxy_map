@@ -825,10 +825,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       // 基座使用同一轮廓挤出，避免扩建后出现矩形底座露边。
       if (foundation) {
         foundation.geometry?.dispose?.()
-        const foundationGeometry = new THREE.ExtrudeGeometry(shape, { depth: 0.55, bevelEnabled: false, curveSegments: 1 })
+        const foundationIsLocal = foundation.parent === target
+        const foundationDepth = foundationIsLocal ? 0.55 : 0.16
+        const foundationGeometry = new THREE.ExtrudeGeometry(shape, { depth: foundationDepth, bevelEnabled: false, curveSegments: 1 })
         foundationGeometry.rotateX(-Math.PI / 2)
         foundation.geometry = foundationGeometry
-        foundation.position.set(0, 0.18, 0)
+        foundation.userData.generatedFoundationIsLocal = foundationIsLocal
       }
       indoorOutdoorBase.geometryKey = geometryKey
       }
@@ -839,8 +841,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         indoorOutdoorBase.position.z + shiftZ,
       )
       if (target.userData.foundationMesh) {
-        // 基座是建筑组的子对象，保持局部原点；世界位移由建筑组统一承担。
-        target.userData.foundationMesh.position.set(0, 0.18, 0)
+        const foundation = target.userData.foundationMesh
+        if (foundation.parent === target) {
+          // RPG 样板的基座是建筑组子对象，保持局部坐标。
+          foundation.position.set(0, 0.18, 0)
+        } else {
+          // 常规校园建筑的基座挂在 campus 根节点下，使用建筑世界平面坐标。
+          foundation.position.set(target.position.x, 0, target.position.z)
+        }
       }
     } else {
       // 非程序化模型（含 RPG 样板手工建筑）暂保留原有包围盒缩放路径。

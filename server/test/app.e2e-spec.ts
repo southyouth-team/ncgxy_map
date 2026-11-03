@@ -291,10 +291,16 @@ describe('Campus map API (PostGIS integration)', () => {
     expect(Number(loaded.body.revision)).toBe(1);
     expect(loaded.body.definition.floors[0].stairPoint.x).toBe(4);
 
+    const secondDefinition = { ...definition, name: '西北组团 01 · 更新' };
+    await request(app.getHttpServer())
+      .put(url).set(auth).send({ revision: 1, definition: secondDefinition }).expect(200);
     const versions = await request(app.getHttpServer())
       .get(url + '/versions').set(auth).expect(200);
-    expect(versions.body).toHaveLength(1);
-    expect(Number(versions.body[0].revision)).toBe(1);
+    expect(versions.body).toHaveLength(2);
+    expect(Number(versions.body[0].revision)).toBe(2);
+    const firstVersion = await request(app.getHttpServer())
+      .get(url + '/versions/1').set(auth).expect(200);
+    expect(firstVersion.body.definition.name).toBe('西北组团 01');
 
     await request(app.getHttpServer())
       .put(url).set(auth).send({ revision: 0, definition }).expect(409);

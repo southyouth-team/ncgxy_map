@@ -212,7 +212,7 @@ function roomLabel(room) { return room.name || '未命名空间' }
 
 <template>
   <div class="floor-plan-editor">
-    <div class="plan-toolbar"><span>平面布局 · {{ floor?.width }} × {{ floor?.depth }} m</span><span>拖动房间/墙体/楼梯 · 拖墙端点改长度 · 拖门洞改位置</span><div class="history-actions"><button :disabled="!undoStack.length" @click="undo">撤销</button><button :disabled="!redoStack.length" @click="redo">重做</button></div></div>
+    <div class="plan-toolbar"><span>平面布局 · {{ floor?.width }} × {{ floor?.depth }} 场景单位</span><span>拖动房间/墙体/楼梯 · 拖墙端点改长度 · 拖门洞改位置</span><div class="history-actions"><button :disabled="!undoStack.length" @click="undo">撤销</button><button :disabled="!redoStack.length" @click="redo">重做</button></div></div>
     <svg v-if="floor && boundary" ref="svgRef" class="floor-plan-canvas" viewBox="0 0 640 440" role="img" aria-label="室内楼层平面编辑画布" @pointermove="moveDrag" @pointerup="endDrag" @pointercancel="endDrag" @lostpointercapture="endDrag">
       <defs><pattern id="indoor-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6e9e1" stroke-width="1"/></pattern></defs>
       <rect width="640" height="440" fill="#f7f8f3"/>
@@ -230,7 +230,7 @@ function roomLabel(room) { return room.name || '未命名空间' }
       <g v-for="room in rooms" :key="room.id">
         <rect :x="room.px - room.pw/2" :y="room.py - room.ph/2" :width="room.pw" :height="room.ph" rx="2" :class="['room-shape', { selected: selectedRoomId === room.id }]" @pointerdown="startDrag($event, room, 'move')"/>
         <text :x="room.px" :y="room.py - 3" text-anchor="middle" class="room-name">{{ roomLabel(room) }}</text>
-        <text :x="room.px" :y="room.py + 13" text-anchor="middle" class="room-size">{{ room.width.toFixed(1) }} × {{ room.depth.toFixed(1) }} m</text>
+        <text :x="room.px" :y="room.py + 13" text-anchor="middle" class="room-size">{{ room.width.toFixed(1) }} × {{ room.depth.toFixed(1) }} 单位</text>
         <circle v-if="selectedRoomId === room.id" :cx="room.px + room.pw/2" :cy="room.py + room.ph/2" r="7" class="resize-handle" @pointerdown="startDrag($event, room, 'resize')"/>
       </g>
       <g class="stair-marker" @pointerdown="startStairDrag" :transform="'translate(' + (origin.x + (floor.stairPoint?.x || 0) * scale) + ' ' + (origin.z + (floor.stairPoint?.z || 0) * scale) + ') rotate(' + ({ south: 0, west: -90, north: 180, east: 90 }[floor.stairPoint?.direction || 'south']) + ')'">

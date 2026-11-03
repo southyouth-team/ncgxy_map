@@ -4,7 +4,7 @@ import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { createIndoorFloor, getStairLandingPoint } from '../indoor/indoorScene.js'
+import { createIndoorFloor, getStairLandingPoint, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -51,6 +51,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let pointerStart = null
   let navigationVisualGroup = null
   let navigationWasActive = false
+  let pendingIndoorFloorTarget = null
 
   async function init() {
     if (!container) throw new Error('未找到三维场景容器')
@@ -536,6 +537,30 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return false
   }
 
+  function navigateToIndoorFloor(targetLevel) {
+    if (!indoorGroup || !indoorBuilding || stairTransition) return false
+    const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, Number(targetLevel))
+    if (!plan) return false
+    if (!plan.transitions.length) {
+      pendingIndoorFloorTarget = null
+      input?.setNavigationPath(null)
+      clearNavigationVisuals()
+      navigationWasActive = false
+      return true
+    }
+    pendingIndoorFloorTarget = Number(targetLevel)
+    const stairPoint = indoorGroup.userData.stairPoint
+    if (!stairPoint) {
+      pendingIndoorFloorTarget = null
+      return false
+    }
+    const distance = Math.hypot(cameraRig.player.x - stairPoint.x, cameraRig.player.z - stairPoint.z)
+    if (distance <= 1.25) {
+      return beginStairTransition(plan.transitions[0].toLevel)
+    }
+    return navigateIndoorTo(stairPoint)
+  }
+
   function onScenePointerDown(event) {
     if (event.button !== 0 || (cameraRig?.mode !== 'overview' && !indoorGroup)) { pointerStart = null; return }
     pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
@@ -735,6 +760,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           nearOutdoorEntrance = near
           callbacks.onIndoorPromptChange?.(near ? { visible: true, text: '按 E 进入教学楼' } : { visible: false })
         }
+      }
+    }
+    if (indoorGroup && cameraRig?.player && !stairTransition && pendingIndoorFloorTarget !== null && !activeIndoorRoom) {
+      const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, pendingIndoorFloorTarget)
+      const nextTransition = plan?.transitions?.[0]
+      const stairPoint = indoorGroup.userData.stairPoint
+      if (!nextTransition || !stairPoint) pendingIndoorFloorTarget = null
+      else if (Math.hypot(cameraRig.player.x - stairPoint.x, cameraRig.player.z - stairPoint.z) <= 1.25) {
+        input?.setNavigationPath(null)
+        navigationWasActive = false
+        clearNavigationVisuals()
+        beginStairTransition(nextTransition.toLevel)
       }
     }
     if (indoorGroup && cameraRig?.player && !stairTransition) {
@@ -1162,6 +1199,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       stairTransition = null
       buildIndoorFloor(transition.targetLevel, { x: transition.toX, z: transition.toZ })
       input.setMovementEnabled(true)
+      if (pendingIndoorFloorTarget === currentIndoorFloor) pendingIndoorFloorTarget = null
+      else if (pendingIndoorFloorTarget !== null && indoorGroup?.userData.stairPoint) {
+        navigateIndoorTo(indoorGroup.userData.stairPoint)
+      }
     }
   }
 
@@ -1180,6 +1221,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     activeIndoorRoom = null
     roomReturnPosition = null
     stairTransition = null
+    pendingIndoorFloorTarget = null
     input.setMovementEnabled(true)
     indoorBuilding = null
     indoorOutdoorTarget = null
@@ -1236,5 +1278,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

@@ -100,9 +100,9 @@ export class InputController {
     if (document.pointerLockElement === this.domElement) document.exitPointerLock?.()
   }
 
-  resetPosition() {
+  resetPosition(position = { x: 0, z: 24 }) {
     this.keys.clear()
-    this.cameraRig.player.set(0, 1.7, 24)
+    this.cameraRig.player.set(Number(position.x) || 0, 1.7, Number(position.z) || 0)
   }
 
   setMovementEnabled(enabled) {

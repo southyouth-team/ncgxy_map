@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
-import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES } from '../three/world/campus/campusAssetLibrary.js'
+import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_ROAD_CENTERLINES,
@@ -119,6 +119,9 @@ const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 const multiSelection = ref([])
 const boxSelection = ref(null)
 const selectionCount = computed(() => multiSelection.value.length || (selected.value.id ? 1 : 0))
+const selectedBuildingFootprintValidation = computed(() => selectedBuilding.value
+  ? validateBuildingFootprint(selectedBuilding.value.footprint)
+  : { valid: true, errors: [] })
 function toggleMultiSelection(type, id, event) {
   if (!event?.shiftKey) { multiSelection.value = []; selected.value = { type, id }; return false }
   if (!multiSelection.value.length && selected.value.id && !isLayerLocked(selected.value.type)) {
@@ -1004,7 +1007,11 @@ function exportDocument() {
             <label>屋顶起拱高度<input type="number" min="0" max="8" step="0.1" v-model.number="selectedBuilding.roofRise"></label>
           </div>
           <label>屋顶样式</label><select v-model="selectedBuilding.roofStyle"><option value="">跟随建筑模板</option><option value="flat">平顶</option><option value="pitched">双坡顶</option><option value="glass">玻璃顶</option><option value="span">跨度双坡顶（受限轮廓）</option></select>
-          <small class="hint property-hint">参数应用于三维预览；留空时使用建筑模板默认值。楼层、高度与立面细节由同一套参数生成。</small>
+          <label>主入口所在边</label><select v-model="selectedBuilding.entranceEdgeIndex"><option value="">自动选择最长边</option><option v-for="(_,index) in selectedBuilding.footprint" :key="index" :value="index">第 {{ index + 1 }} 条边</option></select>
+          <div v-if="!selectedBuildingFootprintValidation.valid" class="geometry-warning">
+            <strong>建筑轮廓校验未通过</strong><span v-for="error in selectedBuildingFootprintValidation.errors" :key="error">{{ error }}</span>
+          </div>
+          <small class="hint property-hint">参数应用于三维预览；入口边可手动指定。留空时使用最长边作为主入口。</small>
           <label>位置与尺寸（地图像素）</label>
           <div class="property-grid">
             <label>X 位置<input type="number" :value="Math.round(selectedBuilding.rect[0])" @change="updateBuildingMetric('x',$event.target.value)"></label>
@@ -1076,7 +1083,7 @@ function exportDocument() {
 .inspector-heading .panel-title{margin:0}.inspector-heading>span{font-size:8px;letter-spacing:1.2px;color:#a0aa9c}
 .selected-card{border-radius:8px;background:#eef3ea;border-color:#e0e8dc;padding:14px}
 .selected-card strong{color:#2e4e37;font-size:14px}
-.selection-count{font-size:10px;color:#637b67;white-space:nowrap}.layer-panel{margin:0 0 4px}.layer-panel>.panel-title{margin-bottom:9px}.layer-panel>.panel-title small{font-size:8px;color:#a0aa9c;letter-spacing:1px}.layer-row{display:flex;align-items:center;gap:6px;padding:8px 6px;margin:5px 0;background:#fff;border:1px solid #e3e8df;border-radius:6px}.layer-row.hidden{opacity:.58;background:#f1f2ed}.layer-row.locked{border-color:#d8c7a8;background:#fbf7ed}.layer-icon{display:grid;place-items:center;width:25px;height:25px;border-radius:5px;background:#edf2e9;color:#48694d}.layer-name{flex:1;min-width:0}.layer-name b,.layer-name small{display:block}.layer-name b{font-size:10px;color:#425845}.layer-name small{margin-top:3px;font-size:9px;color:#8a9587}.layer-action{width:25px;height:25px;padding:0!important;border-radius:4px!important;font-size:13px!important}.layer-help{display:block;font-size:9px;line-height:1.6;color:#879184;margin:8px 2px 0}.property-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.property-grid label{margin:4px 0 0;font-size:10px}.property-grid input{margin-top:5px!important;padding:7px!important;font-variant-numeric:tabular-nums}.property-hint{display:block;margin-top:8px}
+.selection-count{font-size:10px;color:#637b67;white-space:nowrap}.layer-panel{margin:0 0 4px}.layer-panel>.panel-title{margin-bottom:9px}.layer-panel>.panel-title small{font-size:8px;color:#a0aa9c;letter-spacing:1px}.layer-row{display:flex;align-items:center;gap:6px;padding:8px 6px;margin:5px 0;background:#fff;border:1px solid #e3e8df;border-radius:6px}.layer-row.hidden{opacity:.58;background:#f1f2ed}.layer-row.locked{border-color:#d8c7a8;background:#fbf7ed}.layer-icon{display:grid;place-items:center;width:25px;height:25px;border-radius:5px;background:#edf2e9;color:#48694d}.layer-name{flex:1;min-width:0}.layer-name b,.layer-name small{display:block}.layer-name b{font-size:10px;color:#425845}.layer-name small{margin-top:3px;font-size:9px;color:#8a9587}.layer-action{width:25px;height:25px;padding:0!important;border-radius:4px!important;font-size:13px!important}.layer-help{display:block;font-size:9px;line-height:1.6;color:#879184;margin:8px 2px 0}.property-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.property-grid label{margin:4px 0 0;font-size:10px}.property-grid input{margin-top:5px!important;padding:7px!important;font-variant-numeric:tabular-nums}.property-hint{display:block;margin-top:8px}.geometry-warning{margin-top:10px;padding:9px;background:#fff0e8;border:1px solid #e6b9a5;border-radius:5px}.geometry-warning strong,.geometry-warning span{display:block;font-size:10px;color:#9b4d37;line-height:1.6}.geometry-warning span{margin-top:3px}
 .inspector label{font-weight:600;color:#526653;margin-top:16px}
 .inspector input:not([type=range]),.inspector select{border-radius:5px}
 .inspector .add-button,.inspector .danger-button{border-radius:6px!important}

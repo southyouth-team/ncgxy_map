@@ -801,6 +801,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         depth,
         height: Number(definition.floorHeight) * definition.floors.length,
         floors: definition.floors.length,
+        roofStyle: definition.exterior?.roofStyle || rebuildOptions.roofStyle || 'flat',
         label: rebuildOptions.label || target.name,
       })
       const foundation = target.userData.foundationMesh

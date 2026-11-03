@@ -1,3 +1,5 @@
+import { createPixelBuilding } from './campusAssetLibrary.js'
+
 // 宝可梦经典城镇探索风格的 2.5D 校园样板区。
 // 该场景是视觉与交互验证样板，不代表真实校园测绘数据。
 export function createRpgSampleScene(THREE) {
@@ -152,46 +154,71 @@ export function createRpgSampleScene(THREE) {
   for (const z of [4.66, 11.34]) addBox('main-road-curb', 0, 0.035, z, 48, 0.09, 0.14, materials.pathDark)
   for (const x of [-2.98, 2.98]) addBox('walkway-side-border', x, 0.038, 1.7, 0.12, 0.06, 9.2, materials.pathDark)
   for (let x = -2.2; x <= 2.2; x += 0.88) addBox('campus-crosswalk-stripe', x, 0.066, 8, 0.48, 0.018, 3.2, materials.trim)
-  // 教学楼：墙体、分层窗户、门廊与双坡屋顶组成完整体块。
+  // 教学楼由共享建筑资产生成器创建；室外、室内编辑和扩建共用同一轮廓定义。
   const building = new THREE.Group()
   building.name = 'sample-teaching-building'
   building.position.set(0, 0, -8)
   building.userData.objectType = 'building'
   building.userData.buildingId = 'sample-teaching-building'
-  // 室内入口锚点与门洞共用建筑局部坐标，供探索模式按距离触发 E 进入。
+  building.userData.displayName = '现代教学楼'
   building.userData.indoorEntrance = { x: 0, z: 5.35, radius: 2.15 }
-  addBox('teaching-building-foundation', 0, 0.18, 0, 15.5, 0.55, 9.2, materials.wallShade, building)
-  addBox('teaching-building-main-volume', 0, 0.73, 0, 14.8, 5.8, 8.5, materials.wall, building)
-  addBox('teaching-building-front-band', 0, 1.1, 4.28, 14.9, 0.2, 0.18, materials.trim, building)
-  // 现代教学楼采用平屋面+女儿墙，不再使用庄园式红瓦双坡顶。
-  addBox('teaching-building-flat-roof', 0, 6.55, 0, 15.8, 0.48, 9.5, materials.roof, building)
-  addBox('roof-parapet-front', 0, 6.98, 4.62, 15.8, 0.48, 0.22, materials.roofDark, building)
-  addBox('roof-parapet-back', 0, 6.98, -4.62, 15.8, 0.48, 0.22, materials.roofDark, building)
-  for (const x of [-7.75, 7.75]) addBox('roof-parapet-side', x, 6.98, 0, 0.22, 0.48, 9.1, materials.roofDark, building)
-  addBox('roof-service-platform', 3.8, 6.82, -1.2, 3.1, 0.12, 2.2, materials.wallShade, building)
-  addBox('roof-ventilation-unit', 3.8, 7.02, -1.2, 1.35, 0.32, 1.05, materials.roofDark, building)
-  addBox('roof-ventilation-cap', 3.8, 7.2, -1.2, 1.55, 0.08, 1.22, materials.roofLight, building)
-  // 正立面窗户按楼层和轴线布置，保持像素化重复节奏。
-  for (const y of [2.05, 4.15]) {
-    for (const x of [-5.2, -2.6, 2.6, 5.2]) {
-      addBox('window-frame', x, y, 4.34, 1.32, 1.12, 0.16, materials.wallShade, building)
-      addBox('window-glass', x, y + 0.04, 4.44, 1.02, 0.82, 0.08, materials.glass, building)
-      addBox('window-sill', x, y - 0.53, 4.48, 1.45, 0.12, 0.2, materials.trim, building)
-    }
+  const buildingMaterials = {
+    wall: materials.wall,
+    wallCream: materials.wall,
+    roof: materials.roof,
+    roofDark: materials.roofDark,
+    window: materials.glass,
+    windowTrim: materials.trim,
+    door: materials.door,
   }
-  addBox('entrance-door-frame', 0, 0.74, 4.4, 1.85, 2.65, 0.25, materials.wallShade, building)
-  addBox('entrance-door', 0, 0.78, 4.56, 1.28, 2.25, 0.12, materials.door, building)
-  addBox('entrance-canopy', 0, 3.35, 4.9, 3.8, 0.2, 1.45, materials.roofDark, building)
-  // 现代玻璃门厅与金属雨棚。
-  addBox('entrance-glass-transom', 0, 2.95, 4.57, 2.25, 0.42, 0.08, materials.glass, building)
-  addBox('entrance-sign-board', 0, 3.78, 4.52, 4.1, 0.62, 0.18, materials.roofDark, building)
-  addBox('entrance-sign-inlay', 0, 3.8, 4.625, 3.72, 0.34, 0.035, materials.trim, building)
-  for (const x of [-1.72, 1.72]) {
-    addBox('entrance-pillar', x, 0.42, 4.92, 0.28, 2.85, 0.3, materials.trim, building)
-    addBox('entrance-pillar-base', x, 0.28, 4.92, 0.48, 0.18, 0.42, materials.wallShade, building)
+  const teachingFootprint = new THREE.Shape([
+    new THREE.Vector2(-7.4, -4.25),
+    new THREE.Vector2(7.4, -4.25),
+    new THREE.Vector2(7.4, 4.25),
+    new THREE.Vector2(-7.4, 4.25),
+  ])
+  const foundation = addBox('teaching-building-foundation', 0, 0.18, 0, 15.5, 0.55, 9.2, materials.wallShade, building)
+  const generatedBuilding = createPixelBuilding(THREE, {
+    footprint: teachingFootprint,
+    width: 14.8,
+    depth: 8.5,
+    height: 5.8,
+    floors: 2,
+    template: '教学楼',
+    label: '现代教学楼',
+    confidence: 'sample-prototype',
+    entranceEdgeIndex: 0,
+    roofStyle: 'flat',
+    materials: buildingMaterials,
+    wallMaterial: materials.wall,
+    windowDensity: 0.42,
+    windowWidth: 1.02,
+    windowHeight: 0.82,
+    doorWidth: 1.28,
+  })
+  generatedBuilding.position.y = 0.73
+  while (generatedBuilding.children.length) building.add(generatedBuilding.children[0])
+  building.userData.foundationMesh = foundation
+  building.userData.rebuildOptions = {
+    materials: buildingMaterials,
+    wallMaterial: materials.wall,
+    template: '教学楼',
+    label: '现代教学楼',
+    confidence: 'sample-prototype',
+    height: 5.8,
+    floors: 2,
+    roofStyle: 'flat',
+    roofRise: 0,
+    windowDensity: 0.42,
+    windowWidth: 1.02,
+    windowHeight: 0.82,
+    doorWidth: 1.28,
+    entranceEdgeIndex: 0,
   }
-  addBox('entrance-step-lower', 0, 0.18, 5.35, 3.2, 0.18, 0.85, materials.stone, building)
-  addBox('entrance-step-upper', 0, 0.36, 4.95, 2.7, 0.18, 0.65, materials.trim, building)
+  building.userData.floorCount = generatedBuilding.userData.floorCount
+  building.userData.floorHeight = generatedBuilding.userData.floorHeight
+  building.userData.buildingHeight = generatedBuilding.userData.buildingHeight
+  building.userData.roofStyle = generatedBuilding.userData.roofStyle
   root.add(building)
   // 现代校园景观廊架：钢结构、玻璃顶与混凝土坐凳。
   const pavilion = new THREE.Group()

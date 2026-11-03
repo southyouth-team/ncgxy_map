@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
-import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint } from './indoorBuildingDefinitions.js'
+import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
 
 
 const sample = {
@@ -169,6 +169,38 @@ describe('campus footprint indoor generation', () => {
   it('rejects invalid wall geometry inside a building document', () => {
     const building = { id: 'building-a', floorHeight: 3.6, floors: [{ ...sample, walls: [{ id: 'bad-wall', axis: 'x', x: 0, z: 20, length: 8 }] }] }
     expect(validateIndoorBuilding(building).some(error => error.includes('墙体 bad-wall 超出楼层边界'))).toBe(true)
+  })
+
+  it('expands the shared footprint and all floors while preserving existing room world positions', () => {
+    const original = createIndoorBuildingFromFootprint({
+      id: 'expandable-building',
+      label: '可扩建建筑',
+      bounds: { minX: -6, maxX: 6, minZ: -5, maxZ: 5 },
+    }, { floors: 2 })
+    const originalRoom = original.floors[0].rooms[0]
+    const expanded = expandIndoorBuilding(original, { side: 'east', amount: 4 })
+    expect(expanded.footprintSize).toEqual({ width: 16, depth: 10 })
+    expect(expanded.footprint.expansion.east).toBe(4)
+    expect(expanded.floors.map(floor => floor.width)).toEqual([16, 16])
+    expect(expanded.floors.every(floor => floor.depth === 10)).toBe(true)
+    expect(expanded.floors[0].rooms[0].x).toBeCloseTo(originalRoom.x - 2)
+    expect(validateIndoorBuilding(expanded)).toEqual([])
+    expect(original.footprintSize).toEqual({ width: 12, depth: 10 })
+  })
+
+  it('expands north/south/west with centered local bounds and rejects invalid expansion', () => {
+    const original = createIndoorBuildingFromFootprint({
+      id: 'direction-building',
+      bounds: { minX: -5, maxX: 5, minZ: -4, maxZ: 4 },
+    }, { floors: 1 })
+    for (const side of ['north', 'south', 'west']) {
+      const expanded = expandIndoorBuilding(original, { side, amount: 2 })
+      expect(expanded.footprintSize.width).toBe(side === 'west' ? 12 : 10)
+      expect(expanded.footprintSize.depth).toBe(side === 'north' || side === 'south' ? 10 : 8)
+      expect(validateIndoorBuilding(expanded)).toEqual([])
+    }
+    expect(() => expandIndoorBuilding(original, { side: 'up', amount: 2 })).toThrow('扩建方向')
+    expect(() => expandIndoorBuilding(original, { side: 'east', amount: 0 })).toThrow('扩建尺寸')
   })
 
   it('requires stair connection points to align across building floors', () => {

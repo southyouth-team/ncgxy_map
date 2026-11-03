@@ -337,7 +337,7 @@ function focusCampus() {
 
 function openBuildingFromPixelMap(payload) {
   const buildingId = payload?.buildingId
-  if (!CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === buildingId)) return
+  if (!(campusPlanDocument.value?.buildings || CAMPUS_BUILDING_FOOTPRINTS).some(item => item.id === buildingId)) return
   const url = new URL(window.location.href)
   url.searchParams.set('view', 'showcase')
   url.searchParams.set('buildingId', buildingId)

@@ -15,7 +15,7 @@ import {
 import { getCampusSpatialLayers } from '../data/campus/campusGeoJSON.js'
 
 // Canvas 2D 与 Three.js 共用同一组从统一 FeatureCollection 派生的空间图层。
-const { areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS } = getCampusSpatialLayers()
+const { boundary: CAMPUS_BOUNDARY, gates: CAMPUS_GATES, areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS } = getCampusSpatialLayers()
 const CAMPUS_ROAD_WIDTHS = Object.fromEntries(CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.width]))
 
 const canvas = ref(null)
@@ -113,6 +113,44 @@ function drawRoads(ctx) {
     ctx.setLineDash([])
   }
 }
+function drawCampusBoundary(ctx) {
+  const ring = CAMPUS_BOUNDARY?.geometry?.coordinates?.[0]
+  if (!Array.isArray(ring) || ring.length < 4) return
+  ctx.save()
+  ctx.setLineDash([10, 6])
+  ctx.strokeStyle = 'rgba(245, 248, 232, .95)'
+  ctx.lineWidth = 2
+  polygon(ctx, ring.slice(0, -1))
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.restore()
+}
+
+function drawCampusGates(ctx) {
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.font = 'bold 10px "Noto Sans SC", sans-serif'
+  for (const gate of CAMPUS_GATES) {
+    const [x, y] = gate.position
+    ctx.beginPath()
+    ctx.arc(x, y, 6, 0, Math.PI * 2)
+    ctx.fillStyle = '#f4d66d'
+    ctx.fill()
+    ctx.strokeStyle = '#354a40'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    const label = `${gate.name} · 待核位`
+    const width = ctx.measureText(label).width + 8
+    roundedRect(ctx, x - width / 2, y - 22, width, 13, 3)
+    ctx.fillStyle = 'rgba(250, 248, 228, .96)'
+    ctx.fill()
+    ctx.fillStyle = '#354a40'
+    ctx.fillText(label, x, y - 11)
+  }
+  ctx.restore()
+}
+
 function drawAreas(ctx) {
   for (const area of CAMPUS_AREAS) {
     if (area.type === 'water' && area.polygon) {
@@ -290,6 +328,9 @@ function buildBaseMap() {
     drawAreas(ctx)
     drawRoads(ctx)
     drawLabels(ctx)
+    ctx.globalAlpha = 1
+    drawCampusBoundary(ctx)
+    drawCampusGates(ctx)
     ctx.restore()
   }
 }

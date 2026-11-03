@@ -14,7 +14,7 @@ import { CAMPUS_BOUNDARY, CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_B
  */
 export const CAMPUS_SPATIAL_DATASET = Object.freeze({
   id: 'ncgxy-main-campus',
-  version: 1,
+  version: 2,
   coordinateSystem: 'NCGXY_REFERENCE_IMAGE_PIXEL',
   coordinateUnit: 'pixel',
   width: CAMPUS_PLAN_REFERENCE.image.width,

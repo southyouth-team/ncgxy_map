@@ -37,7 +37,7 @@ export function planIndoorFloorRoute(building, startLevel, targetLevel) {
   for (let index = startIndex; index !== targetIndex; index += direction) {
     const from = floors[index]
     const to = floors[index + direction]
-    if (!from.stairPoint || !to.stairPoint) return null
+    if (Math.abs(to.level - from.level) !== 1 || !from.stairPoint || !to.stairPoint) return null
     const aligned = Math.hypot(from.stairPoint.x - to.stairPoint.x, from.stairPoint.z - to.stairPoint.z) <= 0.05
     if (!aligned) return null
     transitions.push({

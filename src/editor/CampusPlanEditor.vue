@@ -993,6 +993,18 @@ function exportDocument() {
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input v-model="selectedBuilding.label">
           <label>建筑模板</label><select v-model="selectedBuilding.template"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>
+          <label>三维建筑参数</label>
+          <div class="property-grid">
+            <label>建筑高度<input type="number" min="1" max="80" step="0.2" v-model.number="selectedBuilding.height"></label>
+            <label>楼层数<input type="number" min="1" max="30" step="1" v-model.number="selectedBuilding.floors"></label>
+            <label>窗户密度<input type="number" min="0.1" max="3" step="0.05" v-model.number="selectedBuilding.windowDensity"></label>
+            <label>窗户宽度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowWidth"></label>
+            <label>窗户高度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowHeight"></label>
+            <label>入口宽度<input type="number" min="0.5" max="5" step="0.1" v-model.number="selectedBuilding.doorWidth"></label>
+            <label>屋顶起拱高度<input type="number" min="0" max="8" step="0.1" v-model.number="selectedBuilding.roofRise"></label>
+          </div>
+          <label>屋顶样式</label><select v-model="selectedBuilding.roofStyle"><option value="">跟随建筑模板</option><option value="flat">平顶</option><option value="pitched">双坡顶</option><option value="glass">玻璃顶</option><option value="span">跨度双坡顶（受限轮廓）</option></select>
+          <small class="hint property-hint">参数应用于三维预览；留空时使用建筑模板默认值。楼层、高度与立面细节由同一套参数生成。</small>
           <label>位置与尺寸（地图像素）</label>
           <div class="property-grid">
             <label>X 位置<input type="number" :value="Math.round(selectedBuilding.rect[0])" @change="updateBuildingMetric('x',$event.target.value)"></label>

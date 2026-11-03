@@ -170,12 +170,16 @@ function exportJson() {
 function importJson(event) {
   const file = event.target.files?.[0]
   if (!file) return
+  if (file.size > 20 * 1024 * 1024) { message.value = '导入文件超过 20 MB 限制'; event.target.value = ''; return }
   const reader = new FileReader()
   reader.onload = () => {
     try {
       const documentData = JSON.parse(String(reader.result || ''))
       if (documentData.schemaVersion !== '2.0.0' || documentData.campusId !== 'ncgxy-main-campus' || !documentData.features || Array.isArray(documentData.features)) {
         throw new Error('文件结构不符合校园空间 V2 标准')
+      }
+      if (documentData.coordinateSystem?.type !== 'image-pixel' || documentData.coordinateSystem?.unit !== 'px' || documentData.coordinateSystem?.origin !== 'top-left') {
+        throw new Error('当前只支持左上角原点的 image-pixel / px 坐标文档')
       }
       const referenceImage = documentData.coordinateSystem?.referenceImage
       if (!Number.isFinite(referenceImage?.width) || !Number.isFinite(referenceImage?.height) || referenceImage.width <= 0 || referenceImage.height <= 0) {

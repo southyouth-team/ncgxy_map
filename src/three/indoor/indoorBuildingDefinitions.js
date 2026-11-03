@@ -243,15 +243,45 @@ export function expandIndoorBuilding(definition, { side, amount = 2 } = {}) {
   const nextWidth = next.bounds.maxX - next.bounds.minX + widthDelta
   const nextDepth = next.bounds.maxZ - next.bounds.minZ + depthDelta
   next.bounds = { minX: -nextWidth / 2, maxX: nextWidth / 2, minZ: -nextDepth / 2, maxZ: nextDepth / 2 }
-  next.floors = next.floors.map(floor => ({
-    ...floor,
-    width: floor.width + widthDelta,
-    depth: floor.depth + depthDelta,
-    rooms: floor.rooms.map(room => ({ ...room, x: room.x - shiftX, z: room.z - shiftZ })),
-    walls: (floor.walls || []).map(wall => ({ ...wall, x: wall.x - shiftX, z: wall.z - shiftZ })),
-    spawnPoint: floor.spawnPoint ? { ...floor.spawnPoint, x: floor.spawnPoint.x - shiftX, z: floor.spawnPoint.z - shiftZ } : floor.spawnPoint,
-    stairPoint: floor.stairPoint ? { ...floor.stairPoint, x: floor.stairPoint.x - shiftX, z: floor.stairPoint.z - shiftZ } : floor.stairPoint,
-  }))
+  next.floors = next.floors.map(floor => {
+    const expandedFloor = {
+      ...floor,
+      width: floor.width + widthDelta,
+      depth: floor.depth + depthDelta,
+      rooms: floor.rooms.map(room => ({ ...room, x: room.x - shiftX, z: room.z - shiftZ })),
+      walls: (floor.walls || []).map(wall => ({ ...wall, x: wall.x - shiftX, z: wall.z - shiftZ })),
+      spawnPoint: floor.spawnPoint ? { ...floor.spawnPoint, x: floor.spawnPoint.x - shiftX, z: floor.spawnPoint.z - shiftZ } : floor.spawnPoint,
+      stairPoint: floor.stairPoint ? { ...floor.stairPoint, x: floor.stairPoint.x - shiftX, z: floor.stairPoint.z - shiftZ } : floor.stairPoint,
+    }
+
+    // 扩建形成的新增带状空间自动生成独立房间，避免只有外墙变大、内部仍是空壳。
+    // 小于 2.4 单位的扩建保留为走廊/活动空间，不强行塞入过窄房间。
+    const roomSpan = distance - 0.4
+    const roomDepth = expandedFloor.depth - 1.2
+    if (roomSpan >= 2.4 && roomDepth >= 2.4) {
+      const room = {
+        id: `expansion-${side}-f${floor.level}-${Math.round((expansion[side] || 0) * 10)}`,
+        name: `扩建空间 ${floor.level}`,
+        x: side === 'east'
+          ? oldBounds.maxX + distance / 2 - shiftX
+          : side === 'west'
+            ? oldBounds.minX - distance / 2 - shiftX
+            : 0,
+        z: side === 'north'
+          ? oldBounds.minZ - distance / 2 - shiftZ
+          : side === 'south'
+            ? oldBounds.maxZ + distance / 2 - shiftZ
+            : 0,
+        width: ['east', 'west'].includes(side) ? roomSpan : expandedFloor.width - 1.2,
+        depth: ['north', 'south'].includes(side) ? roomSpan : roomDepth,
+        doorWall: ({ east: 'west', west: 'east', north: 'south', south: 'north' })[side],
+        doorWidth: 1.2,
+        furniture: [],
+      }
+      expandedFloor.rooms.push(room)
+    }
+    return expandedFloor
+  })
   next.interiorNormalized = next.floors.some(floor => Math.abs(floor.width - next.footprintSize.width) > 0.01 || Math.abs(floor.depth - next.footprintSize.depth) > 0.01)
   next.expansionStatus = 'user-expanded-unverified'
   return next

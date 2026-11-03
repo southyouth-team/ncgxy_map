@@ -1023,10 +1023,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorBuilding = definition
     callbacks.onIndoorPromptChange?.({ visible: false })
     nearOutdoorEntrance = false
-    outdoorState = { visible: campus.visible, player: cameraRig.player.clone(), mode: cameraRig.mode, collisionWorld }
+    outdoorState = {
+      visible: campus.visible,
+      player: cameraRig.player.clone(),
+      mode: cameraRig.mode,
+      collisionWorld,
+      background: scene.background?.clone?.() ?? scene.background,
+      fog: scene.fog?.clone?.() ?? scene.fog,
+      loadedModelVisibility: loadedBuildingModels.map(model => ({ model, visible: model.visible })),
+    }
+    // 室内是独立空间：校园地面、树木及独立加载的建筑模型全部隐藏，不能从室内看到室外。
     campus.visible = false
-    cameraRig.setMode('thirdPerson')
-    input.setMode('thirdPerson')
+    loadedBuildingModels.forEach(model => { model.visible = false })
+    scene.background = new THREE.Color('#d9d4c5')
+    scene.fog = new THREE.Fog('#d9d4c5', 38, 95)
+    // 进入时直接落在一楼走廊内，以第一人称观察教室和家具，不再从建筑外部看剖面。
+    cameraRig.setMode('firstPerson')
+    input.setMode('firstPerson')
     buildIndoorFloor(definition.floors[0].level)
     // 楼层生成器已将建筑外门映射为室内门洞；直接使用同一门洞计算出的出生点。
     const firstFloor = definition.floors.find(floor => floor.level === currentIndoorFloor)
@@ -1444,6 +1457,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorOutdoorBase = null
     currentIndoorFloor = null
     campus.visible = outdoorState.visible
+    for (const item of outdoorState.loadedModelVisibility || []) item.model.visible = item.visible
+    scene.background = outdoorState.background
+    scene.fog = outdoorState.fog
     nearOutdoorEntrance = false
     nearOutdoorBuildingId = null
     callbacks.onIndoorPromptChange?.({ visible: false })

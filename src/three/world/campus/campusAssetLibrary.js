@@ -323,7 +323,7 @@ export function getFacadeWindowPositions(edgeLength, windowWidth, density = 1, r
   const positions = Array.from({ length: count }, (_, index) => (
     margin + usableLength * (index + 0.5) / count
   ))
-  if (!Number.isFinite(Number(reservedCenter))) return positions
+  if (reservedCenter === null || reservedCenter === undefined || reservedCenter === '' || !Number.isFinite(Number(reservedCenter))) return positions
   const keepAway = Math.max(0, Number(reservedHalfWidth) || 0) + width / 2 + 0.06
   return positions.filter(position => Math.abs(position - Number(reservedCenter)) >= keepAway)
 }

@@ -138,6 +138,14 @@ describe('indoor building definition', () => {
     for (const floor of building.floors) expect(validateIndoorFloor(floor)).toEqual([])
   })
 
+  it('rejects unsupported exterior roof styles and unsafe floor heights', () => {
+    const building = indoorBuildingDefinitions.teachingBlockPrototype
+    expect(validateIndoorBuilding({ ...building, exterior: { roofStyle: 'unknown' } }))
+      .toContain('exterior.roofStyle 必须是 flat/glass/pitched/span')
+    expect(validateIndoorBuilding({ ...building, floorHeight: 12 }))
+      .toContain('floorHeight 必须在 2.5 至 10 之间')
+  })
+
   it('rejects duplicate floor levels', () => {
     const building = indoorBuildingDefinitions.teachingBlockPrototype
     expect(validateIndoorBuilding({ ...building, floors: [building.floors[0], building.floors[0]] }))

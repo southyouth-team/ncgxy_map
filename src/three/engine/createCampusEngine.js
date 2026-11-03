@@ -556,9 +556,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     const distance = Math.hypot(cameraRig.player.x - stairPoint.x, cameraRig.player.z - stairPoint.z)
     if (distance <= 1.25) {
-      return beginStairTransition(plan.transitions[0].toLevel)
+      const started = beginStairTransition(plan.transitions[0].toLevel)
+      if (!started) pendingIndoorFloorTarget = null
+      return started
     }
-    return navigateIndoorTo(stairPoint)
+    const started = navigateIndoorTo(stairPoint)
+    if (!started) pendingIndoorFloorTarget = null
+    return started
   }
 
   function onScenePointerDown(event) {

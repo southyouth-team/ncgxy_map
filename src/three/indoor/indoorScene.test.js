@@ -195,7 +195,7 @@ describe('indoor floor contract', () => {
     const graph = buildIndoorNavigationGraph(blockedFloor, [
       { minX: -5.15, maxX: -4.85, minZ: -6, maxZ: 6 },
     ], {
-      roomInteractions: [{ roomId: 'isolated', approach: { x: -5, z: -2 }, inside: { x: -5, z: 2 } }],
+      roomInteractions: [{ roomId: 'isolated', approach: { x: -2, z: -2 }, inside: { x: -8, z: 2 } }],
     })
     expect(graph.points.find(point => point.id === 'room:isolated:inside')?.reachableFromSpawn).toBe(false)
     expect(graph.summary.disconnectedPoints).toContain('room:isolated:inside')

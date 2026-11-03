@@ -171,6 +171,21 @@ describe('campus footprint indoor generation', () => {
     expect(validateIndoorBuilding(building).some(error => error.includes('墙体 bad-wall 超出楼层边界'))).toBe(true)
   })
 
+  it('requires stair connection points to align across building floors', () => {
+    const building = {
+      id: 'linked-building', floorHeight: 3.6,
+      floors: [
+        { ...sample, level: 1, stairPoint: { x: 8, z: 0, direction: 'south' } },
+        { ...sample, level: 2, stairPoint: { x: 8, z: 0, direction: 'south' } },
+      ],
+    }
+    expect(validateIndoorBuilding(building)).toEqual([])
+    const misaligned = { ...building, floors: [building.floors[0], { ...building.floors[1], stairPoint: { x: 4, z: 0 } }] }
+    expect(validateIndoorBuilding(misaligned)).toContain('楼层 2 的楼梯连接点未与其他楼层对齐')
+    const missing = { ...building, floors: [building.floors[0], { ...building.floors[1], stairPoint: undefined }] }
+    expect(validateIndoorBuilding(missing)).toContain('多层建筑的每个楼层都必须配置楼梯连接点')
+  })
+
   it('rejects invalid campus footprints', () => {
     expect(() => createIndoorBuildingFromFootprint({ id: 'bad', bounds: { minX: 2, maxX: 1, minZ: 0, maxZ: 2 } }))
       .toThrow('建筑轮廓尺寸无效')

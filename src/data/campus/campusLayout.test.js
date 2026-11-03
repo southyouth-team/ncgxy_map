@@ -5,8 +5,11 @@ import {
   CAMPUS_PLAN_REFERENCE,
   CAMPUS_PLAYER_SPAWN_PIXEL,
   CAMPUS_ROAD_CENTERLINES,
+  CAMPUS_ROAD_WIDTHS,
   mapPixelToWorld,
   mapRectToWorld,
+  mapPolylineToWorld,
+  mapRoadToWorld,
   pointInCampusArea,
   pointInCampusPolygon,
 } from './campusLayout.js'
@@ -56,6 +59,17 @@ describe('南昌工学院像素校园主空间底图', () => {
       const [left, top, right, bottom] = field.rect
       expect(spawnX > left && spawnX < right && spawnY > top && spawnY < bottom).toBe(false)
     }
+  })
+
+  it('道路中心线和宽度可转换为统一的 Three.js 世界空间数据', () => {
+    const road = CAMPUS_ROAD_CENTERLINES.find(item => item.id === 'north-perimeter-road')
+    const worldRoad = mapRoadToWorld(road)
+    expect(worldRoad.id).toBe(road.id)
+    expect(worldRoad.points).toEqual(mapPolylineToWorld(road.points))
+    expect(worldRoad.points).toHaveLength(road.points.length)
+    expect(worldRoad.width).toBeCloseTo(15 * (CAMPUS_PLAN_REFERENCE.worldWidth / 691))
+    expect(mapRoadToWorld({ id: 'unknown-road', points: [[153, 49], [844, 466]] }).width).toBeCloseTo(12 * (CAMPUS_PLAN_REFERENCE.worldWidth / 691))
+    expect(mapRoadToWorld(null)).toBeNull()
   })
 
   it('道路和水体控制点均位于校园底图范围内', () => {

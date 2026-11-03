@@ -29,7 +29,8 @@ const nearIndoorStairs = ref(false)
 const nearIndoorRoom = ref(null)
 const activeIndoorRoom = ref(null)
 const indoorPrompt = ref(null)
-const selectedBuildingId = ref(CAMPUS_BUILDING_FOOTPRINTS[0]?.id || '')
+const requestedBuildingId = new URLSearchParams(window.location.search).get('buildingId')
+const selectedBuildingId = ref(CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId) ? requestedBuildingId : (CAMPUS_BUILDING_FOOTPRINTS[0]?.id || ''))
 const indoorFloorCount = ref(3)
 const indoorEntryBusy = ref(false)
 const indoorEditorOpen = ref(false)
@@ -314,6 +315,14 @@ function focusCampus() {
   engine?.focusCampus()
 }
 
+function openBuildingFromPixelMap(buildingId) {
+  if (!CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === buildingId)) return
+  const url = new URL(window.location.href)
+  url.searchParams.set('view', 'showcase')
+  url.searchParams.set('buildingId', buildingId)
+  window.location.assign(url)
+}
+
 function openEditor() {
   showEditor.value = true
   editorViewMode.value = '2d'
@@ -390,6 +399,7 @@ onMounted(async () => {
       },
     }, { sceneType: isRpgSample ? 'rpg-sample' : 'campus' })
     await engine.init()
+    if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'
     loading.value = false
@@ -406,7 +416,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isRpgSample } ]">
-    <CampusPixelMap v-if="!showEditor" />
+    <CampusPixelMap v-if="!showEditor" @enter-building="openBuildingFromPixelMap" />
     <div ref="viewport" class="scene-viewport" v-show="showEditor && editorViewMode === '3d'"></div>
     <CampusPlanEditor v-if="showEditor" v-show="editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 

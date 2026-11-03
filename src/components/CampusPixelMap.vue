@@ -39,21 +39,44 @@ function polygon(ctx, points) {
 function drawRoads(ctx) {
   for (const road of CAMPUS_ROAD_CENTERLINES) {
     const pts = road.points
-    ctx.lineCap = 'butt'
-    ctx.lineJoin = 'bevel'
-    ctx.strokeStyle = palette.roadEdge
-    ctx.lineWidth = road.id.includes('perimeter') ? 12 : 9
+    const perimeter = road.id.includes('perimeter')
+    ctx.lineCap = 'square'
+    ctx.lineJoin = 'round'
     ctx.beginPath()
     pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))
+
+    // 三层道路结构：草绿色路缘、浅色人行边带、暖灰色路面。
+    ctx.strokeStyle = '#71866b'
+    ctx.lineWidth = perimeter ? 15 : 12
     ctx.stroke()
-    ctx.strokeStyle = palette.road
-    ctx.lineWidth = road.id.includes('perimeter') ? 8 : 5.5
+    ctx.strokeStyle = '#c6c99f'
+    ctx.lineWidth = perimeter ? 12 : 9
     ctx.stroke()
-    ctx.strokeStyle = palette.roadMark
+    ctx.strokeStyle = perimeter ? '#d5c69e' : '#e2d4ad'
+    ctx.lineWidth = perimeter ? 8 : 5.5
+    ctx.stroke()
+
+    // 断续的像素路面标线，避免连续虚线造成现代公路感。
+    ctx.strokeStyle = '#f4e8c8'
     ctx.lineWidth = 1
-    ctx.setLineDash([3, 5])
+    ctx.setLineDash([2, 7])
     ctx.stroke()
     ctx.setLineDash([])
+
+    // 道路两侧的短段石板纹理，强化 RPG 地图的 tile 质感。
+    ctx.fillStyle = '#a6ad88'
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x1, y1] = pts[i], [x2, y2] = pts[i + 1]
+      const length = Math.hypot(x2 - x1, y2 - y1)
+      const steps = Math.floor(length / 24)
+      for (let j = 1; j < steps; j++) {
+        const t = j / steps
+        const x = Math.round(x1 + (x2 - x1) * t)
+        const y = Math.round(y1 + (y2 - y1) * t)
+        ctx.fillRect(x - 6, y - 6, 2, 2)
+        ctx.fillRect(x + 5, y + 5, 2, 2)
+      }
+    }
   }
 }
 function drawAreas(ctx) {
@@ -76,6 +99,13 @@ function drawAreas(ctx) {
       ctx.setLineDash([5, 4])
       ctx.stroke()
       ctx.setLineDash([])
+
+      // 水岸像素石块与浅滩色块，全部沿岸线稀疏布置。
+      ctx.fillStyle = '#d7d7b0'
+      for (let i = 0; i < area.polygon.length; i += 2) {
+        const [x, y] = area.polygon[i]
+        ctx.fillRect(Math.round(x) - 2, Math.round(y) - 1, 4, 2)
+      }
       if (area.holes?.length) {
         for (const hole of area.holes) {
           polygon(ctx, hole)
@@ -114,13 +144,28 @@ function drawAreas(ctx) {
 function drawGround(ctx) {
   ctx.fillStyle = palette.grass
   ctx.fillRect(0, 0, 1000, 500)
-  for (let y = 0; y < 500; y += 18) {
-    for (let x = 0; x < 1000; x += 18) {
-      const seed = (x * 13 + y * 7) % 17
-      if (seed < 3) {
-        ctx.fillStyle = seed === 0 ? palette.grassDark : palette.grassLight
-        ctx.fillRect(x + 2, y + 3, 5, 3)
-        ctx.fillRect(x + 9, y + 9, 3, 3)
+
+  // 低对比度草地 tile 纹理：保持大面积底色干净，近看有像素颗粒。
+  for (let y = 0; y < 500; y += 16) {
+    for (let x = 0; x < 1000; x += 16) {
+      const seed = (x * 13 + y * 7) % 29
+      if (seed < 7) {
+        ctx.fillStyle = seed % 3 === 0 ? palette.grassDark : palette.grassLight
+        ctx.fillRect(x + 2, y + 3, 3 + (seed % 2), 2)
+        if (seed % 4 === 0) ctx.fillRect(x + 9, y + 9, 2, 2)
+      }
+    }
+  }
+
+  // 稀疏的野花与浅色草簇，让空地有自然变化，不干扰建筑轮廓。
+  for (let y = 12; y < 490; y += 31) {
+    for (let x = 12; x < 990; x += 37) {
+      const seed = (x * 19 + y * 23) % 41
+      if (seed === 2 || seed === 11) {
+        ctx.fillStyle = seed === 2 ? '#e6d99a' : '#d8e0ad'
+        ctx.fillRect(x, y, 2, 2)
+        ctx.fillStyle = '#7f9d69'
+        ctx.fillRect(x + 2, y + 2, 2, 2)
       }
     }
   }
@@ -291,8 +336,8 @@ function buildBaseMap() {
   if (!ctx) return
   ctx.imageSmoothingEnabled = false
   drawGround(ctx)
-  drawRoads(ctx)
   drawAreas(ctx)
+  drawRoads(ctx)
   drawTrees(ctx)
   drawBuildings(ctx)
   drawLabels(ctx)
@@ -378,7 +423,21 @@ function onPointerUp(event) {
 }
 function onWheel(event) {
   event.preventDefault()
-  zoom.value = Math.max(.72, Math.min(2.8, zoom.value * (event.deltaY < 0 ? 1.12 : .89)))
+  const anchor = pointerPosition(event)
+  const previous = mapToScreen()
+  const nextZoom = Math.max(.72, Math.min(3.2, zoom.value * (event.deltaY < 0 ? 1.12 : .89)))
+  if (nextZoom === zoom.value) return
+
+  // 以鼠标所在地图点为缩放锚点，缩放时不让目标位置漂移。
+  const mapX = (anchor.x - previous.x) / previous.scale
+  const mapY = (anchor.y - previous.y) / previous.scale
+  zoom.value = nextZoom
+  const nextScale = mapToScreen().scale
+  const width = viewport.value.width, height = viewport.value.height
+  mapOffset.value = {
+    x: anchor.x - (width - 1000 * nextScale) / 2 - mapX * nextScale,
+    y: anchor.y - (height - 500 * nextScale) / 2 - mapY * nextScale,
+  }
   render()
 }
 function resetView() { zoom.value = 1; mapOffset.value = { x: 0, y: 0 }; render() }

@@ -450,7 +450,7 @@ export function createPixelBuilding(THREE, options = {}) {
     const next = wallPoints[(index + 1) % wallPoints.length]
     return sum + point.x * next.y - next.x * point.y
   }, 0) / 2
-  const wallDoorWidth = Math.min(Number(preset.doorWidth || 0.9), Math.max(0.5, (wallEntrance?.length || 0) * 0.42))
+  const wallDoorWidth = Math.min(Math.max(Number(preset.doorWidth || 0.9), 1.35), Math.max(0.5, (wallEntrance?.length || 0) * 0.42))
   const wallDoorHeight = Math.min(2.05, buildingHeight * 0.58)
   const wallThickness = 0.28
   const addWallSegment = (edge, from, to, height = buildingHeight, centerY = buildingHeight / 2) => {
@@ -612,7 +612,7 @@ export function createPixelBuilding(THREE, options = {}) {
     return { point, next, dx, dy, length: Math.hypot(dx, dy), index }
   })
   const entranceEdge = selectBuildingEntranceEdge(edges, entranceEdgeIndex) || { length: 0 }
-  const doorWidth = Math.min(Number(preset.doorWidth || 0.9), Math.max(0.5, entranceEdge.length * 0.42))
+  const doorWidth = Math.min(Math.max(Number(preset.doorWidth || 0.9), 1.35), Math.max(0.5, entranceEdge.length * 0.42))
   const doorHeight = Math.min(2.05, buildingHeight * 0.58)
   if (entranceEdge.length >= doorWidth * 1.6) {
     const normalX = area >= 0 ? entranceEdge.dy / entranceEdge.length : -entranceEdge.dy / entranceEdge.length

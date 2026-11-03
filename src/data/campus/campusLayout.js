@@ -14,6 +14,9 @@ export const CAMPUS_PLAN_REFERENCE = {
     width: 1000,
     height: 500,
     source: '南昌工学院2026级新生报到指南·校园平面图（reference-only）',
+    publishedAt: '2026-08-28',
+    sourcePageUrl: 'https://app.gaokaozhitongche.com/newsguide/h/Rg1KJO0N',
+    sourceImageUrl: 'https://mmbiz.qpic.cn/sz_mmbiz_jpg/I7CrcZW85viauJhPE5oxIic650acadic3zicLbM1kQ4eHcz4fbdYMNw0QliaiapzFkyBOakxlRcZINmMyD2DO1ib6Da2agZD6iaKM9RhmA1mkh3H8Pc/640?from=appmsg&wx_fmt=jpeg',
   },
   mapBounds: {
     left: 153,

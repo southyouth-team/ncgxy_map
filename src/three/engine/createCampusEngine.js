@@ -783,6 +783,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
     // 对程序化校园建筑按真实多边形重新生成建筑实体，不再用 scale 把矩形模型硬拉伸。
     if (rebuildOptions && Array.isArray(polygon) && polygon.length >= 3) {
+      const geometryKey = JSON.stringify({
+        polygon, width, depth,
+        height: Number(definition.floorHeight) * definition.floors.length,
+        floors: definition.floors.length,
+      })
+      if (indoorOutdoorBase.geometryKey !== geometryKey) {
       const shape = new THREE.Shape()
       shape.moveTo(polygon[0].x, -polygon[0].z)
       polygon.slice(1).forEach(point => shape.lineTo(point.x, -point.z))
@@ -811,11 +817,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         const foundationGeometry = new THREE.ExtrudeGeometry(shape, { depth: 0.16, bevelEnabled: false, curveSegments: 1 })
         foundationGeometry.rotateX(-Math.PI / 2)
         foundation.geometry = foundationGeometry
-        foundation.position.set(
-          indoorOutdoorBase.position.x + shiftX,
-          0,
-          indoorOutdoorBase.position.z + shiftZ,
-        )
+      }
+      indoorOutdoorBase.geometryKey = geometryKey
       }
       target.scale.copy(indoorOutdoorBase.scale)
       target.position.set(
@@ -823,6 +826,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         indoorOutdoorBase.position.y,
         indoorOutdoorBase.position.z + shiftZ,
       )
+      if (target.userData.foundationMesh) {
+        target.userData.foundationMesh.position.set(target.position.x, 0, target.position.z)
+      }
     } else {
       // 非程序化模型（含 RPG 样板手工建筑）暂保留原有包围盒缩放路径。
       indoorOutdoorTarget.scale.x = indoorOutdoorBase.scale.x * width / indoorOutdoorBase.width

@@ -866,6 +866,23 @@ describe('generated teaching block navigation acceptance', () => {
       expect(validation.valid, `楼层 ${floor.level}: ${validation.errors.join('；')}`).toBe(true)
       expect(group.userData.navigationValidation).toEqual(validation)
       expect(group.userData.navigationSummary.disconnectedPoints).toEqual([])
+
+      // 导航网格与运行时角色碰撞使用相同半径，确保寻路节点不会落在实际碰撞体内。
+      const runtimeCollision = new CollisionWorld(
+        building.bounds,
+        group.userData.collisionObstacles,
+        group.userData.navigationGraph.clearance,
+      )
+      const spawn = floor.spawnPoint || { x: 0, z: 0 }
+      for (const landmark of group.userData.navigationGraph.points.filter(point => point.type !== 'spawn')) {
+        const route = group.userData.navigationGraph.findPath(spawn, landmark.point)
+        expect(route, `楼层 ${floor.level} 目标 ${landmark.id} 应存在路径`).not.toBeNull()
+        for (const node of route || []) {
+          expect(runtimeCollision.isBlocked(node.x, node.z),
+            `楼层 ${floor.level} 目标 ${landmark.id} 的导航节点不应被运行时碰撞阻挡`,
+          ).toBe(false)
+        }
+      }
     }
   })
 })

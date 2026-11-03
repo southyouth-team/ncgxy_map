@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, buildIndoorNavigationGraph } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -10,6 +10,37 @@ const sample = {
   rooms: [{ id: 'classroom-101', name: '教室 101', x: -5, z: 0, width: 8, depth: 6, doorWall: 'south', doorWidth: 1.4 }],
   doors: [{ wall: 'south', offset: 0, width: 2 }],
 }
+
+describe('multi-floor navigation planning', () => {
+  const building = {
+    floors: [
+      { level: 1, stairPoint: { x: 8, z: 0 } },
+      { level: 2, stairPoint: { x: 8, z: 0 } },
+      { level: 3, stairPoint: { x: 8, z: 0 } },
+      { level: 4, stairPoint: { x: 8, z: 0 } },
+    ],
+  }
+
+  it('plans every adjacent floor transition when ascending or descending', () => {
+    expect(planIndoorFloorRoute(building, 1, 4)).toMatchObject({
+      levels: [1, 2, 3, 4],
+      transitions: [
+        { fromLevel: 1, toLevel: 2, direction: 1, stairPoint: { x: 8, z: 0 } },
+        { fromLevel: 2, toLevel: 3, direction: 1, stairPoint: { x: 8, z: 0 } },
+        { fromLevel: 3, toLevel: 4, direction: 1, stairPoint: { x: 8, z: 0 } },
+      ],
+    })
+    expect(planIndoorFloorRoute(building, 4, 1)?.levels).toEqual([4, 3, 2, 1])
+    expect(planIndoorFloorRoute(building, 2, 2)).toEqual({ levels: [2], transitions: [] })
+  })
+
+  it('rejects unknown floors and misaligned stair connections', () => {
+    expect(planIndoorFloorRoute(building, 0, 3)).toBeNull()
+    expect(planIndoorFloorRoute({ floors: [{ level: 1 }, { level: 2 }] }, 1, 2)).toBeNull()
+    const misaligned = { floors: [building.floors[0], { level: 2, stairPoint: { x: 8.2, z: 0 } }] }
+    expect(planIndoorFloorRoute(misaligned, 1, 2)).toBeNull()
+  })
+})
 
 describe('indoor interaction contract', () => {
   it('normalizes inspect and navigation interaction metadata', () => {

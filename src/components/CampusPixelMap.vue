@@ -57,8 +57,9 @@ function drawRoads(ctx) {
     ctx.strokeStyle = '#c6c99f'
     ctx.lineWidth = roadWidth * .8
     ctx.stroke()
-    ctx.strokeStyle = perimeter ? '#d5c69e' : '#e2d4ad'
-    ctx.lineWidth = roadWidth * (road.id.includes('perimeter') ? .53 : .46)
+    const isPerimeterRoad = road.id.includes('perimeter')
+    ctx.strokeStyle = isPerimeterRoad ? '#d5c69e' : '#e2d4ad'
+    ctx.lineWidth = roadWidth * (isPerimeterRoad ? .53 : .46)
     ctx.stroke()
 
     // 断续的像素路面标线，避免连续虚线造成现代公路感。

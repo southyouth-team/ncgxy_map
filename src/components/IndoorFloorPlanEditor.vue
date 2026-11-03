@@ -156,7 +156,16 @@ function rotateStair() {
   checkpoint()
   const directions = ['south', 'west', 'north', 'east']
   const current = props.floor.stairPoint?.direction || 'south'
-  props.floor.stairPoint = { ...(props.floor.stairPoint || { x: 0, z: 0 }), direction: directions[(directions.indexOf(current) + 1) % directions.length] }
+  const direction = directions[(directions.indexOf(current) + 1) % directions.length]
+  const horizontal = ['east', 'west'].includes(direction)
+  const maxX = props.floor.width / 2 - (horizontal ? 2.2 : 1)
+  const maxZ = props.floor.depth / 2 - (horizontal ? 1 : 2.2)
+  const point = props.floor.stairPoint || { x: 0, z: 0 }
+  props.floor.stairPoint = {
+    ...point, direction,
+    x: round(Math.max(-maxX, Math.min(maxX, point.x))),
+    z: round(Math.max(-maxZ, Math.min(maxZ, point.z))),
+  }
   emit('change')
 }
 function endDrag(event) {

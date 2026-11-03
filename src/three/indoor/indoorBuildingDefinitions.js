@@ -22,7 +22,7 @@ export const indoorBuildingDefinitions = {
             { id: 'student-desk-3', type: 'desk', x: 1.5, z: 0.5, width: 1.2, depth: 0.65, height: 0.72 },
             { id: 'blackboard', type: 'board', x: 0, z: -2.5, width: 3.4, depth: 0.12, height: 1.1 },
           ] },
-        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 }, stairPoint: { x: 10.5, z: 0 } },
+        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 }, stairPoint: { x: 10.5, z: 0, direction: 'south' } },
       { level: 2, width: 24, depth: 18, wallHeight: 3.4, doors: [],
         rooms: [
           { id: 'classroom-201', name: '教室 201', x: -5.4, z: -1.2, width: 7.2, depth: 6.2, doorWall: 'south', doorWidth: 1.5, furniture: [
@@ -39,7 +39,7 @@ export const indoorBuildingDefinitions = {
             { id: 'student-desk-3', type: 'desk', x: 1.5, z: 0.5, width: 1.2, depth: 0.65, height: 0.72 },
             { id: 'blackboard', type: 'board', x: 0, z: -2.5, width: 3.4, depth: 0.12, height: 1.1 },
           ] },
-        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 }, stairPoint: { x: 10.5, z: 0 } },
+        ], spawnPoint: { x: 0, y: 1.7, z: 5.2 }, stairPoint: { x: 10.5, z: 0, direction: 'north' } },
     ],
   },
 }
@@ -49,6 +49,7 @@ for (const level of [3, 4]) {
   const template = indoorBuildingDefinitions.teachingBlockPrototype.floors[1]
   const floor = JSON.parse(JSON.stringify(template))
   floor.level = level
+  floor.stairPoint = { ...floor.stairPoint, direction: level % 2 === 1 ? 'south' : 'north' }
   floor.rooms = floor.rooms.map(room => ({
     ...room,
     id: room.id.replace(/^classroom-2/, `classroom-${level}`),

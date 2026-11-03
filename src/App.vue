@@ -362,7 +362,9 @@ function switchEditorView(mode, document) {
   else engine?.clearRpgPreview()
 }
 
-function closeEditor() {
+async function closeEditor() {
+  // 编辑器退出时重新拉取刚刚自动保存的平面图，确保首页立即使用最新版本。
+  await loadHomepagePlanDocument()
   // 从室内样板返回像素地图前，先释放室内场景并恢复室外角色快照。
   engine?.exitIndoorPrototype()
   engine?.clearRpgPreview()

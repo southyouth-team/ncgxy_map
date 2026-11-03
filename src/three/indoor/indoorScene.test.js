@@ -227,6 +227,8 @@ describe('campus footprint indoor generation', () => {
     expect(expanded.floors.every(floor => floor.depth === 10)).toBe(true)
     expect(expanded.floors[0].rooms[0].x).toBeCloseTo(originalRoom.x - 2)
     expect(expanded.footprint.bounds).toEqual({ minX: -8, maxX: 8, minZ: -5, maxZ: 5 })
+    expect(Math.min(...expanded.footprint.polygon.map(point => point.x))).toBe(-8)
+    expect(Math.max(...expanded.footprint.polygon.map(point => point.x))).toBe(8)
     expect(validateIndoorBuilding(expanded)).toEqual([])
     const balanced = expandIndoorBuilding(expanded, { side: 'west', amount: 4 })
     expect(balanced.footprintSize).toEqual({ width: 20, depth: 10 })

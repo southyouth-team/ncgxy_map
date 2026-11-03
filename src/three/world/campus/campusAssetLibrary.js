@@ -464,8 +464,18 @@ export function createPixelBuilding(THREE, options = {}) {
     wallSegment.userData.edgeIndex = edge.index
     group.add(wallSegment)
   }
+  const collisionSegments = []
+  const appendCollisionSegment = (edge, from, to) => {
+    if (Math.hypot(to.x - from.x, to.y - from.y) < 0.08) return
+    collisionSegments.push({
+      start: { x: from.x, y: from.y },
+      end: { x: to.x, y: to.y },
+      thickness: wallThickness,
+    })
+  }
   wallEdges.forEach(edge => {
     if (edge.index !== wallEntrance?.index || edge.length < wallDoorWidth * 1.6) {
+      appendCollisionSegment(edge, edge.point, edge.next)
       addWallSegment(edge, edge.point, edge.next)
       return
     }
@@ -474,10 +484,27 @@ export function createPixelBuilding(THREE, options = {}) {
     const midpoint = { x: (edge.point.x + edge.next.x) / 2, y: (edge.point.y + edge.next.y) / 2 }
     const before = { x: midpoint.x - edge.dx / edge.length * halfGap, y: midpoint.y - edge.dy / edge.length * halfGap }
     const after = { x: midpoint.x + edge.dx / edge.length * halfGap, y: midpoint.y + edge.dy / edge.length * halfGap }
+    appendCollisionSegment(edge, edge.point, before)
+    appendCollisionSegment(edge, after, edge.next)
     addWallSegment(edge, edge.point, before)
     addWallSegment(edge, after, edge.next)
     addWallSegment(edge, before, after, buildingHeight - wallDoorHeight, (buildingHeight + wallDoorHeight) / 2)
   })
+  group.userData.collisionSegments = collisionSegments
+  if (wallEntrance?.length >= wallDoorWidth * 1.6) {
+    const midpoint = {
+      x: (wallEntrance.point.x + wallEntrance.next.x) / 2,
+      y: (wallEntrance.point.y + wallEntrance.next.y) / 2,
+    }
+    const normalX = area >= 0 ? wallEntrance.dy / wallEntrance.length : -wallEntrance.dy / wallEntrance.length
+    const normalZ = area >= 0 ? wallEntrance.dx / wallEntrance.length : -wallEntrance.dx / wallEntrance.length
+    group.userData.indoorEntrance = {
+      x: midpoint.x + normalX * 1.5,
+      z: -midpoint.y + normalZ * 1.5,
+      radius: 2.25,
+      edgeIndex: wallEntrance.index,
+    }
+  }
 
   // 屋面始终从 footprint 三角剖分生成：边界顶点严格落在墙顶，凹多边形不会被外接矩形填平。
   const roofStyle = preset.roofStyle || 'flat'

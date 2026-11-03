@@ -19,6 +19,15 @@ export function getStairLandingPoint(stairPath, direction) {
   return { x: point.x, z: point.z }
 }
 
+/** 返回当前楼层的楼梯入口与目标楼层落脚点。 */
+export function getStairTraversalPoints(stairPath, direction) {
+  if (![-1, 1].includes(direction)) return null
+  const entry = getStairLandingPoint(stairPath, -direction)
+  const exit = getStairLandingPoint(stairPath, direction)
+  if (!entry || !exit) return null
+  return { entry, exit }
+
+
 /**
  * 生成建筑内跨楼层导航计划。楼层按编号排序，每次只跨越一个相邻楼层，
  * 由运行时在每层分别执行平面寻路，避免把不同高度的网格错误地投影到同一平面。

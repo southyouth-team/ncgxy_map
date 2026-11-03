@@ -380,7 +380,8 @@ export function createPixelBuilding(THREE, options = {}) {
   ))
   if (outline.length > 2 && outline[0].distanceTo(outline[outline.length - 1]) < 0.001) outline.pop()
   const windowWidth = Math.max(0.28, Number(preset.windowWidth || 0.48))
-  const floorLayout = getBuildingFloorLayout(buildingHeight, floors ?? preset.floors ?? 1, preset.windowHeight)
+  const requestedFloors = hasNumericOverride(floors) ? floors : preset.floors
+  const floorLayout = getBuildingFloorLayout(buildingHeight, requestedFloors ?? 1, preset.windowHeight)
   group.userData.floorCount = floorLayout.floors
   group.userData.floorHeight = floorLayout.floorHeight
   const windowHeight = floorLayout.windowHeight

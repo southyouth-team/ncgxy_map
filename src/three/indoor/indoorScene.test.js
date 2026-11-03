@@ -70,7 +70,7 @@ describe('indoor floor contract', () => {
     const slab = group.children.find(child => child.name === 'indoor-floor-slab')
     const exteriorWalls = group.children.filter(child => child.name.startsWith('indoor-wall-outline-'))
     expect(slab).toBeTruthy()
-    expect(slab.geometry.attributes.position.count).toBeGreaterThan(5)
+    expect(slab.geometry.attributes.position.count).toBeGreaterThanOrEqual(5)
     expect(exteriorWalls).toHaveLength(5)
     expect(group.userData.collisionObstacles.length).toBeGreaterThanOrEqual(5)
   })

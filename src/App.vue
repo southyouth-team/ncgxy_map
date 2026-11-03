@@ -172,8 +172,6 @@ onMounted(async () => {
   window.addEventListener('keydown', onExplorerHotkey)
   try {
     engine = createCampusEngine(viewport.value, {
-      loadSceneData,
-      onSceneDataError: (error) => console.warn('GIS 三维场景加载失败，已回退示意场景：', error),
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorStateChange: (state) => {
         indoorPrototypeActive.value = Boolean(state.active)
@@ -190,7 +188,6 @@ onMounted(async () => {
       },
     })
     await engine.init()
-    if (new URLSearchParams(window.location.search).get('view') === 'editor') { showEditor.value = true; editorViewMode.value = '2d' }
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'
     loading.value = false
@@ -264,10 +261,6 @@ onBeforeUnmount(() => {
       <button v-if="showEditor" class="mode-button" @click="closeEditor">
         <span class="mode-label">退出编辑模式</span>
         <span class="mode-hint">返回普通浏览</span>
-      </button>
-      <button v-else class="mode-button editor-mode-button" @click="openEditor">
-        <span class="mode-label">场景编辑</span>
-        <span class="mode-hint">建筑 · 道路 · 场景</span>
       </button>
     </nav>
 

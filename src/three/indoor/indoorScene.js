@@ -207,8 +207,8 @@ export function getRoomInteractionPoints(floor) {
  * { wall: 'north'|'south'|'east'|'west', offset, width }，offset 从墙体中心沿墙方向计。
  */
 export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}) {
-  const step = 0.5
-  const clearance = 0.42
+  const step = Math.max(0.25, Math.min(0.5, Math.max(floor.width, floor.depth) / 160))
+  const clearance = 0.48
   const halfW = floor.width / 2
   const halfD = floor.depth / 2
   const polygon = Array.isArray(floor.footprintPolygon) ? floor.footprintPolygon : null

@@ -517,6 +517,8 @@ export function createPixelBuilding(THREE, options = {}) {
   const floorLayout = getBuildingFloorLayout(buildingHeight, requestedFloors ?? 1, preset.windowHeight)
   group.userData.floorCount = floorLayout.floors
   group.userData.floorHeight = floorLayout.floorHeight
+  group.userData.buildingHeight = buildingHeight
+  group.userData.buildingTemplate = template
   const windowHeight = floorLayout.windowHeight
   const area = outline.reduce((sum, point, index) => {
     const next = outline[(index + 1) % outline.length]

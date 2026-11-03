@@ -584,7 +584,7 @@ export function createIndoorFloor(THREE, floor, floorHeight = 4.2) {
     const roomDoor = room.doorWidth > 0
       ? [{ offset: Number(room.doorOffset) || 0, width: room.doorWidth }]
       : []
-    addWallSegments({ axis: 'x', centerX: x, centerZ: z - d / 2, length: w, wallName: `${room.id}-north`, wallHeight: roomWallHeight, thickness: roomThickness })
+    addWallSegments({ axis: 'x', centerX: x, centerZ: z - d / 2, length: w, wallName: `${room.id}-north`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'north' ? roomDoor : [] })
     addWallSegments({ axis: 'x', centerX: x, centerZ: z + d / 2, length: w, wallName: `${room.id}-south`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'south' ? roomDoor : [] })
     addWallSegments({ axis: 'z', centerX: x - w / 2, centerZ: z, length: d, wallName: `${room.id}-west`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'west' ? roomDoor : [] })
     addWallSegments({ axis: 'z', centerX: x + w / 2, centerZ: z, length: d, wallName: `${room.id}-east`, wallHeight: roomWallHeight, thickness: roomThickness, openings: roomDoorWall === 'east' ? roomDoor : [] })

@@ -19,7 +19,7 @@ button { font: inherit; }
 .brand-title { font-size: 15px; font-weight: 700; letter-spacing: 2px; }
 .brand-subtitle { margin-top: 4px; font: 9px 'DM Mono', monospace; letter-spacing: 1.1px; color: rgba(236,232,217,.56); }
 .showcase-actions { display: flex; align-items: center; gap: 14px; pointer-events: auto; }
-.showcase-back { padding: 8px 13px; border: 1px solid rgba(239,236,222,.42); border-radius: 3px; color: #f3edda; background: rgba(17,35,31,.72); font: 11px inherit; cursor: pointer; transition: background .18s ease, border-color .18s ease; }
+.showcase-back { padding: 8px 13px; border: 1px solid rgba(239,236,222,.42); border-radius: 3px; color: #f3edda; background: rgba(17,35,31,.72); font: inherit; font-size: 11px; cursor: pointer; transition: background .18s ease, border-color .18s ease; }
 .showcase-back:hover { background: rgba(54,85,63,.9); border-color: #d7bd82; }
 .topbar-status { font: 10px 'DM Mono', monospace; letter-spacing: 1.2px; color: rgba(239,236,222,.78); }
 .status-dot, .coordinate-dot { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: #b9c99c; box-shadow: 0 0 12px #b9c99c; vertical-align: 1px; }
@@ -124,6 +124,9 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 }
 .pixel-brand strong { display: block; font-size: 16px; letter-spacing: 2px; }
 .pixel-brand span { display: block; margin-top: 3px; color: #77866a; font: 8px 'DM Mono', monospace; letter-spacing: 1px; }
+.pixel-header-actions { display: flex; align-items: center; gap: 12px; }
+.pixel-showcase-link { padding: 8px 12px; border: 1px solid #9eae91; border-radius: 4px; color: #405648; background: rgba(250,248,232,.76); font-size: 11px; cursor: pointer; }
+.pixel-showcase-link:hover { color: #fff8df; border-color: #536f55; background: #536f55; }
 .pixel-header-tag { color: #627b5a; font-size: 11px; letter-spacing: 1px; }
 .pixel-header-tag i { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #7f9e68; }
 .pixel-map-controls {

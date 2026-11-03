@@ -20,26 +20,28 @@ export function createRpgSampleScene(THREE) {
     texture.wrapT = THREE.RepeatWrapping
     return texture
   }
-  const wallTexture = makePixelTexture('#ead9ae', (ctx, size) => {
-    for (let y = 4; y < size; y += 12) {
-      ctx.fillStyle = '#dfc99d'
+  const wallTexture = makePixelTexture('#dce2e3', (ctx, size) => {
+    for (let y = 8; y < size; y += 16) {
+      ctx.fillStyle = '#cbd3d5'
       ctx.fillRect(0, y, size, 2)
-      for (let x = ((y / 12) % 2) * 8; x < size; x += 16) {
-        ctx.fillStyle = '#d8c092'
-        ctx.fillRect(x, y - 8, 2, 8)
-      }
     }
-    ctx.fillStyle = '#f3e7c8'
-    for (let x = 3; x < size; x += 24) ctx.fillRect(x, 3, 3, 3)
+    for (let x = 8; x < size; x += 24) {
+      ctx.fillStyle = '#eaf0ef'
+      ctx.fillRect(x, 2, 3, size - 4)
+    }
+    for (let x = 4; x < size; x += 32) {
+      ctx.fillStyle = '#b9c5c8'
+      ctx.fillRect(x, 4, 2, 2)
+    }
   })
-  const roofTexture = makePixelTexture('#a85d4b', (ctx, size) => {
-    for (let y = 0; y < size; y += 8) {
-      for (let x = (y % 16 ? 0 : 4); x < size; x += 8) {
-        ctx.fillStyle = (x + y) % 3 ? '#c7775b' : '#914c43'
-        ctx.fillRect(x, y, 7, 6)
-        ctx.fillStyle = '#d58a68'
-        ctx.fillRect(x, y, 7, 1)
-      }
+  const roofTexture = makePixelTexture('#59666d', (ctx, size) => {
+    for (let y = 5; y < size; y += 12) {
+      ctx.fillStyle = '#68777e'
+      ctx.fillRect(0, y, size, 2)
+    }
+    for (let x = 6; x < size; x += 20) {
+      ctx.fillStyle = '#48565d'
+      ctx.fillRect(x, 2, 2, size - 4)
     }
   })
   const leafTexture = makePixelTexture('#39744a', (ctx, size) => {
@@ -56,11 +58,11 @@ export function createRpgSampleScene(THREE) {
   })
   const materials = {
     grass: mat('#78a957'), grassLight: mat('#91b96a'), grassDark: mat('#5f914b'),
-    path: mat('#d8c18f'), pathLight: mat('#ead7aa'), pathDark: mat('#b99b6d'),
-    wall: mat('#ffffff', { map: wallTexture }), wallShade: mat('#c6a77d'),
+    path: mat('#343d43'), pathLight: mat('#858f93'), pathDark: mat('#626e73'),
+    wall: mat('#ffffff', { map: wallTexture }), wallShade: mat('#aebbc0'),
     roof: mat('#ffffff', { map: roofTexture }), roofLight: mat('#ffffff', { map: roofTexture }),
-    roofDark: mat('#78453e'), trim: mat('#f3e5c4'),
-    glass: mat('#77b8c0'), door: mat('#76513b'), wood: mat('#8b6544'),
+    roofDark: mat('#46545b'), trim: mat('#eef2f1'),
+    glass: mat('#6da9b5'), door: mat('#496a78'), wood: mat('#52666d'),
     trunk: mat('#795238'), leaf: mat('#ffffff', { map: leafTexture }),
     leafLight: mat('#69a653'), leafDark: mat('#2d5e42'),
     flower: mat('#e9a2a0'), stone: mat('#a89d83'),
@@ -110,11 +112,14 @@ export function createRpgSampleScene(THREE) {
   grassPatchMesh.castShadow = false
   grassPatchMesh.receiveShadow = true
   root.add(grassPatchMesh)
-  // 校园主路与通往教学楼的石板支路。
-  addBox('main-campus-road-edge', 0, 0.012, 8, 48, 0.015, 5.4, materials.pathDark)
-  addBox('main-campus-road', 0, 0.027, 8, 48, 0.015, 4.9, materials.path)
-  addBox('building-walkway-edge', 0, 0.012, 1.7, 5.8, 0.015, 9.2, materials.pathDark)
-  addBox('building-walkway', 0, 0.027, 1.7, 5.2, 0.015, 9.2, materials.pathLight)
+  // 现代校园道路：深灰沥青车行道、混凝土人行道与交通标线。
+  addBox('main-campus-road-edge', 0, 0.012, 8, 48, 0.04, 5.8, materials.pathDark)
+  addBox('main-campus-road', 0, 0.04, 8, 48, 0.035, 5.25, materials.path)
+  addBox('building-walkway-edge', 0, 0.012, 1.7, 6.2, 0.035, 9.2, materials.pathDark)
+  addBox('building-walkway', 0, 0.04, 1.7, 5.8, 0.035, 9.2, materials.pathLight)
+  addBox('road-center-line', 0, 0.061, 8, 47.5, 0.018, 0.09, materials.trim)
+  for (let x = -21; x <= 21; x += 5.2) addBox('road-lane-dash', x, 0.064, 8, 2.4, 0.018, 0.12, materials.trim)
+  for (const z of [5.05, 10.95]) addBox('campus-concrete-sidewalk', 0, 0.045, z, 48, 0.035, 0.72, materials.pathLight)
   for (let z = -2.2; z < 6; z += 1.35) {
     addBox('walkway-joint', 0, 0.043, z, 5.1, 0.006, 0.055, materials.pathDark)
   }
@@ -132,7 +137,7 @@ export function createRpgSampleScene(THREE) {
     roadTiles.length,
   )
   const roadTileTransform = new THREE.Object3D()
-  const roadTileTones = ['#ead7aa', '#dfc99b', '#e4d0a5', '#d8c18f'].map(color => new THREE.Color(color))
+  const roadTileTones = ['#414b50', '#4a555a', '#394348', '#505b60'].map(color => new THREE.Color(color))
   roadTiles.forEach((tile, index) => {
     roadTileTransform.position.set(tile.x, 0.044, tile.z)
     roadTileTransform.updateMatrix()
@@ -143,17 +148,10 @@ export function createRpgSampleScene(THREE) {
   roadTileMesh.castShadow = false
   roadTileMesh.receiveShadow = true
   root.add(roadTileMesh)
-  // 道路两侧压边与断续草沿，强化道路边界但不形成厚重马路牙子。
-  for (const z of [5.28, 10.72]) {
-    addBox('main-road-curb', 0, 0.035, z, 48, 0.07, 0.16, materials.pathDark)
-    for (let x = -22; x <= 22; x += 4.4) {
-      addBox('road-edge-grass-chip', x, 0.045, z + (z < 8 ? -0.14 : 0.14), 1.25, 0.035, 0.12, materials.grassLight)
-    }
-  }
-  // 支路边缘增加石块节奏，和主路使用同一套色板。
-  for (const x of [-2.78, 2.78]) {
-    addBox('walkway-side-border', x, 0.038, 1.7, 0.12, 0.045, 9.2, materials.pathDark)
-  }
+  // 现代路缘石、步行边界与人行横道。
+  for (const z of [4.66, 11.34]) addBox('main-road-curb', 0, 0.035, z, 48, 0.09, 0.14, materials.pathDark)
+  for (const x of [-2.98, 2.98]) addBox('walkway-side-border', x, 0.038, 1.7, 0.12, 0.06, 9.2, materials.pathDark)
+  for (let x = -2.2; x <= 2.2; x += 0.88) addBox('campus-crosswalk-stripe', x, 0.066, 8, 0.48, 0.018, 3.2, materials.trim)
   // 教学楼：墙体、分层窗户、门廊与双坡屋顶组成完整体块。
   const building = new THREE.Group()
   building.name = 'sample-teaching-building'
@@ -163,13 +161,14 @@ export function createRpgSampleScene(THREE) {
   addBox('teaching-building-foundation', 0, 0.18, 0, 15.5, 0.55, 9.2, materials.wallShade, building)
   addBox('teaching-building-main-volume', 0, 0.73, 0, 14.8, 5.8, 8.5, materials.wall, building)
   addBox('teaching-building-front-band', 0, 1.1, 4.28, 14.9, 0.2, 0.18, materials.trim, building)
-  addBox('teaching-building-roof', 0, 6.55, 0, 16.2, 0.55, 9.8, materials.roof, building)
-  // 两片斜屋面以硬边盒体表现，不使用悬空矩形屋顶。
-  const roofLeft = addBox('roof-left-slope', -3.85, 6.65, 0, 8.2, 0.32, 10.1, materials.roofLight, building)
-  roofLeft.rotation.z = -0.24
-  const roofRight = addBox('roof-right-slope', 3.85, 6.65, 0, 8.2, 0.32, 10.1, materials.roof, building)
-  roofRight.rotation.z = 0.24
-  addBox('roof-ridge', 0, 7.55, 0, 0.42, 0.28, 10.2, materials.roofDark, building)
+  // 现代教学楼采用平屋面+女儿墙，不再使用庄园式红瓦双坡顶。
+  addBox('teaching-building-flat-roof', 0, 6.55, 0, 15.8, 0.48, 9.5, materials.roof, building)
+  addBox('roof-parapet-front', 0, 6.98, 4.62, 15.8, 0.48, 0.22, materials.roofDark, building)
+  addBox('roof-parapet-back', 0, 6.98, -4.62, 15.8, 0.48, 0.22, materials.roofDark, building)
+  for (const x of [-7.75, 7.75]) addBox('roof-parapet-side', x, 6.98, 0, 0.22, 0.48, 9.1, materials.roofDark, building)
+  addBox('roof-service-platform', 3.8, 6.82, -1.2, 3.1, 0.12, 2.2, materials.wallShade, building)
+  addBox('roof-ventilation-unit', 3.8, 7.02, -1.2, 1.35, 0.32, 1.05, materials.roofDark, building)
+  addBox('roof-ventilation-cap', 3.8, 7.2, -1.2, 1.55, 0.08, 1.22, materials.roofLight, building)
   // 正立面窗户按楼层和轴线布置，保持像素化重复节奏。
   for (const y of [2.05, 4.15]) {
     for (const x of [-5.2, -2.6, 2.6, 5.2]) {
@@ -180,9 +179,10 @@ export function createRpgSampleScene(THREE) {
   }
   addBox('entrance-door-frame', 0, 0.74, 4.4, 1.85, 2.65, 0.25, materials.wallShade, building)
   addBox('entrance-door', 0, 0.78, 4.56, 1.28, 2.25, 0.12, materials.door, building)
-  addBox('entrance-canopy', 0, 3.35, 4.9, 3.1, 0.22, 1.2, materials.roofDark, building)
-  // 门头增加像素招牌、立柱与窗间装饰线，强化教学楼正立面识别度。
-  addBox('entrance-sign-board', 0, 3.78, 4.52, 4.1, 0.62, 0.18, materials.wood, building)
+  addBox('entrance-canopy', 0, 3.35, 4.9, 3.8, 0.2, 1.45, materials.roofDark, building)
+  // 现代玻璃门厅与金属雨棚。
+  addBox('entrance-glass-transom', 0, 2.95, 4.57, 2.25, 0.42, 0.08, materials.glass, building)
+  addBox('entrance-sign-board', 0, 3.78, 4.52, 4.1, 0.62, 0.18, materials.roofDark, building)
   addBox('entrance-sign-inlay', 0, 3.8, 4.625, 3.72, 0.34, 0.035, materials.trim, building)
   for (const x of [-1.72, 1.72]) {
     addBox('entrance-pillar', x, 0.42, 4.92, 0.28, 2.85, 0.3, materials.trim, building)
@@ -191,6 +191,35 @@ export function createRpgSampleScene(THREE) {
   addBox('entrance-step-lower', 0, 0.18, 5.35, 3.2, 0.18, 0.85, materials.stone, building)
   addBox('entrance-step-upper', 0, 0.36, 4.95, 2.7, 0.18, 0.65, materials.trim, building)
   root.add(building)
+  // 现代校园景观廊架：钢结构、玻璃顶与混凝土坐凳。
+  const pavilion = new THREE.Group()
+  pavilion.name = 'modern-campus-pavilion'
+  pavilion.position.set(-10, 0, 7)
+  pavilion.userData.objectType = 'campus-facility'
+  for (const x of [-2.2, 2.2]) for (const z of [-1.65, 1.65]) {
+    addBox('pavilion-steel-column', x, 0.12, z, 0.16, 3.1, 0.16, materials.roofDark, pavilion)
+  }
+  addBox('pavilion-flat-canopy', 0, 3.18, 0, 5.1, 0.22, 4.1, materials.roofDark, pavilion)
+  addBox('pavilion-glass-roof-panel', 0, 3.31, 0, 4.65, 0.06, 3.65, materials.glass, pavilion)
+  addBox('pavilion-bench-left', -1.25, 0.38, 0.45, 1.65, 0.32, 0.48, materials.wood, pavilion)
+  addBox('pavilion-bench-right', 1.25, 0.38, 0.45, 1.65, 0.32, 0.48, materials.wood, pavilion)
+  root.add(pavilion)
+  // 现代校园 LED 路灯。
+  for (const x of [-19, -9, 9, 19]) {
+    const lamp = new THREE.Group()
+    lamp.position.set(x, 0, 4.35)
+    addBox('campus-lamp-post', 0, 0.1, 0, 0.12, 4.3, 0.12, materials.roofDark, lamp)
+    addBox('campus-lamp-arm', 0.48, 4.15, 0, 1.05, 0.1, 0.1, materials.roofDark, lamp)
+    addBox('campus-led-head', 0.95, 4.03, 0, 0.48, 0.16, 0.36, materials.trim, lamp)
+    root.add(lamp)
+  }
+  // 现代景观水渠与直线型人行桥，桥面为混凝土板、栏杆为金属结构。
+  addBox('campus-water-channel', 18, -0.015, -7, 7.2, 0.035, 13, mat('#6daeb8'), root)
+  addBox('campus-bridge-deck', 18, 0.18, -7, 3.1, 0.32, 5.2, materials.pathLight, root)
+  for (const x of [16.55, 19.45]) {
+    addBox('campus-bridge-railing', x, 0.65, -7, 0.1, 0.82, 5.2, materials.roofDark, root)
+    for (let z = -9.1; z <= -4.9; z += 1.4) addBox('campus-bridge-railing-post', x, 0.35, z, 0.12, 0.55, 0.12, materials.roofDark, root)
+  }
   // 像素树：方块树冠分层，树干与投影明确，树冠不参与角色碰撞。
   const addTree = (x, z, scale = 1) => {
     const tree = new THREE.Group()

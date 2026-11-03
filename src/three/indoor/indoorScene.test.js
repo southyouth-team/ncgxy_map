@@ -196,7 +196,7 @@ describe('indoor floor contract', () => {
       walls: [{ id: 'barrier', axis: 'z', x: -5, z: 0, length: 12, thickness: 0.3 }],
     }
     const graph = buildIndoorNavigationGraph(blockedFloor, [
-      { minX: -5.15, maxX: -4.85, minZ: -6, maxZ: 6 },
+      { minX: -5.15, maxX: -4.85, minZ: -9, maxZ: 9 },
     ], {
       roomInteractions: [{ roomId: 'isolated', approach: { x: -2, z: -2 }, inside: { x: -8, z: 2 } }],
     })

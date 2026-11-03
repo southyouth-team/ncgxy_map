@@ -318,6 +318,36 @@ export class ScenesService {
     if (Buffer.byteLength(JSON.stringify(definition), 'utf8') > 5 * 1024 * 1024) {
       throw new BadRequestException('建筑室内布局文档不能超过 5 MB');
     }
+    const footprintSize = definition.footprintSize as Record<string, unknown> | undefined;
+    if (footprintSize) {
+      const footprintWidth = Number(footprintSize.width);
+      const footprintDepth = Number(footprintSize.depth);
+      if (![footprintWidth, footprintDepth].every(Number.isFinite) ||
+          footprintWidth <= 0 || footprintDepth <= 0 || footprintWidth > 500 || footprintDepth > 500) {
+        throw new BadRequestException('建筑占地尺寸无效');
+      }
+    }
+    const footprint = definition.footprint as Record<string, any> | undefined;
+    if (footprint) {
+      if (footprint.type !== 'rect' || !footprint.bounds || typeof footprint.bounds !== 'object') {
+        throw new BadRequestException('当前建筑占地仅支持有效的矩形轮廓');
+      }
+      const bounds = footprint.bounds as Record<string, unknown>;
+      const values = ['minX','maxX','minZ','maxZ'].map(key => Number(bounds[key]));
+      if (!values.every(Number.isFinite) || Number(bounds.maxX) <= Number(bounds.minX) ||
+          Number(bounds.maxZ) <= Number(bounds.minZ) ||
+          Number(bounds.maxX) - Number(bounds.minX) > 500 ||
+          Number(bounds.maxZ) - Number(bounds.minZ) > 500) {
+        throw new BadRequestException('建筑占地边界无效');
+      }
+      const expansion = footprint.expansion || {};
+      for (const side of ['north','south','east','west']) {
+        const amount = Number(expansion[side] || 0);
+        if (!Number.isFinite(amount) || amount < 0 || amount > 500) {
+          throw new BadRequestException('建筑扩建记录无效');
+        }
+      }
+    }
     const levels = new Set<number>();
     for (const floor of floors as Array<Record<string, unknown>>) {
       const level = Number(floor.level);

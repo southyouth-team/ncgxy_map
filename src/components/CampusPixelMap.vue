@@ -8,6 +8,7 @@ import {
 
 const canvas = ref(null)
 const selected = ref(null)
+const hovered = ref(null)
 const zoom = ref(1)
 const mapOffset = ref({ x: 0, y: 0 })
 const viewport = ref({ width: 0, height: 0 })
@@ -226,6 +227,23 @@ function drawBuildings(ctx) {
       ctx.fillRect(x1 + w * .3 + 2, y1 + 4, w * .4 - 4, 1)
     }
 
+    // 屋顶檐口、屋脊与角部高光，形成更清晰的像素建筑轮廓。
+    if (w >= 14 && roofHeight >= 7) {
+      ctx.fillStyle = roof.dark
+      ctx.fillRect(x1 + 2, y1 + roofHeight * .52, w - 4, 1)
+      ctx.fillStyle = roof.light
+      ctx.fillRect(x1 + 2, y1 + roofHeight * .52 - 1, w - 4, 1)
+      ctx.fillRect(x1 + 2, y1 + 2, 2, 2)
+      ctx.fillRect(x1 + w - 4, y1 + 2, 2, 2)
+    }
+    if (w >= 22 && roofHeight >= 10) {
+      // 小型屋顶附属结构：不代表真实设施，仅用于区分建筑剪影。
+      ctx.fillStyle = roof.dark
+      ctx.fillRect(x1 + w * .68, y1 + 3, 5, 4)
+      ctx.fillStyle = roof.light
+      ctx.fillRect(x1 + w * .68 + 1, y1 + 3, 3, 1)
+    }
+
     // 朝向不明确时只表达统一的下沿立面，不虚构入口方向。
     const facadeY = y1 + roofHeight
     ctx.fillStyle = '#9b684f'
@@ -358,14 +376,18 @@ function render() {
   ctx.scale(scale, scale)
   ctx.imageSmoothingEnabled = false
   if (baseMapCanvas) ctx.drawImage(baseMapCanvas, 0, 0)
-  if (selected.value?.type === 'building') {
-    const item = CAMPUS_BUILDING_FOOTPRINTS.find(b => b.id === selected.value.id)
-    if (item) {
-      const [l, t, r, b] = item.rect
-      ctx.strokeStyle = '#fff2a8'
-      ctx.lineWidth = 2 / scale
-      ctx.strokeRect(l - 4, t - 5, r - l + 8, b - t + 9)
-    }
+  for (const [target, color, lineWidth] of [[hovered.value, '#fff8cf', 1.5], [selected.value, '#f6d66e', 2.5]]) {
+    if (target?.type !== 'building') continue
+    const item = CAMPUS_BUILDING_FOOTPRINTS.find(b => b.id === target.id)
+    if (!item) continue
+    const [l, t, r, b] = item.rect
+    ctx.fillStyle = target === selected.value ? 'rgba(255,231,142,.12)' : 'rgba(255,255,220,.08)'
+    ctx.fillRect(l - 2, t - 2, r - l + 4, b - t + 4)
+    ctx.strokeStyle = color
+    ctx.lineWidth = lineWidth / scale
+    ctx.setLineDash(target === selected.value ? [] : [3 / scale, 2 / scale])
+    ctx.strokeRect(l - 3, t - 4, r - l + 6, b - t + 8)
+    ctx.setLineDash([])
   }
   ctx.restore()
 }
@@ -404,7 +426,14 @@ function onPointerDown(event) {
   dragState = { ...pointerPosition(event), origin: { ...mapOffset.value }, moved: false }
 }
 function onPointerMove(event) {
-  if (!dragState) return
+  if (!dragState) {
+    const nextHover = hitTest(pointerPosition(event))
+    if (nextHover?.id !== hovered.value?.id || nextHover?.type !== hovered.value?.type) {
+      hovered.value = nextHover
+      render()
+    }
+    return
+  }
   const point = pointerPosition(event)
   const dx = point.x - dragState.x, dy = point.y - dragState.y
   if (Math.abs(dx) + Math.abs(dy) > 3) dragState.moved = true
@@ -417,9 +446,17 @@ function onPointerUp(event) {
   if (!dragState) return
   if (!dragState.moved) {
     selected.value = hitTest(pointerPosition(event))
+    hovered.value = selected.value
     render()
   }
   dragState = null
+}
+function onPointerLeave() {
+  if (dragState) return
+  if (hovered.value) {
+    hovered.value = null
+    render()
+  }
 }
 function onWheel(event) {
   event.preventDefault()
@@ -441,7 +478,7 @@ function onWheel(event) {
   render()
 }
 function resetView() { zoom.value = 1; mapOffset.value = { x: 0, y: 0 }; render() }
-function zoomBy(value) { zoom.value = Math.max(.72, Math.min(2.8, zoom.value * value)); render() }
+function zoomBy(value) { zoom.value = Math.max(.72, Math.min(3.2, zoom.value * value)); render() }
 onMounted(() => {
   resizeObserver = new ResizeObserver(resize)
   if (canvas.value) resizeObserver.observe(canvas.value)
@@ -466,11 +503,13 @@ onBeforeUnmount(() => {
     <canvas
       ref="canvas"
       class="pixel-map-canvas"
+      :style="{ cursor: dragState ? 'grabbing' : hovered ? 'pointer' : 'grab' }"
       aria-label="南昌工学院二维像素校园地图，可拖动平移、滚轮缩放、点击建筑查看信息"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
+      @pointerleave="onPointerLeave"
       @wheel="onWheel"
       @contextmenu.prevent
     />

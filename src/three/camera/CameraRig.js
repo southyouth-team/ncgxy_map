@@ -34,7 +34,6 @@ export class CameraRig {
   }
 
   applyIsometricOrientation() {
-    // 等距俯视：相机位于场景东北侧上方，使用正交投影避免透视收敛。
     this.camera.position.set(0, 145, 145)
     this.camera.lookAt(0, 0, 0)
     this.currentPosition.copy(this.camera.position)
@@ -65,6 +64,13 @@ export class CameraRig {
     this.createOrbitControls(camera)
   }
 
+  resetOverviewZoom() {
+    // 正交相机的 zoom 会跨视角保留；总览必须回到 1，否则地图边界计算正确
+    // 但实际可视范围仍会被旧 zoom 二次放大，表现为校园逐渐变小/取景不一致。
+    this.overviewCamera.zoom = 1
+    this.overviewCamera.updateProjectionMatrix()
+  }
+
   setMode(mode) {
     if (!['overview', 'thirdPerson', 'firstPerson'].includes(mode) || mode === this.mode) return
     const previousCamera = this.camera
@@ -74,6 +80,7 @@ export class CameraRig {
 
     if (mode === 'overview') {
       this.activateCamera(this.overviewCamera)
+      this.resetOverviewZoom()
       this.transitioningToOverview = true
       this.desiredPosition.set(0, 145, 145)
       this.desiredTarget.set(0, 0, 0)
@@ -94,7 +101,6 @@ export class CameraRig {
         this.thirdDistance = this.isometricRpg ? 24 : 15
         this.updateThirdPersonDesired()
       } else {
-        // 从第三人称切入时沿用角色前进方向；从地图视角进入时默认朝向校园内部。
         if (previousMode === 'thirdPerson') {
           this.firstYaw = this.thirdYaw + Math.PI
           this.firstPitch = -this.thirdPitch
@@ -209,7 +215,6 @@ export class CameraRig {
   }
 
   focusBounds(width, depth, centerX = 0, centerZ = 0, options = {}) {
-    // 正交相机的垂直视野需要同时容纳地图宽度和深度；窄屏时不能只按最大边长计算。
     const aspect = Math.max(this.aspect, 0.1)
     const fitHeight = Math.max(Number(depth) || 60, (Number(width) || 80) / aspect, 20)
     const span = fitHeight * 1.15
@@ -220,7 +225,7 @@ export class CameraRig {
     this.overviewCamera.right = span * aspect / 2
     this.overviewCamera.top = span / 2
     this.overviewCamera.bottom = -span / 2
-    this.overviewCamera.updateProjectionMatrix()
+    this.resetOverviewZoom()
     this.mode = 'overview'
     this.activateCamera(this.overviewCamera)
     this.desiredTarget.set(targetX, 0, targetZ)
@@ -228,7 +233,6 @@ export class CameraRig {
     this.orbit.target.set(targetX, 0, targetZ)
 
     if (options.immediate) {
-      // 完整校园预览只按最终边界取景一次，不先展示小样板再做二次缩放。
       this.camera.position.copy(this.desiredPosition)
       this.currentPosition.copy(this.desiredPosition)
       this.currentTarget.copy(this.desiredTarget)
@@ -243,6 +247,7 @@ export class CameraRig {
   focusCampus() {
     this.mode = 'overview'
     this.activateCamera(this.overviewCamera)
+    this.resetOverviewZoom()
     this.transitioningToOverview = true
     this.orbit.target.set(0, 0, 0)
     this.applyIsometricOrientation()
@@ -250,8 +255,6 @@ export class CameraRig {
     if (this.isometricRpg) {
       this.thirdPitch = 0.72
       this.thirdDistance = 24
-      this.overviewCamera.zoom = 1
-      this.overviewCamera.updateProjectionMatrix()
     }
   }
 

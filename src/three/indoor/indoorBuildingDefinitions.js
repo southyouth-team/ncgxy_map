@@ -168,7 +168,7 @@ export function expandIndoorBuilding(definition, { side, amount = 2 } = {}) {
     spawnPoint: floor.spawnPoint ? { ...floor.spawnPoint, x: floor.spawnPoint.x - shiftX, z: floor.spawnPoint.z - shiftZ } : floor.spawnPoint,
     stairPoint: floor.stairPoint ? { ...floor.stairPoint, x: floor.stairPoint.x - shiftX, z: floor.stairPoint.z - shiftZ } : floor.stairPoint,
   }))
-  next.interiorNormalized = false
+  next.interiorNormalized = next.floors.some(floor => Math.abs(floor.width - next.footprintSize.width) > 0.01 || Math.abs(floor.depth - next.footprintSize.depth) > 0.01)
   next.expansionStatus = 'user-expanded-unverified'
   return next
 }

@@ -23,7 +23,7 @@ const hovered = ref(null)
 const zoom = ref(1)
 const showReferenceImage = ref(true)
 const showVectorOverlay = ref(true)
-const showBuildingFootprints = ref(true)
+const showBuildingFootprints = ref(false)
 const mapOffset = ref({ x: 0, y: 0 })
 const viewport = ref({ width: 0, height: 0 })
 let resizeObserver
@@ -279,7 +279,7 @@ function buildBaseMap() {
   // 近似矢量层可独立开关，便于直接与原始参考图比对。
   if (showVectorOverlay.value) {
     ctx.save()
-    ctx.globalAlpha = 0.34
+    ctx.globalAlpha = 0.22
     drawAreas(ctx)
     drawRoads(ctx)
     ctx.restore()
@@ -664,12 +664,12 @@ onBeforeUnmount(() => {
     <div style="position:absolute;top:18px;left:18px;z-index:3;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(250,248,230,.92);border:1px solid rgba(76,96,70,.22);border-radius:7px;box-shadow:0 3px 12px rgba(48,65,48,.12);pointer-events:none;font-size:12px;color:#405648;">
       <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b9a60;box-shadow:0 0 0 3px rgba(107,154,96,.16);"></span>
       <strong>平面图模式</strong>
-      <span style="opacity:.7;">{{ referenceMapReady ? '原始平面图已加载' : '原始平面图加载中 / 不可用' }} · 矢量标注可独立对照</span>
+      <span style="opacity:.7;">{{ referenceMapReady ? '原始平面图已加载' : '原始平面图加载中 / 不可用' }} · 建筑候选尚未逐栋校准 · 矢量层仅供位置比对</span>
     </div>
     <div class="pixel-map-controls">
       <button :class="{ active: showReferenceImage }" @click="showReferenceImage = !showReferenceImage; baseMapCanvas = null; render()">原图</button>
       <button :class="{ active: showVectorOverlay }" @click="showVectorOverlay = !showVectorOverlay; baseMapCanvas = null; render()">道路/水域</button>
-      <button :class="{ active: showBuildingFootprints }" @click="showBuildingFootprints = !showBuildingFootprints; render()">建筑轮廓</button>
+      <button :class="{ active: showBuildingFootprints }" @click="showBuildingFootprints = !showBuildingFootprints; render()">建筑候选（未校准）</button>
       <button @click="zoomBy(1.2)" aria-label="放大">＋</button>
       <button @click="zoomBy(.84)" aria-label="缩小">－</button>
       <button @click="resetView">复位</button>

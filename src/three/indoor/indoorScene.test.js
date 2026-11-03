@@ -241,6 +241,12 @@ describe('indoor floor contract', () => {
     const desk = group.userData.collisionObstacles.find(item =>
       item.minX === -6 && item.maxX === -4 && item.minZ === -0.5 && item.maxZ === 0.5)
     expect(desk).toBeDefined()
+    const route = group.userData.navigationGraph.findPath({ x: -7, z: 0 }, { x: -3, z: 0 })
+    expect(route).not.toBeNull()
+    expect(route.every(point =>
+      point.x + 0.48 <= desk.minX || point.x - 0.48 >= desk.maxX ||
+      point.z + 0.48 <= desk.minZ || point.z - 0.48 >= desk.maxZ,
+    )).toBe(true)
     const collision = new CollisionWorld(
       { minX: -12, maxX: 12, minZ: -9, maxZ: 9 },
       group.userData.collisionObstacles,

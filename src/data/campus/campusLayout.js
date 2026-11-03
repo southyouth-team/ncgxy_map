@@ -55,12 +55,19 @@ export function mapRectToWorld([left, top, right, bottom]) {
  * 校园主要地理区域。多边形来自官方平面图的人工近似描绘，
  * 重点保证整体空间关系；后续可用现场核验数据逐项修正。
  */
+export const CAMPUS_PLAYER_SPAWN_PIXEL = Object.freeze([455, 365])
+
 export const CAMPUS_AREAS = [
   {
     id: 'central-lake',
     name: '中央湖区',
     type: 'water',
     confidence: 'medium',
+    holes: [[
+      [492, 178], [520, 158], [553, 158], [582, 178], [599, 207],
+      [600, 244], [580, 274], [552, 294], [520, 298], [493, 280],
+      [478, 250], [478, 214],
+    ]],
     polygon: [
       [474, 132], [500, 116], [538, 112], [572, 124], [602, 150],
       [620, 184], [625, 222], [615, 260], [596, 294], [568, 322],

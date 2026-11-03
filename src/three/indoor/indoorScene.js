@@ -291,6 +291,32 @@ export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}
     const nodeId = nearestNode(item.point)
     return { id: item.id, type: item.type, point: item.point, nodeId, reachableFromSpawn: false }
   })
+  const findPath = (start, end) => {
+    const startNode = nearestNode(start)
+    const endNode = nearestNode(end)
+    if (startNode === null || endNode === null) return null
+    const previous = new Int32Array(nodes.length).fill(-1)
+    const visited = new Uint8Array(nodes.length)
+    const queue = [startNode]
+    visited[startNode] = 1
+    for (let cursor = 0; cursor < queue.length && !visited[endNode]; cursor += 1) {
+      const current = nodes[queue[cursor]]
+      for (const neighbor of current.neighbors) {
+        if (visited[neighbor]) continue
+        visited[neighbor] = 1
+        previous[neighbor] = current.id
+        queue.push(neighbor)
+        if (neighbor === endNode) break
+      }
+    }
+    if (!visited[endNode]) return null
+    const path = []
+    for (let current = endNode; current !== -1; current = previous[current]) {
+      path.push({ x: nodes[current].x, z: nodes[current].z })
+      if (current === startNode) break
+    }
+    return path.reverse()
+  }
   const spawnNode = points.find(item => item.type === 'spawn')?.nodeId
   const spawnComponent = spawnNode === null || spawnNode === undefined ? -1 : components[spawnNode]
   for (const point of points) {
@@ -301,6 +327,7 @@ export function buildIndoorNavigationGraph(floor, obstacles = [], landmarks = {}
     clearance,
     nodes,
     points,
+    findPath,
     summary: {
       nodeCount: nodes.length,
       componentCount,

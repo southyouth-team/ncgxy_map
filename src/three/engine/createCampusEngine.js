@@ -606,6 +606,19 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return false
   }
 
+  function getAdjacentStairTargetLevel() {
+    if (!indoorBuilding || !indoorGroup?.userData?.stairPath || !cameraRig?.player) return null
+    const levels = indoorBuilding.floors.map(floor => floor.level).sort((a, b) => a - b)
+    const index = levels.indexOf(currentIndoorFloor)
+    if (index < 0) return null
+    const path = indoorGroup.userData.stairPath
+    const distanceToStart = Math.hypot(cameraRig.player.x - path.start.x, cameraRig.player.z - path.start.z)
+    const distanceToEnd = Math.hypot(cameraRig.player.x - path.end.x, cameraRig.player.z - path.end.z)
+    // 楼梯两端分别代表上行/下行入口；按角色实际走到的平台决定方向。
+    if (distanceToStart <= distanceToEnd) return levels[index + 1] ?? null
+    return levels[index - 1] ?? null
+  }
+
   function navigateToIndoorFloor(targetLevel) {
     if (!indoorGroup || !indoorBuilding || stairTransition || activeIndoorRoom) return false
     const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, Number(targetLevel))
@@ -797,10 +810,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       return
     }
     if (stairInteractionActive && indoorBuilding) {
-      const levels = indoorBuilding.floors.map(floor => floor.level).sort((a, b) => a - b)
-      const index = levels.indexOf(currentIndoorFloor)
-      const target = levels[index + 1] ?? levels[index - 1]
-      if (target !== undefined) navigateToIndoorFloor(target)
+      const target = getAdjacentStairTargetLevel()
+      if (target !== null) navigateToIndoorFloor(target)
     }
   }
 
@@ -915,14 +926,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         nearIndoorRoom = nextRoom
         callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: stairInteractionActive, nearRoom: nearIndoorRoom, activeRoom: activeIndoorRoom })
       }
-      const levels = indoorBuilding?.floors.map(item => item.level).sort((a, b) => a - b) || []
-      const floorIndex = levels.indexOf(currentIndoorFloor)
-      const stairTarget = levels[floorIndex + 1] ?? levels[floorIndex - 1]
+      const stairTarget = nearStairs ? getAdjacentStairTargetLevel() : null
       const prompt = getIndoorInteractionPrompt({
         activeRoom: activeIndoorRoom,
         nearExit: Boolean(nearExit),
-        nearStairs: Boolean(nearStairs),
-        stairTarget: stairTarget === undefined ? null : (stairTarget > currentIndoorFloor ? stairTarget : -stairTarget),
+        nearStairs: Boolean(nearStairs && stairTarget !== null),
+        stairTarget: stairTarget === null ? null : (stairTarget > currentIndoorFloor ? stairTarget : -stairTarget),
         nearRoom: nearestRoom,
         buildingName: indoorBuilding?.name || '建筑',
       })

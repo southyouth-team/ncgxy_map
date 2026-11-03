@@ -41,14 +41,36 @@ describe('stair path geometry', () => {
     })
   })
 
+  it('uses the configured building floor height', () => {
+    expect(createStairPath({ x: 3, z: 5, direction: 'south' }, 3.6)).toEqual({
+      start: { x: 3, z: 2.9 }, end: { x: 3, z: 7.1 }, rise: 3.6, direction: 'south',
+    })
+    expect(createStairPath({ x: 3, z: 5 }, 0)).toBeNull()
+  })
+
   it('rejects invalid stair configuration', () => {
     expect(createStairPath({ x: 1, z: 2, direction: 'diagonal' })).toBeNull()
     expect(createStairPath({ x: NaN, z: 2 })).toBeNull()
   })
 })
 
+describe('stair mesh alignment', () => {
+  it('aligns first and last risers and the upper landing to a 3.6-unit floor height', () => {
+    const group = createIndoorFloor(THREE, { ...sample, rooms: [], stairPoint: { x: 8, z: 0, direction: 'south' } }, 3.6)
+    const steps = group.children.filter(child => child.name === 'indoor-stair-step')
+    const landings = group.children.filter(child => child.name === 'indoor-stair-landing')
+    expect(steps).toHaveLength(12)
+    expect(steps[0].position.y).toBeCloseTo(0.15)
+    expect(steps[11].position.y + steps[11].geometry.parameters.height / 2).toBeCloseTo(3.6)
+    expect(landings).toHaveLength(2)
+    const upperLanding = landings.find(item => item.position.z > 0)
+    expect(upperLanding.position.y + upperLanding.geometry.parameters.height / 2).toBeCloseTo(3.6)
+  })
+})
+
 describe('multi-floor navigation planning', () => {
   const building = {
+    floorHeight: 4.2,
     floors: [
       { level: 1, stairPoint: { x: 8, z: 0 } },
       { level: 2, stairPoint: { x: 8, z: 0 } },

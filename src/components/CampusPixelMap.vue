@@ -26,20 +26,44 @@ let CAMPUS_ROAD_CENTERLINES = baseSpatialLayers.roads
 let CAMPUS_BUILDING_FOOTPRINTS = baseSpatialLayers.buildings
 let CAMPUS_ROAD_WIDTHS = Object.fromEntries(CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.width]))
 
-watch(() => props.planDocument, (document) => {
+function applyPlanDocument(document) {
   if (document?.coordinateSystem !== 'campus-plan-pixel') return
-  if (Array.isArray(document.areas)) CAMPUS_AREAS = document.areas.map(area => ({ ...area, polygon: area.polygon || area.footprint || [], holes: area.holes || [], rect: area.rect || null }))
-  if (Array.isArray(document.roads)) CAMPUS_ROAD_CENTERLINES = document.roads.map(road => ({ ...road, points: (road.points || []).map(point => [...point]), width: Number(road.width) > 0 ? Number(road.width) : 12 }))
-  if (Array.isArray(document.buildings)) CAMPUS_BUILDING_FOOTPRINTS = document.buildings.map(building => {
-    const points = building.footprint || building.polygon || []
-    const polygon = points.length ? points : [[building.rect?.[0] || 0, building.rect?.[1] || 0], [building.rect?.[2] || 0, building.rect?.[1] || 0], [building.rect?.[2] || 0, building.rect?.[3] || 0], [building.rect?.[0] || 0, building.rect?.[3] || 0]]
-    const xs = polygon.map(point => point[0]), ys = polygon.map(point => point[1])
-    return { ...building, polygon, rect: building.rect || [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] }
-  })
+  if (Array.isArray(document.areas)) CAMPUS_AREAS = document.areas.map(area => ({
+    ...area,
+    polygon: area.polygon || area.footprint || [],
+    holes: area.holes || [],
+    rect: area.rect || null,
+  }))
+  if (Array.isArray(document.roads)) CAMPUS_ROAD_CENTERLINES = document.roads.map(road => ({
+    ...road,
+    points: (road.points || []).map(point => [...point]),
+    width: Number(road.width) > 0 ? Number(road.width) : 12,
+  }))
+  if (Array.isArray(document.buildings)) {
+    CAMPUS_BUILDING_FOOTPRINTS = document.buildings.map(building => {
+      const points = building.footprint || building.polygon || []
+      const polygon = points.length ? points : [
+        [building.rect?.[0] || 0, building.rect?.[1] || 0],
+        [building.rect?.[2] || 0, building.rect?.[1] || 0],
+        [building.rect?.[2] || 0, building.rect?.[3] || 0],
+        [building.rect?.[0] || 0, building.rect?.[3] || 0],
+      ]
+      const xs = polygon.map(point => point[0]), ys = polygon.map(point => point[1])
+      return {
+        ...building,
+        polygon,
+        rect: building.rect || [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
+      }
+    })
+    // 首页默认展示编辑器中的建筑轮廓，否则数据虽然已加载，视觉上仍像没有同步。
+    showBuildingFootprints.value = document.buildings.length > 0
+  }
   CAMPUS_ROAD_WIDTHS = Object.fromEntries(CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.width]))
   baseMapCanvas = null
   render()
-})
+}
+
+watch(() => props.planDocument, applyPlanDocument)
 
 const canvas = ref(null)
 const selected = ref(null)
@@ -735,6 +759,8 @@ function openShowcase() {
 function resetView() { zoom.value = 1; mapOffset.value = { x: 0, y: 0 }; render() }
 function zoomBy(value) { zoom.value = Math.max(.72, Math.min(3.2, zoom.value * value)); render() }
 onMounted(() => {
+  // 首次挂载时 props 已经带入服务端文档；watch 默认非 immediate，必须在 Canvas 初始化后显式应用。
+  applyPlanDocument(props.planDocument)
   referenceMapImage.src = CAMPUS_PLAN_REFERENCE.image.sourceImageUrl
   resizeObserver = new ResizeObserver(resize)
   if (canvas.value) resizeObserver.observe(canvas.value)

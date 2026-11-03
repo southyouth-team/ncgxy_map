@@ -518,7 +518,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="showcase-actions">
-        <span class="topbar-status"><span class="status-dot"></span> {{ indoorPrototypeActive ? '室内空间样板 · 非实测布局' : '宝可梦风格 · 2.5D 校园样板' }}</span>
+        <span class="topbar-status"><span class="status-dot"></span> {{ indoorPrototypeActive ? '室内空间样板 · 非实测布局' : '南昌工学院 · 2.5D 平面数据预览' }}</span>
         <button class="showcase-back" @click="closeEditor">返回 2D 地图</button>
       </div>
     </header>
@@ -526,7 +526,7 @@ onBeforeUnmount(() => {
     <section class="intro-card">
       <div class="eyebrow">CAMPUS EXPLORER / 01</div>
       <h1>探索校园<br /><span>从这里开始</span></h1>
-      <p>经典 RPG 斜俯视像素校园 · 教学楼、石板路、树木与角色探索样板。</p>
+      <p>将平面图中的建筑、道路和功能区域映射为斜视角校园场景；建筑体量为程序化预览，不代表真实立面。</p>
       <div class="intro-rule"><span></span></div>
       <div class="intro-foot">INTERACTIVE CAMPUS MAP</div>
     </section>

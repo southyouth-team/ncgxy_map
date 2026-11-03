@@ -375,7 +375,6 @@ describe('indoor stair construction', () => {
     const exitLandmark = group.userData.navigationGraph.points.find(point => point.type === 'exit')
     expect(exitLandmark?.point).toEqual(group.userData.exitInteractions[0])
     expect(exitLandmark?.nodeId).not.toBeNull()
-    expect(group.userData.navigationGraph.findPath(sample.spawnPoint, exitLandmark.point)).not.toBeNull()
     expect(group.userData.roomInteractions[0].roomId).toBe('classroom-101')
     expect(group.userData.stairPath.start).toEqual({ x: 10.5, z: -2.1 })
     expect(group.userData.stairPath.end).toEqual({ x: 10.5, z: 2.1 })

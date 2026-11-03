@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
+import { validateIndoorFloor, createIndoorFloor, getRoomInteractionPoints, createIndoorInteractionData, getStairLandingPoint, getStairTraversalPoints, buildIndoorNavigationGraph, planIndoorFloorRoute } from './indoorScene.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, expandIndoorBuilding } from './indoorBuildingDefinitions.js'
 
@@ -10,6 +10,20 @@ const sample = {
   rooms: [{ id: 'classroom-101', name: '教室 101', x: -5, z: 0, width: 8, depth: 6, doorWall: 'south', doorWidth: 1.4 }],
   doors: [{ wall: 'south', offset: 0, width: 2 }],
 }
+
+describe('stair traversal endpoints', () => {
+  const path = { start: { x: 4, z: -2 }, end: { x: 4, z: 2 } }
+
+  it('enters from the lower landing when ascending and upper landing when descending', () => {
+    expect(getStairTraversalPoints(path, 1)).toEqual({ entry: path.start, exit: path.end })
+    expect(getStairTraversalPoints(path, -1)).toEqual({ entry: path.end, exit: path.start })
+  })
+
+  it('rejects invalid directions or incomplete stair paths', () => {
+    expect(getStairTraversalPoints(path, 0)).toBeNull()
+    expect(getStairTraversalPoints({ start: path.start }, 1)).toBeNull()
+  })
+})
 
 describe('multi-floor navigation planning', () => {
   const building = {

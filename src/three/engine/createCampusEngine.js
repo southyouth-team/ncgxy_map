@@ -869,16 +869,26 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
 
     if (indoorGroup && cameraRig?.player && !stairTransition && pendingIndoorFloorTarget !== null && !activeIndoorRoom) {
-      if (input?.keys?.size) pendingIndoorFloorTarget = null
-      const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, pendingIndoorFloorTarget)
-      const nextTransition = plan?.transitions?.[0]
-      const traversal = getStairTraversalPoints(indoorGroup.userData.stairPath, nextTransition?.direction)
-      if (!nextTransition || !traversal) pendingIndoorFloorTarget = null
-      else if (isAtStairLanding(cameraRig.player, traversal.entry)) {
-        input?.setNavigationPath(null)
-        navigationWasActive = false
-        clearNavigationVisuals()
-        if (!beginStairTransition(nextTransition.toLevel)) pendingIndoorFloorTarget = null
+      if (input?.keys?.size) {
+        // 玩家主动接管移动时，取消自动楼层导航，避免之后意外触发楼层切换。
+        pendingIndoorFloorTarget = null
+      } else {
+        const plan = planIndoorFloorRoute(indoorBuilding, currentIndoorFloor, pendingIndoorFloorTarget)
+        const nextTransition = plan?.transitions?.[0]
+        const traversal = getStairTraversalPoints(indoorGroup.userData.stairPath, nextTransition?.direction)
+        if (!nextTransition || !traversal) {
+          pendingIndoorFloorTarget = null
+        } else if (isAtStairLanding(cameraRig.player, traversal.entry)) {
+          input?.setNavigationPath(null)
+          navigationWasActive = false
+          clearNavigationVisuals()
+          if (!beginStairTransition(nextTransition.toLevel)) pendingIndoorFloorTarget = null
+        } else if (!input?.navigationPath) {
+          // 自动寻路被碰撞中断或外部清空时，不能让楼层目标残留并在稍后误触发。
+          pendingIndoorFloorTarget = null
+          navigationWasActive = false
+          clearNavigationVisuals()
+        }
       }
     }
     if (indoorGroup && cameraRig?.player && !stairTransition) {

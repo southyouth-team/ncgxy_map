@@ -3,15 +3,67 @@
 export function createRpgSampleScene(THREE) {
   const root = new THREE.Group()
   root.name = 'PokemonStyleCampusSample'
-  const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true })
+  const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true, ...extra })
+  const makePixelTexture = (base, pixels, size = 64) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = base
+    ctx.fillRect(0, 0, size, size)
+    pixels(ctx, size)
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.magFilter = THREE.NearestFilter
+    texture.minFilter = THREE.NearestFilter
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    return texture
+  }
+  const wallTexture = makePixelTexture('#ead9ae', (ctx, size) => {
+    for (let y = 4; y < size; y += 12) {
+      ctx.fillStyle = '#dfc99d'
+      ctx.fillRect(0, y, size, 2)
+      for (let x = ((y / 12) % 2) * 8; x < size; x += 16) {
+        ctx.fillStyle = '#d8c092'
+        ctx.fillRect(x, y - 8, 2, 8)
+      }
+    }
+    ctx.fillStyle = '#f3e7c8'
+    for (let x = 3; x < size; x += 24) ctx.fillRect(x, 3, 3, 3)
+  })
+  const roofTexture = makePixelTexture('#a85d4b', (ctx, size) => {
+    for (let y = 0; y < size; y += 8) {
+      for (let x = (y % 16 ? 0 : 4); x < size; x += 8) {
+        ctx.fillStyle = (x + y) % 3 ? '#c7775b' : '#914c43'
+        ctx.fillRect(x, y, 7, 6)
+        ctx.fillStyle = '#d58a68'
+        ctx.fillRect(x, y, 7, 1)
+      }
+    }
+  })
+  const leafTexture = makePixelTexture('#39744a', (ctx, size) => {
+    const colors = ['#69a653', '#4c8a4e', '#2d5e42', '#83b75b']
+    for (let y = 2; y < size; y += 8) {
+      for (let x = 2; x < size; x += 8) {
+        const index = ((x * 3 + y * 5) / 8) % colors.length | 0
+        if ((x + y) % 3 !== 0) {
+          ctx.fillStyle = colors[index]
+          ctx.fillRect(x, y, 5, 5)
+        }
+      }
+    }
+  })
   const materials = {
     grass: mat('#78a957'), grassLight: mat('#91b96a'), grassDark: mat('#5f914b'),
     path: mat('#d8c18f'), pathLight: mat('#ead7aa'), pathDark: mat('#b99b6d'),
-    wall: mat('#ead9ae'), wallShade: mat('#c6a77d'), roof: mat('#a85d4b'),
-    roofLight: mat('#c7775b'), roofDark: mat('#78453e'), trim: mat('#f3e5c4'),
+    wall: mat('#ffffff', { map: wallTexture }), wallShade: mat('#c6a77d'),
+    roof: mat('#ffffff', { map: roofTexture }), roofLight: mat('#ffffff', { map: roofTexture }),
+    roofDark: mat('#78453e'), trim: mat('#f3e5c4'),
     glass: mat('#77b8c0'), door: mat('#76513b'), wood: mat('#8b6544'),
-    trunk: mat('#795238'), leaf: mat('#39744a'), leafLight: mat('#69a653'),
-    leafDark: mat('#2d5e42'), flower: mat('#e9a2a0'), stone: mat('#a89d83'),
+    trunk: mat('#795238'), leaf: mat('#ffffff', { map: leafTexture }),
+    leafLight: mat('#69a653'), leafDark: mat('#2d5e42'),
+    flower: mat('#e9a2a0'), stone: mat('#a89d83'),
     shadow: new THREE.MeshBasicMaterial({ color: '#334b35', transparent: true, opacity: 0.2, depthWrite: false }),
   }
   const addBox = (name, x, y, z, w, h, d, material, parent = root) => {
@@ -93,6 +145,13 @@ export function createRpgSampleScene(THREE) {
   addBox('entrance-door-frame', 0, 0.74, 4.4, 1.85, 2.65, 0.25, materials.wallShade, building)
   addBox('entrance-door', 0, 0.78, 4.56, 1.28, 2.25, 0.12, materials.door, building)
   addBox('entrance-canopy', 0, 3.35, 4.9, 3.1, 0.22, 1.2, materials.roofDark, building)
+  // 门头增加像素招牌、立柱与窗间装饰线，强化教学楼正立面识别度。
+  addBox('entrance-sign-board', 0, 3.78, 4.52, 4.1, 0.62, 0.18, materials.wood, building)
+  addBox('entrance-sign-inlay', 0, 3.8, 4.625, 3.72, 0.34, 0.035, materials.trim, building)
+  for (const x of [-1.72, 1.72]) {
+    addBox('entrance-pillar', x, 0.42, 4.92, 0.28, 2.85, 0.3, materials.trim, building)
+    addBox('entrance-pillar-base', x, 0.28, 4.92, 0.48, 0.18, 0.42, materials.wallShade, building)
+  }
   addBox('entrance-step-lower', 0, 0.18, 5.35, 3.2, 0.18, 0.85, materials.stone, building)
   addBox('entrance-step-upper', 0, 0.36, 4.95, 2.7, 0.18, 0.65, materials.trim, building)
   root.add(building)

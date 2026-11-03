@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { SaveSceneDto } from './dto/save-scene.dto';
+import { SaveIndoorBuildingDto } from './dto/save-indoor-building.dto';
 
 const OBJECT_TYPES = new Set(['building','road','terrain','water','vegetation','facility']);
 
@@ -184,6 +185,153 @@ export class ScenesService {
     const referenceImage = document.referenceImage as Record<string, unknown> | null;
     if (referenceImage && (typeof referenceImage.assetId !== 'string' || referenceImage.assetId.trim().length === 0 || referenceImage.assetId.length > 128)) {
       throw new BadRequestException('持久化底图必须引用有效的地图资源 ID');
+    }
+  }
+
+  async findIndoorBuilding(userId: string, campusId: string, mapId: string, buildingId: string) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor','viewer']);
+    await this.requireMap(campusId, mapId);
+    this.validateBuildingKey(buildingId);
+    const rows = await this.db.query(
+      `SELECT id,campus_id,map_id,building_key,schema_version,definition,revision,created_at,updated_at
+       FROM campus_indoor_building_layout
+       WHERE campus_id=$1 AND map_id=$2 AND building_key=$3`,
+      [campusId,mapId,buildingId],
+    );
+    if (!rows.length) return { campusId, mapId, buildingId, schemaVersion: 1, revision: 0, definition: null };
+    return rows[0];
+  }
+
+  async saveIndoorBuilding(
+    userId: string,
+    campusId: string,
+    mapId: string,
+    buildingId: string,
+    dto: SaveIndoorBuildingDto,
+  ) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor']);
+    this.validateBuildingKey(buildingId);
+    this.validateIndoorDefinition(dto.definition, buildingId);
+
+    return this.db.transaction(async (manager) => {
+      const maps = await manager.query(
+        'SELECT id FROM campus_map WHERE id=$1 AND campus_id=$2 FOR UPDATE',
+        [mapId,campusId],
+      );
+      if (!maps.length) throw new NotFoundException('地图项目不存在');
+      const current = await manager.query(
+        `SELECT id,revision FROM campus_indoor_building_layout
+         WHERE campus_id=$1 AND map_id=$2 AND building_key=$3 FOR UPDATE`,
+        [campusId,mapId,buildingId],
+      );
+      const currentRevision = current.length ? Number(current[0].revision) : 0;
+      if (currentRevision !== dto.revision) {
+        throw new ConflictException({
+          message: '建筑室内布局版本冲突，请重新加载后再保存',
+          currentRevision,
+        });
+      }
+
+      const nextRevision = currentRevision + 1;
+      const definition = { ...dto.definition, id: buildingId, schemaVersion: 1 };
+      let id: string;
+      if (current.length) {
+        id = String(current[0].id);
+        await manager.query(
+          `UPDATE campus_indoor_building_layout
+           SET definition=$1::jsonb,revision=$2,updated_by=$3,updated_at=now()
+           WHERE id=$4`,
+          [JSON.stringify(definition),nextRevision,userId,id],
+        );
+      } else {
+        const inserted = await manager.query(
+          `INSERT INTO campus_indoor_building_layout
+           (campus_id,map_id,building_key,schema_version,definition,revision,created_by,updated_by)
+           VALUES ($1,$2,$3,1,$4::jsonb,$5,$6,$6) RETURNING id`,
+          [campusId,mapId,buildingId,JSON.stringify(definition),nextRevision,userId],
+        );
+        id = String(inserted[0].id);
+      }
+
+      await manager.query(
+        `INSERT INTO campus_indoor_building_layout_version
+         (layout_id,revision,definition,created_by)
+         VALUES ($1,$2,$3::jsonb,$4)`,
+        [id,nextRevision,JSON.stringify(definition),userId],
+      );
+      return { id, campusId, mapId, buildingId, schemaVersion: 1, revision: nextRevision, definition };
+    });
+  }
+
+  async findIndoorBuildingVersions(userId: string, campusId: string, mapId: string, buildingId: string) {
+    await this.requireRole(userId, campusId, ['owner','admin','editor','viewer']);
+    await this.requireMap(campusId, mapId);
+    this.validateBuildingKey(buildingId);
+    return this.db.query(
+      `SELECT v.revision,v.created_by,v.created_at
+       FROM campus_indoor_building_layout_version v
+       JOIN campus_indoor_building_layout l ON l.id=v.layout_id
+       WHERE l.campus_id=$1 AND l.map_id=$2 AND l.building_key=$3
+       ORDER BY v.revision DESC LIMIT 100`,
+      [campusId,mapId,buildingId],
+    );
+  }
+
+  private validateBuildingKey(buildingId: string) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(buildingId)) {
+      throw new BadRequestException('建筑 ID 格式无效');
+    }
+  }
+
+  private validateIndoorDefinition(definition: Record<string, unknown>, buildingId: string) {
+    if (String(definition.id || '') !== buildingId) {
+      throw new BadRequestException('室内布局建筑 ID 与请求路径不一致');
+    }
+    if (!Number.isFinite(Number(definition.floorHeight)) || Number(definition.floorHeight) < 2.5 || Number(definition.floorHeight) > 10) {
+      throw new BadRequestException('建筑层高必须在 2.5 至 10 之间');
+    }
+    const floors = definition.floors;
+    if (!Array.isArray(floors) || floors.length < 1 || floors.length > 30) {
+      throw new BadRequestException('建筑楼层数量必须在 1 至 30 之间');
+    }
+    if (Buffer.byteLength(JSON.stringify(definition), 'utf8') > 5 * 1024 * 1024) {
+      throw new BadRequestException('建筑室内布局文档不能超过 5 MB');
+    }
+    const levels = new Set<number>();
+    for (const floor of floors as Array<Record<string, unknown>>) {
+      const level = Number(floor.level);
+      const width = Number(floor.width);
+      const depth = Number(floor.depth);
+      if (!Number.isInteger(level) || level < 1 || level > 30 || levels.has(level)) {
+        throw new BadRequestException('楼层编号无效或重复');
+      }
+      levels.add(level);
+      if (!Number.isFinite(width) || !Number.isFinite(depth) || width < 4 || depth < 4 || width > 500 || depth > 500) {
+        throw new BadRequestException(`楼层 ${level} 尺寸必须在 4 至 500 之间`);
+      }
+      for (const key of ['rooms', 'walls', 'doors']) {
+        const value = floor[key];
+        if (value !== undefined && (!Array.isArray(value) || value.length > 1000)) {
+          throw new BadRequestException(`楼层 ${level} 的 ${key} 数据格式无效或数量超限`);
+        }
+      }
+      if (floors.length > 1 && !floor.stairPoint) {
+        throw new BadRequestException('多层建筑的每个楼层都必须配置楼梯连接点');
+      }
+      const stair = floor.stairPoint as Record<string, unknown> | undefined;
+      if (stair && (!Number.isFinite(Number(stair.x)) || !Number.isFinite(Number(stair.z)))) {
+        throw new BadRequestException(`楼层 ${level} 楼梯坐标无效`);
+      }
+    }
+    const stairFloors = (floors as Array<Record<string, unknown>>).filter((floor) => floor.stairPoint) as Array<Record<string, any>>;
+    if (stairFloors.length > 1) {
+      const first = stairFloors[0].stairPoint;
+      for (const floor of stairFloors.slice(1)) {
+        const point = floor.stairPoint;
+        if (Math.hypot(Number(point.x) - Number(first.x), Number(point.z) - Number(first.z)) > 0.25) {
+          throw new BadRequestException(`楼层 ${floor.level} 的楼梯连接点未与其他楼层对齐`);
+        }
+      }
     }
   }
 

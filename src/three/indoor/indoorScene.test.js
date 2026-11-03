@@ -166,6 +166,11 @@ describe('campus footprint indoor generation', () => {
     expect(validateIndoorBuilding(building)).toEqual([])
   })
 
+  it('rejects invalid wall geometry inside a building document', () => {
+    const building = { id: 'building-a', floorHeight: 3.6, floors: [{ ...sample, walls: [{ id: 'bad-wall', axis: 'x', x: 0, z: 20, length: 8 }] }] }
+    expect(validateIndoorBuilding(building).some(error => error.includes('墙体 bad-wall 超出楼层边界'))).toBe(true)
+  })
+
   it('rejects invalid campus footprints', () => {
     expect(() => createIndoorBuildingFromFootprint({ id: 'bad', bounds: { minX: 2, maxX: 1, minZ: 0, maxZ: 2 } }))
       .toThrow('建筑轮廓尺寸无效')

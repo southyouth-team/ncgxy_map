@@ -176,11 +176,15 @@ export function createCampusEngine(container, callbacks = {}) {
   }
 
   function clearRpgPreview() {
-    if (!rpgPreviewGroup) return
-    scene?.remove(rpgPreviewGroup)
-    disposeObjectGroup(rpgPreviewGroup)
-    rpgPreviewGroup = null
+    if (rpgPreviewGroup) {
+      scene?.remove(rpgPreviewGroup)
+      disposeObjectGroup(rpgPreviewGroup)
+      rpgPreviewGroup = null
+    }
+    // 基础校园由 campus 容器和独立加载的 GLB 建筑共同组成。
+    // 预览退出时必须恢复两类对象，不能只恢复 campus 容器。
     if (campus) campus.visible = true
+    loadedBuildingModels.forEach((model) => { model.visible = true })
     cameraRig?.setObstructionObjects([
       ...(campus ? (() => { const roots = []; campus.traverse(object => { if (object.userData?.buildingId || object.userData?.objectType === 'building') roots.push(object) }); return roots })() : []),
       ...loadedBuildingModels,
@@ -231,7 +235,9 @@ export function createCampusEngine(container, callbacks = {}) {
     }
     const ground=new THREE.Mesh(new THREE.PlaneGeometry(width*unit,height*unit),new THREE.MeshStandardMaterial({color:'#6eaa55',roughness:1}))
     ground.rotation.x=-Math.PI/2; ground.position.set(0,-.09,0); ground.receiveShadow=true; rpgPreviewGroup.add(ground)
-    scene.add(rpgPreviewGroup); if (campus) campus.visible=false
+    scene.add(rpgPreviewGroup)
+    if (campus) campus.visible = false
+    loadedBuildingModels.forEach((model) => { model.visible = false })
     cameraRig?.focusBounds(width*unit,height*unit)
     return true
   }
@@ -424,6 +430,9 @@ export function createCampusEngine(container, callbacks = {}) {
     scene.add(rpgPreviewGroup)
     cameraRig?.setObstructionObjects(rpgPreviewGroup.children.filter(object => object.userData?.objectType === 'building'))
     if (campus) campus.visible = false
+    // GLB 建筑模型直接挂载在 scene 下，不属于 campus 容器；必须单独隐藏，
+    // 否则预览中会同时残留原校园建筑，看起来像没有切换到编辑方案。
+    loadedBuildingModels.forEach((model) => { model.visible = false })
     // 编辑器实时预览使用当前文档的地面边界和建筑碰撞体，不能沿用旧校园场景的碰撞数据。
     const previewBounds = {
       minX: centerX - groundWidth / 2, maxX: centerX + groundWidth / 2,

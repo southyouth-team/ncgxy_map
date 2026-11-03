@@ -83,7 +83,7 @@ describe('multi-floor navigation planning', () => {
     expect(planIndoorFloorRoute(building, 1, 4)).toMatchObject({
       levels: [1, 2, 3, 4],
       transitions: [
-        { fromLevel: 1, toLevel: 2, direction: 1, connector: { from: { level: 1, point: { x: 8, z: -2.1 } }, to: { level: 2, point: { x: 8, z: 2.1 } } } },
+        { fromLevel: 1, toLevel: 2, direction: 1, connector: { rise: 4.2, from: { level: 1, point: { x: 8, z: -2.1 } }, to: { level: 2, point: { x: 8, z: 2.1 } } } },
         { fromLevel: 2, toLevel: 3, direction: 1, connector: { from: { level: 2, point: { x: 8, z: -2.1 } }, to: { level: 3, point: { x: 8, z: 2.1 } } } },
         { fromLevel: 3, toLevel: 4, direction: 1, connector: { from: { level: 3, point: { x: 8, z: -2.1 } }, to: { level: 4, point: { x: 8, z: 2.1 } } } },
       ],

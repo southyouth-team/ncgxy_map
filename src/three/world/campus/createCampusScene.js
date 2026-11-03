@@ -241,6 +241,24 @@ export function createCampusScene(THREE) {
     group.userData.buildingId = item.id
     group.userData.objectType = 'building'
     group.userData.displayName = item.label
+    // 保存运行时生成参数，后续建筑轮廓编辑可直接重建外墙、门窗和屋顶。
+    group.userData.rebuildOptions = {
+      materials: mats,
+      wallMaterial: wallPalette[index % wallPalette.length],
+      template,
+      label: item.label || item.id,
+      confidence: item.confidence || 'unverified',
+      height: item.height,
+      floors: item.floors,
+      roofStyle: item.roofStyle,
+      roofRise: item.roofRise,
+      windowDensity: item.windowDensity,
+      windowWidth: item.windowWidth,
+      windowHeight: item.windowHeight,
+      doorWidth: item.doorWidth,
+      entranceEdgeIndex: item.entranceEdgeIndex,
+    }
+    group.userData.foundationMesh = foundation
     // 外轮廓与生成器最终采用的建筑高度一致，不再覆盖屋顶或门窗。
     const outline = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(width, buildingHeight, depth)),

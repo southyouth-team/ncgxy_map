@@ -68,39 +68,30 @@ function drawRoads(ctx) {
     ctx.beginPath()
     pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))
 
-    // 三层道路结构：草绿色路缘、浅色人行边带、暖灰色路面。
-    ctx.strokeStyle = '#71866b'
+    // 现代校园道路：灰色路缘、混凝土人行边带、深灰柏油路面。
+    ctx.strokeStyle = '#89978c'
     ctx.lineWidth = roadWidth
     ctx.stroke()
-    ctx.strokeStyle = '#c6c99f'
-    ctx.lineWidth = roadWidth * .8
+    ctx.strokeStyle = '#c2c8bb'
+    ctx.lineWidth = roadWidth * .82
     ctx.stroke()
-    const isPerimeterRoad = road.id.includes('perimeter')
-    ctx.strokeStyle = isPerimeterRoad ? '#d5c69e' : '#e2d4ad'
-    ctx.lineWidth = roadWidth * (isPerimeterRoad ? .53 : .46)
+    ctx.strokeStyle = '#687579'
+    ctx.lineWidth = roadWidth * .56
     ctx.stroke()
 
-    // 断续的像素路面标线，避免连续虚线造成现代公路感。
-    ctx.strokeStyle = '#f4e8c8'
+    // 低频白色虚线作为道路中心标线，保留像素游戏的简洁表达。
+    ctx.strokeStyle = '#e4e8df'
     ctx.lineWidth = 1
-    ctx.setLineDash([2, 7])
+    ctx.setLineDash([5, 9])
     ctx.stroke()
     ctx.setLineDash([])
 
-    // 道路两侧的短段石板纹理，强化 RPG 地图的 tile 质感。
-    ctx.fillStyle = '#a6ad88'
-    for (let i = 0; i < pts.length - 1; i++) {
-      const [x1, y1] = pts[i], [x2, y2] = pts[i + 1]
-      const length = Math.hypot(x2 - x1, y2 - y1)
-      const steps = Math.floor(length / 24)
-      for (let j = 1; j < steps; j++) {
-        const t = j / steps
-        const x = Math.round(x1 + (x2 - x1) * t)
-        const y = Math.round(y1 + (y2 - y1) * t)
-        ctx.fillRect(x - 6, y - 6, 2, 2)
-        ctx.fillRect(x + 5, y + 5, 2, 2)
-      }
-    }
+    // 人行边带使用短缝线表达混凝土铺装，不再使用石板/土路纹理。
+    ctx.strokeStyle = 'rgba(238, 241, 230, .42)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([1, 15])
+    ctx.stroke()
+    ctx.setLineDash([])
   }
 }
 function drawAreas(ctx) {
@@ -195,10 +186,10 @@ function drawGround(ctx) {
   }
 }
 const BUILDING_ROOF_SETS = [
-    { base: '#c17a5d', light: '#e9ad80', dark: '#925844' },
-    { base: '#ae765c', light: '#dfaa7d', dark: '#805442' },
-    { base: '#bd875c', light: '#edbd86', dark: '#8f5e43' },
-    { base: '#a27a61', light: '#d9ad82', dark: '#765846' },
+    { base: '#89999b', light: '#cbd5d0', dark: '#52666b' },
+    { base: '#7d9299', light: '#c0d2d4', dark: '#4c626b' },
+    { base: '#9ba9a4', light: '#d7ddd2', dark: '#61716e' },
+    { base: '#87949a', light: '#c7d0d1', dark: '#53646b' },
   ]
 function drawBuilding(ctx, building, index) {
   const roofSets = BUILDING_ROOF_SETS
@@ -224,12 +215,12 @@ function drawBuilding(ctx, building, index) {
       for (let stripeY = y1 + 3; stripeY < y1 + roofHeight - 1; stripeY += 4) {
         ctx.fillRect(x1 + 3, stripeY, Math.max(1, w - 6), 1)
       }
-      ctx.fillStyle = '#9b684f'
+      ctx.fillStyle = '#829694'
       ctx.fillRect(x1, y1 + roofHeight, w, facadeHeight)
       const windowCount = Math.max(2, Math.floor(w / 13))
       for (let col = 0; col < windowCount; col++) {
         const wx = x1 + 4 + col * ((w - 8) / windowCount)
-        ctx.fillStyle = '#536d70'
+        ctx.fillStyle = '#355b68'
         ctx.fillRect(wx, y1 + roofHeight + 1, 3, Math.max(1, facadeHeight - 2))
       }
       ctx.restore()
@@ -245,7 +236,7 @@ function drawBuilding(ctx, building, index) {
     const facadeHeight = Math.max(3, Math.min(5, h * .24))
     const roofHeight = h - facadeHeight
 
-    // 轻量投影与建筑主体，统一从左上方受光。
+    // 轻量投影与现代教学楼主体，统一从左上方受光。
     ctx.fillStyle = 'rgba(48,65,48,.22)'
     ctx.fillRect(x1 + 3, y1 + 4, w + 1, h + 1)
     ctx.fillStyle = roof.dark
@@ -303,20 +294,20 @@ function drawBuilding(ctx, building, index) {
       ctx.fillRect(x1 + w * .68 + 1, y1 + 3, 3, 1)
     }
 
-    // 朝向不明确时只表达统一的下沿立面，不虚构入口方向。
+    // 采用浅灰混凝土立面与蓝灰玻璃窗；朝向不明确时不虚构入口方向。
     const facadeY = y1 + roofHeight
-    ctx.fillStyle = '#9b684f'
+    ctx.fillStyle = '#829694'
     ctx.fillRect(x1, facadeY, w, facadeHeight)
-    ctx.fillStyle = '#e0aa7e'
+    ctx.fillStyle = '#d1dbd3'
     ctx.fillRect(x1, facadeY, 2, facadeHeight)
-    ctx.fillStyle = '#c58a67'
+    ctx.fillStyle = '#91a39f'
     ctx.fillRect(x1 + w - 2, facadeY, 2, facadeHeight)
     const windowCount = Math.max(2, Math.floor(w / 13))
     for (let col = 0; col < windowCount; col++) {
       const wx = x1 + 4 + col * ((w - 8) / windowCount)
-      ctx.fillStyle = '#536d70'
+      ctx.fillStyle = '#355b68'
       ctx.fillRect(wx, facadeY + 1, 3, Math.max(1, facadeHeight - 2))
-      ctx.fillStyle = '#d7d7a0'
+      ctx.fillStyle = '#d2e7d9'
       ctx.fillRect(wx + 1, facadeY + 1, 1, 1)
     }
     ctx.strokeStyle = roof.dark

@@ -23,6 +23,9 @@ export class CameraRig {
     this.firstPitch = -0.12
     this.player = new THREE.Vector3(0, 1.7, 24)
     this.lookTarget = new THREE.Vector3()
+    this.obstructionRaycaster = new THREE.Raycaster()
+    this.obstructionObjects = []
+    this.obstructionMargin = 0.38
     this.orbit = null
     this.createOrbitControls(this.overviewCamera)
     this.transitioningToOverview = false
@@ -136,13 +139,39 @@ export class CameraRig {
     this.updateThirdPersonDesired()
   }
 
+  setObstructionObjects(objects = []) {
+    this.obstructionObjects = Array.isArray(objects) ? objects.filter(Boolean) : []
+  }
+
+  getSafeThirdPersonPosition() {
+    const direction = this.desiredPosition.clone().sub(this.desiredTarget)
+    const desiredDistance = direction.length()
+    if (!desiredDistance || !this.obstructionObjects.length) return { position: this.desiredPosition, obstructed: false }
+    direction.normalize()
+    this.obstructionRaycaster.set(this.desiredTarget, direction)
+    this.obstructionRaycaster.near = 0.12
+    this.obstructionRaycaster.far = desiredDistance
+    const hit = this.obstructionRaycaster.intersectObjects(this.obstructionObjects, true)
+      .find(item => item.distance > 0.12 && item.object.visible)
+    if (!hit) return { position: this.desiredPosition, obstructed: false }
+    const safeDistance = Math.max(1.25, hit.distance - this.obstructionMargin)
+    return {
+      position: this.desiredTarget.clone().addScaledVector(direction, Math.min(desiredDistance, safeDistance)),
+      obstructed: true,
+    }
+  }
+
   update(delta) {
     if (this.mode === 'overview' && !this.transitioningToOverview) {
       this.orbit.update()
       return
     }
     const alpha = 1 - Math.exp(-7 * delta)
-    this.camera.position.lerp(this.desiredPosition, alpha)
+    const cameraTargetPosition = this.mode === 'thirdPerson'
+      ? this.getSafeThirdPersonPosition()
+      : { position: this.desiredPosition, obstructed: false }
+    const cameraAlpha = cameraTargetPosition.obstructed ? 1 - Math.exp(-24 * delta) : alpha
+    this.camera.position.lerp(cameraTargetPosition.position, cameraAlpha)
     this.currentTarget.lerp(this.desiredTarget, alpha)
     this.camera.lookAt(this.currentTarget)
     if (this.mode === 'overview' && this.transitioningToOverview && this.camera.position.distanceTo(this.desiredPosition) < 0.12) {

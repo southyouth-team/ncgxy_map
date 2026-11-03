@@ -1020,11 +1020,24 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (errors.length) throw new TypeError(errors.join('；'))
     syncOutdoorBuildingFootprint(definition)
     const currentPosition = cameraRig.player.clone()
+    const previousFloor = indoorBuilding.floors.find(item => item.level === currentIndoorFloor)
+    const previousFloorBaseY = previousFloor ? (currentIndoorFloor - 1) * indoorBuilding.floorHeight : 0
+    const playerHeightOffset = currentPosition.y - previousFloorBaseY
     indoorBuilding = definition
     const levels = definition.floors.map(item => item.level)
-    const nextLevel = levels.includes(currentIndoorFloor) ? currentIndoorFloor : levels[0]
-    buildIndoorFloor(nextLevel, { x: currentPosition.x, z: currentPosition.z })
-    cameraRig.player.y = currentPosition.y
+    const keepsCurrentFloor = levels.includes(currentIndoorFloor)
+    const nextLevel = keepsCurrentFloor ? currentIndoorFloor : levels[0]
+    const nextFloor = definition.floors.find(item => item.level === nextLevel)
+    const transitionPosition = keepsCurrentFloor
+      ? { x: currentPosition.x, z: currentPosition.z }
+      : { x: nextFloor.spawnPoint.x, z: nextFloor.spawnPoint.z }
+    buildIndoorFloor(nextLevel, transitionPosition)
+    // 楼层编辑可能改变层高或删除当前楼层；保留玩家相对楼板的高度，而不是沿用旧世界 Y 坐标。
+    const nextFloorBaseY = (nextLevel - 1) * definition.floorHeight
+    const nextHeightOffset = keepsCurrentFloor
+      ? Math.max(0.5, Math.min(definition.floorHeight - 0.25, playerHeightOffset))
+      : nextFloor.spawnPoint.y
+    cameraRig.player.y = nextFloorBaseY + nextHeightOffset
     cameraRig.updateThirdPersonDesired()
     callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: levels, buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: null })
     return true

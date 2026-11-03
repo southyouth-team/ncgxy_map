@@ -603,6 +603,8 @@ describe('campus footprint indoor generation', () => {
     expect(building.floorHeight).toBe(3.8)
     expect(building.interiorNormalized).toBe(true)
     expect(building.footprintSize).toEqual({ width: 13, depth: 3 })
+    expect(building.interiorFootprint.bounds).toEqual({ minX: -6.5, maxX: 6.5, minZ: -4, maxZ: 4 })
+    expect(building.footprint.bounds).toEqual({ minX: -6.5, maxX: 6.5, minZ: -1.5, maxZ: 1.5 })
     expect(building.floors.map(floor => floor.stairPoint.direction)).toEqual(['south', 'north', 'south'])
     const generatedRoute = planIndoorFloorRoute(building, 1, 3)
     expect(generatedRoute?.transitions[0].connector.to.point).toEqual(generatedRoute?.transitions[1].connector.from.point)

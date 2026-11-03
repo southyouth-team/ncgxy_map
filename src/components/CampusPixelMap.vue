@@ -6,11 +6,7 @@ const props = defineProps({
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getCampusInteriorData } from '../data/campus/campusInteriors.js'
 import {
-  CAMPUS_AREAS as LEGACY_CAMPUS_AREAS,
-  CAMPUS_BUILDING_FOOTPRINTS as LEGACY_CAMPUS_BUILDING_FOOTPRINTS,
   CAMPUS_PLAYER_SPAWN_PIXEL,
-  CAMPUS_ROAD_CENTERLINES as LEGACY_CAMPUS_ROAD_CENTERLINES,
-  CAMPUS_ROAD_WIDTHS as LEGACY_CAMPUS_ROAD_WIDTHS,
   getCampusFootprintBounds,
   pointInCampusArea,
   pointInCampusPolygon,
@@ -37,7 +33,7 @@ const CAMPUS_AREAS = campusFeatureCollection.features
       confidence: feature.properties.confidence,
       polygon: outer,
       holes: rings.slice(1).map(openRing),
-      rect: feature.geometry.type === 'Polygon'
+      rect: feature.properties.category === 'sports'
         ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
         : null,
     }

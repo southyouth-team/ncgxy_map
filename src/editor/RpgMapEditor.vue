@@ -77,8 +77,8 @@ function applyAt(event) {
   const { x, y } = getCell(event)
   if (tool.value === 'object' && selectedObject.value) {
     const building = CAMPUS_BUILDING_ASSET_CATALOG.find(entry => entry.id === selectedObject.value)
-    if (building && x >= 0 && y >= 0 && x + building.width <= map.value.grid.width && y + building.height <= map.value.grid.height) {
-      map.value.objects.push({ id: `building-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, kind: 'building', assetId: building.id, template: building.template, name: building.label, x, y, width: building.width, height: building.height, rotation: 0 })
+    if (building && x >= 0 && y >= 0 && x + building.tileWidth <= map.value.grid.width && y + building.tileHeight <= map.value.grid.height) {
+      map.value.objects.push({ id: `building-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, kind: 'building', assetId: building.id, template: building.template, name: building.label, x, y, width: building.tileWidth, height: building.tileHeight, rotation: 0 })
       draw()
       return
     }

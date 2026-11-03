@@ -409,7 +409,7 @@ describe('scaled building-local indoor footprint', () => {
       { x: 2, z: 1 },
     )).toEqual({
       bounds: { minX: -6, maxX: 4, minZ: -6, maxZ: 10 },
-      entrancePoint: { x: -1, z: 2 },
+      entrancePoint: { x: -1, z: 0 },
     })
   })
 

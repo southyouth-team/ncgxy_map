@@ -7,6 +7,8 @@ import {
   CAMPUS_ROAD_CENTERLINES,
   mapPixelToWorld,
   mapRectToWorld,
+  pointInCampusArea,
+  pointInCampusPolygon,
 } from './campusLayout.js'
 
 describe('南昌工学院像素校园主空间底图', () => {

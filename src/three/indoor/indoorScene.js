@@ -31,6 +31,22 @@ export function validateIndoorFloor(floor) {
     if (!Number.isFinite(door.width) || door.width < 0.7 || door.width > wallLength) errors.push('门洞 width 超出有效范围')
     if (!Number.isFinite(door.offset) || Math.abs(door.offset) + (Number(door.width) || 0) / 2 > wallLength / 2) errors.push('门洞 offset 超出墙体范围')
   }
+  for (const wall of Array.isArray(floor.walls) ? floor.walls : []) {
+    if (!wall.id || !['x', 'z'].includes(wall.axis)) errors.push('室内墙体必须包含 id 和有效 axis')
+    if (![wall.x, wall.z, wall.length].every(Number.isFinite) || wall.length < 1) errors.push(`墙体 ${wall.id || '(unknown)'} 的位置或长度无效`)
+    else {
+      const halfLength = wall.length / 2
+      const horizontal = wall.axis === 'x'
+      const limit = horizontal ? floor.width / 2 : floor.depth / 2
+      const center = horizontal ? wall.x : wall.z
+      const crossLimit = horizontal ? floor.depth / 2 : floor.width / 2
+      const cross = horizontal ? wall.z : wall.x
+      if (Math.abs(center) + halfLength > limit || Math.abs(cross) > crossLimit) errors.push(`墙体 ${wall.id} 超出楼层边界`)
+    }
+    if (wall.doorWidth !== undefined && wall.doorWidth > 0 &&
+      (!Number.isFinite(wall.doorWidth) || wall.doorWidth < 0.7 || wall.doorWidth > wall.length ||
+       Math.abs(Number(wall.doorOffset) || 0) + wall.doorWidth / 2 > wall.length / 2)) errors.push(`墙体 ${wall.id} 的门洞尺寸无效`)
+  }
   for (const room of Array.isArray(floor.rooms) ? floor.rooms : []) {
     if (!room.id || !room.name) errors.push('房间必须包含 id 和 name')
     if (![room.x, room.z, room.width, room.depth].every(Number.isFinite) || room.width <= 0 || room.depth <= 0) {
@@ -185,6 +201,24 @@ export function createIndoorFloor(THREE, floor) {
   addWallSegments({ axis: 'x', centerX: 0, centerZ: halfD, length: floor.width, wallName: 'south', openings: doors.filter(door => door.wall === 'south') })
   addWallSegments({ axis: 'z', centerX: -halfW, centerZ: 0, length: floor.depth, wallName: 'west', openings: doors.filter(door => door.wall === 'west') })
   addWallSegments({ axis: 'z', centerX: halfW, centerZ: 0, length: floor.depth, wallName: 'east', openings: doors.filter(door => door.wall === 'east') })
+
+  // 自定义隔墙由同一份楼层数据驱动，门洞在几何与碰撞层同步留空。
+  for (const wallDefinition of Array.isArray(floor.walls) ? floor.walls : []) {
+    const horizontal = wallDefinition.axis === 'x'
+    const openings = Number(wallDefinition.doorWidth) > 0
+      ? [{ offset: Number(wallDefinition.doorOffset) || 0, width: wallDefinition.doorWidth }]
+      : []
+    addWallSegments({
+      axis: horizontal ? 'x' : 'z',
+      centerX: wallDefinition.x,
+      centerZ: wallDefinition.z,
+      length: wallDefinition.length,
+      wallName: wallDefinition.id,
+      wallHeight: Number(wallDefinition.height) || h * 0.82,
+      thickness: Number(wallDefinition.thickness) || 0.2,
+      openings,
+    })
+  }
 
   for (const room of floor.rooms) {
     const x = room.x, z = room.z, w = room.width, d = room.depth

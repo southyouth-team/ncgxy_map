@@ -228,6 +228,15 @@ export function createCampusScene(THREE) {
       confidence: item.confidence || 'unverified',
     })
     const buildingHeight = group.userData.buildingHeight || 3.8
+    // 建筑底部增加浅色基座，明确建筑与地面的接触关系，避免模型像直接插在草地里。
+    const foundation = new THREE.Mesh(
+      new THREE.BoxGeometry(width + 0.55, 0.16, depth + 0.55),
+      mats.stone,
+    )
+    foundation.name = 'building-foundation-' + item.id
+    foundation.position.set(bounds.x, 0.08, bounds.z)
+    foundation.receiveShadow = true
+    root.add(foundation)
     group.position.set(bounds.x, 0.16, bounds.z)
     group.userData.buildingId = item.id
     group.userData.objectType = 'building'

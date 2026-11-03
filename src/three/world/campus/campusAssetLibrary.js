@@ -177,45 +177,34 @@ export const CAMPUS_BUILDING_ASSET_CATALOG = Object.freeze(
  * 在二维 RPG 画布绘制建筑像素预览。
  * 使用同一 template 配置决定墙体/屋顶风格，与三维 createPixelBuilding 保持类型一致。
  */
+/**
+ * 二维编辑器的建筑平面预览。
+ * 仅表达建筑占地，不绘制屋顶、墙面、门窗等三维表现元素。
+ * 实际建筑形态统一由 createPixelBuilding 根据 footprint 生成。
+ */
 export function drawPixelBuildingPreview(context, options = {}) {
-  const { x, y, width, height, tileSize, template = '教学楼', selected = false } = options
+  const { x, y, width, height, tileSize, selected = false } = options
   if (!context || ![x, y, width, height, tileSize].every(Number.isFinite) || width <= 0 || height <= 0 || tileSize <= 0) {
     throw new TypeError('建筑二维预览参数无效')
   }
-  const preset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
   const px = x * tileSize
   const py = y * tileSize
   const pw = width * tileSize
   const ph = height * tileSize
-  const wallColors = {
-    wall: '#e7d2a5', wallCream: '#e7d2a5', wallPeach: '#d8a77d', wallMint: '#b8c99a',
-  }
-  const wall = wallColors[preset.wall] || wallColors.wallCream
-  const roof = '#a85f4e'
   context.save()
-  context.fillStyle = '#5b5141'
-  context.fillRect(px + 1, py + 1, pw - 2, ph - 2)
-  context.fillStyle = wall
-  context.fillRect(px + 3, py + Math.max(5, tileSize * 0.34), pw - 6, ph - Math.max(8, tileSize * 0.38))
-  context.fillStyle = roof
-  context.fillRect(px + 1, py + 1, pw - 2, Math.max(5, tileSize * 0.42))
-  context.fillStyle = '#784b43'
-  context.fillRect(px + 1, py + Math.max(5, tileSize * 0.42), pw - 2, 3)
-  const windowCount = Math.max(1, Math.min(5, Math.round(width * preset.windowDensity / 2.5)))
-  const windowY = py + Math.max(8, ph * 0.48)
-  for (let index = 0; index < windowCount; index += 1) {
-    const windowX = px + ((index + 1) / (windowCount + 1)) * pw
-    context.fillStyle = '#f3dfb5'
-    context.fillRect(windowX - 3, windowY - 3, 6, 7)
-    context.fillStyle = '#8bc3c5'
-    context.fillRect(windowX - 2, windowY - 2, 4, 5)
-  }
-  context.fillStyle = '#76533d'
-  context.fillRect(px + pw / 2 - Math.max(3, tileSize * 0.12), py + ph - Math.max(8, tileSize * 0.48), Math.max(6, tileSize * 0.24), Math.max(8, tileSize * 0.48))
+  context.fillStyle = '#c8a66e'
+  context.globalAlpha = 0.34
+  context.fillRect(px, py, pw, ph)
+  context.globalAlpha = 1
+  context.strokeStyle = selected ? '#d69c43' : '#806b4b'
+  context.lineWidth = selected ? 3 : 1.5
+  context.strokeRect(px, py, pw, ph)
   if (selected) {
+    context.setLineDash([4, 3])
     context.strokeStyle = '#f2d98a'
-    context.lineWidth = 2
-    context.strokeRect(px + 1, py + 1, pw - 2, ph - 2)
+    context.lineWidth = 1
+    context.strokeRect(px - 3, py - 3, pw + 6, ph + 6)
+    context.setLineDash([])
   }
   context.restore()
 }

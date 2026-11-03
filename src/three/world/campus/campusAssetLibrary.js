@@ -148,6 +148,11 @@ export function addPixelLamp(THREE, parent, x, z, mats) {
  * 仅负责视觉资产，不代表真实建筑测绘尺寸。
  */
 export const CAMPUS_BUILDING_TEMPLATES = Object.freeze({
+  // 纯视觉建筑原型：名称表示轮廓风格，不代表建筑实际用途。
+  '街区楼 A': { height: 3.6, floors: 2, windowDensity: 0.85, roofRise: 0.72, roofStyle: 'pitched', wall: 'wallCream', doorWidth: 0.9, windowWidth: 0.52, windowHeight: 0.62 },
+  '街区楼 B': { height: 5.2, floors: 4, windowDensity: 1.25, roofRise: 0.2, roofStyle: 'flat', wall: 'wallPeach', doorWidth: 0.9, windowWidth: 0.44, windowHeight: 0.58 },
+  '庭院楼': { height: 4.4, floors: 3, windowDensity: 0.95, roofRise: 0.62, roofStyle: 'pitched', wall: 'wallMint', doorWidth: 1.0, windowWidth: 0.5, windowHeight: 0.66 },
+  '坡顶楼': { height: 3.9, floors: 2, windowDensity: 0.72, roofRise: 0.95, roofStyle: 'span', wall: 'wallCream', doorWidth: 0.95, windowWidth: 0.58, windowHeight: 0.72 },
   '教学楼': { height: 4.2, floors: 3, windowDensity: 1, roofRise: 0.82, roofStyle: 'pitched', wall: 'wallCream', doorWidth: 0.9, windowWidth: 0.48, windowHeight: 0.62 },
   '宿舍楼': { height: 4.8, floors: 4, windowDensity: 1.45, roofRise: 0.22, roofStyle: 'flat', wall: 'wallPeach', doorWidth: 0.86, windowWidth: 0.42, windowHeight: 0.58 },
   '办公楼': { height: 3.8, floors: 3, windowDensity: 1.15, roofRise: 0.28, roofStyle: 'flat', wall: 'wall', doorWidth: 0.86, windowWidth: 0.58, windowHeight: 0.72 },

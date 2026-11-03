@@ -22,6 +22,24 @@ describe('CollisionWorld', () => {
     expect(result.blockedZ).toBe(true)
   })
 
+  it('recovers a player spawned inside a building collision box', () => {
+    const result = world().move({ x: 0, z: 0 }, 0.2, 0)
+    expect(world().isBlocked(result.x, result.z)).toBe(true)
+    const collision = world()
+    const recovered = collision.resolvePosition({ x: 0, z: 0 })
+    expect(collision.isBlocked(recovered.x, recovered.z)).toBe(false)
+  })
+
+  it('chooses the longer valid slide direction around a corner', () => {
+    const collision = new CollisionWorld(
+      { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+      [{ minX: -2, maxX: 2, minZ: -2, maxZ: 2 }],
+      0.5,
+    )
+    const result = collision.move({ x: -3, z: -3 }, 2, 1)
+    expect(result.x).toBe(-1)
+    expect(result.z).toBe(-3)
+  })
   it('keeps the player inside the walkable boundary', () => {
     const result = world().move({ x: 9.8, z: 0 }, 2, 0)
     expect(result.x).toBe(9.5)

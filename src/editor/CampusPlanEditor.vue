@@ -147,7 +147,7 @@ function beginFeatureDrag(event, type, item) {
     }).filter(Boolean)
     drag.value = { type: 'multi', start, items }
   } else {
-    drag.value = { type, id: item.id, start, geometry: featureGeometry(type, item) }
+    drag.value = type === 'road' ? { type: 'road', id: item.id, start, points: featureGeometry(type, item) } : { type, id: item.id, start, footprint: featureGeometry(type, item) }
   }
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
@@ -639,6 +639,9 @@ function movePointer(event) {
   } else if (drag.value.type === 'area') {
     const area = areas.value.find((entry) => entry.id === drag.value.id)
     if (area) area.footprint = movePolygon(drag.value.footprint, p.x - drag.value.start.x, p.y - drag.value.start.y)
+  } else if (drag.value.type === 'road') {
+    const road = roads.value.find((entry) => entry.id === drag.value.id)
+    if (road) road.points = movePolygon(drag.value.points, p.x - drag.value.start.x, p.y - drag.value.start.y)
   } else {
     const road = roads.value.find((entry) => entry.id === drag.value.id)
     if (road) road.points[drag.value.index] = [p.x, p.y]

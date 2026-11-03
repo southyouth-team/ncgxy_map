@@ -141,6 +141,19 @@ describe('indoor floor contract', () => {
       .toContain('房间 classroom-101 的家具超出房间范围')
   })
 
+  it('rejects overlapping rooms and overlapping furniture footprints', () => {
+    const overlappingRooms = { ...sample, rooms: [
+      { id: 'room-a', name: 'A', x: 0, z: 0, width: 8, depth: 6 },
+      { id: 'room-b', name: 'B', x: 2, z: 0, width: 8, depth: 6 },
+    ] }
+    expect(validateIndoorFloor(overlappingRooms).some(error => error.includes('room-a 与 room-b 存在重叠'))).toBe(true)
+    const overlappingFurniture = { ...sample, rooms: [{ ...sample.rooms[0], furniture: [
+      { id: 'desk-a', type: 'desk', x: 0, z: 0, width: 1, depth: 1, height: 0.8 },
+      { id: 'desk-b', type: 'desk', x: 0.5, z: 0, width: 1, depth: 1, height: 0.8 },
+    ] }] }
+    expect(validateIndoorFloor(overlappingFurniture).some(error => error.includes('desk-a 与 desk-b 存在重叠'))).toBe(true)
+  })
+
   it('requires integer floor levels', () => {
     expect(validateIndoorFloor({ ...sample, level: 1.5 })).toContain('楼层 level 必须是整数')
   })

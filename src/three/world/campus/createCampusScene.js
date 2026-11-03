@@ -138,6 +138,14 @@ export function createCampusScene(THREE) {
   }
   CAMPUS_AREAS.filter(area => area.type === 'sports' && area.rect).forEach(area => addSportsMarkings(area.rect, area.id))
 
+  // 中央湖心绿地：平面图中的环湖水域围绕中央开放空间，保留可步行的岛状绿地。
+  const centralIsland = [
+    [492, 178], [520, 158], [553, 158], [582, 178], [599, 207],
+    [600, 244], [580, 274], [552, 294], [520, 298], [493, 280],
+    [478, 250], [478, 214],
+  ]
+  addPolygon('central-lake-island', centralIsland, mats.grassPlain, 0.145)
+
   const wallPalette = [mats.wall, mats.wallPeach, mats.wallMint, mats.wallCream]
   function addCampusBuilding(item, index) {
     const bounds = mapRectToWorld(item.rect)

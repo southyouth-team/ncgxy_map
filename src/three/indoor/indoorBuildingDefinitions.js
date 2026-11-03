@@ -59,7 +59,6 @@ function validateFootprintPolygon(footprint) {
   const points = footprint?.polygon
   if (!Array.isArray(points) || points.length < 3 || points.length > 32) return ['建筑轮廓必须包含 3 至 32 个顶点']
   if (points.some(point => !Number.isFinite(point?.x) || !Number.isFinite(point?.z))) return ['建筑轮廓顶点坐标无效']
-  if (polygonArea(points) < 1) return ['建筑轮廓面积过小或顶点顺序无效']
   for (let i = 0; i < points.length; i++) {
     const a = points[i], b = points[(i + 1) % points.length]
     if (Math.hypot(a.x - b.x, a.z - b.z) < 0.25) return ['建筑轮廓存在重合或过近顶点']
@@ -68,6 +67,7 @@ function validateFootprintPolygon(footprint) {
       if (segmentsIntersect(a, b, points[j], points[(j + 1) % points.length])) return ['建筑轮廓不能自相交']
     }
   }
+  if (polygonArea(points) < 1) return ['建筑轮廓面积过小或顶点顺序无效']
   const bounds = footprint.bounds
   if (points.some(point => point.x < bounds.minX - 0.01 || point.x > bounds.maxX + 0.01 || point.z < bounds.minZ - 0.01 || point.z > bounds.maxZ + 0.01)) return ['建筑轮廓顶点超出占地包围范围']
   return []

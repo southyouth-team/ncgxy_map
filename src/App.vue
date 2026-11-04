@@ -68,11 +68,11 @@ const campusPlanDocument = ref(null)
 
 let engine
 
-const modes = [
-  { id: 'overview', label: '总览', hint: '校园全景' },
-  { id: 'thirdPerson', label: '跟随', hint: '角色漫游' },
-  { id: 'firstPerson', label: '第一人称', hint: '自由观察' },
-]
+const modes = computed(() => [
+  { id: 'overview', label: '总览', hint: viewMode.value === '2.5d' ? '平移浏览' : '自由观察' },
+  { id: 'thirdPerson', label: '跟随', hint: viewMode.value === '2.5d' ? '固定斜俯视漫游' : '角色漫游' },
+  ...(viewMode.value === '3d' ? [{ id: 'firstPerson', label: '第一人称', hint: '沉浸漫游' }] : []),
+])
 
 function adjacentIndoorFloor(direction) {
   const levels = [...indoorFloors.value].sort((a, b) => a - b)
@@ -250,6 +250,7 @@ function switchIndoorFloor(direction) {
 }
 
 async function switchMode(mode) {
+  if (mode === 'firstPerson' && viewMode.value !== '3d') return
   activeMode.value = mode
   engine?.setMode(mode)
   if (isMobile.value && mode !== 'overview') {
@@ -323,7 +324,7 @@ function onExplorerHotkey(event) {
   if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
   const target = event.target
   if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName))) return
-  if (event.key.toLowerCase() !== 'v' || activeMode.value === 'overview') return
+  if (event.key.toLowerCase() !== 'v' || viewMode.value !== '3d' || activeMode.value === 'overview') return
   event.preventDefault()
   switchMode(activeMode.value === 'firstPerson' ? 'thirdPerson' : 'firstPerson')
 }
@@ -356,6 +357,11 @@ function openEditor() {
 
 function switchViewMode(mode) {
   if (!['2.5d', '3d'].includes(mode)) return
+  // 从 3D 第一人称切回 2.5D 时，先回到角色跟随，避免 2.5D 继续保留透视第一人称。
+  if (mode === '2.5d' && activeMode.value === 'firstPerson') {
+    activeMode.value = 'thirdPerson'
+    engine?.setMode('thirdPerson')
+  }
   viewMode.value = mode
   engine?.setViewMode(mode)
 }
@@ -604,7 +610,7 @@ onBeforeUnmount(() => {
         <button class="virtual-key key-right" aria-label="向右移动" @pointerdown.prevent="setMoveKey('d', true)" @pointerup="setMoveKey('d', false)" @pointercancel="setMoveKey('d', false)" @pointerleave="setMoveKey('d', false)">▶</button>
       </div>
       <button class="virtual-key sprint-key" aria-label="加速移动" @pointerdown.prevent="setMoveKey('shift', true)" @pointerup="setMoveKey('shift', false)" @pointercancel="setMoveKey('shift', false)" @pointerleave="setMoveKey('shift', false)">加速</button>
-      <div class="look-hint">滑动右侧区域转动视角</div>
+      <div v-if="viewMode === '3d'" class="look-hint">滑动右侧区域转动视角</div>
     </div>
 
     <div v-if="isMobile && activeMode !== 'overview' && isPortrait" class="rotate-device-hint">
@@ -626,8 +632,8 @@ onBeforeUnmount(() => {
         </template>
         <template v-else-if="activeMode === 'thirdPerson'">
           <div class="control-row"><kbd>W A S D</kbd><span>控制角色移动</span></div>
-          <div class="control-row"><kbd>拖动</kbd><span>调整等距镜头方向</span></div>
-          <div class="control-row"><kbd>V</kbd><span>切换第一/第三人称</span></div>
+          <div class="control-row"><kbd>拖动</kbd><span>{{ viewMode === '2.5d' ? '固定斜俯视，不可旋转' : '调整观察角度' }}</span></div>
+          <div v-if="viewMode === '3d'" class="control-row"><kbd>V</kbd><span>切换第一/第三人称</span></div>
           <div class="control-row"><kbd>滚轮</kbd><span>调整跟随距离</span></div>
         </template>
         <template v-else>

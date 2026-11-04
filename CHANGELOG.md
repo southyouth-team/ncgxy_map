@@ -1,3 +1,14 @@
+## 2026-11-04 — 统一校园目录与空间 Feature 的数据边界
+
+- **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`。
+- **实际完成**：
+  - 基础 FeatureCollection 的 metadata 增加 `catalogue`，集中保存未定位 POI、场地台账和建筑身份元数据。
+  - `getCampusSpatialLayers` 优先从当前 FeatureCollection catalogue 读取 POI/场地目录。
+  - 首页 Feature 合并函数保留基础 metadata，避免目录数据在合并时丢失。
+  - 增加测试验证目录可从统一数据集读取，未定位 POI 不会被伪造成 GeoJSON Feature。
+- **验证状态**：代码与测试已提交，等待 CI；未进行浏览器端到端验收。
+- **已知限制**：目录中的 POI/场地多数仍待定位，建筑身份和 footprint 仍有待核验状态；尚未统一编辑器预览与首页场景构建流程。
+- **下一步**：验证 CI，随后抽取共享场景 Feature 适配器，避免首页与编辑器预览分别转换同一空间数据。
 ## 2026-11-04 — 抽取首页 Feature 合并契约
 
 - **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`src/App.vue`。

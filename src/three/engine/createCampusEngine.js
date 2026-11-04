@@ -455,7 +455,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         }
         const mesh = new THREE.Mesh(
           new THREE.ShapeGeometry(shape),
-          new THREE.MeshStandardMaterial({ color: area.type === 'water' ? '#68b9b5' : '#a4bd83', roughness: 1 }),
+          new THREE.MeshStandardMaterial({ color: ({ water: '#68b9b5', sports: '#b9b69f', vegetation: '#78936d', plaza: '#b8b2a0', parking: '#858b8d' }[area.type] || '#a4bd83'), roughness: area.type === 'water' ? 0.32 : 1 }),
         )
         mesh.rotation.x = -Math.PI / 2
         mesh.position.y = 0.015
@@ -468,7 +468,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         const shape = new THREE.Shape(corners.map((point) => new THREE.Vector2(point.x, -point.z)))
         const mesh = new THREE.Mesh(
           new THREE.ShapeGeometry(shape),
-          new THREE.MeshStandardMaterial({ color: area.type === 'sports' ? '#b9b69f' : '#829a70', roughness: 1, side: THREE.DoubleSide }),
+          new THREE.MeshStandardMaterial({ color: ({ water: '#68b9b5', sports: '#b9b69f', vegetation: '#78936d', plaza: '#b8b2a0', parking: '#858b8d' }[area.type] || '#829a70'), roughness: area.type === 'water' ? 0.32 : 1, side: THREE.DoubleSide }),
         )
         mesh.rotation.x = -Math.PI / 2
         mesh.position.y = 0.02

@@ -255,3 +255,10 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 规范 FeatureCollection 的变更必须通过不可变 mutation API 完成，当前提供 upsert、properties patch、geometry replacement 和批量删除。所有操作以稳定 Feature.id 定位，删除可写入 tombstone，恢复同 ID Feature 时清除对应 tombstone。
 
 这些函数是实时编辑器迁移的基础契约。迁移完成前，旧数组工作模型仍然存在；不得在 UI 中同时维护两套可写状态，也不得用深度 watch 做双向同步。
+
+
+## 26. 属性检查器写入路径
+
+属性检查器不得直接对选中对象引用执行双向绑定。属性修改应显式提供 Feature ID 和字段 patch，经规范 FeatureCollection mutation API 更新，再通过兼容适配器刷新当前交互视图。对象属性和几何仍须保持既定语义：Point 对象的 rotation/scale 属于 properties，区域类型通过 areaType 映射，建筑显示名称通过 Feature properties.name 映射。
+
+当前属性检查器已采用该写入路径；画布绘制、拖动、顶点编辑、复制粘贴等操作尚未全部迁移。此处属于分阶段迁移状态，不构成编辑器唯一状态源验收。

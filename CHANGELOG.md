@@ -1,3 +1,8 @@
+## 2026-11-04 — 属性面板编辑纳入撤销/重做快照
+
+- **修改文件**：`src/editor/CampusPlanEditor.vue`。
+- **实际完成**：建筑名称/模板/楼层/高度/窗户/入口/屋顶、区域名称/类型、对象名称/类型/朝向/缩放、道路宽度等属性控件在获得焦点时先创建 undo 快照，避免直接 v-model 修改绕过历史记录。
+- **验证状态**：前端 CI 最新提交 `65dff73` 测试与构建通过；本次快照改动等待新 CI。真实浏览器端交互仍需验收。
 ## 2026-11-04 — 统一编辑器与基础数据质量字段契约
 
 - **修改文件**：`src/editor/campusFeatureCollection.js`、`src/data/campus/campusGeoJSON.test.js`。

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toCampusFeatureCollection, fromCampusFeatureCollection } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot } from './campusFeatureCollection.js'
 
 describe('toCampusFeatureCollection', () => {
   it('normalizes buildings, roads, areas and point objects into one feature collection', () => {

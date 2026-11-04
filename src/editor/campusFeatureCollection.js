@@ -111,7 +111,7 @@ export function toCampusFeatureCollection(document = {}) {
     const { id, geometry, type, name, properties = {}, source, qualityStatus, ...metadata } = object;
     features.push(createFeature(
       id,
-      type || 'facility',
+      'object',
       name,
       { type: 'Point', coordinates: [Number(coordinates[0]), Number(coordinates[1])] },
       { ...metadata, ...properties, objectType: type || 'facility' },

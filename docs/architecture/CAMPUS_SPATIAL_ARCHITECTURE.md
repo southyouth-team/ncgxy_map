@@ -428,3 +428,8 @@ schema v4 的 FeatureCollection 服务端校验不能仅递归检查坐标是否
 ## 49. 撤销/重做快照必须保留 FeatureCollection metadata
 
 FeatureCollection 的集合级 metadata 与 features、deletedFeatureIds 同属规范空间数据。创建 CampusFeatureSnapshot 时必须完整复制 metadata，不能只保存空间 Feature 与删除标记。恢复快照后 metadata.dataset、metadata.catalogue 和未知扩展字段必须保持不变，避免撤销/重做后下一次自动保存将集合级元数据永久清除。测试必须覆盖 metadata 经 JSON 序列化和恢复的 round-trip。
+
+
+## 50. 建筑放置交互与几何创建语义
+
+“建筑摆放”必须采用单击创建默认矩形 Footprint 的交互：根据画布点击位置生成 Polygon 外环，立即选中新 Feature 并切换到选择工具，允许后续拖动、改名、调整尺寸和顶点。多边形自定义绘制作为独立“建筑轮廓”工具，要求至少三个顶点并显式完成。不得将尚未完成的绘制控制点误认为已创建的建筑 Feature。点对象拖动由 SVG 根节点捕获 pointer 事件，移动时只更新对应 Point Feature 的规范 geometry；对象图层隐藏时不得显示对象。

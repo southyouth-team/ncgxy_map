@@ -67,4 +67,11 @@ describe('toCampusFeatureCollection', () => {
     expect(restored.objects[0]).toMatchObject({ id: 't', type: 'tree', properties: { scale: 1.5 } })
   })
 
+  it('preserves deleted base-feature IDs through FeatureCollection adapters', () => {
+    const source = { buildings: [], roads: [], areas: [], objects: [], deletedFeatureIds: ['campus-tree-001', 'campus-bench-002'] }
+    const collection = toCampusFeatureCollection(source)
+    expect(collection.deletedFeatureIds).toEqual(['campus-tree-001', 'campus-bench-002'])
+    expect(fromCampusFeatureCollection(collection).deletedFeatureIds).toEqual(source.deletedFeatureIds)
+  })
+
 })

@@ -929,14 +929,14 @@ function addPolygonVertex() {
   const a = ring[bestIndex], b = ring[(bestIndex + 1) % ring.length]
   const footprint = ring.map(point => [...point])
   footprint.splice(bestIndex + 1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
-  commitFeatureGeometry(item.id, selectedBuilding.value ? { buildings: [{ id: item.id, footprint }] } : { areas: [{ id: item.id, footprint }] })
+  commitPolygonOuterRing(item.id, footprint)
 }
 function removePolygonVertex(index) {
   const item = selectedBuilding.value || selectedArea.value
   if (!item || item.footprint.length <= 3) return
   snapshot()
   const footprint = item.footprint.filter((_, vertexIndex) => vertexIndex !== index).map(point => [...point])
-  commitFeatureGeometry(item.id, selectedBuilding.value ? { buildings: [{ id: item.id, footprint }] } : { areas: [{ id: item.id, footprint }] })
+  commitPolygonOuterRing(item.id, footprint)
 }
 function endPointer() { if (boxSelection.value) finishBoxSelection(); drag.value = null }
 function addBuilding(event) {
@@ -994,13 +994,13 @@ function updateBuildingMetric(metric, rawValue) {
     nextBounds[0] + ((x - oldBounds[0]) / oldWidth) * nextWidth,
     nextBounds[1] + ((y - oldBounds[1]) / oldHeight) * nextHeight,
   ])
-  commitFeatureGeometry(item.id, { buildings: [{ id: item.id, footprint }] })
+  commitPolygonOuterRing(item.id, footprint)
 }
 function rotateBuilding() {
   const item = selectedBuilding.value
   if (!item) return
   snapshot()
-  commitFeatureGeometry(item.id, { buildings: [{ id: item.id, footprint: rotatePolygon(item.footprint, 90) }] })
+  commitPolygonOuterRing(item.id, rotatePolygon(item.footprint, 90))
 }
 function addRoadNode() {
   const road = selectedRoad.value
@@ -1011,14 +1011,14 @@ function addRoadNode() {
   const a = road.points[index], b = road.points[index+1]
   const points = road.points.map(point => [...point])
   points.splice(index+1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
-  commitFeatureGeometry(road.id, { roads: [{ id: road.id, points }] })
+  commitFeatureGeometryValue(road.id, { type: 'LineString', coordinates: points })
 }
 function removeRoadNode(index) {
   const road = selectedRoad.value
   if (!road || road.points.length <= 2) return
   snapshot()
   const points = road.points.filter((_, pointIndex) => pointIndex !== index).map(point => [...point])
-  commitFeatureGeometry(road.id, { roads: [{ id: road.id, points }] })
+  commitFeatureGeometryValue(road.id, { type: 'LineString', coordinates: points })
 }
 function deleteSelected() {
   if (multiSelection.value.length > 1) { deleteSelectionBatch(); return }
@@ -1051,17 +1051,17 @@ function commitFeatureUpsert(fragment) {
 function commitFeatureGeometryValue(featureId, geometry) {
   commitFeatureCollectionMutation(collection => updateCampusFeatureGeometry(collection, featureId, geometry))
 }
-function commitFeatureGeometry(featureId, fragment) {
-  const feature = toCampusFeatureCollection(fragment).features[0]
-  if (!feature) throw new Error('无法将编辑几何转换为校园 Feature')
+function commitPolygonOuterRing(featureId, footprint) {
+  const fragment = toCampusFeatureCollection({ areas: [{ id: featureId, footprint }] })
+  const outerRing = fragment.features[0]?.geometry?.coordinates?.[0]
+  if (!outerRing) throw new Error('无法生成 Polygon 外环')
   commitFeatureCollectionMutation(collection => {
     const current = collection.features.find(item => String(item.id) === String(featureId))
-    let geometry = feature.geometry
-    // 顶点编辑只提交外环时，保留现有 Polygon 内环，避免水域岛洞被意外删除。
-    if (geometry.type === 'Polygon' && current?.geometry?.type === 'Polygon' && geometry.coordinates.length === 1 && current.geometry.coordinates.length > 1) {
-      geometry = { ...geometry, coordinates: [...geometry.coordinates, ...current.geometry.coordinates.slice(1)] }
-    }
-    return updateCampusFeatureGeometry(collection, featureId, geometry)
+    if (current?.geometry?.type !== 'Polygon') throw new Error('目标 Feature 不是 Polygon')
+    return updateCampusFeatureGeometry(collection, featureId, {
+      type: 'Polygon',
+      coordinates: [outerRing, ...current.geometry.coordinates.slice(1)],
+    })
   })
 }
 function commitFeatureRemoval(featureIds) {

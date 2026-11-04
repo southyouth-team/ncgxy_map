@@ -342,11 +342,16 @@ export class CameraRig {
     const desiredDistance = direction.length()
     if (!desiredDistance || !this.obstructionObjects.length) return { position: this.desiredPosition, obstructed: false }
     direction.normalize()
+    // Sprite.raycast 需要 camera.matrixWorld；第三人称遮挡检测复用场景相机，
+    // 否则加入 2.5D 图片 Sprite 后会因 Raycaster.camera=null 触发运行时异常。
+    this.camera.updateMatrixWorld(true)
+    this.obstructionRaycaster.camera = this.camera
     this.obstructionRaycaster.set(this.desiredTarget, direction)
     this.obstructionRaycaster.near = 0.12
     this.obstructionRaycaster.far = desiredDistance
-    const hit = this.obstructionRaycaster.intersectObjects(this.obstructionObjects, true)
-      .find(item => item.distance > 0.12 && item.object.visible)
+    const obstructionRoots = this.obstructionObjects.filter(object => object?.isObject3D && object.parent)
+    const hit = this.obstructionRaycaster.intersectObjects(obstructionRoots, true)
+      .find(item => item.distance > 0.12 && item.object?.visible && !item.object.isSprite)
     if (!hit) return { position: this.desiredPosition, obstructed: false }
     const safeDistance = Math.max(1.25, hit.distance - this.obstructionMargin)
     return {

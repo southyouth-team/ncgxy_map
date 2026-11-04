@@ -538,3 +538,13 @@
 - 新增回归测试，覆盖基础集合和编辑器集合分别携带删除标记的情况。
 - 更新空间架构文档第 41 节。
 - 最新提交 CI 尚待完成；浏览器端保存、刷新和首页同步仍待真实验收。
+
+
+## 2026-11-05 — 修复编辑器加载时基础集合 metadata 丢失
+
+- 编辑器加载服务端文档时改为直接使用 buildCampusGeoJSON() 的完整 FeatureCollection，不再从四组兼容数组重建基础集合。
+- toCampusFeatureCollection() 现在透传 document.metadata，确保兼容数组转换不会丢失集合级目录信息。
+- mergeCampusFeatureCollections() 合并基础与编辑器 metadata；编辑器同名字段优先，双方 catalogue 按子键合并。
+- 新增回归测试覆盖 metadata 透传与 catalogue 合并。
+- 更新空间架构文档第 42 节。
+- CI 以本次最新 HEAD 结果为准；浏览器端真实加载、自动保存和刷新回读仍待验收。

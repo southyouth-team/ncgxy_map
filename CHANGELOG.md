@@ -603,3 +603,12 @@
 - 若已有保存请求正在进行，则不启动并发写入；该请求原有的请求期间变更检测仍负责补发最新内容。
 - 此处理针对 SPA 组件卸载。浏览器整页关闭、强制刷新或进程终止时，网络请求仍可能被浏览器中断，不能视为离线可靠队列。
 - 代码已提交；需以最新 HEAD CI 结果为准。
+
+
+## 2026-11-05 — 修复撤销/重做快照丢失 FeatureCollection metadata
+
+- 对照 metadata 的保存、加载、首页合并和撤销/重做链路时，发现 createCampusFeatureSnapshot() 只保存 features 与 deletedFeatureIds，未保存 FeatureCollection.metadata。
+- 这会导致用户执行撤销或重做后，metadata.dataset、metadata.catalogue 及其他集合级扩展字段从规范空间状态中丢失，并可能在下一次自动保存时被持久化删除。
+- 现在历史快照完整保留 FeatureCollection.metadata；恢复时继续通过 snapshot 中的 FeatureCollection 返回原 metadata。
+- 增加测试覆盖 dataset、catalogue 在创建快照、JSON 序列化和恢复后的完整往返。
+- 本次代码和测试已提交，CI 尚待执行；此前同一 HEAD 的前后端 CI 已通过，但不代表本轮新增修改通过。

@@ -626,9 +626,20 @@ onBeforeUnmount(() => {
       </div>
       <div class="help-panel is-visible">
         <template v-if="activeMode === 'overview'">
-          <div class="control-row"><kbd>拖动</kbd><span>平移视野</span></div>
-          <div class="control-row"><kbd>滚轮</kbd><span>缩放校园</span></div>
-          <div class="control-row"><kbd>双击</kbd><span>聚焦场景</span></div>
+          <template v-if="viewMode === '2.5d'">
+            <div class="control-row"><kbd>鼠标左键 / 右键拖动</kbd><span>平移地图，不会旋转</span></div>
+            <div class="control-row"><kbd>滚轮</kbd><span>放大 / 缩小校园</span></div>
+            <div v-if="isMobile" class="control-row"><kbd>单指拖动</kbd><span>平移地图</span></div>
+            <div v-if="isMobile" class="control-row"><kbd>双指操作</kbd><span>缩放 / 平移地图</span></div>
+          </template>
+          <template v-else>
+            <div class="control-row"><kbd>鼠标左键拖动</kbd><span>旋转观察角度</span></div>
+            <div class="control-row"><kbd>鼠标右键 / 中键拖动</kbd><span>平移观察位置</span></div>
+            <div class="control-row"><kbd>滚轮</kbd><span>拉近 / 拉远视野</span></div>
+            <div v-if="isMobile" class="control-row"><kbd>单指拖动</kbd><span>旋转观察角度</span></div>
+            <div v-if="isMobile" class="control-row"><kbd>双指操作</kbd><span>缩放 / 平移视野</span></div>
+          </template>
+          <div class="control-row"><kbd>重置视角</kbd><span>恢复校园初始构图</span></div>
         </template>
         <template v-else-if="activeMode === 'thirdPerson'">
           <div class="control-row"><kbd>W A S D</kbd><span>控制角色移动</span></div>

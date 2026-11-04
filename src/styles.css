@@ -52,6 +52,9 @@ button { font: inherit; }
   .app-shell.is-rpg-sample .mode-switcher {
     bottom: max(10px, env(safe-area-inset-bottom));
   }
+  .app-shell.is-rpg-sample .view-mode-switcher {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
 }
 
 .scene-viewport canvas { display: block; width: 100%; height: 100%; outline: none; }
@@ -79,6 +82,8 @@ button { font: inherit; }
 .intro-rule span { display: block; width: 45px; height: 1px; background: #d7bd82; }
 .intro-foot { color: rgba(239,236,222,.42); font: 9px 'DM Mono', monospace; letter-spacing: 1.8px; }
 .mode-switcher { position: absolute; z-index: 4; left: 50%; bottom: 38px; transform: translateX(-50%); display: flex; gap: 5px; padding: 5px; border: 1px solid rgba(232,225,204,.18); background: rgba(14,25,29,.84); backdrop-filter: blur(18px); }
+.app-shell.is-rpg-sample .view-mode-switcher { bottom: 92px; }
+.app-shell.is-rpg-sample .camera-mode-switcher { bottom: 16px; }
 .mode-button { min-width: 112px; padding: 10px 16px; border: 1px solid transparent; color: rgba(242,239,226,.65); background: transparent; cursor: pointer; text-align: left; transition: .2s ease; }
 .mode-button:hover { color: #fff; background: rgba(255,255,255,.06); }
 .mode-button.active { border-color: rgba(215,189,130,.55); color: #e4cc98; background: rgba(215,189,130,.1); }

@@ -2,11 +2,11 @@
 
 - **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`src/three/world/campus/createCampusScene.js`、`src/App.vue`。
 - **实际完成**：
-  - 将原场景内 54 棵树、24 组花卉、8 张长椅、12 盏路灯（共 98 个对象）迁移为 Point Feature。
+  - 将原场景内树木、花卉、长椅、路灯共 96 个对象迁移为 Point Feature。
   - 每个对象拥有稳定 ID、类型、坐标、来源、置信度和未核验状态。
   - 首页把基础装饰 Feature 与编辑器 FeatureCollection 合并，同 ID 编辑对象覆盖基础对象。
   - 主场景从统一对象图层生成树木、花卉、座椅和路灯，删除了渲染脚本内对应的独立坐标数组。
-  - 增加 98 个对象的 FeatureCollection 数据回归测试，并修正基础 Feature 数量断言。
+  - 增加 96 个对象的 FeatureCollection 数据回归测试，并修正基础 Feature 数量断言；首次 CI 暴露数量断言误差，已按实际 Feature 数修正。
 - **数据质量说明**：坐标从旧场景装饰数组迁移，属于历史视觉占位坐标，全部标记未核验；不能作为真实校园设施测绘成果。
 - **已知限制**：基础对象删除的 tombstone/同步语义尚未定义；其他 POI 和环境细节仍有独立数据源；尚未完成真实浏览器验收。
 - **下一步**：补齐对象编辑删除同步语义和场景交互回归，再统一编辑器预览与首页渲染适配器。

@@ -205,6 +205,32 @@ function openRing(ring) {
   return ring.slice(0, ring.length - (first[0] === last[0] && first[1] === last[1] ? 1 : 0))
 }
 
+
+/**
+ * 合并首页校园场景的基础结构/装饰数据与编辑器数据。
+ * boundary/gate/object 由基础数据提供默认值；编辑器同 ID Feature 覆盖基础值；
+ * deletedFeatureIds 对基础对象执行删除屏蔽，避免下次启动重新出现。
+ */
+export function mergeCampusSceneFeatureCollections(baseCollection = buildCampusGeoJSON(), editorCollection = {}) {
+  const structuralTypes = new Set(['boundary', 'gate', 'object'])
+  const featureById = new Map(
+    (baseCollection?.features || [])
+      .filter(feature => structuralTypes.has(feature?.properties?.featureType))
+      .map(feature => [String(feature.id), feature]),
+  )
+  for (const feature of editorCollection?.features || []) {
+    if (feature?.id !== undefined && feature?.id !== null) featureById.set(String(feature.id), feature)
+  }
+  const deletedFeatureIds = [...new Set((editorCollection?.deletedFeatureIds || []).map(String))]
+  const deleted = new Set(deletedFeatureIds)
+  return {
+    type: 'FeatureCollection',
+    features: [...featureById.values()].filter(feature => !deleted.has(String(feature.id))),
+    deletedFeatureIds,
+  }
+}
+
+
 /**
  * 返回供 Canvas 2D 与 Three.js 消费的统一空间图层视图。
  * 几何只从 FeatureCollection 派生，不在渲染端重复维护。

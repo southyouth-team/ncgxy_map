@@ -52,4 +52,19 @@ describe('toCampusFeatureCollection', () => {
     })
     expect(result.features).toEqual([])
   })
+  it('round-trips supported feature types through the legacy editor adapter', async () => {
+    const { fromCampusFeatureCollection } = await import('./campusFeatureCollection.js')
+    const source = {
+      buildings: [{ id: 'b', label: '教学楼', footprint: [[0, 0], [10, 0], [10, 8]], floors: 4 }],
+      roads: [{ id: 'r', points: [[0, 0], [10, 10]], width: 6 }],
+      areas: [{ id: 'a', name: '草坪', type: 'vegetation', footprint: [[0, 0], [5, 0], [5, 5]] }],
+      objects: [{ id: 't', type: 'tree', name: '树木', geometry: { type: 'Point', coordinates: [3, 4] }, properties: { scale: 1.5 } }],
+    }
+    const restored = fromCampusFeatureCollection(toCampusFeatureCollection(source))
+    expect(restored.buildings[0]).toMatchObject({ id: 'b', label: '教学楼', floors: 4 })
+    expect(restored.roads[0]).toMatchObject({ id: 'r', width: 6, points: [[0, 0], [10, 10]] })
+    expect(restored.areas[0]).toMatchObject({ id: 'a', name: '草坪', type: 'vegetation' })
+    expect(restored.objects[0]).toMatchObject({ id: 't', type: 'tree', properties: { scale: 1.5 } })
+  })
+
 })

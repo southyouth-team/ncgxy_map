@@ -46,6 +46,7 @@ async function loadEditorDocument() {
   if (!props.campusId || !props.mapId) return
   try {
     const saved = await apiRequest(`${mapApiPath()}/scene/plan`)
+    let referenceImagePreviewError = ''
     documentRevision.value = Number(saved.revision || 0)
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
@@ -73,7 +74,7 @@ async function loadEditorDocument() {
           try {
             await loadAssetPreview(document.referenceImage.assetId)
           } catch (error) {
-            persistenceMessage.value = `底图预览加载失败：${error.message}`
+            referenceImagePreviewError = `底图预览加载失败：${error.message}`
           }
         }
       }
@@ -81,9 +82,9 @@ async function loadEditorDocument() {
     if (!spatialFeatureCollection.value.features.length) spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value })
     documentLoaded.value = true
     lastSavedSnapshot = JSON.stringify(buildDocument())
-    if (!persistenceMessage.value.startsWith('底图预览加载失败：')) {
-      persistenceMessage.value = saved.document ? `已加载服务端版本 · ${documentRevision.value}` : '当前地图尚无服务端编辑文档，修改后将自动保存'
-    }
+    persistenceMessage.value = referenceImagePreviewError || (saved.document
+      ? `已加载服务端版本 · ${documentRevision.value}`
+      : '当前地图尚无服务端编辑文档，修改后将自动保存')
   } catch (error) {
     persistenceMessage.value = `读取已保存编辑文档失败：${error.message}`
   }

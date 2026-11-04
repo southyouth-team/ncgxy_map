@@ -92,6 +92,7 @@ const CATEGORY_CONTRACTS = Object.freeze([
     geometry: feature => feature.geometry.coordinates,
     layerGeometry: item => item.position,
     previewGeometry: item => item.geometry?.coordinates,
+    previewWalkable: item => item.properties?.walkable,
   },
 ])
 
@@ -145,7 +146,8 @@ export function validateCampusSceneRenderData(featureCollection, renderData = cr
       if (!sameJsonValue(contract.previewGeometry(projected), sourceGeometry)) {
         push('PREVIEW_GEOMETRY_MISMATCH', contract.name, id, '编辑器预览几何与源 Feature 不一致')
       }
-      if (layer.walkable !== projected.walkable) {
+      const previewWalkable = contract.previewWalkable ? contract.previewWalkable(projected) : projected.walkable
+      if (layer.walkable !== previewWalkable) {
         push('WALKABILITY_MISMATCH', contract.name, id, '归一化图层与编辑器预览的通行属性不一致')
       }
     }

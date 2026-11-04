@@ -303,6 +303,7 @@ describe('mergeCampusFeatureCollections', () => {
   it('lets saved features override baseline IDs and tombstones remove baseline features', () => {
     const base = {
       type: 'FeatureCollection',
+      metadata: { dataset: 'campus-baseline', catalogue: { pois: [{ id: 'library' }], siteAreas: [{ id: 'north' }] } },
       features: [
         { type: 'Feature', id: 'gate-east', geometry: { type: 'Point', coordinates: [1, 1] }, properties: { featureType: 'gate', name: '东门' } },
         { type: 'Feature', id: 'road-main', geometry: { type: 'LineString', coordinates: [[0, 0], [10, 0]] }, properties: { featureType: 'road', width: 8 } },
@@ -310,6 +311,7 @@ describe('mergeCampusFeatureCollections', () => {
     }
     const edited = {
       type: 'FeatureCollection',
+      metadata: { editorRevision: 3, catalogue: { editorNotes: [{ id: 'note-1' }] } },
       features: [
         { type: 'Feature', id: 'road-main', geometry: { type: 'LineString', coordinates: [[0, 1], [10, 1]] }, properties: { featureType: 'road', width: 12 } },
         { type: 'Feature', id: 'future-object', geometry: { type: 'Point', coordinates: [5, 5] }, properties: { featureType: 'future-facility', vendor: 'future-schema' } },
@@ -321,6 +323,15 @@ describe('mergeCampusFeatureCollections', () => {
     expect(merged.features[0].geometry.coordinates).toEqual([[0, 1], [10, 1]])
     expect(merged.features[1].properties.vendor).toBe('future-schema')
     expect(merged.deletedFeatureIds).toEqual(['gate-east'])
+    expect(merged.metadata).toMatchObject({
+      dataset: 'campus-baseline',
+      editorRevision: 3,
+      catalogue: {
+        pois: [{ id: 'library' }],
+        siteAreas: [{ id: 'north' }],
+        editorNotes: [{ id: 'note-1' }],
+      },
+    })
     expect(base.features).toHaveLength(2)
   })
 

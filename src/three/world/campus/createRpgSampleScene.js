@@ -1,4 +1,5 @@
 import { createPixelBuilding } from './campusAssetLibrary.js'
+import { createCampusPlayer } from './createCampusPlayer.js'
 
 // 宝可梦经典城镇探索风格的 2.5D 校园样板区。
 // 该场景是视觉与交互验证样板，不代表真实校园测绘数据。
@@ -296,69 +297,12 @@ export function createRpgSampleScene(THREE) {
       addBox('pixel-flower', x - 0.9 + i * 0.45, 0.31, 1.2 + (i % 2) * 0.45, 0.22, 0.18, 0.22, materials.flower)
     }
   }
-  // 角色采用 4 方向 × 2 帧像素图集，NearestFilter 保留硬朗像素边缘。
-  const canvas = document.createElement('canvas')
-  canvas.width = 32
-  canvas.height = 96
-  const ctx = canvas.getContext('2d')
-  const drawFrame = (ox, oy, direction, step) => {
-    const px = (x, y, w, h, color) => {
-      ctx.fillStyle = color
-      ctx.fillRect(ox + x, oy + y, w, h)
-    }
-    // 头发与脸部按朝向切换，侧面和背面不绘制正面五官。
-    px(5, 1, 6, 2, '#493d36')
-    px(4, 3, 8, 6, '#e8b987')
-    px(3, 4, 2, 4, '#493d36')
-    px(11, 4, 2, 4, '#493d36')
-    if (direction === 0) {
-      px(5, 5, 1, 1, '#302b2a')
-      px(10, 5, 1, 1, '#302b2a')
-    } else if (direction === 1) {
-      px(4, 5, 2, 2, '#302b2a')
-    } else if (direction === 2) {
-      px(10, 5, 2, 2, '#302b2a')
-    } else {
-      px(4, 2, 8, 2, '#493d36')
-    }
-    px(4, 9, 8, 7, '#3d6f9b')
-    px(3, 10, 2, 6, '#e8b987')
-    px(11, 10, 2, 6, '#e8b987')
-    // 两帧腿部交替，形成简洁的行走节奏。
-    const leftLegX = step ? 4 : 5
-    const rightLegX = step ? 9 : 10
-    px(leftLegX, 16, 3, step ? 6 : 5, '#39434c')
-    px(rightLegX, step ? 16 : 17, 3, step ? 5 : 6, '#39434c')
-    px(leftLegX - 1, 22, 4, 2, '#6d4938')
-    px(rightLegX, 22, 4, 2, '#6d4938')
-  }
-  for (let direction = 0; direction < 4; direction += 1) {
-    for (let frame = 0; frame < 2; frame += 1) {
-      drawFrame(frame * 16, direction * 24, direction, frame)
-    }
-  }
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.magFilter = THREE.NearestFilter
-  texture.minFilter = THREE.NearestFilter
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.repeat.set(0.5, 0.25)
-  texture.offset.set(0, 0.75)
-  const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false })
-  const sprite = new THREE.Sprite(spriteMaterial)
-  sprite.name = 'PixelExplorerSprite'
-  sprite.position.set(0, 1.262, 14)
-  sprite.scale.set(1.65, 2.5, 1)
-  root.add(sprite)
-  root.userData.playerSpawn = { x: 0, z: 14 }
-  root.userData.walkableBounds = { minX: -25, maxX: 25, minZ: -19, maxZ: 19 }
-  root.userData.sampleBounds = { width: 62, depth: 54 }
+  // 与正式校园共用同一套有体积的角色模型和关节动画。
+  const character = createCampusPlayer(THREE)
+  character.position.set(0, 0, 14)
+  root.add(character)
   root.userData.updatePlayerAnimation = (moving, time, dx = 0, dz = 0) => {
-    sprite.position.y = moving ? 1.292 + Math.abs(Math.sin(time * 12)) * 0.05 : 1.262
-    let row = 0 // 默认朝向镜头
-    if (Math.abs(dx) > Math.abs(dz)) row = dx < 0 ? 1 : 2
-    else if (Math.abs(dz) > 0.0001) row = dz < 0 ? 3 : 0
-    const frame = moving ? Math.floor(time * 7) % 2 : 0
-    texture.offset.set(frame * 0.5, 1 - (row + 1) * 0.25)
+    character.userData.updateAnimation?.call(character, moving, time, dx, dz)
   }
   return root
 }

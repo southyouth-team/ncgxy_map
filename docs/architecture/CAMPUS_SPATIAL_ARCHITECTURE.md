@@ -473,3 +473,11 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 ## 57. 撤销/重做恢复必须重建建筑兼容边界
 
 规范 FeatureCollection 中建筑 Polygon 的外环是几何权威数据，不保存旧编辑器专用的 `rect`。历史快照恢复到 SVG 编辑器兼容数组时，`fromCampusFeatureCollection` 必须根据 Polygon 外环重新计算 `[minX, minY, maxX, maxY]`，并将其作为 `rect` 输出。CampusPlanEditor 的历史恢复入口继续对建筑执行 `normalizeBuilding`，以兼容旧版快照和历史文档。撤销/重做回归测试必须覆盖快照序列化、恢复后 footprint 与 rect 的一致性；不得把 rect 反向写入或替代规范 geometry。
+
+
+## 58. 编辑器历史导航文案与快捷键
+
+- 历史栈的用户操作命名统一为“上一步 / 下一步”，分别对应现有 undo/redo，不改变底层历史快照结构和 FeatureCollection 权威数据。
+- 上一步使用 Ctrl/Cmd + Z；下一步使用 Ctrl/Cmd + Shift + Z。键盘事件在 input、textarea、select 和 contenteditable 中不应被编辑器截获，避免干扰文本编辑。
+- 两处历史操作入口（顶部操作区、画布工具栏）必须使用一致文案和快捷键提示；无历史记录时上一步禁用，无可重做记录时下一步禁用。
+- 撤销后产生新编辑时，现有 snapshot 逻辑清空 redo/future 栈；历史恢复继续触发既有自动保存监听，不引入独立持久化路径。

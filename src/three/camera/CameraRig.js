@@ -89,7 +89,9 @@ export class CameraRig {
       this.desiredPosition.set(0, 145, 145)
       this.desiredTarget.set(0, 0, 0)
     } else {
-      const targetCamera = this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera
+      const targetCamera = mode === 'firstPerson' || this.viewMode === '3d'
+        ? this.perspectiveCamera
+        : this.overviewCamera
       if (previousCamera !== targetCamera) {
         targetCamera.position.copy(previousCamera.position)
         targetCamera.quaternion.copy(previousCamera.quaternion)
@@ -116,8 +118,16 @@ export class CameraRig {
         this.updateFirstPersonDesired()
       }
     }
-    this.currentPosition.copy(this.camera.position)
-    this.currentTarget.copy(this.camera.getWorldDirection(new this.THREE.Vector3()).add(this.camera.position))
+    if (mode === 'firstPerson') {
+      // 第一人称必须使用透视相机，并直接落到角色眼部位置，不能沿用 2.5D 正交总览镜头缓慢飞行。
+      this.camera.position.copy(this.desiredPosition)
+      this.currentPosition.copy(this.desiredPosition)
+      this.currentTarget.copy(this.desiredTarget)
+      this.camera.lookAt(this.desiredTarget)
+    } else {
+      this.currentPosition.copy(this.camera.position)
+      this.currentTarget.copy(this.camera.getWorldDirection(new this.THREE.Vector3()).add(this.camera.position))
+    }
   }
 
   setViewMode(viewMode) {
@@ -134,7 +144,10 @@ export class CameraRig {
     viewDirection.normalize()
 
     this.viewMode = viewMode
-    const targetCamera = viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera
+    // 第一人称始终保持透视投影；2.5D/3D 切换只影响总览与跟随模式。
+    const targetCamera = this.mode === 'firstPerson' || viewMode === '3d'
+      ? this.perspectiveCamera
+      : this.overviewCamera
 
     if (this.mode === 'overview') {
       // 正交与透视相机使用不同的缩放机制。按垂直视场高度换算距离，

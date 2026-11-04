@@ -1,3 +1,16 @@
+## 2026-11-04 — 空间数据：建立统一 GeoJSON FeatureCollection 交换层
+
+- **修改文件**：`src/editor/campusFeatureCollection.js`、`src/editor/campusFeatureCollection.test.js`、`src/editor/CampusPlanEditor.vue`、`src/three/engine/createCampusEngine.js`、`docs/architecture/CAMPUS_SPATIAL_ARCHITECTURE.md`。
+- **实际完成**：
+  - 新增 `toCampusFeatureCollection`，将建筑 Polygon、道路 LineString + width、区域 Polygon（含 holes）、树木/设施 Point 统一转换为 GeoJSON FeatureCollection。
+  - 每个 Feature 统一保留稳定 id、featureType、name、source、qualityStatus；道路宽度、建筑属性、设施朝向/缩放保留在 properties。
+  - 编辑器保存文档新增 schemaVersion 3 的 `featureCollection`；加载时优先读取 FeatureCollection，并通过兼容适配器恢复现有编辑交互集合。
+  - Three.js 编辑器预览优先从 FeatureCollection 还原渲染输入，确保预览读取与保存相同的几何内容。
+  - 新增几何闭合、内环保留、类型映射、异常记录过滤和往返转换测试。
+- **架构边界**：当前 FeatureCollection 是统一交换/保存契约；编辑器交互仍保留旧集合，文档暂时同时包含兼容字段。服务端 canonical-only 存储、探索首页所有渲染路径统一消费 FeatureCollection 尚未完成，不能宣称第三阶段完成。
+- **验证边界**：已增加 Vitest 单元测试；提交后的前端/后端 CI 待执行。尚未完成浏览器端编辑、保存、刷新和 2.5D/3D 同源数据验收。
+- **下一步**：CI 通过后，继续让首页校园探索加载统一 FeatureCollection，逐步移除旧数组作为第二数据源；随后建立 2.5D/3D 共用渲染适配器。
+
 ## 2026-11-04 — 编辑器：增加连续线/面几何绘制
 
 - **修改文件**：`src/editor/CampusPlanEditor.vue`。

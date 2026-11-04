@@ -381,7 +381,8 @@ async function closeEditor() {
   url.pathname = '/'
   url.searchParams.delete('view')
   url.searchParams.delete('buildingId')
-  window.history.pushState({}, '', url)
+  // 关闭编辑器应替换当前历史记录，避免点击“返回校园探索”后再按浏览器后退重新进入编辑器。
+  window.history.replaceState({}, '', url)
   activeMode.value = 'overview'
   viewMode.value = '2.5d'
   engine?.setViewMode('2.5d')
@@ -442,11 +443,37 @@ function getShowcasePlanDocument() {
   }
 }
 
+async function handleBrowserNavigation() {
+  const route = window.location.pathname.replace(/\\/+$/, '') || '/'
+  const queryView = new URLSearchParams(window.location.search).get('view')
+  const nextIsEditor = route === '/editor' || queryView === 'editor'
+  if (nextIsEditor === showEditor.value) return
+
+  if (nextIsEditor) {
+    showEditor.value = true
+    editorViewMode.value = '2d'
+    engine?.exitIndoorPrototype()
+    engine?.clearRpgPreview()
+    return
+  }
+
+  if (showEditor.value) await loadHomepagePlanDocument()
+  engine?.exitIndoorPrototype()
+  engine?.clearRpgPreview()
+  showEditor.value = false
+  editorViewMode.value = '2d'
+  activeMode.value = 'overview'
+  viewMode.value = '2.5d'
+  engine?.setViewMode('2.5d')
+  engine?.setMode('overview')
+}
+
 onMounted(async () => {
   updateViewportState()
   window.addEventListener('resize', updateViewportState)
   window.addEventListener('orientationchange', updateViewportState)
   window.addEventListener('keydown', onExplorerHotkey)
+  window.addEventListener('popstate', handleBrowserNavigation)
   try {
     // 校园探索与编辑器预览共用同一套校园空间数据；首页默认直接启动 2.5D 主场景。
     if (!requestedBuildingId) await loadHomepagePlanDocument()
@@ -499,6 +526,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewportState)
   window.removeEventListener('orientationchange', updateViewportState)
   window.removeEventListener('keydown', onExplorerHotkey)
+  window.removeEventListener('popstate', handleBrowserNavigation)
   engine?.dispose()
 })
 </script>

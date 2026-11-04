@@ -765,7 +765,16 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleEditorKeydown)
   window.removeEventListener('keydown', onWindowKeyDown)
   canvasResizeObserver?.disconnect()
-  if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
+  // 路由切换/关闭编辑器时，若 debounce 尚未触发且当前没有保存请求，
+  // 立即启动最后一次保存，避免清理定时器时丢弃已编辑内容。
+  if (autoSaveTimer) {
+    window.clearTimeout(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  if (documentLoaded.value && !persistenceBusy.value && !revisionConflict.value &&
+      JSON.stringify(buildDocument()) !== lastSavedSnapshot) {
+    void saveEditorDocument()
+  }
   if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
   window.removeEventListener('keyup', onWindowKeyUp)
 })

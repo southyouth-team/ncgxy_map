@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
@@ -227,7 +227,7 @@ function alignSelection(mode) {
     const dy = mode === 'top' ? top - b.top : mode === 'bottom' ? bottom - b.bottom : mode === 'centerY' ? centerY - (b.top + b.bottom) / 2 : 0
     const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
     const canonical = spatialFeatureCollection.value.features.find(feature => String(feature.id) === String(entry.id))
-    if (canonical) commitFeatureGeometryValue(entry.id, translateGeometry(canonical.geometry, dx, dy))
+    if (canonical) commitFeatureGeometryValue(entry.id, translateCampusFeatureGeometry(canonical.geometry, dx, dy))
   })
 }
 function distributeSelection(axis) {
@@ -251,7 +251,7 @@ function distributeSelection(axis) {
     const dy = axis === 'vertical' ? delta : 0
     const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
     const canonical = spatialFeatureCollection.value.features.find(feature => String(feature.id) === String(entry.id))
-    if (canonical) commitFeatureGeometryValue(entry.id, translateGeometry(canonical.geometry, dx, dy))
+    if (canonical) commitFeatureGeometryValue(entry.id, translateCampusFeatureGeometry(canonical.geometry, dx, dy))
     cursor += entry.bounds[sizeKey] + gap
   })
 }
@@ -863,7 +863,7 @@ function movePointer(event) {
   if (currentDrag.type === 'multi') {
     const updates = currentDrag.items.map(entry => {
       const dx = p.x - currentDrag.start.x, dy = p.y - currentDrag.start.y
-      return { id: entry.id, geometry: translateGeometry(entry.geometry, dx, dy) }
+      return { id: entry.id, geometry: translateCampusFeatureGeometry(entry.geometry, dx, dy) }
     }).filter(entry => entry.geometry)
     commitFeatureCollectionMutation(collection => updates.reduce(
       (next, entry) => updateCampusFeatureGeometry(next, entry.id, entry.geometry),
@@ -882,16 +882,16 @@ function movePointer(event) {
     }
   } else if (currentDrag.type === 'building') {
     const item = buildings.value.find(entry => entry.id === currentDrag.id)
-    if (item) commitFeatureGeometryValue(item.id, translateGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
+    if (item) commitFeatureGeometryValue(item.id, translateCampusFeatureGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
   } else if (currentDrag.type === 'object') {
     const item = objects.value.find(entry => entry.id === currentDrag.id)
     if (item) commitFeatureGeometry(item.id, { objects: [{ id: item.id, geometry: { type: 'Point', coordinates: [currentDrag.position[0] + p.x - currentDrag.start.x, currentDrag.position[1] + p.y - currentDrag.start.y] } }] })
   } else if (currentDrag.type === 'area') {
     const item = areas.value.find(entry => entry.id === currentDrag.id)
-    if (item) commitFeatureGeometryValue(item.id, translateGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
+    if (item) commitFeatureGeometryValue(item.id, translateCampusFeatureGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
   } else if (currentDrag.type === 'road') {
     const item = roads.value.find(entry => entry.id === currentDrag.id)
-    if (item) commitFeatureGeometryValue(item.id, translateGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
+    if (item) commitFeatureGeometryValue(item.id, translateCampusFeatureGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
   } else if (currentDrag.type === 'node') {
     const item = roads.value.find(entry => entry.id === currentDrag.id)
     if (item) {
@@ -1038,17 +1038,6 @@ function commitFeatureUpsert(fragment) {
     (next, feature) => upsertCampusFeature(next, feature),
     collection,
   ))
-}
-function translateGeometry(geometry, dx, dy) {
-  if (!geometry) return geometry
-  const translatePoint = ([x, y, ...rest]) => [x + dx, y + dy, ...rest]
-  const mapCoordinates = (coordinates, depth) => depth === 1
-    ? coordinates.map(translatePoint)
-    : coordinates.map(child => mapCoordinates(child, depth - 1))
-  const depth = geometry.type === 'Point' ? 0 : geometry.type === 'LineString' ? 1 : geometry.type === 'Polygon' ? 2 : geometry.type === 'MultiPolygon' ? 3 : -1
-  if (geometry.type === 'Point') return { ...geometry, coordinates: translatePoint(geometry.coordinates) }
-  if (depth < 0) throw new Error(`不支持平移几何类型：${geometry.type}`)
-  return { ...geometry, coordinates: mapCoordinates(geometry.coordinates, depth) }
 }
 function commitFeatureGeometryValue(featureId, geometry) {
   commitFeatureCollectionMutation(collection => updateCampusFeatureGeometry(collection, featureId, geometry))

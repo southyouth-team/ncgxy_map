@@ -467,7 +467,7 @@ onBeforeUnmount(resetPreview)
       <div v-else class="asset-table">
         <button v-for="asset in assets" :key="asset.assetId" :class="['asset-row', { active: activeAssetId === asset.assetId }]" @click="selectAsset(asset)">
           <span><strong>{{ asset.name }}</strong><small>{{ asset.featureId }} · {{ asset.viewMode }} · {{ asset.fileName }}</small></span>
-          <em :class="'status-' + asset.status">{{ asset.status === 'draft' ? '草稿' : asset.status === 'review' ? '待审核' : asset.status === 'ready' ? '已就绪' : '已归档' }}</em>
+          <em :class="'status-' + asset.status">{{ asset.status === 'draft' ? '草稿' : asset.status === 'review' ? '待审核' : asset.status === 'ready' ? '已入库' : asset.status === 'rejected' ? '已驳回' : '已归档' }}</em>
         </button>
       </div>
       <div v-if="selectedAsset" class="review-panel">
@@ -482,7 +482,8 @@ onBeforeUnmount(resetPreview)
           <div class="button-row">
             <button class="primary-button" :disabled="selectedAsset.status === 'ready' || saving" @click="approveAsset(selectedAsset)">{{ saving ? '入库中…' : selectedAsset.status === 'ready' ? '已正式入库' : '审核通过并自动入库' }}</button>
             <button class="secondary-button" @click="downloadAsset(selectedAsset)">下载原始文件</button>
-            <button class="secondary-button" :disabled="selectedAsset.status === 'ready'" @click="updateAsset({ status: 'review', deployedConfirmed: false })">设为待审核</button>
+            <button class="secondary-button" :disabled="selectedAsset.status === 'ready'" @click="updateAsset({ status: 'review', deployedConfirmed: false })">重新提交审核</button>
+            <button class="danger-button" :disabled="selectedAsset.status === 'ready'" @click="updateAsset({ status: 'rejected', deployedConfirmed: false })">驳回候选</button>
             <button class="danger-button" :disabled="selectedAsset.status === 'ready'" @click="removeAsset(selectedAsset)">删除候选</button>
           </div>
           <small class="hint">审核前请检查：风格一致、边缘干净、比例合理、无文字水印、文件格式正确；3D 模型还需检查朝向、原点、地面高度和网格结构。</small>

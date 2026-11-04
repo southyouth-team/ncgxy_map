@@ -53,6 +53,12 @@ describe('campus visual asset manifest', () => {
     expect(report.errors.map(error => error.code)).toContain('ASSET_BINDING_FEATURE_UNKNOWN')
   })
 
+  it('accepts server-persisted visual asset content URLs', () => {
+    const serverAsset = structuredClone(manifest)
+    serverAsset.assets[0].files[0].url = '/api/v1/assets/visual-assets/123e4567-e89b-12d3-a456-426614174000/content'
+    expect(validateCampusAssetManifest(serverAsset, ['building-001']).valid).toBe(true)
+  })
+
   it('does not resolve draft or review assets', () => {
     const pending = structuredClone(manifest)
     pending.assets[0].status = 'review'

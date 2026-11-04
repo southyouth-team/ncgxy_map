@@ -450,3 +450,8 @@ FeatureCollection 的集合级 metadata 与 features、deletedFeatureIds 同属�
 ## 53. Vue 父子生命周期下的编辑器 ID 延迟注入
 
 CampusPlanEditor 可能在父组件 App 的异步初始化完成前先执行自身 onMounted。若首次挂载时 campusId/mapId 尚未传入，loadEditorDocument 会提前退出。组件必须监听两个标识的 props 变化，并在它们均可用且文档尚未加载时重新触发加载；不能假设父组件 onMounted 一定早于子组件。若初始 props 已具备两个标识，则由组件原有挂载流程加载，避免重复请求。
+
+
+## 54. 平面编辑文档请求体大小限制
+
+Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 FeatureCollection 的平面编辑文档。Nest 启动时关闭默认 body parser，并显式注册 16 MiB JSON parser；URL-encoded parser 单独保留 1 MiB 上限。16 MiB 请求上限与 ScenesService 当前 15 MiB 文档序列化大小校验对齐。该调整只解决 HTTP 请求体解析层限制，不放宽业务 schema、几何校验、权限或 revision 乐观锁。验收必须确认 PUT 成功、revision 递增，并通过 GET 回读验证完整文档。

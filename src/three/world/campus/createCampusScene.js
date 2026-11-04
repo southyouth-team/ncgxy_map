@@ -36,7 +36,7 @@ export function createCampusScene(THREE, featureCollection = null) {
     root.add(mesh)
     return mesh
   }
-  function addPolygon(name, polygon, material, y = 0.08, holes = []) {
+  function addPolygon(name, polygon, material, y = 0.08, holes = [], featureId = null) {
     if (!Array.isArray(polygon) || polygon.length < 3) return null
     const points = polygon.map(([px, py]) => {
       const point = mapPixelToWorld(px, py)
@@ -57,6 +57,7 @@ export function createCampusScene(THREE, featureCollection = null) {
     mesh.name = name
     mesh.position.y = y
     mesh.receiveShadow = true
+    if (featureId !== null) { mesh.userData.featureId = featureId; mesh.userData.featureCategory = 'areas' }
     root.add(mesh)
     return mesh
   }
@@ -86,17 +87,17 @@ export function createCampusScene(THREE, featureCollection = null) {
 
   for (const area of CAMPUS_AREAS) {
     if (area.type === 'water' && area.polygon?.length) {
-      addPolygon('campus-' + area.id + '-bed', area.polygon, mats.waterEdge, 0.065, area.holes)
-      addPolygon('campus-' + area.id + '-water', area.polygon, mats.water, 0.13, area.holes)
+      addPolygon('campus-' + area.id + '-bed', area.polygon, mats.waterEdge, 0.065, area.holes, area.id)
+      addPolygon('campus-' + area.id + '-water', area.polygon, mats.water, 0.13, area.holes, area.id)
       continue
     }
     if (!area.rect && area.polygon?.length >= 3) {
-      addPolygon('area-' + area.id, area.polygon, area.type === 'sports' ? mats.sports : mats.grassPlain, 0.025, area.holes)
+      addPolygon('area-' + area.id, area.polygon, area.type === 'sports' ? mats.sports : mats.grassPlain, 0.025, area.holes, area.id)
       continue
     }
     if (!area.rect) continue
     if (area.type === 'sports') {
-      if (area.polygon?.length >= 3) addPolygon('area-' + area.id + '-earth', area.polygon, mats.sports, 0.035, area.holes)
+      if (area.polygon?.length >= 3) addPolygon('area-' + area.id + '-earth', area.polygon, mats.sports, 0.035, area.holes, area.id)
       else addGroundPatch('area-' + area.id + '-earth', area.rect, mats.sports, 0.035)
       const bounds = mapRectToWorld(area.rect)
       const inset = new THREE.Mesh(new THREE.BoxGeometry(bounds.width - 0.9, 0.035, bounds.depth - 0.9), mats.pathEdge)
@@ -141,6 +142,8 @@ export function createCampusScene(THREE, featureCollection = null) {
         material,
       )
       slab.name = 'pixel-road-' + suffix + '-' + roadId + '-' + index
+      slab.userData.featureId = roadId
+      slab.userData.featureCategory = 'roads'
       slab.position.set((from.x + to.x) / 2, y, (from.z + to.z) / 2)
       slab.rotation.y = Math.atan2(-dz, dx)
       slab.receiveShadow = true
@@ -280,6 +283,8 @@ export function createCampusScene(THREE, featureCollection = null) {
     root.add(foundation)
     group.position.set(bounds.x, 0.16, bounds.z)
     group.userData.buildingId = item.id
+    group.userData.featureId = item.id
+    group.userData.featureCategory = 'buildings'
     group.userData.walkable = item.walkable === true
     group.userData.objectType = 'building'
     group.userData.displayName = item.label
@@ -345,6 +350,7 @@ export function createCampusScene(THREE, featureCollection = null) {
     if (object) {
       object.name = 'campus-feature-' + item.id
       object.userData.featureId = item.id
+      object.userData.featureCategory = 'objects'
       object.userData.displayName = item.name || item.type
       object.userData.objectType = item.type
       object.userData.walkable = item.walkable === true

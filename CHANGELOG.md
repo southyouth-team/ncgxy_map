@@ -1,3 +1,10 @@
+## 2026-11-05 — 补齐父子组件异步初始化时序
+
+- 进一步核查 Vue 生命周期，发现 CampusPlanEditor 的 onMounted 早于 App 父组件的 onMounted；首次调用 loadEditorDocument 时 campusId/mapId 仍为空。
+- 即使父组件随后写入 sceneDocument 标识，编辑器原先也没有监听 props 变化，因此不会重新加载文档，documentLoaded 仍保持 false。
+- CampusPlanEditor 现在监听 campusId/mapId：首次挂载时若 ID 未就绪，待两个标识注入后自动加载；若初始 props 已完整，则仍由原 onMounted 流程加载，避免重复请求。
+- 与首页注入 ID 的修复共同解决编辑器初始化链路；仍需通过 CI 和真实浏览器持久化验收。
+
 ## 2026-11-05 — 修复编辑器缺少校园/地图 ID 导致保存入口不可用
 
 - 浏览器验收发现，新建建筑后状态始终停留在“等待修改”，立即保存按钮不可用。

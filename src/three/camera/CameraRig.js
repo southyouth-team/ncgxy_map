@@ -61,8 +61,14 @@ export class CameraRig {
     this.orbit.maxDistance = 190
     this.orbit.target.set(0, 0, 0)
     this.orbit.enabled = this.mode === 'overview'
+    // 2.5D 总览是固定方位的地图浏览，只允许平移/缩放；3D 总览保留旋转观察。
+    this.orbit.enableRotate = this.viewMode === '3d'
     this.orbit.mouseButtons.LEFT = this.THREE.MOUSE.PAN
-    this.orbit.mouseButtons.RIGHT = this.THREE.MOUSE.ROTATE
+    this.orbit.mouseButtons.RIGHT = this.viewMode === '3d' ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
+    if (this.orbit.touches) {
+      this.orbit.touches.ONE = this.viewMode === '3d' ? this.THREE.TOUCH.ROTATE : this.THREE.TOUCH.PAN
+      this.orbit.touches.TWO = this.THREE.TOUCH.DOLLY_PAN
+    }
   }
 
   activateCamera(camera) {
@@ -79,6 +85,8 @@ export class CameraRig {
 
   setMode(mode) {
     if (!['overview', 'thirdPerson', 'firstPerson'].includes(mode) || mode === this.mode) return
+    // 第一人称仅属于 3D；2.5D 的角色跟随始终保持固定斜俯视。 
+    if (mode === 'firstPerson' && this.viewMode !== '3d') return
     const previousCamera = this.camera
     const previousMode = this.mode
     this.mode = mode
@@ -235,11 +243,10 @@ export class CameraRig {
   }
 
   rotateThird(dx, dy) {
-    const is2dFollow = this.viewMode === '2.5d'
-    if (!is2dFollow) this.thirdYaw -= dx * 0.004
-    const minPitch = is2dFollow ? 0.98 : -0.05
-    const maxPitch = is2dFollow ? 1.18 : 0.85
-    this.thirdPitch = Math.max(minPitch, Math.min(maxPitch, this.thirdPitch + dy * 0.003))
+    // 2.5D 跟随严格锁定地图方位与俯角；仅 3D 跟随允许自由调整观察角度。
+    if (this.viewMode === '2.5d') return
+    this.thirdYaw -= dx * 0.004
+    this.thirdPitch = Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
 

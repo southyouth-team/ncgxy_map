@@ -215,15 +215,14 @@ function openRing(ring) {
 
 
 /**
- * 合并首页校园场景的基础结构/装饰数据与编辑器数据。
- * boundary/gate/object 由基础数据提供默认值；编辑器同 ID Feature 覆盖基础值；
- * deletedFeatureIds 对基础对象执行删除屏蔽，避免下次启动重新出现。
+ * 合并完整基础校园数据与编辑器数据。
+ * 所有基础 Feature 都进入底集；编辑器按稳定 ID 覆盖或新增；
+ * deletedFeatureIds 最后统一过滤，确保删除不会因基础数据重新合并而复活。
  */
 export function mergeCampusSceneFeatureCollections(baseCollection = buildCampusGeoJSON(), editorCollection = {}) {
-  const structuralTypes = new Set(['boundary', 'gate', 'object'])
   const featureById = new Map(
     (baseCollection?.features || [])
-      .filter(feature => structuralTypes.has(feature?.properties?.featureType))
+      .filter(feature => feature?.id !== undefined && feature?.id !== null)
       .map(feature => [String(feature.id), feature]),
   )
   for (const feature of editorCollection?.features || []) {

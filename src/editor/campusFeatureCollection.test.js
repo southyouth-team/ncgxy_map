@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, upsertCampusFeature, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, mergeCampusFeatureCollections, removeCampusFeatures } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, upsertCampusFeature, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, duplicateCampusFeature, mergeCampusFeatureCollections, removeCampusFeatures } from './campusFeatureCollection.js'
 
 describe('translateCampusFeatureGeometry', () => {
   it('translates every Polygon ring and preserves geometry metadata', () => {
@@ -330,3 +330,23 @@ describe('restoreCampusFeatureSnapshot', () => {
   })
 })
 
+
+describe('duplicateCampusFeature', () => {
+  it('creates a new ID while preserving feature properties, provenance and polygon rings', () => {
+    const source = {
+      type: 'Feature',
+      id: 'lake-1',
+      geometry: { type: 'Polygon', coordinates: [
+        [[0, 0], [10, 0], [10, 10], [0, 0]],
+        [[2, 2], [3, 2], [2, 2]],
+      ] },
+      properties: { featureType: 'water', source: 'survey', confidence: 'high', verificationStatus: 'verified', custom: { keep: true } },
+    }
+    const duplicate = duplicateCampusFeature(source, 'lake-2', 4, 5)
+    expect(duplicate.id).toBe('lake-2')
+    expect(duplicate.properties).toEqual(source.properties)
+    expect(duplicate.geometry.coordinates[1]).toEqual([[6, 7], [7, 7], [6, 7]])
+    expect(source.geometry.coordinates[0][0]).toEqual([0, 0])
+    expect(() => duplicateCampusFeature(source, '', 1, 1)).toThrow('复制 Feature 参数无效')
+  })
+})

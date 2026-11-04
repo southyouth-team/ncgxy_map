@@ -778,3 +778,18 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - `public/data/buildings.json` 当前没有 ready GLB 条目；真实建筑模型文件、测绘位置和朝向仍待补齐。程序化建筑继续作为当前视觉 fallback。
 - 详细盘点、统计口径、来源链接和补齐顺序见 `docs/asset-source-audit-2026-11-05.md`。
 
+
+
+## 28. AI 优先的校园视觉资产统一管理（2026-11-05）
+
+视觉资产与空间数据分层管理。规范 FeatureCollection 仍是位置、建筑 footprint、道路连接、碰撞和 `walkable` 的唯一权威来源；视觉资产清单不得复制或覆盖这些字段。
+
+- `public/data/campus-assets.json` 使用 schemaVersion 1，登记资产元数据、来源类型、审核状态、文件变体和 Feature 绑定。
+- 资产来源统一支持 `ai_generated`、`manual_model`、`procedural`、`external`；审核状态为 `draft`、`review`、`ready`、`archived`。未达到 ready 的资产不参与解析。
+- 一个 `assetId` 可登记 `2.5d`、`3d` 和显式 `shared` 文件变体。2.5D 主素材可使用图片/精灵图；3D 主素材可使用 GLB。解析优先使用当前视角 primary，只有显式 shared primary 才能 fallback，不允许跨视角隐式替代。
+- `bindings` 通过稳定空间 `featureId` 关联 `assetId`。替换资产只改变视觉引用，不改变 Feature geometry、position、footprint、碰撞或通行属性。
+- `src/data/campus/campusAssetManifest.js` 提供纯函数校验与视角解析；`campusAssetManifest.test.js` 覆盖有效/无效清单、视角变体、shared fallback、路径穿越、重复 ID、未知 Feature 和未审核资产。
+- 资产文件必须放入受控公共目录（`/assets/campus/` 或既有 `/models/buildings/`），禁止路径穿越；AI 临时生成 URL 不作为长期资产路径。
+- 当前清单为空，现有程序化资产与 `public/data/buildings.json` 的 GLB 加载流程保持不变。本阶段未接入 AI 生成服务、上传存储、素材工坊 UI、编辑器素材选择器或实际视觉替换。
+
+后续接入顺序：资产上传/落盘与来源记录 → AI 生成任务和审核 → 编辑器素材库 → 2.5D/3D 视角资源绑定与运行时替换。每一步均不得改变空间 Feature 的碰撞和位置语义。

@@ -128,3 +128,13 @@
 - FeatureCollection 正向/反向适配器均保留删除标记。
 
 该字段是迁移期的删除同步机制，不是 GeoJSON 标准字段。未来服务端空间数据模型应将对象版本、删除状态和编辑权限纳入正式持久化契约，并定义删除冲突处理、恢复对象和审计记录。
+
+## 12. 首页场景 Feature 合并契约
+
+首页场景初始化通过 `mergeCampusSceneFeatureCollections(base, editor)` 统一合并：
+- 基础数据仅提供校园边界、出入口和基础环境对象（`boundary/gate/object`）默认 Feature。
+- 编辑器 Feature 以稳定 ID 覆盖同 ID 基础 Feature，并可增加新对象。
+- `deletedFeatureIds` 在合并末端统一过滤，删除优先级高于基础数据与编辑器 Feature。
+- 合并函数为纯数据函数，可在单元测试中验证，不将合并规则散落在 Vue 生命周期内。
+
+当前建筑、道路和区域仍由编辑器 FeatureCollection 提供覆盖/新增；基础校园台账中尚未具备可定位几何的 POI 与场地记录继续保持待定位状态，不伪造 Point/Polygon。后续应在统一数据契约中为未定位记录定义独立的非空间状态，而不是将空坐标塞入 GeoJSON Feature。

@@ -125,20 +125,51 @@ export class CameraRig {
     const previousCamera = this.camera
     const previousPosition = previousCamera.position.clone()
     const previousQuaternion = previousCamera.quaternion.clone()
-    const previousTarget = this.currentTarget.clone()
+    // 总览模式以 OrbitControls 的实时目标为准；currentTarget 在用户拖拽后不一定同步。
+    const previousTarget = this.mode === 'overview'
+      ? this.orbit.target.clone()
+      : this.currentTarget.clone()
+    const viewDirection = previousPosition.clone().sub(previousTarget)
+    const previousDistance = Math.max(viewDirection.length(), 0.001)
+    viewDirection.normalize()
+
     this.viewMode = viewMode
     const targetCamera = viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera
-    targetCamera.position.copy(previousPosition)
-    targetCamera.quaternion.copy(previousQuaternion)
+
+    if (this.mode === 'overview') {
+      // 正交与透视相机使用不同的缩放机制。按垂直视场高度换算距离，
+      // 避免切换 2.5D/3D 时校园突然放大、缩小或偏离用户当前观察目标。
+      let visibleHeight
+      if (previousCamera.isOrthographicCamera) {
+        visibleHeight = (previousCamera.top - previousCamera.bottom) / previousCamera.zoom
+        const perspectiveDistance = visibleHeight / (2 * Math.tan(this.THREE.MathUtils.degToRad(targetCamera.fov) / 2))
+        targetCamera.position.copy(previousTarget).addScaledVector(viewDirection, perspectiveDistance)
+      } else {
+        visibleHeight = 2 * previousDistance * Math.tan(this.THREE.MathUtils.degToRad(previousCamera.fov) / 2)
+        this.overviewSpan = visibleHeight
+        const halfHeight = visibleHeight / 2
+        this.overviewCamera.left = -halfHeight * this.aspect
+        this.overviewCamera.right = halfHeight * this.aspect
+        this.overviewCamera.top = halfHeight
+        this.overviewCamera.bottom = -halfHeight
+        this.resetOverviewZoom()
+        targetCamera.position.copy(previousPosition)
+      }
+      targetCamera.lookAt(previousTarget)
+    } else {
+      // 跟随与第一人称的镜头位置由角色状态驱动，切换投影后再按各自模式重算目标位置。
+      targetCamera.position.copy(previousPosition)
+      targetCamera.quaternion.copy(previousQuaternion)
+    }
+
     this.activateCamera(targetCamera)
-    this.currentPosition.copy(previousPosition)
+    this.currentPosition.copy(targetCamera.position)
     this.currentTarget.copy(previousTarget)
-    this.desiredPosition.copy(previousPosition)
+    this.desiredPosition.copy(targetCamera.position)
     this.desiredTarget.copy(previousTarget)
     this.transitioningToOverview = false
 
     if (this.mode === 'overview') {
-      if (viewMode === '2.5d') this.resetOverviewZoom()
       this.orbit.target.copy(previousTarget)
       this.orbit.enabled = true
     } else {
@@ -146,7 +177,7 @@ export class CameraRig {
       if (this.mode === 'thirdPerson') this.updateThirdPersonDesired()
       else this.updateFirstPersonDesired()
     }
-    targetCamera.lookAt(this.currentTarget)
+    targetCamera.lookAt(this.mode === 'overview' ? previousTarget : this.desiredTarget)
   }
 
   updateThirdPersonDesired() {

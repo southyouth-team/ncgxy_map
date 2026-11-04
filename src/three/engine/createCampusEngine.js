@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
-import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels } from '../world/campus/campusSceneData.js'
+import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
@@ -366,6 +366,28 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         }
         loadedBuildingModels = result.models || []
         const modelAudit = validateCampusBuildingModels(loadedBuildingModels, canonicalBuildingIds)
+        const geometryRecords = loadedBuildingModels.map(model => {
+          model.updateWorldMatrix(true, true)
+          const bounds = new THREE.Box3().setFromObject(model)
+          const position = model.getWorldPosition(new THREE.Vector3())
+          return {
+            buildingId: String(model.userData.buildingId ?? model.name ?? ''),
+            bounds: bounds.isEmpty() ? null : {
+              minX: bounds.min.x, maxX: bounds.max.x,
+              minY: bounds.min.y, maxY: bounds.max.y,
+              minZ: bounds.min.z, maxZ: bounds.max.z,
+            },
+            transform: { x: position.x, y: position.y, z: position.z, rotationY: model.rotation.y },
+          }
+        })
+        const geometryAudit = auditCampusBuildingModelGeometry(
+          spatialLayers?.buildings || [],
+          geometryRecords,
+          mapPixelToWorld,
+        )
+        callbacks.onAssetGeometryAudit?.(geometryAudit)
+        if (geometryAudit.errorCount > 0) console.warn('[CampusAssetGeometryAudit] 建筑模型与 footprint 几何偏差', geometryAudit)
+        else if (renderDebugEnabled) console.info('[CampusAssetGeometryAudit] 建筑模型几何审计', geometryAudit.summary)
         const assetAudit = {
           ...modelAudit,
           loadErrorCount: (result.errors || []).length,

@@ -61,7 +61,7 @@ export function createCampusScene(THREE) {
 
   addBox('campus-ground-soil', 0, -0.9, 0, worldWidth + 4, 0.9, worldDepth + 4, mats.trunk)
   // 校园底板外扩展远景地面，避免低角度旋转时露出矩形底板边缘。
-  const horizonGround = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), mats.grassPlain)
+  const horizonGround = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), mats.grassPlain)
   horizonGround.name = 'campus-horizon-ground'
   horizonGround.rotation.x = -Math.PI / 2
   // 放在土壤底板顶面上方，保证斜视时底板外仍有连续地面填充。

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
-import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage } from '../world/campus/campusSceneData.js'
+import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
@@ -365,6 +365,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           return result
         }
         loadedBuildingModels = result.models || []
+        const modelAudit = validateCampusBuildingModels(loadedBuildingModels, canonicalBuildingIds)
+        const assetAudit = {
+          ...modelAudit,
+          loadErrorCount: (result.errors || []).length,
+          loadErrors: (result.errors || []).map(item => ({ buildingId: item.buildingId, message: item.error?.message || String(item.error) })),
+          manifestTotal: result.total || 0,
+          loadedCount: loadedBuildingModels.length,
+        }
+        callbacks.onAssetAudit?.(assetAudit)
+        if (assetAudit.errorCount > 0 || assetAudit.loadErrorCount > 0) console.warn('[CampusAssetAudit] 建筑 GLB 资产检查发现异常', assetAudit)
+        else if (renderDebugEnabled) console.info('[CampusAssetAudit] 建筑 GLB 资产检查通过', assetAudit)
         for (const model of loadedBuildingModels) {
           model.visible = shouldShowBuildingModels()
           model.userData.objectType = 'building'

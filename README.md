@@ -42,6 +42,12 @@ API 前缀为 `/api/v1`，Swagger 文档地址为 `/api/docs`（开发环境）�
 
 工程已包含程序化演示场景和三种相机交互模式。**当前演示场景不是南昌工学院真实测绘模型。** 道路、地面、树木和环境布局仍是演示占位内容，后续必须使用经校准的校园底图数据替换。
 
+## 项目目标与核心架构
+
+- [项目长期目标与产品基线](PROJECT_GOALS.md)
+- [校园空间建模与渲染架构](docs/architecture/CAMPUS_SPATIAL_ARCHITECTURE.md)
+- [开发变更记录](CHANGELOG.md)
+
 ## 多校园平台架构
 
 - [多校园平台架构与 API 边界](docs/multi-campus-architecture.md)

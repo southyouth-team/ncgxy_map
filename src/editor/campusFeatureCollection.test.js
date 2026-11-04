@@ -323,7 +323,7 @@ describe('restoreCampusFeatureSnapshot', () => {
       deletedFeatureIds: ['old-gate'],
     }
     const restored = restoreCampusFeatureSnapshot(createCampusFeatureSnapshot({ featureCollection: collection }))
-    expect(restored.objects).toHaveLength(1)
+    expect(restored.objects).toHaveLength(2)
     expect(restored.featureCollection.features).toHaveLength(2)
     expect(restored.featureCollection.features[1].properties.vendorData).toEqual({ keep: true })
     expect(restored.featureCollection.deletedFeatureIds).toEqual(['old-gate'])

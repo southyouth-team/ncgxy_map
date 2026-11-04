@@ -477,8 +477,6 @@ onBeforeUnmount(resetPreview)
         </div>
         <div class="review-fields">
           <label>资产名称<input :value="selectedAsset.name" @input="updateAsset({ name: $event.target.value })" /></label>
-          <label>正式文件路径<input :value="selectedAsset.publicPath" @input="updateAsset({ publicPath: $event.target.value, deployedConfirmed: false })" /></label>
-          <label class="confirm-row"><input type="checkbox" :checked="selectedAsset.deployedConfirmed" @change="updateAsset({ deployedConfirmed: $event.target.checked, status: $event.target.checked ? 'ready' : 'review' })" />我已将对应文件放入项目 public 目录并核对路径</label>
           <div class="button-row">
             <button class="primary-button" :disabled="selectedAsset.status === 'ready' || saving" @click="approveAsset(selectedAsset)">{{ saving ? '入库中…' : selectedAsset.status === 'ready' ? '已正式入库' : '审核通过并自动入库' }}</button>
             <button class="secondary-button" @click="downloadAsset(selectedAsset)">下载原始文件</button>

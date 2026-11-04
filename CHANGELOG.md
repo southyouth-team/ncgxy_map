@@ -1,3 +1,16 @@
+## 2026-11-04 — 完整基础校园数据合并与编辑器底集补齐
+
+- **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`src/editor/CampusPlanEditor.vue`。
+- **实际完成**：
+  - 首页合并函数改为将全部基础 Feature 作为底集，不再只合并校界、出入口和点对象。
+  - 编辑器同 ID Feature 覆盖基础 Feature；新增 Feature 保留；tombstone 在最终阶段过滤。
+  - 编辑器首次打开/加载稀疏旧文档时补齐基础建筑、道路、区域及 96 个基础环境对象，编辑器已保存数据按 ID 覆盖。
+  - 单项和批量删除任何基础对象都会记录删除标记。
+  - 保存文档时将 `deletedFeatureIds` 写入顶层兼容字段和 FeatureCollection，修复此前构建保存文档时遗漏删除标记的问题。
+  - 扩展合并测试，覆盖基础建筑/区域保留和基础道路删除优先级。
+- **验证状态**：代码与测试已提交，等待最新前端/后端 CI；未进行真实浏览器验收。
+- **已知限制**：删除后恢复对象的 UI 操作尚未实现；编辑冲突仍依赖现有文档 revision 机制。
+- **下一步**：验证 CI；继续检查编辑器属性保存与首页渲染的完整字段映射。
 ## 2026-11-04 — 修复共享场景适配器的属性丢失
 
 - **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/three/world/campus/campusSceneData.js`、`src/three/world/campus/campusSceneData.test.js`。

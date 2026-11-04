@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, upsertCampusFeature, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, removeCampusFeatures } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, upsertCampusFeature, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, mergeCampusFeatureCollections, removeCampusFeatures } from './campusFeatureCollection.js'
 
 describe('translateCampusFeatureGeometry', () => {
   it('translates every Polygon ring and preserves geometry metadata', () => {
@@ -280,4 +280,34 @@ describe('toCampusFeatureCollection', () => {
     expect(canonical.features).toHaveLength(4)
   })
 
+})
+
+describe('mergeCampusFeatureCollections', () => {
+  it('lets saved features override baseline IDs and tombstones remove baseline features', () => {
+    const base = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', id: 'gate-east', geometry: { type: 'Point', coordinates: [1, 1] }, properties: { featureType: 'gate', name: '东门' } },
+        { type: 'Feature', id: 'road-main', geometry: { type: 'LineString', coordinates: [[0, 0], [10, 0]] }, properties: { featureType: 'road', width: 8 } },
+      ],
+    }
+    const edited = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', id: 'road-main', geometry: { type: 'LineString', coordinates: [[0, 1], [10, 1]] }, properties: { featureType: 'road', width: 12 } },
+        { type: 'Feature', id: 'future-object', geometry: { type: 'Point', coordinates: [5, 5] }, properties: { featureType: 'future-facility', vendor: 'future-schema' } },
+      ],
+      deletedFeatureIds: ['gate-east'],
+    }
+    const merged = mergeCampusFeatureCollections(base, edited)
+    expect(merged.features.map(feature => feature.id)).toEqual(['road-main', 'future-object'])
+    expect(merged.features[0].geometry.coordinates).toEqual([[0, 1], [10, 1]])
+    expect(merged.features[1].properties.vendor).toBe('future-schema')
+    expect(merged.deletedFeatureIds).toEqual(['gate-east'])
+    expect(base.features).toHaveLength(2)
+  })
+
+  it('rejects invalid FeatureCollections', () => {
+    expect(() => mergeCampusFeatureCollections({}, { type: 'FeatureCollection', features: [] })).toThrow('基础校园 FeatureCollection 无效')
+  })
 })

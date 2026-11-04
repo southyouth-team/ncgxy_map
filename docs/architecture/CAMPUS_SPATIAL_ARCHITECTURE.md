@@ -468,3 +468,8 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - SVG 空间对象组由 `documentLoaded` 门控；只有服务端文档 GET、基础 FeatureCollection 与编辑 FeatureCollection 合并、legacy 交互投影完成后才显示对象。
 - 参考底图预览属于非关键辅助资源，采用后台异步加载，不能阻塞空间文档就绪。
 - 本修复只调整首屏可见时序，不改变 FeatureCollection 的数据权威性、合并优先级、tombstone 语义或保存协议。
+
+
+## 57. 撤销/重做恢复必须重建建筑兼容边界
+
+规范 FeatureCollection 中建筑 Polygon 的外环是几何权威数据，不保存旧编辑器专用的 `rect`。历史快照恢复到 SVG 编辑器兼容数组时，`fromCampusFeatureCollection` 必须根据 Polygon 外环重新计算 `[minX, minY, maxX, maxY]`，并将其作为 `rect` 输出。CampusPlanEditor 的历史恢复入口继续对建筑执行 `normalizeBuilding`，以兼容旧版快照和历史文档。撤销/重做回归测试必须覆盖快照序列化、恢复后 footprint 与 rect 的一致性；不得把 rect 反向写入或替代规范 geometry。

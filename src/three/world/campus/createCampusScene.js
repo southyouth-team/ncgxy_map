@@ -27,7 +27,7 @@ export function createCampusScene(THREE, featureCollection = null) {
     parent.add(mesh)
     return mesh
   }
-  function addGroundPatch(name, rect, material, y = 0.015) {
+  function addGroundPatch(name, rect, material, y = 0.015, featureId = null) {
     const bounds = mapRectToWorld(rect)
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(bounds.width, 0.08, bounds.depth), material)
     mesh.name = name
@@ -98,16 +98,20 @@ export function createCampusScene(THREE, featureCollection = null) {
     if (!area.rect) continue
     if (area.type === 'sports') {
       if (area.polygon?.length >= 3) addPolygon('area-' + area.id + '-earth', area.polygon, mats.sports, 0.035, area.holes, area.id)
-      else addGroundPatch('area-' + area.id + '-earth', area.rect, mats.sports, 0.035)
+      else addGroundPatch('area-' + area.id + '-earth', area.rect, mats.sports, 0.035, area.id)
       const bounds = mapRectToWorld(area.rect)
       const inset = new THREE.Mesh(new THREE.BoxGeometry(bounds.width - 0.9, 0.035, bounds.depth - 0.9), mats.pathEdge)
       inset.position.set(bounds.x, 0.09, bounds.z)
+      inset.userData.featureId = area.id
+      inset.userData.featureCategory = 'areas'
       root.add(inset)
       const field = new THREE.Mesh(new THREE.BoxGeometry(bounds.width - 1.15, 0.04, bounds.depth - 1.15), mats.grassPlain)
       field.position.set(bounds.x, 0.12, bounds.z)
+      field.userData.featureId = area.id
+      field.userData.featureCategory = 'areas'
       root.add(field)
     } else if (area.type !== 'building-cluster') {
-      addGroundPatch('area-' + area.id, area.rect, mats.grassPlain, 0.025)
+      addGroundPatch('area-' + area.id, area.rect, mats.grassPlain, 0.025, area.id)
     }
   }
 

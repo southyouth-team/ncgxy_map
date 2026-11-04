@@ -241,3 +241,10 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 - legacy 数组只允许作为有明确生命周期的只读兼容视图，不得与 FeatureCollection 双向独立写入。
 - 保存、首页渲染、编辑器预览都直接消费该权威 FeatureCollection。
 - 保持 schemaVersion 旧文档读取能力，并提供可回滚的迁移测试。
+
+
+## 24. FeatureCollection 版本化历史快照
+
+编辑器 undo/redo 历史现统一存储版本化 `CampusFeatureSnapshot`，其空间载荷为单一 GeoJSON FeatureCollection，删除标记随快照保存。恢复通过规范反向适配器生成当前交互模型；旧版四数组历史快照保留读取兼容。
+
+该改动收敛了历史记录的空间数据契约，但不改变当前编辑器四组响应式数组仍作为实时工作状态的事实。不能将此项改动等同于 FeatureCollection 已成为编辑器唯一可变状态。

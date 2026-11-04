@@ -260,8 +260,8 @@ export class CameraRig {
 
   update(delta) {
     if (this.mode === 'overview' && !this.transitioningToOverview) {
-      this.orbit.update()
-      return
+      // OrbitControls.update() 返回相机是否仍在变化；供引擎判断是否需要下一帧。
+      return this.orbit.update()
     }
     const alpha = 1 - Math.exp(-7 * delta)
     const cameraTargetPosition = this.mode === 'thirdPerson'
@@ -278,6 +278,7 @@ export class CameraRig {
       this.orbit.enabled = true
       this.transitioningToOverview = false
     }
+    return this.mode !== 'overview' || this.transitioningToOverview
   }
 
   resize(aspect) {

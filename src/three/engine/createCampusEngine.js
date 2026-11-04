@@ -104,6 +104,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return searchParams.has('render-debug') || hashParams.has('render-debug')
   })()
   let renderDebugFrame = 0
+  let lastRenderCostMs = 0
+  let directionalLight = null
+
+  // 校园总览以像素场景为主，实时阴影会为大量静态网格增加额外 shadow pass。
+  // 仅在 3D 跟随/第一人称下启用阴影，总览和 2.5D 保持轻量渲染。
+  function syncRenderQuality() {
+    if (!renderer || !cameraRig) return
+    const shadowsEnabled = cameraRig.viewMode === '3d' && cameraRig.mode !== 'overview'
+    renderer.shadowMap.enabled = shadowsEnabled
+    if (directionalLight) directionalLight.castShadow = shadowsEnabled
+  }
 
   async function init() {
     if (!container) throw new Error('未找到三维场景容器')
@@ -118,7 +129,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。
     renderer.setPixelRatio(1)
     renderer.setSize(container.clientWidth, container.clientHeight)
-    renderer.shadowMap.enabled = true
+    // 总览/2.5D 默认关闭实时阴影，避免静态校园大量网格重复参与 shadow pass。
+    renderer.shadowMap.enabled = false
     renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
     // 保留像素美术标准色板，避免电影色调映射改变颜色。
@@ -251,16 +263,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
     const hemi = new THREE.HemisphereLight(0xfff2d8, 0x71865e, 2.2)
     scene.add(hemi)
-    const sun = new THREE.DirectionalLight(0xffe2b2, 2.7)
-    sun.position.set(-55, 90, 45)
-    sun.castShadow = true
-    sun.shadow.mapSize.set(1024, 1024)
-    sun.shadow.camera.left = -100
-    sun.shadow.camera.right = 100
-    sun.shadow.camera.top = 100
-    sun.shadow.camera.bottom = -100
-    sun.shadow.bias = -0.0002
-    scene.add(sun)
+    directionalLight = new THREE.DirectionalLight(0xffe2b2, 2.7)
+    directionalLight.position.set(-55, 90, 45)
+    directionalLight.castShadow = false
+    directionalLight.shadow.mapSize.set(1024, 1024)
+    directionalLight.shadow.camera.left = -100
+    directionalLight.shadow.camera.right = 100
+    directionalLight.shadow.camera.top = 100
+    directionalLight.shadow.camera.bottom = -100
+    directionalLight.shadow.bias = -0.0002
+    scene.add(directionalLight)
+    syncRenderQuality()
 
     resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(container)
@@ -967,6 +980,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       scissor: Array.from(gl.getParameter(gl.SCISSOR_BOX)),
       scissorTest: gl.isEnabled(gl.SCISSOR_TEST),
       pixelRatio: renderer.getPixelRatio(),
+      render: { ...renderer.info.render },
+      memory: { ...renderer.info.memory },
+      lastRenderCostMs,
+      sceneObjects: (() => { let objects = 0, meshes = 0; scene.traverse(object => { objects += 1; if (object.isMesh) meshes += 1 }); return { objects, meshes } })(),
       camera: {
         type: camera.type,
         near: camera.near,
@@ -983,6 +1000,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!renderer || !cameraRig) return
     const width = Math.max(container.clientWidth, 1)
     const height = Math.max(container.clientHeight, 1)
+    // 限制绘制缓冲区像素总量；高分辨率/4K 屏幕自动降采样，降低 GPU fill-rate 压力。
+    const pixelRatio = Math.min(1, Math.sqrt(1_500_000 / (width * height)))
+    renderer.setPixelRatio(pixelRatio)
     renderer.setSize(width, height)
     cameraRig.resize(width / height)
     logRenderDiagnostics('resize')
@@ -1138,8 +1158,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       activeHorizonGround.position.x = cameraRig.camera.position.x
       activeHorizonGround.position.z = cameraRig.camera.position.z
     }
+    const renderStartedAt = renderDebugEnabled ? performance.now() : 0
     renderer.render(scene, cameraRig.camera)
-    if (renderDebugEnabled && ++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
+    if (renderDebugEnabled) {
+      lastRenderCostMs = performance.now() - renderStartedAt
+      if (++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
+    }
     // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
     if (cameraRig?.mode !== 'overview' || cameraChanged) requestFrame()
   }
@@ -1674,6 +1698,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function setMode(mode) {
     cameraRig?.setMode(mode)
     input?.setMode(mode)
+    syncRenderQuality()
     requestFrame()
     if (mode !== 'overview' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
@@ -1681,6 +1706,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function setViewMode(mode) {
     cameraRig?.setViewMode(mode)
+    syncRenderQuality()
     requestFrame()
     if (mode === '3d' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })

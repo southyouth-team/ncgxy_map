@@ -391,3 +391,8 @@ schema v4 的 FeatureCollection metadata 属于规范空间数据的一部分。
 ## 44. 编辑器冲突恢复前取消待执行自动保存
 
 当编辑器检测到 revision 冲突后，用户选择重新加载服务端版本时，必须先清除尚未触发的自动保存定时器，再开始读取服务端文档。否则旧本地快照可能在服务端重载完成前再次发起保存请求，造成额外冲突或状态提示抖动。冲突恢复期间若仍有保存请求进行中，则不允许并发执行重载。
+
+
+## 45. 服务端 GeoJSON geometry 必须按类型校验结构
+
+schema v4 的 FeatureCollection 服务端校验不能仅递归检查坐标是否为有限数字；必须先识别 GeoJSON 标准 geometry 类型，再按各类型的坐标嵌套结构校验。Point/MultiPoint、LineString/MultiLineString、Polygon/MultiPolygon 分别校验 Position、线段、闭合 LinearRing 和多层集合结构；GeometryCollection 递归校验子 geometry，并设置递归深度上限。Position 至少包含两个有限数值，LineString 至少两个 Position，Polygon 的每个 LinearRing 至少四个 Position 且首尾位置一致。未知 geometry 类型、错误嵌套、非有限坐标和非法环必须拒绝。当前编辑器主要生产 Point、LineString、Polygon；对暂不渲染的合法扩展类型仍须在 FeatureCollection 中原样保留。

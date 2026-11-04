@@ -1,3 +1,5 @@
+import { getDefaultWalkable } from '../data/campus/walkability.js'
+
 /**
  * CampusPlanEditor legacy collections -> canonical GeoJSON FeatureCollection.
  *
@@ -44,6 +46,7 @@ function createFeature(id, featureType, name, geometry, properties = {}, source 
     geometry,
     properties: {
       ...properties,
+      walkable: getDefaultWalkable(featureType, properties),
       featureType,
       name: name || '未命名要素',
       source,

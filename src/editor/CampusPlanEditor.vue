@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection } from './campusFeatureCollection.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
@@ -46,10 +47,13 @@ async function loadEditorDocument() {
     documentRevision.value = Number(saved.revision || 0)
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
-      if (Array.isArray(document.buildings)) buildings.value = document.buildings.map(normalizeBuilding)
-      if (Array.isArray(document.areas)) areas.value = document.areas.map((area) => ({ ...area, footprint: area.polygon || area.footprint || [] }))
-      if (Array.isArray(document.roads)) roads.value = document.roads
-      if (Array.isArray(document.objects)) objects.value = document.objects.filter(item => item?.geometry?.type === 'Point' && Array.isArray(item.geometry.coordinates))
+      const normalized = document.featureCollection?.type === 'FeatureCollection'
+        ? fromCampusFeatureCollection(document.featureCollection)
+        : document
+      if (Array.isArray(normalized.buildings)) buildings.value = normalized.buildings.map(normalizeBuilding)
+      if (Array.isArray(normalized.areas)) areas.value = normalized.areas.map((area) => ({ ...area, footprint: area.polygon || area.footprint || [] }))
+      if (Array.isArray(normalized.roads)) roads.value = normalized.roads
+      if (Array.isArray(normalized.objects)) objects.value = normalized.objects.filter(item => item?.geometry?.type === 'Point' && Array.isArray(item.geometry.coordinates))
       if (document.calibration?.controlPoints) calibrationPoints.value = document.calibration.controlPoints
       if (document.referenceImage) {
         referenceImage.value = document.referenceImage
@@ -961,7 +965,9 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
-  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
+  const document = { schemaVersion: 3, coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
+  document.featureCollection = toCampusFeatureCollection(document)
+  return document
 }
 function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {

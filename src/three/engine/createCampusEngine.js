@@ -107,13 +107,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let lastRenderCostMs = 0
   let directionalLight = null
 
-  // 校园总览以像素场景为主，实时阴影会为大量静态网格增加额外 shadow pass。
-  // 仅在 3D 跟随/第一人称下启用阴影，总览和 2.5D 保持轻量渲染。
+  // 静态校园保留阴影贴图；只有场景几何变化时才重算，不随相机交互重复执行 shadow pass。
+  function invalidateShadowMap() {
+    if (!renderer || !renderer.shadowMap.enabled) return
+    renderer.shadowMap.needsUpdate = true
+  }
+
   function syncRenderQuality() {
     if (!renderer || !cameraRig) return
-    const shadowsEnabled = cameraRig.viewMode === '3d' && cameraRig.mode !== 'overview'
-    renderer.shadowMap.enabled = shadowsEnabled
-    if (directionalLight) directionalLight.castShadow = shadowsEnabled
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.autoUpdate = false
+    if (directionalLight) directionalLight.castShadow = true
+    invalidateShadowMap()
   }
 
   async function init() {
@@ -125,13 +130,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 出现横向雾化分界，视觉上像场景被水平裁切；先保持背景色统一以排除该因素。
     scene.fog = null
 
-    renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false })
-    // 固定 1x 渲染倍率，避免高 DPI 屏幕二次缩放破坏像素边缘。
-    renderer.setPixelRatio(1)
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    // 像素纹理仍使用 NearestFilter；MSAA 只平滑几何轮廓，不会把像素贴图模糊化。
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     renderer.setSize(container.clientWidth, container.clientHeight)
-    // 总览/2.5D 默认关闭实时阴影，避免静态校园大量网格重复参与 shadow pass。
-    renderer.shadowMap.enabled = false
-    renderer.shadowMap.type = THREE.BasicShadowMap
+    // 静态阴影贴图按需更新，避免每帧重复生成。
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.autoUpdate = false
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
     // 保留像素美术标准色板，避免电影色调映射改变颜色。
     renderer.toneMapping = THREE.NoToneMapping
@@ -265,13 +271,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     scene.add(hemi)
     directionalLight = new THREE.DirectionalLight(0xffe2b2, 2.7)
     directionalLight.position.set(-55, 90, 45)
-    directionalLight.castShadow = false
-    directionalLight.shadow.mapSize.set(1024, 1024)
+    directionalLight.castShadow = true
+    directionalLight.shadow.mapSize.set(2048, 2048)
     directionalLight.shadow.camera.left = -100
     directionalLight.shadow.camera.right = 100
     directionalLight.shadow.camera.top = 100
     directionalLight.shadow.camera.bottom = -100
-    directionalLight.shadow.bias = -0.0002
+    directionalLight.shadow.camera.near = 0.5
+    directionalLight.shadow.camera.far = 320
+    directionalLight.shadow.bias = -0.00015
+    directionalLight.shadow.normalBias = 0.025
+    directionalLight.shadow.radius = 3
     scene.add(directionalLight)
     syncRenderQuality()
 
@@ -333,6 +343,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           })
         }
         cameraRig?.setObstructionObjects([...cameraObstacleRoots, ...loadedBuildingModels])
+        invalidateShadowMap()
         callbacks.onAssetsLoaded?.(result)
         requestFrame()
         return result
@@ -411,6 +422,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const ground=new THREE.Mesh(new THREE.PlaneGeometry(width*unit,height*unit),new THREE.MeshStandardMaterial({color:'#6eaa55',roughness:1}))
     ground.rotation.x=-Math.PI/2; ground.position.set(0,-.09,0); ground.receiveShadow=true; rpgPreviewGroup.add(ground)
     scene.add(rpgPreviewGroup)
+    invalidateShadowMap()
     requestFrame()
     if (campus) campus.visible = false
     loadedBuildingModels.forEach((model) => { model.visible = false })
@@ -1001,7 +1013,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const width = Math.max(container.clientWidth, 1)
     const height = Math.max(container.clientHeight, 1)
     // 限制绘制缓冲区像素总量；高分辨率/4K 屏幕自动降采样，降低 GPU fill-rate 压力。
-    const pixelRatio = Math.min(1, Math.sqrt(1_500_000 / (width * height)))
+    // 普通视口恢复更高细节；4K/高分屏仍限制绘制缓冲区面积，控制 GPU fill-rate。
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, Math.sqrt(2_400_000 / (width * height)))
     renderer.setPixelRatio(pixelRatio)
     renderer.setSize(width, height)
     cameraRig.resize(width / height)
@@ -1191,6 +1204,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
     item.sceneObject = sceneObject
     if (wasSelected) selectObject(item.feature.id)
+    invalidateShadowMap()
     requestFrame()
     return true
   }

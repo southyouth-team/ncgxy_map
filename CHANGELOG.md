@@ -1,3 +1,13 @@
+## 2026-11-05 — 素材工坊接入服务端 AI 图片生成
+
+- 新增受身份校验保护的 `POST /api/v1/assets/ai-image/generate`，由服务端调用 OpenAI 兼容的 `/images/generations` 接口，前端不接触 API Key。
+- 图片生成优先读取 `IMAGE_API_KEY`、`IMAGE_API_BASE_URL`、`IMAGE_MODEL`；未单独设置时复用现有 `VISION_API_KEY`、`VISION_API_BASE_URL`，模型默认 `gpt-image-2`。识图仍使用独立的 `VISION_MODEL`（当前为 `deepseek-flash`）。
+- 解析 Base64 图片响应，并兼容同源图片 URL；校验 PNG/JPEG/WebP 文件签名与 20 MB 大小上限。跨域 URL 不做服务端抓取，避免引入 SSRF 风险。
+- 素材工坊新增“直接 AI 生成图片”，2.5D 图片可在页面内生成并预览；生成后仍需人工检查并保存为候选素材。候选文件暂存浏览器 IndexedDB，元数据暂存 localStorage。
+- 3D GLB 仍走人工建模/外部 3D 工具导入；`gpt-image-2` 是图片模型，不会将图片伪装成可用 3D 模型。
+- 增加图片生成服务单元测试，覆盖提示词校验、模型/地址选择、复用识图鉴权、缺失密钥和无效图片响应。
+- 本次未修改本地部署环境变量、未提交密钥，也未把生成图片自动写入服务器资产库或正式校园清单；服务端生成 API 需在用户本地部署环境完成真实联调。
+
 ## 2026-11-05 — 完成校园资产来源盘点
 
 - 对开发分支完整文件树（150 个文件）进行资产扩展名盘点，未发现独立提交的 GLB/GLTF/FBX/OBJ、图片、贴图、视频或字体资产文件。

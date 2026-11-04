@@ -83,7 +83,7 @@
 
 `getCampusSpatialLayers(collection)` 现在同时支持基础校园数据格式（`featureType: area + category`）和编辑器保存格式（`featureType: green/water/sports/plaza/parking`）。道路、建筑、区域和 Point 设施均从传入的 FeatureCollection 派生；不会为这些对象复制第二份几何。
 
-- 置信度读取兼容 `confidence` 与编辑器 `qualityStatus`。
+- 置信度只读取合法的 `confidence`；缺失或非法时保守回退为 low，不再从核验状态字段推导置信度。
 - 道路几何只接受 LineString，宽度统一为正数并提供安全默认值。
 - 建筑 Polygon 派生 footprint，同时保留楼层、高度、模板等渲染属性。
 - 区域 Polygon 保留外环与 holes，映射为既有校园场景区域类型。

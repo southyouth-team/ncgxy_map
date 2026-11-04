@@ -7,8 +7,8 @@ export class CameraRig {
     this.domElement = domElement
     this.aspect = 1
     this.overviewSpan = 190
-    this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.1, 3000)
-    this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 3000)
+    this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.1, 20000)
+    this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 20000)
     this.camera = this.overviewCamera
     this.camera.position.set(0, 145, 145)
     this.target = new THREE.Vector3(0, 0, 0)
@@ -18,8 +18,9 @@ export class CameraRig {
     this.desiredTarget = this.target.clone()
     this.mode = 'overview'
     this.thirdYaw = 0.35
-    this.thirdPitch = 0.32
-    this.thirdDistance = 15
+    // 采用宝可梦式 3/4 俯视跟随视角，而不是接近水平的肩后镜头。
+    this.thirdPitch = this.isometricRpg ? 0.95 : 0.32
+    this.thirdDistance = this.isometricRpg ? 13 : 15
     this.firstYaw = 0
     this.firstPitch = -0.12
     this.player = new THREE.Vector3(0, 1.7, 24)
@@ -87,9 +88,9 @@ export class CameraRig {
     } else {
       if (this.isometricRpg && mode === 'thirdPerson') {
         this.activateCamera(this.overviewCamera)
-        this.thirdPitch = 0.32
-        this.thirdDistance = 15
-        this.overviewCamera.zoom = 2.15
+        this.thirdPitch = 0.95
+        this.thirdDistance = 13
+        this.overviewCamera.zoom = 2.8
         this.overviewCamera.updateProjectionMatrix()
       } else if (previousCamera !== this.perspectiveCamera) {
         this.perspectiveCamera.position.copy(previousCamera.position)
@@ -98,7 +99,7 @@ export class CameraRig {
       }
       if (mode === 'thirdPerson') {
         this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
-        this.thirdDistance = 15
+        this.thirdDistance = this.isometricRpg ? 13 : 15
         this.updateThirdPersonDesired()
       } else {
         if (previousMode === 'thirdPerson') {
@@ -141,7 +142,9 @@ export class CameraRig {
 
   rotateThird(dx, dy) {
     this.thirdYaw -= dx * 0.004
-    this.thirdPitch = Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
+    const minPitch = this.isometricRpg ? 0.62 : -0.05
+    const maxPitch = this.isometricRpg ? 1.18 : 0.85
+    this.thirdPitch = Math.max(minPitch, Math.min(maxPitch, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
 
@@ -251,8 +254,8 @@ export class CameraRig {
     this.applyIsometricOrientation()
     this.player.set(0, 1.7, this.isometricRpg ? 14 : 24)
     if (this.isometricRpg) {
-      this.thirdPitch = 0.32
-      this.thirdDistance = 15
+      this.thirdPitch = 0.95
+      this.thirdDistance = 13
     }
   }
 

@@ -64,7 +64,8 @@ export function createCampusScene(THREE) {
   const horizonGround = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), mats.grassPlain)
   horizonGround.name = 'campus-horizon-ground'
   horizonGround.rotation.x = -Math.PI / 2
-  horizonGround.position.y = -0.91
+  // 放在土壤底板顶面上方，保证斜视时底板外仍有连续地面填充。
+  horizonGround.position.y = 0.001
   horizonGround.receiveShadow = true
   root.add(horizonGround)
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(worldWidth, worldDepth), mats.grass)

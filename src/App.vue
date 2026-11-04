@@ -67,9 +67,9 @@ let engine
 
 const modes = isCampusExplorer
   ? [
-      { id: 'overview', label: '场景总览', hint: '校园布局' },
-      { id: 'thirdPerson', label: 'RPG 探索', hint: '等距跟随' },
-      { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
+      { id: 'overview', label: '2.5D 总览', hint: '等距校园' },
+      { id: 'thirdPerson', label: '2.5D 探索', hint: '角色漫游' },
+      { id: 'firstPerson', label: '3D 视角', hint: '第一人称' },
     ]
   : [
       { id: 'overview', label: '上帝视角', hint: '像素地图' },
@@ -623,7 +623,7 @@ onBeforeUnmount(() => {
     <div v-if="indoorPrompt" class="indoor-interaction-prompt">{{ indoorPrompt.text }}</div>
     <div v-if="loading" class="loading-screen">
       <div class="loader"></div>
-      <div>正在加载 2.5D 校园样板</div>
+      <div>正在加载南昌工学院校园</div>
       <span>INITIALIZING SCENE</span>
     </div>
     <aside v-if="selectedObject && !showEditor" style="position:absolute;right:24px;top:110px;z-index:12;min-width:190px;padding:14px 16px;background:rgba(255,255,255,.94);border:1px solid #d7ded7;border-radius:6px;color:#34443b;box-shadow:0 8px 24px rgba(30,50,40,.12)">

@@ -204,18 +204,40 @@ export class ScenesService {
         if (typeof geometry.type !== 'string' || geometry.type.trim() === '') {
           throw new BadRequestException(`Feature geometry 类型无效：${id}`);
         }
-        const hasCoordinates = Array.isArray(geometry.coordinates);
-        const hasGeometries = Array.isArray(geometry.geometries);
-        if (!hasCoordinates && !hasGeometries) throw new BadRequestException(`Feature geometry 坐标无效：${id}`);
-        const validateCoordinates = (value: unknown): boolean => {
-          if (!Array.isArray(value)) return false;
-          if (value.length >= 2 && value.slice(0, 2).every(item => typeof item === 'number')) {
-            return value.every(item => typeof item === 'number' && Number.isFinite(item));
+        const isPosition = (value: unknown): value is number[] =>
+          Array.isArray(value) && value.length >= 2 &&
+          value.every(item => typeof item === 'number' && Number.isFinite(item));
+        const isLineString = (value: unknown): boolean =>
+          Array.isArray(value) && value.length >= 2 && value.every(isPosition);
+        const isPolygon = (value: unknown): boolean =>
+          Array.isArray(value) && value.length > 0 && value.every((ring: unknown) =>
+            Array.isArray(ring) && ring.length >= 4 &&
+            ring.every(isPosition) &&
+            JSON.stringify(ring[0]) === JSON.stringify(ring[ring.length - 1]));
+        const validateGeometry = (value: unknown, depth = 0): boolean => {
+          if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 16) return false;
+          const item = value as Record<string, unknown>;
+          switch (item.type) {
+            case 'Point':
+              return isPosition(item.coordinates);
+            case 'MultiPoint':
+              return Array.isArray(item.coordinates) && item.coordinates.length > 0 && item.coordinates.every(isPosition);
+            case 'LineString':
+              return isLineString(item.coordinates);
+            case 'MultiLineString':
+              return Array.isArray(item.coordinates) && item.coordinates.length > 0 && item.coordinates.every(isLineString);
+            case 'Polygon':
+              return isPolygon(item.coordinates);
+            case 'MultiPolygon':
+              return Array.isArray(item.coordinates) && item.coordinates.length > 0 && item.coordinates.every(isPolygon);
+            case 'GeometryCollection':
+              return Array.isArray(item.geometries) && item.geometries.every(child => validateGeometry(child, depth + 1));
+            default:
+              return false;
           }
-          return value.length > 0 && value.every(item => Array.isArray(item) && validateCoordinates(item));
         };
-        if (hasCoordinates && !validateCoordinates(geometry.coordinates)) {
-          throw new BadRequestException(`Feature geometry 坐标包含无效值：${id}`);
+        if (!validateGeometry(geometry)) {
+          throw new BadRequestException(`Feature geometry 结构或坐标无效：${id}`);
         }
         if (rawFeature.properties !== undefined &&
             (typeof rawFeature.properties !== 'object' || rawFeature.properties === null || Array.isArray(rawFeature.properties))) {

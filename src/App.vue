@@ -365,8 +365,9 @@ function switchEditorView(mode, document) {
   if (mode === '3d') {
     activeMode.value = 'overview'
     viewMode.value = '3d'
-    engine?.setViewMode('3d')
+    // 先挂载编辑器预览并标记预览态，再切换相机；避免为编辑器预览额外加载整套基础校园 GLB。
     engine?.previewCampusPlan(document)
+    engine?.setViewMode('3d')
   } else engine?.clearRpgPreview()
 }
 

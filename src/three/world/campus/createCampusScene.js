@@ -367,7 +367,16 @@ export function createCampusScene(THREE, featureCollection = null) {
 
   const halfW = worldWidth / 2
   const halfD = worldDepth / 2
-  root.userData.walkableBounds = { minX: -halfW + 2, maxX: halfW - 2, minZ: -halfD + 2, maxZ: halfD - 2 }
+  // 可活动区域需要覆盖校园外围环线道路及道路外侧缓冲地带。
+  // 旧边界向内缩 2 个世界单位，再叠加角色半径后，会把外围道路整体排除在可行走范围外。
+  // 地面之外仍有无限远景草地，因此这里保留 12 个世界单位的外围活动缓冲区。
+  const perimeterWalkableMargin = 12
+  root.userData.walkableBounds = {
+    minX: -halfW - perimeterWalkableMargin,
+    maxX: halfW + perimeterWalkableMargin,
+    minZ: -halfD - perimeterWalkableMargin,
+    maxZ: halfD + perimeterWalkableMargin,
+  }
   root.userData.isVisualPrototype = true
   root.userData.assetStyle = 'isometric-pixel-campus'
   root.userData.coordinateSystem = 'campus-plan-pixel-to-world'

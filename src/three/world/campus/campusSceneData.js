@@ -168,3 +168,59 @@ export function validateCampusSceneRenderData(featureCollection, renderData = cr
     },
   }
 }
+
+
+/**
+ * Audit the actual Three.js campus scene tree against normalized feature layers.
+ * Every renderable spatial feature root/segment must carry featureId metadata.
+ */
+export function auditCampusSceneFeatureCoverage(spatialLayers, sceneRoot) {
+  const expected = {
+    buildings: (spatialLayers?.buildings || []).map(item => String(item.id)),
+    roads: (spatialLayers?.roads || []).map(item => String(item.id)),
+    areas: (spatialLayers?.areas || []).map(item => String(item.id)),
+    objects: (spatialLayers?.objects || []).map(item => String(item.id)),
+  }
+  const actual = Object.fromEntries(Object.keys(expected).map(key => [key, new Map()]))
+  const push = (errors, code, category, featureId, message) => errors.push({ code, category, featureId, message })
+  const errors = []
+
+  sceneRoot?.traverse?.(object => {
+    const data = object.userData || {}
+    const category = data.featureCategory
+    const id = data.featureId ?? (category === 'buildings' ? data.buildingId : undefined)
+    if (!category || id === undefined || !actual[category]) return
+    const key = String(id)
+    const record = actual[category].get(key) || { renderableMeshes: 0, missingMaterialMeshes: 0 }
+    if (object.isMesh || object.isLine || object.isPoints) {
+      record.renderableMeshes += 1
+      if (object.isMesh && (!object.geometry || !object.material)) record.missingMaterialMeshes += 1
+    }
+    actual[category].set(key, record)
+  })
+
+  for (const category of Object.keys(expected)) {
+    const expectedIds = expected[category]
+    const actualMap = actual[category]
+    const expectedSet = new Set(expectedIds)
+    for (const id of expectedSet) {
+      if (!actualMap.has(id)) push(errors, 'SCENE_FEATURE_MISSING', category, id, '空间对象未生成对应的 Three.js 场景节点')
+      else if (actualMap.get(id).renderableMeshes === 0) push(errors, 'SCENE_FEATURE_NOT_RENDERABLE', category, id, '场景节点未包含可渲染 Mesh/Line/Points')
+      else if (actualMap.get(id).missingMaterialMeshes > 0) push(errors, 'SCENE_FEATURE_MATERIAL_MISSING', category, id, '场景中存在缺少几何体或材质的 Mesh')
+    }
+    for (const id of actualMap.keys()) {
+      if (!expectedSet.has(id)) push(errors, 'SCENE_FEATURE_UNEXPECTED', category, id, '场景包含空间数据之外的 Feature 节点')
+    }
+    const counts = new Map()
+    for (const id of expectedIds) counts.set(id, (counts.get(id) || 0) + 1)
+    for (const [id, count] of counts) {
+      if (count > 1) push(errors, 'SCENE_SOURCE_DUPLICATE_ID', category, id, '规范空间图层存在重复 Feature ID')
+    }
+  }
+
+  const summary = Object.fromEntries(Object.keys(expected).map(category => [
+    category,
+    { expected: expected[category].length, rendered: actual[category].size },
+  ]))
+  return { valid: errors.length === 0, errorCount: errors.length, errors, summary }
+}

@@ -870,7 +870,8 @@ function startObjectDrag(event, item) {
   multiSelection.value = []
   snapshot()
   drag.value = { type: 'object', id: item.id, start: point(event), position: [...item.geometry.coordinates] }
-  event.currentTarget.setPointerCapture?.(event.pointerId)
+  // 点对象的拖动由 SVG 根节点统一接收 pointermove，避免捕获在 <g> 后事件链不稳定。
+  event.currentTarget.ownerSVGElement?.setPointerCapture?.(event.pointerId)
 }
 function startPolygonVertexDrag(event, type, item, index) {
   if (event.button !== 0 || tool.value === 'pan' || spacePressed.value || isLayerLocked(type)) return

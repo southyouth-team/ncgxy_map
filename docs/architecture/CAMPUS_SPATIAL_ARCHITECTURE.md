@@ -200,3 +200,7 @@
 Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上两个标准字段合法。不得将 `unverified` 直接写入 `confidence`。当旧文档没有置信度时，按保守默认值 low + unverified 输出；已核验对象默认 medium + verified。来源和置信度仍需根据实际资料人工校准。
 
 点对象的规范类型固定为 `featureType: object`，具体设施类别放在 `objectType`（例如 tree、bench、streetlight）。不得把具体资产类型直接作为 featureType，否则统一几何契约无法识别其 Point 语义。
+
+## 20. 属性面板修改与撤销/重做
+
+属性面板通过 `v-model` 修改对象属性时，必须在用户开始编辑前记录 undo 快照。否则自动保存会持久化修改，但撤销栈中没有修改前状态。当前通过控件 focus 建立快照；未来若引入复杂输入控件，应统一接入编辑事务入口。

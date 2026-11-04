@@ -3,17 +3,18 @@ import {
 } from '../../../data/campus/campusLayout.js'
 import { getCampusSpatialLayers } from '../../../data/campus/campusGeoJSON.js'
 
-const { areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS } = getCampusSpatialLayers()
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
   addPixelBench, addPixelLamp, createPixelBuilding,
 } from './campusAssetLibrary.js'
 
 // 等距像素风 2.5D 校园原型。空间轮廓来自示意图，程序化建筑不代表真实楼体测绘。
-export function createCampusScene(THREE) {
+export function createCampusScene(THREE, featureCollection = null) {
   const root = new THREE.Group()
   root.name = 'NanchangInstituteCampus'
   const mats = createCampusMaterials(THREE)
+  const spatialLayers = getCampusSpatialLayers(featureCollection || undefined)
+  const { areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS, objects: CAMPUS_OBJECTS } = spatialLayers
   const { worldWidth, worldDepth } = CAMPUS_PLAN_REFERENCE
 
   function addBox(name, x, y, z, w, h, d, material, parent = root) {
@@ -88,6 +89,10 @@ export function createCampusScene(THREE) {
       addPolygon('campus-' + area.id + '-water', area.polygon, mats.water, 0.13, area.holes)
       continue
     }
+    if (!area.rect && area.polygon?.length >= 3) {
+      addPolygon('area-' + area.id, area.polygon, area.type === 'sports' ? mats.sports : mats.grassPlain, 0.025, area.holes)
+      continue
+    }
     if (!area.rect) continue
     if (area.type === 'sports') {
       addGroundPatch('area-' + area.id + '-earth', area.rect, mats.sports, 0.035)
@@ -150,8 +155,9 @@ export function createCampusScene(THREE) {
     const curve = new THREE.CatmullRomCurve3(points)
     const segments = Math.max(16, (points.length - 1) * 5)
     const sampledPoints = curve.getPoints(segments)
-    addPixelRoadLayer(road.id, sampledPoints, 3.5, 0.16, 0.105, mats.pathEdge, 'curb')
-    addPixelRoadLayer(road.id, sampledPoints, 2.86, 0.12, 0.205, mats.path, 'surface')
+    const roadWidth = Math.max(1.1, Number(road.width || 12) * worldWidth / (CAMPUS_PLAN_REFERENCE.mapBounds.right - CAMPUS_PLAN_REFERENCE.mapBounds.left) * 0.95)
+    addPixelRoadLayer(road.id, sampledPoints, roadWidth * 1.22, 0.16, 0.105, mats.pathEdge, 'curb')
+    addPixelRoadLayer(road.id, sampledPoints, roadWidth, 0.12, 0.205, mats.path, 'surface')
   }
 
   // 运动场边线与中心标记：让校园远景中的场地具备明确的运动设施识别度。
@@ -316,6 +322,31 @@ export function createCampusScene(THREE) {
     root.add(group)
   }
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)
+
+  // 用户编辑的 Point Feature 直接参与主场景构建，位置和属性不再只存在于编辑器预览层。
+  CAMPUS_OBJECTS.forEach((item, index) => {
+    const point = mapPixelToWorld(item.position[0], item.position[1])
+    let object
+    if (item.type === 'tree') object = addPixelTree(THREE, root, point.x, point.z, item.scale, index, mats)
+    else if (['bench', 'seat'].includes(item.type)) object = addPixelBench(THREE, root, point.x, point.z, mats)
+    else if (['streetlight', 'lamp'].includes(item.type)) object = addPixelLamp(THREE, root, point.x, point.z, mats)
+    else {
+      object = new THREE.Group()
+      const marker = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.8), mats.stone)
+      marker.position.y = 0.6
+      object.add(marker)
+      object.position.set(point.x, 0, point.z)
+      root.add(object)
+    }
+    if (object) {
+      object.name = 'campus-feature-' + item.id
+      object.userData.featureId = item.id
+      object.userData.displayName = item.name || item.type
+      object.userData.objectType = item.type
+      object.rotation.y = Number(item.rotation || 0) * Math.PI / 180
+      object.scale.multiplyScalar(item.scale || 1)
+    }
+  })
 
   const treePositions = [
     // 西侧湖岸与西南绿化带

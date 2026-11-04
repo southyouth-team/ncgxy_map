@@ -1,7 +1,7 @@
 import {
   CAMPUS_PLAN_REFERENCE, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
-import { getCampusSpatialLayers } from '../../../data/campus/campusGeoJSON.js'
+import { createCampusSceneRenderData } from './campusSceneData.js'
 
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
@@ -13,7 +13,7 @@ export function createCampusScene(THREE, featureCollection = null) {
   const root = new THREE.Group()
   root.name = 'NanchangInstituteCampus'
   const mats = createCampusMaterials(THREE)
-  const spatialLayers = getCampusSpatialLayers(featureCollection || undefined)
+  const spatialLayers = createCampusSceneRenderData(featureCollection || undefined).layers
   const { areas: CAMPUS_AREAS, roads: CAMPUS_ROAD_CENTERLINES, buildings: CAMPUS_BUILDING_FOOTPRINTS, objects: CAMPUS_OBJECTS } = spatialLayers
   const { worldWidth, worldDepth } = CAMPUS_PLAN_REFERENCE
 

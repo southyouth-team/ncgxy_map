@@ -78,3 +78,17 @@
 
 编辑器加载优先读取 FeatureCollection，并通过过渡适配器提供旧交互集合；保存时生成 FeatureCollection；Three.js 编辑器预览优先消费 FeatureCollection，再适配到当前渲染流程。旧 buildings/roads/areas/objects 字段暂时保留为兼容字段，尚未完成服务端 canonical-only 存储和所有渲染器的统一迁移。
 
+
+## 8. 编辑器 FeatureCollection 到渲染图层的统一归一化
+
+`getCampusSpatialLayers(collection)` 现在同时支持基础校园数据格式（`featureType: area + category`）和编辑器保存格式（`featureType: green/water/sports/plaza/parking`）。道路、建筑、区域和 Point 设施均从传入的 FeatureCollection 派生；不会为这些对象复制第二份几何。
+
+- 置信度读取兼容 `confidence` 与编辑器 `qualityStatus`。
+- 道路几何只接受 LineString，宽度统一为正数并提供安全默认值。
+- 建筑 Polygon 派生 footprint，同时保留楼层、高度、模板等渲染属性。
+- 区域 Polygon 保留外环与 holes，映射为既有校园场景区域类型。
+- Point 设施保留 feature ID、类型、坐标、朝向、缩放和来源。
+- 基础数据中的 boundary、gate、poi 仍按既有类型单独识别。
+
+该步骤建立了从编辑器统一数据契约到通用校园渲染图层的适配能力；当前尚未把首页启动流程完全切换为注入编辑器 FeatureCollection，也未完成所有 2.5D/3D 渲染路径统一，不能据此宣布双引擎转换完成。
+

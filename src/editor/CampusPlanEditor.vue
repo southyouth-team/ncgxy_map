@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
@@ -851,43 +851,50 @@ function movePointer(event) {
   if (boxSelection.value) { updateBoxSelection(event); return }
   if (!drag.value) return
   const p = point(event)
-  if (drag.value.type === 'multi') {
-    const dx = p.x - drag.value.start.x, dy = p.y - drag.value.start.y
-    drag.value.items.forEach(entry => {
-      const feature = featureCollection(entry.type).find(candidate => candidate.id === entry.id)
-      if (!feature) return
+  const currentDrag = drag.value
+  if (currentDrag.type === 'multi') {
+    const updates = currentDrag.items.map(entry => {
+      const dx = p.x - currentDrag.start.x, dy = p.y - currentDrag.start.y
       const moved = entry.geometry.map(([x, y]) => [x + dx, y + dy])
-      if (entry.type === 'road') feature.points = moved
-      else {
-        feature.footprint = moved
-        if (entry.type === 'building') feature.rect = polygonBounds(feature.footprint)
-      }
-    })
-  } else if (drag.value.type === 'vertex') {
-    const collection = drag.value.featureType === 'building' ? buildings.value : areas.value
-    const item = collection.find((entry) => entry.id === drag.value.id)
+      const fragment = entry.type === 'road'
+        ? { roads: [{ id: entry.id, points: moved }] }
+        : { [entry.type === 'building' ? 'buildings' : 'areas']: [{ id: entry.id, footprint: moved }] }
+      return { id: entry.id, geometry: toCampusFeatureCollection(fragment).features[0]?.geometry }
+    }).filter(entry => entry.geometry)
+    commitFeatureCollectionMutation(collection => updates.reduce(
+      (next, entry) => updateCampusFeatureGeometry(next, entry.id, entry.geometry),
+      collection,
+    ))
+  } else if (currentDrag.type === 'vertex') {
+    const collection = currentDrag.featureType === 'building' ? buildings.value : areas.value
+    const item = collection.find(entry => entry.id === currentDrag.id)
     if (item) {
-      const candidate = snapEnabled.value ? snapPoint(p, drag.value.index) : p
-      item.footprint[drag.value.index] = [candidate.x, candidate.y]
-      if (drag.value.featureType === 'building') item.rect = polygonBounds(item.footprint)
+      const candidate = snapEnabled.value ? snapPoint(p, currentDrag.index) : p
+      const footprint = item.footprint.map(point => [...point])
+      footprint[currentDrag.index] = [candidate.x, candidate.y]
+      commitFeatureGeometry(currentDrag.id, currentDrag.featureType === 'building'
+        ? { buildings: [{ id: item.id, footprint }] }
+        : { areas: [{ id: item.id, footprint }] })
     }
-  } else if (drag.value.type === 'building') {
-    const item = buildings.value.find((entry) => entry.id === drag.value.id)
-    const dx = p.x - drag.value.start.x, dy = p.y - drag.value.start.y
-    item.footprint = movePolygon(drag.value.footprint, dx, dy)
-    item.rect = polygonBounds(item.footprint)
-  } else if (drag.value.type === 'object') {
-    const item = objects.value.find(entry => entry.id === drag.value.id)
-    if (item) item.geometry.coordinates = [drag.value.position[0] + p.x - drag.value.start.x, drag.value.position[1] + p.y - drag.value.start.y]
-  } else if (drag.value.type === 'area') {
-    const area = areas.value.find((entry) => entry.id === drag.value.id)
-    if (area) area.footprint = movePolygon(drag.value.footprint, p.x - drag.value.start.x, p.y - drag.value.start.y)
-  } else if (drag.value.type === 'road') {
-    const road = roads.value.find((entry) => entry.id === drag.value.id)
-    if (road) road.points = movePolygon(drag.value.points, p.x - drag.value.start.x, p.y - drag.value.start.y)
-  } else {
-    const road = roads.value.find((entry) => entry.id === drag.value.id)
-    if (road) road.points[drag.value.index] = [p.x, p.y]
+  } else if (currentDrag.type === 'building') {
+    const item = buildings.value.find(entry => entry.id === currentDrag.id)
+    if (item) commitFeatureGeometry(item.id, { buildings: [{ id: item.id, footprint: movePolygon(currentDrag.footprint, p.x - currentDrag.start.x, p.y - currentDrag.start.y) }] })
+  } else if (currentDrag.type === 'object') {
+    const item = objects.value.find(entry => entry.id === currentDrag.id)
+    if (item) commitFeatureGeometry(item.id, { objects: [{ id: item.id, geometry: { type: 'Point', coordinates: [currentDrag.position[0] + p.x - currentDrag.start.x, currentDrag.position[1] + p.y - currentDrag.start.y] } }] })
+  } else if (currentDrag.type === 'area') {
+    const item = areas.value.find(entry => entry.id === currentDrag.id)
+    if (item) commitFeatureGeometry(item.id, { areas: [{ id: item.id, footprint: movePolygon(currentDrag.footprint, p.x - currentDrag.start.x, p.y - currentDrag.start.y) }] })
+  } else if (currentDrag.type === 'road') {
+    const item = roads.value.find(entry => entry.id === currentDrag.id)
+    if (item) commitFeatureGeometry(item.id, { roads: [{ id: item.id, points: movePolygon(currentDrag.points, p.x - currentDrag.start.x, p.y - currentDrag.start.y) }] })
+  } else if (currentDrag.type === 'node') {
+    const item = roads.value.find(entry => entry.id === currentDrag.id)
+    if (item) {
+      const points = item.points.map(point => [...point])
+      points[currentDrag.index] = [p.x, p.y]
+      commitFeatureGeometry(item.id, { roads: [{ id: item.id, points }] })
+    }
   }
 }
 function snapPoint(position, excludedIndex = -1) {
@@ -1025,6 +1032,11 @@ function commitFeatureUpsert(fragment) {
     (next, feature) => upsertCampusFeature(next, feature),
     collection,
   ))
+}
+function commitFeatureGeometry(featureId, fragment) {
+  const feature = toCampusFeatureCollection(fragment).features[0]
+  if (!feature) throw new Error('无法将编辑几何转换为校园 Feature')
+  commitFeatureCollectionMutation(collection => updateCampusFeatureGeometry(collection, featureId, feature.geometry))
 }
 function commitFeatureRemoval(featureIds) {
   const ids = featureIds.map(String)

@@ -231,7 +231,7 @@ function deleteSelectionBatch() {
   multiSelection.value = []
 }
 // 图层状态仅控制编辑视图与交互，不写入地图业务数据。
-const layerStates = ref({ buildings: { visible: true, locked: false }, roads: { visible: true, locked: false }, areas: { visible: true, locked: false } })
+const layerStates = ref({ buildings: { visible: true, locked: false }, roads: { visible: true, locked: false }, areas: { visible: true, locked: false }, objects: { visible: true, locked: false } })
 const clipboardObject = ref(null)
 let duplicateSequence = 0
 function copySelected() {
@@ -476,13 +476,14 @@ const canvasRenderBounds = computed(() => {
 const selectedBuilding = computed(() => buildings.value.find((item) => item.id === selected.value.id))
 const selectedRoad = computed(() => roads.value.find((item) => item.id === selected.value.id))
 const selectedArea = computed(() => areas.value.find((item) => item.id === selected.value.id))
-const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || selectedArea.value?.name || '未选择对象')
+const selectedLabel = computed(() => selectedBuilding.value?.label || selectedRoad.value?.id || selectedArea.value?.name || selectedObject.value?.name || '未选择对象')
 const layerItems = computed(() => [
   { key: 'buildings', label: '建筑图层', count: buildings.value.length, icon: '▦' },
   { key: 'roads', label: '道路图层', count: roads.value.length, icon: '⌁' },
   { key: 'areas', label: '区域图层', count: areas.value.length, icon: '▧' },
+  { key: 'objects', label: '树木与设施', count: objects.value.length, icon: '♧' },
 ])
-function layerKey(type) { return type === 'building' ? 'buildings' : type === 'road' ? 'roads' : 'areas' }
+function layerKey(type) { return type === 'building' ? 'buildings' : type === 'road' ? 'roads' : type === 'object' ? 'objects' : 'areas' }
 function isLayerLocked(type) { return Boolean(layerStates.value[layerKey(type)]?.locked) }
 function toggleLayerVisibility(key) {
   layerStates.value[key].visible = !layerStates.value[key].visible
@@ -515,7 +516,7 @@ const roadPath = (points) => {
   return path + ' L ' + last[0] + ' ' + last[1]
 }
 function snapshot() {
-  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value }))
+  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value }))
   if (history.value.length > 40) history.value.shift()
   future.value = []
 }
@@ -524,10 +525,11 @@ function restore(raw) {
   buildings.value = state.buildings
   roads.value = state.roads
   areas.value = state.areas || areas.value
+  objects.value = state.objects || []
 }
 function undo() {
   if (!history.value.length) return
-  future.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value }))
+  future.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value }))
   restore(history.value.pop())
 }
 function redo() {
@@ -914,6 +916,7 @@ function deleteSelected() {
   if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'road') roads.value = roads.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'area') areas.value = areas.value.filter(item => item.id !== selected.value.id)
+  if (selected.value.type === 'object') objects.value = objects.value.filter(item => item.id !== selected.value.id)
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
@@ -1031,7 +1034,7 @@ function exportDocument() {
               <polygon v-if="selected.id===item.id" :points="item.footprint.map(p=>p.join(',')).join(' ')" fill="none" stroke="#e6a84c" stroke-width="2" stroke-dasharray="5 3"/>
               <g v-if="selected.type==='building' && selected.id===item.id"><circle v-for="(vertex,index) in item.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'building',item,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
-            <g fill="#4f8050" stroke="#d8dfc6" stroke-width="1.5"><g v-for="(tree,index) in [[202,215],[305,210],[355,280],[190,360],[520,275],[565,355],[225,420],[330,430],[485,435],[75,220],[85,260],[570,180]]" :key="index"><circle :cx="tree[0]" :cy="tree[1]" r="7"/><circle :cx="tree[0]-4" :cy="tree[1]+2" r="4"/></g></g>
+            
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>
           </svg>
         </div>

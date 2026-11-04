@@ -5,7 +5,7 @@
  * walkability. This module only resolves visual assets for a Feature and view.
  */
 
-const ASSET_ROOTS = ['/assets/campus/', '/models/buildings/'];
+const ASSET_ROOTS = ['/assets/campus/', '/models/buildings/', '/api/v1/assets/visual-assets/'];
 const VIEW_MODES = ['2.5d', '3d', 'shared'];
 const SOURCES = ['ai_generated', 'manual_model', 'procedural', 'external'];
 const STATUSES = ['draft', 'review', 'ready', 'archived'];

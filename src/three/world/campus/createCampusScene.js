@@ -369,7 +369,8 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
           }
         })
         group.userData.visualAsset2d = { sprite, fallbackObjects, foundation, assetId: resolved.assetId }
-        const useImage = visualAssets.viewMode !== '3d'
+        const currentViewMode = typeof visualAssets.getViewMode === 'function' ? visualAssets.getViewMode() : visualAssets.viewMode
+        const useImage = currentViewMode !== '3d'
         sprite.visible = useImage
         fallbackObjects.forEach(({ object }) => { object.visible = !useImage })
         foundation.visible = !useImage

@@ -222,3 +222,22 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 ## 22. 点对象基础数据加载规则
 
 编辑器从基础 FeatureCollection 初始化 Point 对象时，必须保留 `confidence` 与 `verificationStatus` 在对象 `properties` 中；编辑器迁移字段 `qualityStatus` 只能来自同名字段或 `verificationStatus`，禁止回退到置信度字段。点对象的坐标、朝向、缩放、来源及质量元数据必须在加载、保存和反向适配中完整保留。
+
+
+## 23. 第三阶段验收边界与编辑器权威状态
+
+当前统一空间数据的已完成边界为：
+
+1. GeoJSON FeatureCollection 是保存与渲染交换边界的规范格式。
+2. 基础校园空间 Feature 与编辑器 Feature 按稳定 ID 合并，编辑器覆盖同 ID 基础要素，删除标记在合并后过滤。
+3. 首页与编辑器预览通过共享适配器从 FeatureCollection 派生相同空间图层。
+4. 质量字段 `confidence`、`verificationStatus` 与迁移字段 `qualityStatus` 分离。
+
+当前未完成边界：编辑器仍以四组响应式 legacy 数组作为交互工作状态，在保存/预览时再序列化为 FeatureCollection。因此不能称 FeatureCollection 已是编辑器内部唯一权威状态，也不能宣布第三阶段完全验收。
+
+后续迁移要求：
+- 以单个响应式 FeatureCollection 作为编辑器唯一可变空间状态。
+- 工具栏、绘制、拖动、批量选择、复制粘贴、属性面板、撤销/重做全部通过 Feature ID 与 geometry/properties 操作该集合。
+- legacy 数组只允许作为有明确生命周期的只读兼容视图，不得与 FeatureCollection 双向独立写入。
+- 保存、首页渲染、编辑器预览都直接消费该权威 FeatureCollection。
+- 保持 schemaVersion 旧文档读取能力，并提供可回滚的迁移测试。

@@ -486,7 +486,8 @@ onMounted(async () => {
     const structuralFeatures = buildCampusGeoJSON().features.filter(feature => ['boundary', 'gate', 'object'].includes(feature.properties.featureType))
     const featureById = new Map(structuralFeatures.map(feature => [String(feature.id), feature]))
     for (const feature of editorCollection.features || []) featureById.set(String(feature.id), feature)
-    const campusFeatureCollection = { type: 'FeatureCollection', features: [...featureById.values()] }
+    const deletedFeatureIds = new Set((editorCollection.deletedFeatureIds || planDocument?.deletedFeatureIds || []).map(String))
+     const campusFeatureCollection = { type: 'FeatureCollection', features: [...featureById.values()].filter(feature => !deletedFeatureIds.has(String(feature.id))), deletedFeatureIds: [...deletedFeatureIds] }
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },

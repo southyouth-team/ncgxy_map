@@ -465,3 +465,12 @@
 - 恢复结果现在同时返回兼容投影和原始规范 FeatureCollection；编辑器撤销/重做直接恢复规范集合。
 - 新增测试覆盖：支持的树木对象正常投影，未知设施 Feature、扩展属性和 tombstone 在历史恢复后完整保留。
 - 该修复与服务端加载的未知 Feature 保留规则一致；尚未完成浏览器端 undo/redo 与自动保存回读验收。
+
+
+## 2026-11-04 — 复制粘贴改为规范 Feature 操作
+
+- 复制时直接从规范 FeatureCollection 读取完整 Feature，不再从建筑/道路/区域/对象 legacy 数组提取数据。
+- 新增 `duplicateCampusFeature`，生成新稳定 ID、平移规范几何，并保留 properties、来源、置信度、核验状态及扩展属性。
+- 粘贴通过 `upsertCampusFeature` 写入规范集合；Point、LineString、Polygon、MultiPolygon 使用统一几何平移逻辑。
+- 新增复制测试，覆盖 Polygon 内环、质量元数据、扩展属性和源对象不可变。
+- 复制粘贴的实际画布交互、撤销/重做及保存回读仍需浏览器验收。

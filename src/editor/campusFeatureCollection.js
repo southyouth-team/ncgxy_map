@@ -124,7 +124,7 @@ export function toCampusFeatureCollection(document = {}) {
     ));
   }
 
-  return { type: 'FeatureCollection', features, deletedFeatureIds: [...new Set((document.deletedFeatureIds || []).map(String))] };
+  return { type: 'FeatureCollection', metadata: { ...(document.metadata || {}) }, features, deletedFeatureIds: [...new Set((document.deletedFeatureIds || []).map(String))] };
 }
 
 /**
@@ -319,10 +319,20 @@ export function mergeCampusFeatureCollections(baseCollection = {}, editedCollect
     if (!feature?.id) continue
     byId.set(String(feature.id), feature)
   }
+  const baseMetadata = baseCollection.metadata || {}
+  const editedMetadata = editedCollection.metadata || {}
+  const metadata = { ...baseMetadata, ...editedMetadata }
+  if (baseMetadata.catalogue || editedMetadata.catalogue) {
+    metadata.catalogue = {
+      ...(baseMetadata.catalogue || {}),
+      ...(editedMetadata.catalogue || {}),
+    }
+  }
   return {
     ...baseCollection,
     ...editedCollection,
     type: 'FeatureCollection',
+    metadata,
     features: [...byId.values()].filter(feature => !deleted.has(String(feature.id))),
     deletedFeatureIds,
   }

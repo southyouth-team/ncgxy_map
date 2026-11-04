@@ -15,6 +15,11 @@ export class CameraRig {
     this.camera = this.viewMode === '3d' ? this.perspectiveCamera : this.overviewCamera
     this.camera.position.set(0, 145, 145)
     this.target = new THREE.Vector3(0, 0, 0)
+    // 2.5D 与 3D 总览各自维护平移中心，切换投影不串用另一视角的拖拽结果。
+    this.overviewTargets = {
+      '2.5d': new THREE.Vector3(0, 0, 0),
+      '3d': new THREE.Vector3(0, 0, 0),
+    }
     this.currentPosition = this.camera.position.clone()
     this.currentTarget = this.target.clone()
     this.desiredPosition = this.camera.position.clone()
@@ -51,6 +56,11 @@ export class CameraRig {
   createOrbitControls(camera) {
     this.orbit?.dispose()
     this.orbit = new OrbitControls(camera, this.domElement)
+    this.orbit.addEventListener('change', () => {
+      if (this.mode === 'overview' && this.overviewTargets?.[this.viewMode]) {
+        this.overviewTargets[this.viewMode].copy(this.orbit.target)
+      }
+    })
     this.orbit.enableDamping = true
     this.orbit.dampingFactor = 0.075
     this.orbit.screenSpacePanning = true
@@ -158,6 +168,8 @@ export class CameraRig {
     const previousTarget = this.mode === 'overview'
       ? this.orbit.target.clone()
       : this.currentTarget.clone()
+    if (this.mode === 'overview') this.overviewTargets[this.viewMode].copy(previousTarget)
+    const nextOverviewTarget = this.overviewTargets[viewMode].clone()
     const viewDirection = previousPosition.clone().sub(previousTarget)
     const previousDistance = Math.max(viewDirection.length(), 0.001)
     viewDirection.normalize()
@@ -185,16 +197,16 @@ export class CameraRig {
         this.resetOverviewZoom()
         // 2.5D 总览固定为北向上、45° 斜俯视；只继承观察中心，不继承 3D 相机姿态。
         const fixedDistance = Math.max(145, this.overviewSpan * 1.1)
-        targetCamera.position.set(previousTarget.x, fixedDistance, previousTarget.z + fixedDistance)
+        targetCamera.position.set(nextOverviewTarget.x, fixedDistance, nextOverviewTarget.z + fixedDistance)
       } else if (previousCamera.isOrthographicCamera) {
         visibleHeight = (previousCamera.top - previousCamera.bottom) / previousCamera.zoom
         const perspectiveDistance = visibleHeight / (2 * Math.tan(this.THREE.MathUtils.degToRad(targetCamera.fov) / 2))
-        targetCamera.position.copy(previousTarget).addScaledVector(viewDirection, perspectiveDistance)
+        targetCamera.position.copy(nextOverviewTarget).addScaledVector(viewDirection, perspectiveDistance)
       } else {
         visibleHeight = 2 * previousDistance * Math.tan(this.THREE.MathUtils.degToRad(previousCamera.fov) / 2)
-        targetCamera.position.copy(previousPosition)
+        targetCamera.position.copy(nextOverviewTarget).addScaledVector(viewDirection, previousDistance)
       }
-      targetCamera.lookAt(previousTarget)
+      targetCamera.lookAt(nextOverviewTarget)
     } else {
       // 跟随与第一人称的镜头位置由角色状态驱动，切换投影后再按各自模式重算目标位置。
       targetCamera.position.copy(previousPosition)
@@ -208,20 +220,21 @@ export class CameraRig {
 
     this.activateCamera(targetCamera)
     this.currentPosition.copy(targetCamera.position)
-    this.currentTarget.copy(previousTarget)
+    const activeTarget = this.mode === 'overview' ? nextOverviewTarget : previousTarget
+    this.currentTarget.copy(activeTarget)
     this.desiredPosition.copy(targetCamera.position)
-    this.desiredTarget.copy(previousTarget)
+    this.desiredTarget.copy(activeTarget)
     this.transitioningToOverview = false
 
     if (this.mode === 'overview') {
-      this.orbit.target.copy(previousTarget)
+      this.orbit.target.copy(nextOverviewTarget)
       this.orbit.enabled = true
     } else {
       this.orbit.enabled = false
       if (this.mode === 'thirdPerson') this.updateThirdPersonDesired()
       else this.updateFirstPersonDesired()
     }
-    targetCamera.lookAt(this.mode === 'overview' ? previousTarget : this.desiredTarget)
+    targetCamera.lookAt(this.mode === 'overview' ? nextOverviewTarget : this.desiredTarget)
   }
 
   updateThirdPersonDesired() {
@@ -342,6 +355,9 @@ export class CameraRig {
     this.activateCamera(this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera)
     this.desiredTarget.set(targetX, 0, targetZ)
     this.desiredPosition.set(targetX, span * 0.78, targetZ + span * 0.78)
+    // 首次按校园内容包络聚焦时，同步初始化两套视角中心；后续用户平移互不覆盖。
+    this.overviewTargets['2.5d'].set(targetX, 0, targetZ)
+    this.overviewTargets['3d'].set(targetX, 0, targetZ)
     this.orbit.target.set(targetX, 0, targetZ)
 
     if (options.immediate) {
@@ -361,6 +377,8 @@ export class CameraRig {
     this.activateCamera(this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera)
     if (this.viewMode === '2.5d') this.resetOverviewZoom()
     this.transitioningToOverview = true
+    this.overviewTargets['2.5d'].set(0, 0, 0)
+    this.overviewTargets['3d'].set(0, 0, 0)
     this.orbit.target.set(0, 0, 0)
     this.applyIsometricOrientation()
     this.player.set(0, 1.7, this.isometricRpg ? 14 : 24)

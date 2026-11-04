@@ -283,9 +283,8 @@ let duplicateSequence = 0
 function copySelected() {
   const targets = multiSelection.value.length > 1 ? multiSelection.value : (selected.value.id ? [selected.value] : [])
   const copied = targets.filter(entry => !isLayerLocked(entry.type)).map(entry => {
-    const collection = featureCollection(entry.type)
-    const item = collection.find(candidate => candidate.id === entry.id)
-    return item ? { type: entry.type, item: JSON.parse(JSON.stringify(item)) } : null
+    const feature = spatialFeatureCollection.value.features.find(candidate => String(candidate.id) === String(entry.id))
+    return feature ? { type: entry.type, feature: JSON.parse(JSON.stringify(feature)) } : null
   }).filter(Boolean)
   if (copied.length) clipboardObject.value = copied
 }
@@ -296,15 +295,12 @@ function pasteCopied() {
   snapshot()
   const pasted = []
   available.forEach(entry => {
-    const clone = JSON.parse(JSON.stringify(entry.item))
+    const clone = JSON.parse(JSON.stringify(entry.feature))
     duplicateSequence += 1
     clone.id = `copy-${entry.type}-${Date.now()}-${duplicateSequence}`
-    if (Array.isArray(clone.footprint)) clone.footprint = clone.footprint.map(([x, y]) => [x + 24, y + 24])
-    if (Array.isArray(clone.points)) clone.points = clone.points.map(([x, y]) => [x + 24, y + 24])
-    if (clone.geometry?.type === 'Point') clone.geometry.coordinates = clone.geometry.coordinates.map(value => value + 24)
-    if (Array.isArray(clone.rect)) clone.rect = [clone.rect[0] + 24, clone.rect[1] + 24, clone.rect[2] + 24, clone.rect[3] + 24]
-    const fragment = entry.type === 'building' ? { buildings: [clone] } : entry.type === 'road' ? { roads: [clone] } : entry.type === 'object' ? { objects: [clone] } : { areas: [clone] }
-    commitFeatureUpsert(fragment)
+    clone.geometry = translateCampusFeatureGeometry(clone.geometry, 24, 24)
+    clone.id = String(clone.id)
+    commitFeatureCollectionMutation(collection => upsertCampusFeature(collection, clone))
     pasted.push({ type: entry.type, id: clone.id })
   })
   multiSelection.value = pasted

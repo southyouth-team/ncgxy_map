@@ -63,7 +63,7 @@ describe('toCampusFeatureCollection', () => {
     const restored = fromCampusFeatureCollection(toCampusFeatureCollection(source))
     expect(restored.buildings[0]).toMatchObject({ id: 'b', label: '教学楼', floors: 4 })
     expect(restored.roads[0]).toMatchObject({ id: 'r', width: 6, points: [[0, 0], [10, 10]] })
-    expect(restored.areas[0]).toMatchObject({ id: 'a', name: '草坪', type: 'vegetation' })
+    expect(restored.areas[0]).toMatchObject({ id: 'a', name: '草坪', type: 'vegetation', polygon: [[0, 0], [5, 0], [5, 5]] })
     expect(restored.objects[0]).toMatchObject({ id: 't', type: 'tree', properties: { scale: 1.5 } })
   })
 

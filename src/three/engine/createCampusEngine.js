@@ -84,7 +84,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let navigationVisualGroup = null
   let navigationWasActive = false
   let pendingIndoorFloorTarget = null
-  const renderDebugEnabled = new URLSearchParams(window.location.search).has('render-debug')
+  // 同时兼容普通查询参数与 Vue Router Hash 路由中的查询参数。
+  // 例如 /?render-debug=1 和 /#/map?render-debug=1 都应启用诊断。
+  const renderDebugEnabled = (() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const hashQueryIndex = window.location.hash.indexOf('?')
+    const hashQuery = hashQueryIndex >= 0 ? window.location.hash.slice(hashQueryIndex + 1) : ''
+    const hashParams = new URLSearchParams(hashQuery)
+    return searchParams.has('render-debug') || hashParams.has('render-debug')
+  })()
   let renderDebugFrame = 0
 
   async function init() {

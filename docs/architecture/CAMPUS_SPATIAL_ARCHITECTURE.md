@@ -190,3 +190,11 @@
 ## 18. 编辑器删除操作入口约束
 
 所有对象删除入口必须调用统一删除命令，不允许属性面板或快捷操作直接过滤业务数组。统一删除命令负责图层锁校验、undo 快照、基础 Feature tombstone 和选中状态清理；否则不同入口会产生不同持久化语义。
+
+## 19. 编辑器质量字段与统一数据质检映射
+
+编辑器历史文档使用 `qualityStatus`，基础空间数据质检使用两个独立字段：
+- `confidence`：low / medium / high，表达数据置信度。
+- `verificationStatus`：verified / unverified，表达人工核验状态。
+
+Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上两个标准字段合法。不得将 `unverified` 直接写入 `confidence`。当旧文档没有置信度时，按保守默认值 low + unverified 输出；已核验对象默认 medium + verified。来源和置信度仍需根据实际资料人工校准。

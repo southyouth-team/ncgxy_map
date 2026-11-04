@@ -2,6 +2,7 @@ import {
   CAMPUS_PLAN_REFERENCE, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
 import { createCampusSceneRenderData } from './campusSceneData.js'
+import { resolveCampusVisualAsset } from '../../../data/campus/campusAssetManifest.js'
 import { createCampusPlayer } from './createCampusPlayer.js'
 
 import {
@@ -10,7 +11,7 @@ import {
 } from './campusAssetLibrary.js'
 
 // 等距像素风 2.5D 校园原型。空间轮廓来自示意图，程序化建筑不代表真实楼体测绘。
-export function createCampusScene(THREE, featureCollection = null) {
+export function createCampusScene(THREE, featureCollection = null, visualAssets = {}) {
   const root = new THREE.Group()
   root.name = 'NanchangInstituteCampus'
   const mats = createCampusMaterials(THREE)
@@ -332,6 +333,50 @@ export function createCampusScene(THREE, featureCollection = null) {
       group.add(outline)
     }
     root.add(group)
+
+    const resolved = resolveCampusVisualAsset(visualAssets.manifest, item.id, '2.5d')
+    if (resolved.resolved && resolved.file?.mediaType === 'image' && visualAssets.baseUrl) {
+      const imageUrl = new URL(resolved.file.url, visualAssets.baseUrl).toString()
+      const loader = new THREE.TextureLoader()
+      loader.load(imageUrl, (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace
+        texture.magFilter = THREE.LinearFilter
+        texture.minFilter = THREE.LinearMipmapLinearFilter
+        const spriteMaterial = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+        })
+        const sprite = new THREE.Sprite(spriteMaterial)
+        const imageAspect = texture.image?.height && texture.image?.width
+          ? texture.image.height / texture.image.width
+          : 1
+        const spriteWidth = Math.max(width, depth) * 1.12
+        const spriteHeight = spriteWidth * imageAspect
+        sprite.name = 'ai-visual-asset-' + item.id
+        sprite.position.set(0, spriteHeight / 2, 0)
+        sprite.scale.set(spriteWidth, spriteHeight, 1)
+        sprite.userData.featureId = item.id
+        sprite.userData.featureCategory = 'buildings'
+        sprite.userData.objectType = 'building-visual-asset'
+        sprite.userData.assetId = resolved.assetId
+        group.add(sprite)
+        const fallbackObjects = []
+        group.children.forEach((child) => {
+          if (child !== sprite) {
+            fallbackObjects.push({ object: child, visible: child.visible })
+          }
+        })
+        group.userData.visualAsset2d = { sprite, fallbackObjects, foundation, assetId: resolved.assetId }
+        const useImage = visualAssets.viewMode !== '3d'
+        sprite.visible = useImage
+        fallbackObjects.forEach(({ object }) => { object.visible = !useImage })
+        foundation.visible = !useImage
+      }, undefined, (error) => {
+        console.warn('[CampusVisualAsset] 图片加载失败，保留程序化建筑：' + item.id, error)
+      })
+    }
   }
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)
 

@@ -75,6 +75,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let selectedFeatureObject = null
   let selectedIndoorObject = null
   let rpgPreviewGroup = null
+  // 远景地面跟随当前相机的水平位置，避免低俯仰角下有限平面边缘进入视野。
+  let activeHorizonGround = null
   let editorPreviewActive = false
   let loadedBuildingModels = []
   const outdoorBuildingBaselines = new WeakMap()
@@ -423,12 +425,16 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const groundWidth = Math.max(4000, contentWidth + margin * 2)
     const groundDepth = Math.max(4000, contentDepth + margin * 2)
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(groundWidth, groundDepth),
+      // 相机低角度观察时，地面边界会被投影成横向截断线；大尺寸平面并随相机水平位置移动，
+      // 让地面边缘始终远离当前视锥体。校园内容边界仍使用独立的 contentWidth/contentDepth。
+      new THREE.PlaneGeometry(Math.max(12000, groundWidth), Math.max(12000, groundDepth)),
       new THREE.MeshStandardMaterial({ color: '#8eae69', roughness: 1 }),
     )
+    ground.name = 'campus-preview-horizon-ground'
     ground.rotation.x = -Math.PI / 2
     ground.position.set(centerX, -0.12, centerZ)
     ground.receiveShadow = true
+    activeHorizonGround = ground
     rpgPreviewGroup.add(ground)
 
     for (const area of document.areas || []) {
@@ -1008,6 +1014,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       lastPlayerZ = cameraRig.player.z
     }
     cameraRig?.update(delta)
+    // 远景地面跟随相机的 X/Z 坐标，避免相机平移或低角度观察时看到有限平面的边缘。
+    if (activeHorizonGround && cameraRig?.camera) {
+      activeHorizonGround.position.x = cameraRig.camera.position.x
+      activeHorizonGround.position.z = cameraRig.camera.position.z
+    }
     renderer.render(scene, cameraRig.camera)
     if (renderDebugEnabled && ++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
   }
@@ -1553,6 +1564,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     clearSelection()
     clearNavigationVisuals()
     clearRpgPreview()
+    activeHorizonGround = null
     if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()
     cameraRig?.dispose()

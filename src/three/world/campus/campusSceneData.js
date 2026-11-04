@@ -178,7 +178,8 @@ export function auditCampusSceneFeatureCoverage(spatialLayers, sceneRoot) {
   const expected = {
     buildings: (spatialLayers?.buildings || []).map(item => String(item.id)),
     roads: (spatialLayers?.roads || []).map(item => String(item.id)),
-    areas: (spatialLayers?.areas || []).map(item => String(item.id)),
+    // building-cluster 是建筑布局辅助分组，不单独生成地面 Mesh。
+    areas: (spatialLayers?.areas || []).filter(item => item.type !== 'building-cluster').map(item => String(item.id)),
     objects: (spatialLayers?.objects || []).map(item => String(item.id)),
   }
   const actual = Object.fromEntries(Object.keys(expected).map(key => [key, new Map()]))

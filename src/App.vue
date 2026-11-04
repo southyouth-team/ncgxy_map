@@ -1,9 +1,9 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
-import CampusPlanEditor from './editor/CampusPlanEditor.vue'
-import IndoorFloorPlanEditor from './components/IndoorFloorPlanEditor.vue'
-import BuildingFootprintEditor from './components/BuildingFootprintEditor.vue'
+const CampusPlanEditor = defineAsyncComponent(() => import('./editor/CampusPlanEditor.vue'))
+const IndoorFloorPlanEditor = defineAsyncComponent(() => import('./components/IndoorFloorPlanEditor.vue'))
+const BuildingFootprintEditor = defineAsyncComponent(() => import('./components/BuildingFootprintEditor.vue'))
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 import { CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAN_REFERENCE, mapPixelToWorld } from './data/campus/campusLayout.js'

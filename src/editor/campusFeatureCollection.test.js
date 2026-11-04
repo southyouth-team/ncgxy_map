@@ -1,5 +1,36 @@
 import { describe, expect, it } from 'vitest'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, upsertCampusFeature, updateCampusFeatureProperties, updateCampusFeatureGeometry, removeCampusFeatures } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, upsertCampusFeature, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, removeCampusFeatures } from './campusFeatureCollection.js'
+
+describe('translateCampusFeatureGeometry', () => {
+  it('translates every Polygon ring and preserves geometry metadata', () => {
+    const geometry = {
+      type: 'Polygon',
+      coordinates: [
+        [[0, 0], [10, 0], [10, 10], [0, 0]],
+        [[2, 2], [4, 2], [4, 4], [2, 2]],
+      ],
+    }
+    expect(translateCampusFeatureGeometry(geometry, 5, -3)).toEqual({
+      type: 'Polygon',
+      coordinates: [
+        [[5, -3], [15, -3], [15, 7], [5, -3]],
+        [[7, -1], [9, -1], [9, 1], [7, -1]],
+      ],
+    })
+    expect(geometry.coordinates[1][0]).toEqual([2, 2])
+  })
+
+  it('translates LineString, Point and MultiPolygon geometries', () => {
+    expect(translateCampusFeatureGeometry({ type: 'LineString', coordinates: [[0, 1], [2, 3]] }, 2, 4).coordinates).toEqual([[2, 5], [4, 7]])
+    expect(translateCampusFeatureGeometry({ type: 'Point', coordinates: [1, 2] }, -1, 3).coordinates).toEqual([0, 5])
+    expect(translateCampusFeatureGeometry({ type: 'MultiPolygon', coordinates: [[[[0, 0], [1, 0], [0, 0]]]] }, 1, 1).coordinates).toEqual([[[[1, 1], [2, 1], [1, 1]]]])
+  })
+
+  it('rejects unsupported geometry and invalid offsets', () => {
+    expect(() => translateCampusFeatureGeometry({ type: 'GeometryCollection', geometries: [] }, 1, 1)).toThrow('不支持平移几何类型')
+    expect(() => translateCampusFeatureGeometry({ type: 'Point', coordinates: [0, 0] }, NaN, 1)).toThrow('几何平移参数无效')
+  })
+})
 
 describe('toCampusFeatureCollection', () => {
   it('normalizes buildings, roads, areas and point objects into one feature collection', () => {

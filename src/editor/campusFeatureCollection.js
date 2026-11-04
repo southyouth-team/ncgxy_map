@@ -148,7 +148,12 @@ export function fromCampusFeatureCollection(collection = {}) {
     if (type === 'building' && feature.geometry?.type === 'Polygon') {
       const footprint = (feature.geometry.coordinates?.[0] || []).slice(0, -1);
       const holes = (feature.geometry.coordinates || []).slice(1).map(ring => ring.slice(0, -1));
-      result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, holes, confidence: properties.confidence || 'low', qualityStatus, source });
+      const xs = footprint.map(([x]) => Number(x))
+      const ys = footprint.map(([, y]) => Number(y))
+      const rect = footprint.length
+        ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+        : [0, 0, 0, 0]
+      result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, holes, rect, confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (type === 'road' && feature.geometry?.type === 'LineString') {
       result.roads.push({ ...properties, id: String(feature.id), name, points: feature.geometry.coordinates, width: properties.width, confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (['green', 'water', 'sports', 'plaza', 'parking'].includes(type) && feature.geometry?.type === 'Polygon') {

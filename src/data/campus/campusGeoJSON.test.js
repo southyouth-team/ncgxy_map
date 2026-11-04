@@ -253,6 +253,15 @@ describe('统一校园空间数据出口', () => {
         qualityStatus: 'unverified',
         verificationStatus: 'unverified',
       }],
+      objects: [{
+        id: 'quality-check-tree',
+        type: 'tree',
+        name: '待核验树木',
+        geometry: { type: 'Point', coordinates: [180, 180] },
+        properties: { confidence: 'low', verificationStatus: 'unverified', scale: 1.1 },
+        qualityStatus: 'unverified',
+        source: 'manual',
+      }],
     })
 
     const report = validateCampusGeoJSON(collection)
@@ -262,6 +271,7 @@ describe('统一校园空间数据出口', () => {
       expect.objectContaining({ confidence: 'high', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
       expect.objectContaining({ confidence: 'medium', qualityStatus: 'verified', verificationStatus: 'verified' }),
       expect.objectContaining({ confidence: 'low', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+      expect.objectContaining({ featureType: 'object', objectType: 'tree', confidence: 'low', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
     ]))
   })
 

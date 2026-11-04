@@ -9,8 +9,8 @@ export class CameraRig {
     this.domElement = domElement
     this.aspect = 1
     this.overviewSpan = 190
-    this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.1, 20000)
-    this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 20000)
+    this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.5, 3200)
+    this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.5, 3200)
     // 首次进入时也必须尊重 URL/应用指定的投影模式，不能先创建正交相机再等待用户切换。
     this.camera = this.viewMode === '3d' ? this.perspectiveCamera : this.overviewCamera
     this.camera.position.set(0, 145, 145)

@@ -3,12 +3,24 @@ import { CAMPUS_AREAS, CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_ROAD_CENTERLINES } fro
 import { buildCampusGeoJSON, getCampusSpatialLayers, validateCampusGeoJSON, CAMPUS_SPATIAL_DATASET, mergeCampusSceneFeatureCollections } from './campusGeoJSON.js'
 import { CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_BUILDING_METADATA, buildCampusRoadGraph } from './campusInventory.js'
 import { toCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
+import { getDefaultWalkable } from './walkability.js'
 
 describe('统一校园空间数据出口', () => {
   it('明确使用同一套参考图像像素坐标，不伪装成测绘坐标', () => {
     expect(CAMPUS_SPATIAL_DATASET.coordinateSystem).toBe('NCGXY_REFERENCE_IMAGE_PIXEL')
     expect(CAMPUS_SPATIAL_DATASET.coordinateUnit).toBe('pixel')
     expect(CAMPUS_SPATIAL_DATASET.accuracyNote).toContain('非测绘成果')
+  })
+
+  it('按要素类型提供默认通行策略，并允许显式覆盖', () => {
+    expect(getDefaultWalkable('area', { category: 'vegetation' })).toBe(true)
+    expect(getDefaultWalkable('area', { category: 'plaza' })).toBe(true)
+    expect(getDefaultWalkable('area', { category: 'water' })).toBe(false)
+    expect(getDefaultWalkable('building')).toBe(false)
+    expect(getDefaultWalkable('object', { objectType: 'tree' })).toBe(false)
+    expect(getDefaultWalkable('object', { objectType: 'flower' })).toBe(true)
+    expect(getDefaultWalkable('object', { objectType: 'tree', walkable: true })).toBe(true)
+    expect(getDefaultWalkable('water', { walkable: true })).toBe(true)
   })
 
   it('将现有区域、道路和建筑输出为唯一 FeatureCollection', () => {
@@ -83,8 +95,8 @@ describe('统一校园空间数据出口', () => {
     expect(edited.features.every(feature => ['verified', 'unverified'].includes(feature.properties.verificationStatus))).toBe(true)
     expect(layers.buildings[0]).toMatchObject({ id: 'edit-building', label: '新教学楼', floors: 6 })
     expect(layers.roads[0]).toMatchObject({ id: 'edit-road', name: '新支路', width: 9 })
-    expect(layers.areas[0]).toMatchObject({ id: 'edit-water', name: '景观水池', type: 'water' })
-    expect(layers.objects[0]).toMatchObject({ id: 'edit-tree', type: 'tree', position: [70, 80], rotation: 45, scale: 1.4 })
+    expect(layers.areas[0]).toMatchObject({ id: 'edit-water', name: '景观水池', type: 'water', walkable: false })
+    expect(layers.objects[0]).toMatchObject({ id: 'edit-tree', type: 'tree', position: [70, 80], rotation: 45, scale: 1.4, walkable: false })
   })
 
 

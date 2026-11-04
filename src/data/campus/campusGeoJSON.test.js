@@ -105,6 +105,22 @@ describe('统一校园空间数据出口', () => {
   })
 
 
+  it('质检覆盖全部对象类型的几何契约，并拒绝缺失或未知类型', () => {
+    const invalid = structuredClone(buildCampusGeoJSON())
+    const water = invalid.features.find(feature => feature.properties.featureType === 'area')
+    water.properties.category = 'water'
+    water.geometry.type = 'Point'
+    water.geometry.coordinates = [120, 120]
+    const tree = invalid.features.find(feature => feature.properties.objectType === 'tree')
+    tree.geometry.type = 'Polygon'
+    tree.geometry.coordinates = [[[100, 100], [120, 100], [120, 120], [100, 120], [100, 100]]]
+    const plaza = invalid.features.find(feature => feature.properties.category === 'plaza')
+    plaza.properties.featureType = 'unknown-custom-type'
+    const report = validateCampusGeoJSON(invalid)
+    expect(report.errors.map(error => error.code)).toContain('GEOMETRY_TYPE_MISMATCH')
+    expect(report.errors.map(error => error.code)).toContain('UNSUPPORTED_FEATURE_TYPE')
+  })
+
   it('质检能识别自交面和要素类型不匹配', () => {
     const invalid = structuredClone(buildCampusGeoJSON())
     const polygon = invalid.features.find(feature => feature.geometry.type === 'Polygon')

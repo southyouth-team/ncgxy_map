@@ -20,12 +20,15 @@ export class InputController {
     this.lastTouchLook = { x: 0, y: 0 }
     this.onKeyDown = (event) => {
       const key = event.key.toLowerCase()
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) {
-        this.keys.add(key)
-        if (this.mode !== 'firstPerson') event.preventDefault()
-      }
+      if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) return
+      const target = event.target
+      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return
+      this.keys.add(key)
+      // 第一人称 WASD 也必须阻止浏览器默认滚动，否则按键会同时滚动页面。
+      event.preventDefault()
     }
     this.onKeyUp = (event) => this.keys.delete(event.key.toLowerCase())
+    this.onWindowBlur = () => this.keys.clear()
     this.onMouseDown = (event) => {
       if (event.button !== 0) return
       this.pointerDown = true
@@ -75,6 +78,7 @@ export class InputController {
   attach() {
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
+    window.addEventListener('blur', this.onWindowBlur)
     this.domElement.addEventListener('mousedown', this.onMouseDown)
     window.addEventListener('mousemove', this.onMouseMove)
     window.addEventListener('mouseup', this.onMouseUp)
@@ -181,6 +185,7 @@ export class InputController {
   dispose() {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
+    window.removeEventListener('blur', this.onWindowBlur)
     this.domElement.removeEventListener('mousedown', this.onMouseDown)
     window.removeEventListener('mousemove', this.onMouseMove)
     window.removeEventListener('mouseup', this.onMouseUp)

@@ -310,6 +310,7 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
       confidence: confidenceOf(feature),
       points: feature.geometry.coordinates,
       width: Number(feature.properties.width) > 0 ? Number(feature.properties.width) : 12,
+      walkable: getDefaultWalkable('road', feature.properties),
       properties: { ...feature.properties },
       source: feature.properties.source,
       qualityStatus: feature.properties.qualityStatus,

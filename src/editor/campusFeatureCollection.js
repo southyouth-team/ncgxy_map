@@ -191,6 +191,8 @@ export function createCampusFeatureSnapshot(document = {}) {
     version: 1,
     featureCollection: {
       type: 'FeatureCollection',
+      // 集合级 metadata（数据集版本、catalogue、扩展信息）同样属于空间快照。
+      metadata: { ...(converted.metadata || {}) },
       features: converted.features || [],
       deletedFeatureIds,
     },

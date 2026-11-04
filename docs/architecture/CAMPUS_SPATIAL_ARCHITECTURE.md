@@ -341,3 +341,12 @@ Polygon 几何编辑必须明确区分整体变换和外环顶点编辑：
 ## 36. 未知 Feature 的兼容投影与持久化
 
 legacy 编辑器投影不是规范数据完整性的判断依据。当前编辑器只支持部分 Feature 类型映射到旧数组；未映射类型允许不出现在 legacy 数组中，但必须原样留在 `spatialFeatureCollection`。保存文档、undo/redo 和服务端刷新回读均以规范集合为依据。任何兼容投影、属性更新、几何更新和删除操作都不得通过重建 legacy 数组覆盖规范集合。
+
+
+## 37. 平面编辑文档服务端 schema 契约
+
+编辑器当前保存 `schemaVersion: 4`，其空间权威载荷为 `featureCollection`。服务端 `savePlan` 必须接受 v4，并要求存在合法 GeoJSON FeatureCollection；不得仅按旧版 v2 拒绝请求。历史 v2/v3 文档继续允许保存，以支持迁移期兼容。
+
+服务端以 JSONB 原样持久化规范集合，结构校验不应通过白名单重建 Feature properties，未知业务字段必须保留。至少校验 FeatureCollection 类型、features 数组、稳定 ID 非空且唯一、geometry 结构、坐标有限、properties 为对象、tombstone 为字符串数组和文档体积上限。数据库 schema_version 应与文档 schemaVersion 同步。
+
+端到端验收必须验证 PUT 后 GET 回读完整 FeatureCollection、未知 Feature、扩展 properties、Polygon 内环和删除 tombstone，并验证 revision 冲突不会覆盖服务端已有版本。

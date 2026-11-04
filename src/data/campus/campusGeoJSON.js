@@ -294,7 +294,6 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
       properties: { ...feature.properties },
       source: feature.properties.source,
       qualityStatus: feature.properties.qualityStatus,
-      properties: { ...feature.properties },
     }))
 
   const buildings = features
@@ -309,6 +308,7 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
       template: feature.properties.template,
       source: feature.properties.source,
       qualityStatus: feature.properties.qualityStatus,
+      properties: { ...feature.properties },
     }))
 
   const objects = features

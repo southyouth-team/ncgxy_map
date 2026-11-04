@@ -116,3 +116,10 @@
 
 - 当前上传接口复用项目现有 `DevIdentityGuard`，仅适用于 `NODE_ENV` 非 production 的开发联调；生产环境会拒绝该开发身份请求。正式上线前必须接入项目正式用户认证和资产管理权限校验。
 - Dockerfile 声明了 `/data/campus-map-assets` 数据卷，部署时仍应显式绑定命名卷/宿主机持久目录，并将该目录纳入备份。不能依赖容器可写层。
+
+
+### 2.5D 图片与 3D 模型的显示边界
+
+- `gpt-image-2` 生成的是 2D 图片，仅用于 2.5D 视图；它不会自动生成建筑体积、侧面、屋顶几何或可旋转 3D 模型。
+- 切换到 3D 时，2.5D 图片 Sprite 隐藏，显示程序化建筑；如需真实建筑立面和可旋转模型，需要导入并审核 GLB。当前资产清单可登记 3D GLB，但该清单的 GLB 运行时加载器仍待接入，现有 `buildings.json` GLB 管线保持独立。
+- Sprite 参与场景树后，第三人称遮挡检测的 Raycaster 必须设置当前 Camera；检测前更新 camera world matrix，避免 Sprite.raycast 读取空 camera.matrixWorld。

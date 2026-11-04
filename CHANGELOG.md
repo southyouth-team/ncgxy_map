@@ -341,3 +341,9 @@
   - 仍需核对所有旧文档中 `qualityStatus` 的历史取值，确认没有超出 verified / unverified 的业务状态。
   - 仍需执行浏览器端保存、回读、首页与编辑器预览一致性验收。
 - **下一步**：等待前后端 CI；通过后继续第三阶段完整 FeatureCollection 合并与持久化验收，不提前进入第四阶段。
+
+
+### 统一图层置信度回退规则补充
+
+- 修正 `getCampusSpatialLayers` 的置信度读取：只接受 low / medium / high；缺失或非法值回退为 low，不再把 `qualityStatus: unverified` 当作置信度。
+- 修正旧测试中将 `confidence: medium` 错误断言为 `qualityStatus: medium` 的语义混淆，改为分别断言三个字段。

@@ -24,7 +24,7 @@
 | sourceType | ai_generated / manual_model / procedural / external |
 | status | draft / review / ready / archived |
 | files | 一个资产可包含多个视角与用途文件 |
-| provenance | 后续扩展生成模型、提示词、参考图、授权和制作记录 |
+| provenance | 可选来源记录：provider、prompt、reference、license、createdAt、notes；AI 资产建议至少填写 provider 与 prompt |
 
 ### File variant
 
@@ -50,7 +50,7 @@
 
 ## AI 生成与人工建模的接入约定
 
-- AI 生成素材进入 `draft`，记录生成来源和 prompt；审核尺寸、透明边缘、风格、比例、授权后转为 `ready`。
+- AI 生成素材进入 `draft`，记录生成 provider 和 prompt；审核尺寸、透明边缘、风格、比例、授权后转为 `ready`。校验器会对缺失来源信息给出 warning。
 - 人工建模导入 GLB 使用相同 assetId/binding；模型结构、三角面、材质和包围盒继续走既有 GLB 审计。
 - 程序化资产可以登记为 `procedural` 来源，但现阶段不强制把现有全部程序化 Mesh 迁移进清单。
 - AI 输出文件先落入受控目录，再由清单引用；不能把临时生成 URL 当作长期资产地址。

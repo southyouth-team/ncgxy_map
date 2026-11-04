@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveCampusVisualAsset, validateCampusAssetManifest } from './campusAssetManifest.js'
+import { createCampusAssetManifestFromWorkshopRecords, resolveCampusVisualAsset, validateCampusAssetManifest } from './campusAssetManifest.js'
 
 const manifest = {
   schemaVersion: 1,
@@ -63,5 +63,27 @@ describe('campus visual asset manifest', () => {
     thumbnailOnly.assets[0].files = [thumbnailOnly.assets[0].files[2]]
     const report = validateCampusAssetManifest(thumbnailOnly)
     expect(report.errors.map(error => error.code)).toContain('ASSET_READY_WITHOUT_PRIMARY')
+  })
+  it('groups reviewed 2.5D and 3D variants under one stable Feature asset binding', () => {
+    const records = [
+      { assetId: 'draft-image', featureId: 'building-001', featureName: '教学楼', category: 'building', sourceType: 'ai_generated', status: 'ready', deployedConfirmed: true, viewMode: '2.5d', publicPath: '/assets/campus/buildings/teaching.webp', prompt: 'isometric building' },
+      { assetId: 'draft-model', featureId: 'building-001', featureName: '教学楼', category: 'building', sourceType: 'manual_model', status: 'ready', deployedConfirmed: true, viewMode: '3d', publicPath: '/models/buildings/teaching.glb' },
+    ]
+    const result = createCampusAssetManifestFromWorkshopRecords(records, ['building-001'])
+    expect(result.report.valid).toBe(true)
+    expect(result.manifest.assets).toHaveLength(1)
+    expect(result.manifest.assets[0].assetId).toBe('campus-building-001')
+    expect(result.manifest.assets[0].files.map(file => file.viewMode)).toEqual(['2.5d', '3d'])
+    expect(result.manifest.bindings).toEqual([{ featureId: 'building-001', assetId: 'campus-building-001' }])
+  })
+
+  it('does not export unconfirmed files or unsafe public paths', () => {
+    const records = [
+      { featureId: 'building-001', status: 'ready', deployedConfirmed: false, viewMode: '2.5d', publicPath: '/assets/campus/buildings/pending.webp' },
+      { featureId: 'building-002', status: 'ready', deployedConfirmed: true, viewMode: '2.5d', publicPath: '/assets/campus/../../private.webp' },
+    ]
+    const result = createCampusAssetManifestFromWorkshopRecords(records, ['building-001', 'building-002'])
+    expect(result.manifest.assets).toHaveLength(0)
+    expect(result.skipped).toHaveLength(1)
   })
 })

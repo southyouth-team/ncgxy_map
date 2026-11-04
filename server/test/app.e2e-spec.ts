@@ -351,6 +351,25 @@ describe('Campus map API (PostGIS integration)', () => {
         vendorData: { model: 'future', revision: 9 },
       },
     };
+    const multiPolygonFeature = {
+      ...unknownFeature,
+      id: 'future-multipolygon-01',
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [[[[30, 30], [40, 30], [40, 40], [30, 30]]]],
+      },
+    };
+    const geometryCollectionFeature = {
+      ...unknownFeature,
+      id: 'future-geometry-collection-01',
+      geometry: {
+        type: 'GeometryCollection',
+        geometries: [
+          { type: 'Point', coordinates: [50, 50] },
+          { type: 'LineString', coordinates: [[50, 50], [60, 60]] },
+        ],
+      },
+    };
     const document = {
       schemaVersion: 4,
       mapId,
@@ -363,7 +382,7 @@ describe('Campus map API (PostGIS integration)', () => {
       objects: [],
       featureCollection: {
         type: 'FeatureCollection',
-        features: [unknownFeature],
+        features: [unknownFeature, multiPolygonFeature, geometryCollectionFeature],
         deletedFeatureIds: ['removed-gate-01'],
         metadata: {
           dataset: 'campus-baseline-v2',
@@ -437,7 +456,7 @@ describe('Campus map API (PostGIS integration)', () => {
     const afterInvalid = await request(app.getHttpServer())
       .get(planUrl).set(auth).expect(200);
     expect(Number(afterInvalid.body.revision)).toBe(1);
-    expect(afterInvalid.body.document.featureCollection.features).toHaveLength(1);
+    expect(afterInvalid.body.document.featureCollection.features).toHaveLength(3);
   });
 
   it('continues accepting legacy schema v2 plan documents', async () => {

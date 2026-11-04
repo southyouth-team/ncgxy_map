@@ -331,7 +331,7 @@ async function approveAsset(asset) {
       deployedConfirmed: true,
       remoteFileId: payload.fileId,
       remoteUrl: payload.url,
-      assetId: payload.assetId || asset.assetId,
+      remoteAssetId: payload.assetId || null,
       approvedAt: new Date().toISOString(),
     })
     message.value = '审核通过，素材已自动上传服务器并登记正式资产清单。'
@@ -443,9 +443,6 @@ onBeforeUnmount(resetPreview)
         <div class="panel-heading"><span>02 / 素材收集</span><small>{{ viewMode === '2.5d' ? 'PNG / WebP 图片' : 'GLB 模型' }}</small></div>
         <label>素材名称
           <input v-model="assetName" placeholder="例如：西侧组团 01 · AI 视觉稿" />
-        </label>
-        <label>项目内目标路径
-          <input v-model="publicPath" :placeholder="viewMode === '3d' ? '/models/buildings/asset.glb' : '/assets/campus/buildings/asset.webp'" />
         </label>
         <label class="upload-zone">
           <input type="file" :accept="viewMode === '3d' ? '.glb,model/gltf-binary' : 'image/png,image/webp,image/jpeg'" @change="onFileChange" />

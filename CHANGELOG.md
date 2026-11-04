@@ -1,3 +1,13 @@
+## 2026-11-04 — 扩展空间数据类型与几何一致性质检
+
+- **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`。
+- **实际完成**：
+  - 将所有当前业务 Feature 类型映射到明确几何契约：区域/建筑使用 Polygon，道路使用 LineString，出入口/POI/设施对象使用 Point。
+  - 校验集合成员必须为 Feature，并拒绝缺失或未知的 featureType。
+  - 增加错误用例，覆盖水域 Point、树木 Polygon、未知业务类型。
+- **验证状态**：代码和测试已提交，等待最新 CI；尚未进行真实浏览器验收。
+- **已知限制**：目前几何契约不支持 MultiPolygon/MultiLineString；后续如需复杂边界，应先扩展渲染适配器和测试。
+- **下一步**：验证 CI，再检查建筑/道路/区域属性编辑 UI 是否完整写入 Feature.properties。
 ## 2026-11-04 — 完整基础校园数据合并与编辑器底集补齐
 
 - **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`src/editor/CampusPlanEditor.vue`。

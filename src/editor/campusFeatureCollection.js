@@ -171,3 +171,34 @@ export function fromCampusFeatureCollection(collection = {}) {
   }
   return result;
 }
+
+
+/**
+ * Canonical undo/redo snapshot. The FeatureCollection is the only spatial
+ * payload stored in history; legacy arrays are reconstructed on restore.
+ */
+export function createCampusFeatureSnapshot(document = {}) {
+  const converted = document.featureCollection?.type === 'FeatureCollection'
+    ? document.featureCollection
+    : toCampusFeatureCollection(document)
+  const deletedFeatureIds = [...new Set([
+    ...(converted.deletedFeatureIds || []),
+    ...(document.deletedFeatureIds || []),
+  ].map(String))]
+  return {
+    type: 'CampusFeatureSnapshot',
+    version: 1,
+    featureCollection: {
+      type: 'FeatureCollection',
+      features: converted.features || [],
+      deletedFeatureIds,
+    },
+  }
+}
+
+export function restoreCampusFeatureSnapshot(snapshot = {}) {
+  if (snapshot?.type !== 'CampusFeatureSnapshot' || snapshot.version !== 1) {
+    throw new Error('不支持的校园空间历史快照版本')
+  }
+  return fromCampusFeatureCollection(snapshot.featureCollection || {})
+}

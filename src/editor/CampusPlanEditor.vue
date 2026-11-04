@@ -582,7 +582,7 @@ function undo() {
 }
 function redo() {
   if (!future.value.length) return
-  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value }))
+  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value }))
   restore(future.value.pop())
 }
 function canvasViewBox() {

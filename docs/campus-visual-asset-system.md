@@ -100,3 +100,13 @@
 - 当前候选文件仍存储在浏览器本地，不是服务器持久化资产库；清理浏览器站点数据可能丢失未入库候选。
 - 生成图片不会自动覆盖现有程序化建筑，不会修改 Feature geometry、位置、碰撞或 walkable。
 - GitHub CI 通过只代表构建和单元测试通过；必须在本地部署环境调用真实 API，才能确认服务地址、模型权限和响应格式兼容。
+
+
+## 审核通过后自动入库
+
+- 素材工坊候选仍在浏览器 IndexedDB 暂存，审核动作由用户明确触发；点击“审核通过并自动入库”后，浏览器将文件以 multipart/form-data 上传至 `POST /api/v1/assets/visual-assets`。
+- 服务端校验 Feature ID、视角、来源类型、文件真实签名和大小，生成唯一文件 ID 与 SHA-256 校验值；素材写入 `ASSET_STORAGE_DIR/campus-visual-assets/files/`，元数据清单原子更新至 `ASSET_STORAGE_DIR/campus-visual-assets/manifest.json`。
+- 同一空间 Feature 的 2.5D/3D 文件合并到稳定 `assetId`，同视角再次审核通过时替换该视角主文件引用；历史文件不会被自动删除，避免并发页面仍引用时产生断链。
+- `GET /api/v1/assets/visual-assets/manifest` 提供正式清单；`GET /api/v1/assets/visual-assets/:fileId/content` 提供素材文件。读取接口用于场景加载，不要求浏览器附加开发身份头。
+- `ASSET_STORAGE_DIR` 必须挂载到持久化磁盘卷，并纳入备份策略；容器重建但未挂载持久卷会导致素材丢失。当前实现是单实例文件清单写入队列，不适用于多副本共享同一存储目录的并发写入；多副本部署应迁移到对象存储或数据库事务/分布式锁。
+- 运行时自动加载与替换 2.5D 渲染资源属于后续接入步骤；素材成功入库不等于已在首页显示。

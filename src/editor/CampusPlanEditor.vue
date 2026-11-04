@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
@@ -260,10 +260,7 @@ function deleteSelectionBatch() {
   const deletedBaseIds = deletable.map(item => String(item.id)).filter(id => BASE_CAMPUS_FEATURE_IDS.has(id))
   if (deletedBaseIds.length) deletedFeatureIds.value = [...new Set([...deletedFeatureIds.value, ...deletedBaseIds])]
   deletable.forEach(item => ids[item.type]?.add(item.id))
-  buildings.value = buildings.value.filter(item => !ids.building.has(item.id))
-  roads.value = roads.value.filter(item => !ids.road.has(item.id))
-  areas.value = areas.value.filter(item => !ids.area.has(item.id))
-  objects.value = objects.value.filter(item => !ids.object.has(item.id))
+  commitFeatureRemoval(deletable.map(item => item.id))
   selected.value = { type: '', id: '' }
   multiSelection.value = []
 }
@@ -338,14 +335,14 @@ function finishGeometryDraft() {
   snapshot()
   const id = `${tool.value}-${Date.now()}`
   if (tool.value === 'road') {
-    roads.value.push({ id, points: geometry.coordinates, width: roadWidth.value, confidence: 'unverified', source: 'manual' })
+    commitFeatureUpsert({ roads: [{ id, points: geometry.coordinates, width: roadWidth.value, confidence: 'unverified', source: 'manual' }] })
     selected.value = { type: 'road', id }
   } else if (tool.value === 'building') {
     const footprint = geometry.coordinates[0].slice(0, -1)
-    buildings.value.push({ id, label: newBuilding.value, template: newBuilding.value, footprint, rect: polygonBounds(footprint), floors: null, confidence: 'unverified', source: 'manual' })
+    commitFeatureUpsert({ buildings: [{ id, label: newBuilding.value, template: newBuilding.value, footprint, rect: polygonBounds(footprint), floors: null, confidence: 'unverified', source: 'manual' }] })
     selected.value = { type: 'building', id }
   } else {
-    areas.value.push({ id, name: areaKinds.find(item => item.value === areaKind.value)?.label || '校园区域', type: areaKind.value, footprint: geometry.coordinates[0].slice(0, -1), confidence: 'unverified', source: 'manual' })
+    commitFeatureUpsert({ areas: [{ id, name: areaKinds.find(item => item.value === areaKind.value)?.label || '校园区域', type: areaKind.value, footprint: geometry.coordinates[0].slice(0, -1), confidence: 'unverified', source: 'manual' }] })
     selected.value = { type: 'area', id }
   }
   draftPoints.value = []
@@ -934,7 +931,7 @@ function addPointObject(event) {
   snapshot()
   const p = event?.clientX != null ? point(event) : { x: 320, y: 250 }
   const id = `${objectKind.value}-${Date.now()}`
-  objects.value.push({ id, type: objectKind.value, name: objectKinds.find(entry => entry.value === objectKind.value)?.label || '校园设施', geometry: { type: 'Point', coordinates: [p.x, p.y] }, properties: { rotation: 0, scale: 1 }, source: 'manual', qualityStatus: 'unverified' })
+  commitFeatureUpsert({ objects: [{ id, type: objectKind.value, name: objectKinds.find(entry => entry.value === objectKind.value)?.label || '校园设施', geometry: { type: 'Point', coordinates: [p.x, p.y] }, properties: { rotation: 0, scale: 1 }, source: 'manual', qualityStatus: 'unverified' }] })
   selected.value = { type: 'object', id }; tool.value = 'select'
 }
 function addArea(event) {
@@ -943,7 +940,7 @@ function addArea(event) {
   const id = `area-${areaKind.value}-${Date.now()}`
   const size = areaKind.value === 'water' ? { width: 70, height: 44 } : { width: 52, height: 34 }
   const footprint = rectToPolygon([position.x - size.width / 2, position.y - size.height / 2, position.x + size.width / 2, position.y + size.height / 2])
-  areas.value.push({ id, name: areaKinds.find(item => item.value === areaKind.value)?.label || '校园区域', type: areaKind.value, footprint, confidence: 'unverified', source: 'manual' })
+  commitFeatureUpsert({ areas: [{ id, name: areaKinds.find(item => item.value === areaKind.value)?.label || '校园区域', type: areaKind.value, footprint, confidence: 'unverified', source: 'manual' }] })
   selected.value = { type: 'area', id }
   tool.value = 'select'
 }
@@ -951,7 +948,7 @@ function addRoad(event) {
   snapshot()
   const position = event?.clientX != null ? point(event) : { x: 300, y: 265 }
   const id = `road-custom-${Date.now()}`
-  roads.value.push({ id, confidence: 'unverified', points: [[position.x - 45, position.y],[position.x, position.y + 8],[position.x + 45, position.y]], width: roadWidth.value })
+  commitFeatureUpsert({ roads: [{ id, confidence: 'unverified', points: [[position.x - 45, position.y],[position.x, position.y + 8],[position.x + 45, position.y]], width: roadWidth.value }] })
   selected.value = { type: 'road', id }
   tool.value = 'select'
 }
@@ -1008,10 +1005,7 @@ function deleteSelected() {
   if (BASE_CAMPUS_FEATURE_IDS.has(String(selected.value.id))) {
     deletedFeatureIds.value = [...new Set([...deletedFeatureIds.value, String(selected.value.id)])]
   }
-   if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
-  if (selected.value.type === 'road') roads.value = roads.value.filter(item => item.id !== selected.value.id)
-  if (selected.value.type === 'area') areas.value = areas.value.filter(item => item.id !== selected.value.id)
-  if (selected.value.type === 'object') objects.value = objects.value.filter(item => item.id !== selected.value.id)
+  commitFeatureRemoval([selected.value.id])
   selected.value = { type: '', id: '' }
 }
 function commitFeatureCollectionMutation(mutator) {
@@ -1024,6 +1018,17 @@ function commitFeatureCollectionMutation(mutator) {
   areas.value = document.areas
   objects.value = document.objects
   deletedFeatureIds.value = document.deletedFeatureIds
+}
+function commitFeatureUpsert(fragment) {
+  const incoming = toCampusFeatureCollection(fragment)
+  commitFeatureCollectionMutation(collection => incoming.features.reduce(
+    (next, feature) => upsertCampusFeature(next, feature),
+    collection,
+  ))
+}
+function commitFeatureRemoval(featureIds) {
+  const ids = featureIds.map(String)
+  commitFeatureCollectionMutation(collection => removeCampusFeatures(collection, ids, { recordDeleted: ids.some(id => BASE_CAMPUS_FEATURE_IDS.has(id)) }))
 }
 function updateSelectedFeatureProperty(key, value, { numeric = false, nested = false } = {}) {
   const featureId = selected.value.id

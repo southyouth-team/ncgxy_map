@@ -1,3 +1,16 @@
+## 2026-11-04 — 编辑器基础对象删除同步
+
+- **修改文件**：`src/editor/CampusPlanEditor.vue`、`src/editor/campusFeatureCollection.js`、`src/editor/campusFeatureCollection.test.js`、`src/App.vue`。
+- **实际完成**：
+  - FeatureCollection 增加迁移期 `deletedFeatureIds`，正向/反向适配器保留删除标记。
+  - 编辑器删除历史场景装饰对象时记录稳定 ID；单选删除和批量删除均覆盖。
+  - 删除标记进入自动保存文档，并纳入 undo/redo 快照。
+  - 首页合并基础环境 Feature 与编辑器 Feature 后按删除标记过滤，避免基础对象被重新合并出来。
+  - 增加适配器删除标记往返测试。
+- **验证状态**：代码已提交；当前 head 的 Frontend CI / Backend CI 正在执行，尚未取得最终结果；未进行真实浏览器端到端验收。
+- **已知限制**：当前 tombstone 仅针对来源为 `legacy-scene-decoration` 的基础环境对象；其他基础数据删除策略、恢复对象、服务端冲突解决和审计仍需设计。
+- **下一步**：验证 CI，补充首页合并行为测试；随后统一编辑器预览和首页的场景构建入口，继续完成第三阶段数据契约。
+
 ## 2026-11-04 — 环境装饰对象纳入统一空间数据
 
 - **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`src/three/world/campus/createCampusScene.js`、`src/App.vue`。

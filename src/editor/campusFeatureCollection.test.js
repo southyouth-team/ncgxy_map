@@ -350,3 +350,67 @@ describe('duplicateCampusFeature', () => {
     expect(() => duplicateCampusFeature(source, '', 1, 1)).toThrow('复制 Feature 参数无效')
   })
 })
+
+describe('unknown Feature mutation and persistence round-trip', () => {
+  it('retains future feature types, vendor properties and tombstones through mutation and history', () => {
+    const future = {
+      type: 'Feature',
+      id: 'future-sensor-01',
+      geometry: { type: 'Polygon', coordinates: [
+        [[0, 0], [12, 0], [12, 12], [0, 0]],
+        [[2, 2], [4, 2], [2, 2]],
+      ] },
+      properties: {
+        featureType: 'future-sensor-zone',
+        name: '传感器覆盖区',
+        vendorData: { schema: 7, tags: ['iot', 'campus'] },
+        confidence: 'high',
+        verificationStatus: 'verified',
+      },
+    }
+    let canonical = { type: 'FeatureCollection', features: [future], deletedFeatureIds: ['legacy-deleted-gate'] }
+    canonical = updateCampusFeatureProperties(canonical, future.id, { name: '更新后的覆盖区', customFlag: true })
+    canonical = updateCampusFeatureGeometry(canonical, future.id, {
+      type: 'Polygon',
+      coordinates: [
+        [[10, 10], [22, 10], [22, 22], [10, 10]],
+        [[12, 12], [14, 12], [12, 12]],
+      ],
+    })
+    canonical = upsertCampusFeature(canonical, {
+      type: 'Feature',
+      id: 'new-tree',
+      geometry: { type: 'Point', coordinates: [30, 30] },
+      properties: { featureType: 'object', objectType: 'tree' },
+    })
+
+    // 模拟编辑器兼容投影：未知 Polygon 不出现在旧类型数组中。
+    const projected = fromCampusFeatureCollection(canonical)
+    expect(projected.objects.map(item => item.id)).toContain('new-tree')
+    expect(projected.buildings).toHaveLength(0)
+    expect(canonical.features.find(feature => feature.id === future.id).properties.vendorData).toEqual(future.properties.vendorData)
+
+    const history = createCampusFeatureSnapshot({
+      featureCollection: canonical,
+      deletedFeatureIds: ['another-deleted-base-feature'],
+    })
+    const restored = restoreCampusFeatureSnapshot(history)
+    const restoredFuture = restored.featureCollection.features.find(feature => feature.id === future.id)
+    expect(restoredFuture.properties).toMatchObject({
+      name: '更新后的覆盖区',
+      customFlag: true,
+      vendorData: { schema: 7, tags: ['iot', 'campus'] },
+      confidence: 'high',
+      verificationStatus: 'verified',
+    })
+    expect(restoredFuture.geometry.coordinates[1]).toEqual([[12, 12], [14, 12], [12, 12]])
+    expect(restored.featureCollection.deletedFeatureIds).toEqual(['legacy-deleted-gate', 'another-deleted-base-feature'])
+
+    const removed = removeCampusFeatures(restored.featureCollection, [future.id], { recordDeleted: true })
+    const finalSnapshot = createCampusFeatureSnapshot({ featureCollection: removed })
+    const finalRestore = restoreCampusFeatureSnapshot(finalSnapshot)
+    expect(finalRestore.featureCollection.features.some(feature => feature.id === future.id)).toBe(false)
+    expect(finalRestore.featureCollection.deletedFeatureIds).toContain(future.id)
+    expect(finalRestore.featureCollection.features.some(feature => feature.id === 'new-tree')).toBe(true)
+  })
+})

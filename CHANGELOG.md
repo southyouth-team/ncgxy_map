@@ -1,3 +1,15 @@
+## 2026-11-04 — 首页场景初始化接入统一 FeatureCollection
+
+- **修改文件**：`src/App.vue`、`src/three/engine/createCampusEngine.js`、`src/three/world/campus/createCampusScene.js`。
+- **实际完成**：
+  - 首页在创建引擎前读取已保存的编辑器文档；优先使用其 FeatureCollection，没有时从现有编辑器文档结构转换。
+  - 将基础校园数据中的 boundary/gate 与编辑器可编辑要素组合，作为单一 FeatureCollection 注入校园场景初始化。
+  - `createCampusScene` 从注入集合派生建筑、道路、区域和 Point 设施，不再在初始化后额外调用 `previewCampusPlan` 覆盖首页地图。
+  - 道路宽度参与场景道路铺装；区域 Polygon/holes 进入场景构建；树木、路灯、座椅等 Point Feature 在主场景中生成对应资产并保留 ID、名称、朝向和缩放。
+- **已知限制**：旧场景中的部分树木、花卉、长椅、路灯仍以程序化装饰坐标存在，尚未全部迁移为 Feature；编辑器独立 3D 预览尚未统一到同一 renderer adapter；真实浏览器体验未验收。
+- **验证状态**：本轮修改已提交，CI 正在触发；不能将提交成功视为测试通过。
+- **下一步**：补充场景初始化集成测试，处理静态装饰对象数据化；随后统一 2.5D/3D 的 FeatureCollection 渲染适配器。
+
 ## 2026-11-04 — 空间数据：统一 FeatureCollection 渲染图层适配
 
 - **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`docs/architecture/CAMPUS_SPATIAL_ARCHITECTURE.md`。

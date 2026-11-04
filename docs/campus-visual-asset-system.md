@@ -22,7 +22,7 @@
 | assetId | 全局稳定资产 ID，不使用文件名作为主键 |
 | name / category | 名称与资产类别 |
 | sourceType | ai_generated / manual_model / procedural / external |
-| status | draft / review / ready / archived |
+| status | draft / review / ready / rejected / archived |
 | files | 一个资产可包含多个视角与用途文件 |
 | provenance | 可选来源记录：provider、prompt、reference、license、createdAt、notes；AI 资产建议至少填写 provider 与 prompt |
 
@@ -109,4 +109,10 @@
 - 同一空间 Feature 的 2.5D/3D 文件合并到稳定 `assetId`，同视角再次审核通过时替换该视角主文件引用；历史文件不会被自动删除，避免并发页面仍引用时产生断链。
 - `GET /api/v1/assets/visual-assets/manifest` 提供正式清单；`GET /api/v1/assets/visual-assets/:fileId/content` 提供素材文件。读取接口用于场景加载，不要求浏览器附加开发身份头。
 - `ASSET_STORAGE_DIR` 必须挂载到持久化磁盘卷，并纳入备份策略；容器重建但未挂载持久卷会导致素材丢失。当前实现是单实例文件清单写入队列，不适用于多副本共享同一存储目录的并发写入；多副本部署应迁移到对象存储或数据库事务/分布式锁。
-- 首页启动时读取服务端 manifest；2.5D 模式按建筑 Feature ID 加载审核通过的图片 Sprite，图片加载失败时保留程序化建筑。切换到 3D 时隐藏 2.5D 图片并恢复程序化/GLB 视觉资产；空间位置、footprint、碰撞和 walkable 不变。
+- 首页启动时读取服务端 manifest；2.5D 模式按建筑 Feature ID 加载审核通过的图片 Sprite，图片加载失败时保留程序化建筑。切换到 3D 时隐藏 2.5D 图片并恢复程序化建筑及原有 `buildings.json` GLB 资产；本轮上传的 3D GLB 已进入统一清单，但尚未接入新的视觉资产 GLB 运行时加载器。空间位置、footprint、碰撞和 walkable 不变。
+
+
+### 部署与权限限制
+
+- 当前上传接口复用项目现有 `DevIdentityGuard`，仅适用于 `NODE_ENV` 非 production 的开发联调；生产环境会拒绝该开发身份请求。正式上线前必须接入项目正式用户认证和资产管理权限校验。
+- Dockerfile 声明了 `/data/campus-map-assets` 数据卷，部署时仍应显式绑定命名卷/宿主机持久目录，并将该目录纳入备份。不能依赖容器可写层。

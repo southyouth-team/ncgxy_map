@@ -1,3 +1,10 @@
+## 2026-11-05 — 修复平面地图保存请求体超限
+
+- 浏览器联调日志确认，Express 默认 JSON body-parser 上限为 100 KiB；实际平面编辑文档请求体为 187,529 字节（约 183.1 KiB），在进入 ScenesController/ScenesService 前即触发 PayloadTooLargeError。
+- `server/src/main.ts` 关闭 Nest 默认 body parser，显式注册 JSON parser 上限 16 MiB，并为 URL-encoded 请求保留 1 MiB 上限，避免默认 100 KiB parser 先行拦截。
+- 16 MiB 请求上限与 ScenesService 当前 15 MiB 平面文档校验上限对齐；业务层文档大小校验、GeoJSON 结构校验和 revision 乐观锁保持不变。
+- 需通过 Backend CI，并在本地重启 API 后验证 PUT /scene/plan 返回成功、revision 增长、GET 回读完整 FeatureCollection。不得仅凭 HTTP 413 消失就判定持久化验收通过。
+
 ## 2026-11-05 — 补齐父子组件异步初始化时序
 
 - 进一步核查 Vue 生命周期，发现 CampusPlanEditor 的 onMounted 早于 App 父组件的 onMounted；首次调用 loadEditorDocument 时 campusId/mapId 仍为空。

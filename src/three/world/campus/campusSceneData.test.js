@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildCampusGeoJSON } from '../../../data/campus/campusGeoJSON.js'
-import { createCampusSceneRenderData, validateCampusSceneRenderData } from './campusSceneData.js'
+import { createCampusSceneRenderData, validateCampusSceneRenderData, auditCampusSceneFeatureCoverage } from './campusSceneData.js'
 
 describe('campus scene shared render adapter', () => {
   it('derives homepage and editor preview inputs from the same FeatureCollection', () => {
@@ -57,5 +57,58 @@ describe('campus scene shared render adapter', () => {
     expect(report.errors.map(error => error.code)).toContain('MISSING_FEATURE')
     expect(report.errors.map(error => error.code)).toContain('PREVIEW_GEOMETRY_MISMATCH')
     expect(report.errors.map(error => error.code)).toContain('WALKABILITY_MISMATCH')
+  })
+})
+
+
+describe('campus Three.js scene coverage audit', () => {
+  it('confirms every normalized feature has a renderable scene node', () => {
+    const layers = {
+      buildings: [{ id: 'b1' }],
+      roads: [{ id: 'r1' }],
+      areas: [{ id: 'a1' }],
+      objects: [{ id: 'o1' }],
+    }
+    const nodes = [
+      { userData: { featureId: 'b1', featureCategory: 'buildings' }, isMesh: true, geometry: {}, material: {} },
+      { userData: { featureId: 'r1', featureCategory: 'roads' }, isMesh: true, geometry: {}, material: {} },
+      { userData: { featureId: 'a1', featureCategory: 'areas' }, isMesh: true, geometry: {}, material: {} },
+      { userData: { featureId: 'o1', featureCategory: 'objects' }, isMesh: true, geometry: {}, material: {} },
+    ]
+    const scene = { traverse(callback) { nodes.forEach(callback) } }
+    const report = auditCampusSceneFeatureCoverage(layers, scene)
+    expect(report.valid).toBe(true)
+    expect(report.errorCount).toBe(0)
+    expect(report.summary.buildings).toEqual({ expected: 1, rendered: 1 })
+  })
+
+  it('detects missing, non-renderable and unexpected scene features', () => {
+    const layers = {
+      buildings: [{ id: 'b1' }, { id: 'b2' }],
+      roads: [],
+      areas: [],
+      objects: [],
+    }
+    const nodes = [
+      { userData: { featureId: 'b1', featureCategory: 'buildings' } },
+      { userData: { featureId: 'extra', featureCategory: 'buildings' }, isMesh: true, geometry: {}, material: {} },
+    ]
+    const scene = { traverse(callback) { nodes.forEach(callback) } }
+    const report = auditCampusSceneFeatureCoverage(layers, scene)
+    expect(report.valid).toBe(false)
+    expect(report.errors.map(error => error.code)).toContain('SCENE_FEATURE_NOT_RENDERABLE')
+    expect(report.errors.map(error => error.code)).toContain('SCENE_FEATURE_MISSING')
+    expect(report.errors.map(error => error.code)).toContain('SCENE_FEATURE_UNEXPECTED')
+  })
+
+  it('detects meshes without geometry or material', () => {
+    const layers = { buildings: [], roads: [], areas: [], objects: [{ id: 'o1' }] }
+    const scene = {
+      traverse(callback) {
+        callback({ userData: { featureId: 'o1', featureCategory: 'objects' }, isMesh: true, geometry: null, material: null })
+      },
+    }
+    const report = auditCampusSceneFeatureCoverage(layers, scene)
+    expect(report.errors.map(error => error.code)).toContain('SCENE_FEATURE_MATERIAL_MISSING')
   })
 })

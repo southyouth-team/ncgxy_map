@@ -342,3 +342,9 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
   .app-shell.is-mobile .reset-button { top: 58px; right: auto; bottom: auto; left: 10px; padding: 6px 9px; font-size: 10px; }
   .app-shell.is-mobile .editor-entry { display: none !important; }
 }
+
+
+/* 手机端所有漫游模式均不显示操作指南，不依赖 is-overview 状态类。 */
+@media (pointer: coarse), (max-width: 760px) {
+  .control-card { display: none !important; }
+}

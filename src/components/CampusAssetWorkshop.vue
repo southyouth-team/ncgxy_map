@@ -120,7 +120,7 @@ function buildPrompt() {
     'Do not invent school logos or claim to reproduce a real building. This is a visual placeholder pending reference-photo verification.',
     extraPrompt.value.trim() ? 'Additional requirements: ' + extraPrompt.value.trim() : '',
   ].filter(Boolean).join('\n\n')
-  message.value = '已生成可复制的素材提示词。请使用 AI 图像/3D 工具生成候选，再上传到此处审核。'
+  message.value = '提示词已生成，可直接调用图片模型生成 2.5D 候选，也可以复制到外部 AI 工具。'
 }
 
 async function copyPrompt() {
@@ -208,6 +208,7 @@ async function onFileChange(event) {
     return
   }
   selectedFile.value = file
+  generationModel.value = ''
   previewUrl.value = URL.createObjectURL(file)
   if (!assetName.value) assetName.value = (selectedFeature.value?.name || '校园素材') + (viewMode.value === '2.5d' ? ' · 2.5D' : ' · 3D')
 }
@@ -334,6 +335,7 @@ watch([selectedFeatureId, viewMode, extraPrompt], () => {
 })
 watch([selectedFeatureId, viewMode], () => {
   resetPreview()
+  generationModel.value = ''
   publicPath.value = ''
   fileError.value = ''
 })

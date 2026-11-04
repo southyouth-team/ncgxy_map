@@ -119,5 +119,36 @@ describe('toCampusFeatureCollection', () => {
     expect(collection.deletedFeatureIds).toEqual(['campus-tree-001', 'campus-bench-002'])
     expect(fromCampusFeatureCollection(collection).deletedFeatureIds).toEqual(source.deletedFeatureIds)
   })
+  it('restores point-object confidence without treating it as qualityStatus', () => {
+    const collection = toCampusFeatureCollection({
+      objects: [{
+        id: 'quality-tree',
+        type: 'tree',
+        name: '待核验树木',
+        geometry: { type: 'Point', coordinates: [12, 18] },
+        properties: {
+          confidence: 'low',
+          verificationStatus: 'unverified',
+          rotation: 25,
+          scale: 1.2,
+        },
+        source: 'legacy-scene-decoration',
+        qualityStatus: 'unverified',
+      }],
+    })
+    const restored = fromCampusFeatureCollection(collection)
+    expect(restored.objects[0]).toMatchObject({
+      id: 'quality-tree',
+      type: 'tree',
+      qualityStatus: 'unverified',
+      properties: {
+        confidence: 'low',
+        verificationStatus: 'unverified',
+        rotation: 25,
+        scale: 1.2,
+      },
+    })
+  })
+
 
 })

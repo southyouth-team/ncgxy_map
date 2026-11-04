@@ -935,3 +935,13 @@
 - 增加清单重复 ID、未知建筑 ID、无效模型路径、无效位置和无效旋转的诊断。
 - `public/data/buildings.json` 升级为 schemaVersion 2，定义模型文件、坐标、旋转和核验状态契约。
 - 当前仓库没有已登记 GLB 文件，资产清单仍为空；因此本次完成的是自动生成资产工作清单和接入校验，不代表已经生成或导入真实建筑模型。
+
+
+## 2026-11-05 — 建立 AI 优先的校园视觉资产统一管理基础
+
+- 新增 `public/data/campus-assets.json` 作为统一视觉资产清单，统一登记 AI 生成、人工建模、程序化和外部来源资产；支持 2.5D、3D 与显式 shared 视角变体。
+- 新增 `campusAssetManifest.js`，提供资产清单结构校验和按 Feature ID/视角解析 ready 素材的纯函数接口。
+- 资产通过稳定 `assetId` 绑定规范空间 Feature；资产清单不复制位置、footprint、碰撞或 walkable，替换视觉素材不修改空间真值。
+- 解析优先匹配当前视角 primary，仅允许显式 shared primary 作为 fallback；不把 2.5D 图片自动降级成 3D 模型，也不把 GLB 当作 2.5D 图片。
+- 新增测试覆盖 AI 图片 + GLB 双视角资产、shared fallback、跨视角不匹配、重复 ID、路径穿越、未知 Feature 和未审核资产。
+- 本阶段仅建立数据契约和解析基础，不接入生成 API、素材工坊 UI、上传服务或编辑器选择器；空清单不会改变现有程序化渲染和建筑 GLB 加载行为。

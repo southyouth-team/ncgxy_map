@@ -4,6 +4,8 @@ export class CameraRig {
   constructor(THREE, domElement, options = {}) {
     this.THREE = THREE
     this.isometricRpg = Boolean(options.isometricRpg)
+    // 展示投影与相机操控模式分离：2.5D 使用正交投影，3D 使用透视投影。
+    this.viewMode = options.viewMode === '3d' ? '3d' : '2.5d'
     this.domElement = domElement
     this.aspect = 1
     this.overviewSpan = 190
@@ -86,16 +88,17 @@ export class CameraRig {
       this.desiredPosition.set(0, 145, 145)
       this.desiredTarget.set(0, 0, 0)
     } else {
-      if (this.isometricRpg && mode === 'thirdPerson') {
-        this.activateCamera(this.overviewCamera)
+      const targetCamera = this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera
+      if (previousCamera !== targetCamera) {
+        targetCamera.position.copy(previousCamera.position)
+        targetCamera.quaternion.copy(previousCamera.quaternion)
+        this.activateCamera(targetCamera)
+      }
+      if (this.isometricRpg && this.viewMode === '2.5d' && mode === 'thirdPerson') {
         this.thirdPitch = 0.95
         this.thirdDistance = 13
         this.overviewCamera.zoom = 2.8
         this.overviewCamera.updateProjectionMatrix()
-      } else if (previousCamera !== this.perspectiveCamera) {
-        this.perspectiveCamera.position.copy(previousCamera.position)
-        this.perspectiveCamera.quaternion.copy(previousCamera.quaternion)
-        this.activateCamera(this.perspectiveCamera)
       }
       if (mode === 'thirdPerson') {
         this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
@@ -114,6 +117,35 @@ export class CameraRig {
     }
     this.currentPosition.copy(this.camera.position)
     this.currentTarget.copy(this.camera.getWorldDirection(new this.THREE.Vector3()).add(this.camera.position))
+  }
+
+  setViewMode(viewMode) {
+    if (!['2.5d', '3d'].includes(viewMode) || viewMode === this.viewMode) return
+    const previousCamera = this.camera
+    const previousPosition = previousCamera.position.clone()
+    const previousQuaternion = previousCamera.quaternion.clone()
+    const previousTarget = this.currentTarget.clone()
+    this.viewMode = viewMode
+    const targetCamera = viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera
+    targetCamera.position.copy(previousPosition)
+    targetCamera.quaternion.copy(previousQuaternion)
+    this.activateCamera(targetCamera)
+    this.currentPosition.copy(previousPosition)
+    this.currentTarget.copy(previousTarget)
+    this.desiredPosition.copy(previousPosition)
+    this.desiredTarget.copy(previousTarget)
+    this.transitioningToOverview = false
+
+    if (this.mode === 'overview') {
+      if (viewMode === '2.5d') this.resetOverviewZoom()
+      this.orbit.target.copy(previousTarget)
+      this.orbit.enabled = true
+    } else {
+      this.orbit.enabled = false
+      if (this.mode === 'thirdPerson') this.updateThirdPersonDesired()
+      else this.updateFirstPersonDesired()
+    }
+    targetCamera.lookAt(this.currentTarget)
   }
 
   updateThirdPersonDesired() {
@@ -228,7 +260,7 @@ export class CameraRig {
     this.overviewCamera.bottom = -span / 2
     this.resetOverviewZoom()
     this.mode = 'overview'
-    this.activateCamera(this.overviewCamera)
+    this.activateCamera(this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera)
     this.desiredTarget.set(targetX, 0, targetZ)
     this.desiredPosition.set(targetX, span * 0.78, targetZ + span * 0.78)
     this.orbit.target.set(targetX, 0, targetZ)

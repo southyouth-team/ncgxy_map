@@ -67,6 +67,50 @@ describe('toCampusFeatureCollection', () => {
     expect(restored.objects[0]).toMatchObject({ id: 't', type: 'tree', properties: { scale: 1.5 } })
   })
 
+
+  it('keeps confidence and verification status independent in both adapter directions', () => {
+    const source = {
+      buildings: [{
+        id: 'quality-building',
+        label: '待核验教学楼',
+        footprint: [[10, 10], [30, 10], [30, 25]],
+        confidence: 'high',
+        qualityStatus: 'unverified',
+        verificationStatus: 'unverified',
+      }],
+      roads: [{
+        id: 'quality-road',
+        name: '已核验道路',
+        points: [[0, 20], [20, 30]],
+        width: 8,
+        confidence: 'medium',
+        qualityStatus: 'verified',
+        verificationStatus: 'verified',
+      }],
+      areas: [{
+        id: 'quality-water',
+        name: '待核验水域',
+        type: 'water',
+        footprint: [[40, 40], [60, 40], [60, 60]],
+        confidence: 'low',
+        qualityStatus: 'unverified',
+        verificationStatus: 'unverified',
+      }],
+    }
+
+    const collection = toCampusFeatureCollection(source)
+    expect(collection.features.map(feature => feature.properties)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ featureType: 'building', confidence: 'high', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+      expect.objectContaining({ featureType: 'road', confidence: 'medium', qualityStatus: 'verified', verificationStatus: 'verified' }),
+      expect.objectContaining({ featureType: 'water', confidence: 'low', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+    ]))
+
+    const restored = fromCampusFeatureCollection(collection)
+    expect(restored.buildings[0]).toMatchObject({ confidence: 'high', qualityStatus: 'unverified', verificationStatus: 'unverified' })
+    expect(restored.roads[0]).toMatchObject({ confidence: 'medium', qualityStatus: 'verified', verificationStatus: 'verified' })
+    expect(restored.areas[0]).toMatchObject({ confidence: 'low', qualityStatus: 'unverified', verificationStatus: 'unverified' })
+  })
+
   it('preserves deleted base-feature IDs through FeatureCollection adapters', () => {
     const source = { buildings: [], roads: [], areas: [], objects: [], deletedFeatureIds: ['campus-tree-001', 'campus-bench-002'] }
     const collection = toCampusFeatureCollection(source)

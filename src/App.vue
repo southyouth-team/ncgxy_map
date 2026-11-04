@@ -444,7 +444,7 @@ function getShowcasePlanDocument() {
 }
 
 async function handleBrowserNavigation() {
-  const route = window.location.pathname.replace(/\\/+$/, '') || '/'
+  const route = window.location.pathname.replace(/\/+$/, '') || '/'
   const queryView = new URLSearchParams(window.location.search).get('view')
   const nextIsEditor = route === '/editor' || queryView === 'editor'
   if (nextIsEditor === showEditor.value) return

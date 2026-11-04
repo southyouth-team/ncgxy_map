@@ -745,3 +745,24 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - 该对比使用轴对齐包围盒而非多边形精确重叠：凹形、斜边、旋转 footprint 会产生近似误差，结果应作为资产定位/尺度问题筛查，不作为碰撞几何的最终证明。
 - 当前 GLB 清单 `public/data/buildings.json` 为空，故当前真实模型匹配数为 0；只有录入建筑模型后才能形成逐栋偏差结论。
 
+
+## 26. 建筑 GLB 资产清单与摆放工作流
+
+建筑空间 Feature 是资产清单的唯一关联基准，使用稳定 `buildingId` 绑定 GLB 文件：
+
+1. 引擎进入 3D/跟随视图并加载 `/data/buildings.json` 后，调用 `createCampusBuildingAssetInventory` 生成全量建筑资产待办清单，并通过 `onAssetInventory` 回调提供。
+2. 未配置 position 时，根据规范 footprint 的世界坐标轴对齐包围盒中心生成候选位置；这是摆放初始值，不是现场测绘原点。位置人工校准后填写 `positionVerified: true`。
+3. `rotationY` 使用弧度制。规范 Feature 没有方向依据时保持未核验；不能把默认 0 当作真实朝向。确认后填写 rotationY 和 `rotationVerified: true`。
+4. 只有 `status: "ready"`、有效 `/models/buildings/*.glb`、三个有限 position 值和明确 rotationY 的条目才会加载。其他条目作为待制作/待核验资产跳过，不会落到世界原点。
+5. 模型文件放置于 `public/models/buildings/`，清单路径使用 `/models/buildings/<file>.glb`。
+6. 加载成功后继续执行 GLB 结构检查与世界包围盒/footprint 几何偏差审计。
+
+资产条目字段：
+- `buildingId`：规范建筑 Feature ID。
+- `modelUrl`：GLB 公共路径。
+- `position`：校园本地米制坐标 [x, y, z]，模型原点按 footprint 中心地面位置约定。
+- `rotationY`：绕 Y 轴旋转角，单位弧度。
+- `status`：只有 ready 才参与加载。
+- `positionVerified` / `rotationVerified`：位置和朝向人工核验标志。
+
+当前仓库尚无已登记的建筑 GLB 文件，`public/data/buildings.json` 的 buildings 数组为空。因此运行时会从规范 Feature 生成待制作清单和位置候选值，但不会虚构模型文件、现场原点或旋转角。当前校园空间数据本身仍是人工近似数字化，候选坐标必须经图纸/现场资料复核后才能标记为 verified。

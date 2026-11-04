@@ -246,7 +246,7 @@ export function mergeCampusSceneFeatureCollections(baseCollection = buildCampusG
 export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
   const features = Array.isArray(collection?.features) ? collection.features : []
   const featureType = feature => feature?.properties?.featureType
-  const confidenceOf = feature => feature.properties.confidence || feature.properties.qualityStatus || 'low'
+  const confidenceOf = feature => ['low', 'medium', 'high'].includes(feature?.properties?.confidence) ? feature.properties.confidence : 'low'
   const boundary = features.find(feature => featureType(feature) === 'boundary') || null
   const gates = features
     .filter(feature => featureType(feature) === 'gate' && feature.geometry?.type === 'Point')

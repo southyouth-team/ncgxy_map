@@ -1,3 +1,10 @@
+## 2026-11-05 — 修复 2D 编辑器刷新时空间对象闪现
+
+- 编辑器原先在服务端文档 GET 完成前就渲染本地基础建筑、道路和区域；随后再替换为基础数据与服务端 FeatureCollection 合并结果，刷新时会出现首屏闪现/消失。
+- 空间对象图层统一受 `documentLoaded` 控制，仅在服务端文档读取及 FeatureCollection 合并完成后显示；画布背景仍可先行显示。
+- 参考底图资源改为后台异步加载，不再阻塞空间数据就绪和首屏显示。
+- 保存 API、文档结构、FeatureCollection 合并规则及 revision 乐观锁不变。
+
 ## 2026-11-05 — 修复 NestJS body parser 注册的 TypeScript 编译错误
 
 - `INestApplication` 不提供 `useBodyParser()` 方法；此前关闭默认 parser 后调用该方法会触发 TS2339。

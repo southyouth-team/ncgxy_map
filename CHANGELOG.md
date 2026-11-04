@@ -448,3 +448,12 @@
 - Polygon/MultiPolygon 的全部 ring 均按同一位移变换，避免水域内环在拖动、多选、对齐和分布时丢失或错位。
 - 编辑器拖动、对齐、分布统一复用该工具；新增单元测试覆盖几何类型、内环保留、原对象不可变和非法参数。
 - 自动化验证以本次提交触发的 Frontend CI 为准；真实浏览器端交互仍待验收。
+
+
+## 2026-11-04 — 服务端 FeatureCollection 直接合并基础校园数据
+
+- 新增 `mergeCampusFeatureCollections`：以基础校园 FeatureCollection 为底座，保存文档中的同 ID Feature 覆盖基础对象，tombstone 优先删除。
+- 编辑器加载服务端文档时，优先直接使用保存的 FeatureCollection 与基础集合合并，不再先反向转换 legacy 数组再重新构造规范集合。
+- 迁移期间仍通过 `fromCampusFeatureCollection` 派生 SVG 编辑器兼容视图；规范集合保留未知 Feature 类型，避免较旧编辑器加载/保存时静默丢弃未来对象类型。
+- 新增覆盖 ID 覆盖、tombstone 删除、未知 Feature 保留和输入不可变的合并测试。
+- 当前基础集合来自编辑器已有校园基础数组；目录类 POI/门区等未纳入该编辑器集合的内容仍由首页校园数据目录处理。

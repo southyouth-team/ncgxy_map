@@ -156,11 +156,14 @@ export function fromCampusFeatureCollection(collection = {}) {
       result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, holes, rect, confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (type === 'road' && feature.geometry?.type === 'LineString') {
       result.roads.push({ ...properties, id: String(feature.id), name, points: feature.geometry.coordinates, width: properties.width, confidence: properties.confidence || 'low', qualityStatus, source });
-    } else if (['green', 'water', 'sports', 'plaza', 'parking'].includes(type) && feature.geometry?.type === 'Polygon') {
-      const areaType = properties.areaType || ({ green: 'vegetation' }[type] || type);
+    } else if (['area', 'green', 'water', 'sports', 'plaza', 'parking'].includes(type) && feature.geometry?.type === 'Polygon') {
+      // 基础校园底图以 featureType=area + properties.category 表示区域；
+      // 编辑器新增区域则直接使用 green/water/sports 等 featureType。两种契约统一投影。
+      const areaType = properties.areaType || properties.category || ({ green: 'vegetation' }[type] || type);
       delete properties.areaType;
+      delete properties.category;
       const polygon = (feature.geometry.coordinates?.[0] || []).slice(0, -1)
-      result.areas.push({ ...properties, id: String(feature.id), name, type: areaType, polygon, footprint: polygon, holes: (feature.geometry.coordinates || []).slice(1), confidence: properties.confidence || 'low', qualityStatus, source });
+      result.areas.push({ ...properties, id: String(feature.id), name, type: areaType, polygon, footprint: polygon, holes: (feature.geometry.coordinates || []).slice(1).map(ring => ring.slice(0, -1)), confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (feature.geometry?.type === 'Point') {
       const objectType = properties.objectType || type || 'facility';
       delete properties.objectType;

@@ -189,7 +189,7 @@ describe('统一校园空间数据出口', () => {
     const merged = mergeCampusSceneFeatureCollections(base, editor)
     expect(merged.features.map(feature => feature.id)).toEqual(['campus-boundary', 'campus-building-001', 'campus-water-001', 'campus-tree-001', 'editor-bench-001'])
     expect(merged.features.find(feature => feature.id === 'campus-tree-001').properties.name).toBe('已校准树木')
-    expect(merged.deletedFeatureIds).toEqual(['campus-gate-east'])
+    expect(merged.deletedFeatureIds).toEqual(['campus-gate-east', 'campus-road-001'])
   })
 
 

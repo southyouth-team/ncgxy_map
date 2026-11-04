@@ -151,4 +151,31 @@ describe('toCampusFeatureCollection', () => {
   })
 
 
+
+  it('stores undo/redo history as one canonical FeatureCollection snapshot', () => {
+    const document = {
+      buildings: [{ id: 'history-building', label: '教学楼', footprint: [[0, 0], [20, 0], [20, 20], [0, 20]], floors: 4, confidence: 'high' }],
+      roads: [{ id: 'history-road', points: [[0, 0], [30, 30]], width: 9, confidence: 'medium' }],
+      areas: [{ id: 'history-water', name: '水域', type: 'water', footprint: [[40, 40], [60, 40], [60, 60]], confidence: 'low' }],
+      objects: [{ id: 'history-tree', type: 'tree', name: '树木', geometry: { type: 'Point', coordinates: [70, 80] }, properties: { rotation: 15, scale: 1.2 }, qualityStatus: 'unverified' }],
+      deletedFeatureIds: ['legacy-gate-01'],
+    }
+    const snapshot = createCampusFeatureSnapshot(document)
+    expect(snapshot.type).toBe('CampusFeatureSnapshot')
+    expect(snapshot.version).toBe(1)
+    expect(snapshot.featureCollection.features).toHaveLength(4)
+    expect(snapshot.featureCollection.deletedFeatureIds).toEqual(['legacy-gate-01'])
+
+    const restored = restoreCampusFeatureSnapshot(JSON.parse(JSON.stringify(snapshot)))
+    expect(restored.buildings[0]).toMatchObject({ id: 'history-building', floors: 4, confidence: 'high' })
+    expect(restored.roads[0]).toMatchObject({ id: 'history-road', width: 9, confidence: 'medium' })
+    expect(restored.areas[0]).toMatchObject({ id: 'history-water', type: 'water', confidence: 'low' })
+    expect(restored.objects[0]).toMatchObject({ id: 'history-tree', properties: { rotation: 15, scale: 1.2 } })
+    expect(restored.deletedFeatureIds).toEqual(['legacy-gate-01'])
+  })
+
+  it('rejects unsupported canonical history snapshot versions', () => {
+    expect(() => restoreCampusFeatureSnapshot({ type: 'CampusFeatureSnapshot', version: 99 })).toThrow('不支持的校园空间历史快照版本')
+  })
+
 })

@@ -1,3 +1,9 @@
+## 2026-11-04 — 修复区域删除绕过统一删除契约
+
+- **修改文件**：`src/editor/CampusPlanEditor.vue`。
+- **实际完成**：区域属性面板原先直接过滤数组，绕过基础 Feature tombstone 写入；现统一调用 `deleteSelected()`，复用图层锁、撤销快照、基础对象删除标记和选中状态清理。
+- **验证状态**：修复已提交，等待 CI；真实浏览器端删除/刷新回归尚未执行。
+- **下一步**：检查其余编辑器入口是否存在绕过统一删除、撤销或自动保存流程的直接数组修改。
 ## 2026-11-04 — 扩展空间数据类型与几何一致性质检
 
 - **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`。

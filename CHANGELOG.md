@@ -966,3 +966,13 @@
 - 新增 `createCampusAssetManifestFromWorkshopRecords`，将同一 Feature 的 2.5D/3D 变体合并到一个稳定 assetId，避免双视角素材形成重复绑定；导出前执行路径、文件类型和 Feature ID 校验。
 - 新增测试覆盖双视角变体合并、单 Feature 稳定绑定、未确认文件排除和路径穿越拦截。
 - 当前版本是本地工作流：不包含云端 AI 生成 API、服务端文件上传、团队共享审核、自动部署或 GLB 实时预览；本地暂存不等同于已提交仓库。正式入库仍需将文件放入对应 public 目录并提交清单。
+
+
+## 2026-11-05 — 审核通过后自动上传并登记校园视觉资产
+
+- 素材工坊候选保存后进入“待审核”，不再要求用户把文件手动复制到项目 public 目录。
+- 新增 `POST /api/v1/assets/visual-assets`：审核通过后上传图片/GLB，校验文件真实签名、视角类型、Feature ID、文件大小并计算 SHA-256。
+- 服务端将素材保存到 `ASSET_STORAGE_DIR/campus-visual-assets/files/`，并原子更新同目录下的 `manifest.json`；同一 Feature 的 2.5D/3D 变体共享稳定 assetId。
+- 新增公开只读 manifest/content API，支持后续校园运行时按 Feature ID 解析资源。
+- 素材工坊新增“审核通过并自动入库”按钮；上传失败时保留本地候选与待审核状态，成功后更新状态为 ready。
+- 当前完成服务端自动入库闭环；运行时自动加载和替换 2.5D 建筑视觉仍需单独接入，持久化目录需由部署环境挂载磁盘卷。

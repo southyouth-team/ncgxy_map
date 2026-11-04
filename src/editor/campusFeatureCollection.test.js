@@ -227,4 +227,26 @@ describe('toCampusFeatureCollection', () => {
     expect(restored.objects[0]).toMatchObject({ name: '新树木', properties: { rotation: 90, scale: 1.5 } })
   })
 
+  it('keeps geometry edits in the canonical collection across legacy editor projections', () => {
+    const source = {
+      buildings: [{ id: 'move-building', label: '教学楼', template: '教学楼', footprint: [[0, 0], [20, 0], [20, 20]], floors: 4, confidence: 'high', source: 'survey' }],
+      roads: [{ id: 'move-road', name: '主干道', points: [[0, 30], [20, 30]], width: 8, confidence: 'medium', source: 'survey' }],
+      areas: [{ id: 'move-water', name: '湖泊', type: 'water', footprint: [[30, 0], [50, 0], [50, 20]], holes: [[[35, 5], [40, 5], [40, 10]]], confidence: 'high', source: 'survey' }],
+      objects: [{ id: 'move-tree', type: 'tree', name: '树木', geometry: { type: 'Point', coordinates: [60, 60] }, properties: { rotation: 25, scale: 1.4, confidence: 'medium' }, source: 'survey', qualityStatus: 'verified' }],
+    }
+    let canonical = toCampusFeatureCollection(source)
+    canonical = updateCampusFeatureGeometry(canonical, 'move-building', { type: 'Polygon', coordinates: [[[2, 2], [22, 2], [22, 22], [2, 2]]] })
+    canonical = updateCampusFeatureGeometry(canonical, 'move-road', { type: 'LineString', coordinates: [[1, 31], [21, 31]] })
+    canonical = updateCampusFeatureGeometry(canonical, 'move-water', { type: 'Polygon', coordinates: [[[32, 2], [52, 2], [52, 22], [32, 2]], [[37, 7], [42, 7], [42, 12], [37, 7]]] })
+    canonical = updateCampusFeatureGeometry(canonical, 'move-tree', { type: 'Point', coordinates: [62, 62] })
+
+    const restored = fromCampusFeatureCollection(canonical)
+    expect(restored.buildings[0]).toMatchObject({ id: 'move-building', floors: 4, confidence: 'high', source: 'survey' })
+    expect(restored.roads[0]).toMatchObject({ id: 'move-road', width: 8, confidence: 'medium', source: 'survey' })
+    expect(restored.areas[0]).toMatchObject({ id: 'move-water', type: 'water', confidence: 'high', source: 'survey' })
+    expect(restored.areas[0].holes).toHaveLength(1)
+    expect(restored.objects[0]).toMatchObject({ id: 'move-tree', geometry: { type: 'Point', coordinates: [62, 62] }, properties: { rotation: 25, scale: 1.4 }, qualityStatus: 'verified' })
+    expect(canonical.features).toHaveLength(4)
+  })
+
 })

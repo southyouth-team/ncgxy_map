@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
-import { toCampusFeatureCollection, fromCampusFeatureCollection } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
@@ -592,27 +592,41 @@ const roadPath = (points) => {
   const last = points[points.length - 1]
   return path + ' L ' + last[0] + ' ' + last[1]
 }
+function serializeSpatialHistory() {
+  // 撤销/重做历史以规范 FeatureCollection 为唯一空间快照，不再分别保存四组 legacy 数组。
+  return JSON.stringify(createCampusFeatureSnapshot(buildDocument()))
+}
 function snapshot() {
-  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value }))
+  history.value.push(serializeSpatialHistory())
   if (history.value.length > 40) history.value.shift()
   future.value = []
 }
 function restore(raw) {
   const state = JSON.parse(raw)
-  buildings.value = state.buildings
-  roads.value = state.roads
-  areas.value = state.areas || areas.value
+  if (state?.type === 'CampusFeatureSnapshot') {
+    const document = restoreCampusFeatureSnapshot(state)
+    buildings.value = document.buildings
+    roads.value = document.roads
+    areas.value = document.areas
+    objects.value = document.objects
+    deletedFeatureIds.value = document.deletedFeatureIds
+    return
+  }
+  // 兼容当前会话中旧版历史快照，避免热更新/历史恢复时丢失数据。
+  buildings.value = state.buildings || []
+  roads.value = state.roads || []
+  areas.value = state.areas || []
   objects.value = state.objects || []
   deletedFeatureIds.value = state.deletedFeatureIds || []
 }
 function undo() {
   if (!history.value.length) return
-  future.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value }))
+  future.value.push(serializeSpatialHistory())
   restore(history.value.pop())
 }
 function redo() {
   if (!future.value.length) return
-  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value }))
+  history.value.push(serializeSpatialHistory())
   restore(future.value.pop())
 }
 function canvasViewBox() {

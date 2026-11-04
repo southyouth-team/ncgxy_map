@@ -73,6 +73,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let outdoorEntranceObjects = []
   let lastEntranceCheckPosition = null
   let frameId = 0
+  let playerSpriteObject = null
   let resizeObserver
   let previousTime = 0
   let initialized = false
@@ -129,10 +130,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     scene.add(campus)
     cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
-    const playerSprite = campus.getObjectByName('PixelExplorerSprite')
+    playerSpriteObject = campus.getObjectByName('PixelExplorerSprite')
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
     const spawn = campus.userData.playerSpawn || fallbackSpawn
-    cameraRig.player.set(playerSprite?.position.x ?? spawn.x, 1.7, playerSprite?.position.z ?? spawn.z)
+    cameraRig.player.set(playerSpriteObject?.position.x ?? spawn.x, 1.7, playerSpriteObject?.position.z ?? spawn.z)
     if (isRpgSample && !options.deferInitialFocus) cameraRig.focusBounds(campus.userData.sampleBounds.width, campus.userData.sampleBounds.depth)
     // 从像素地图进入建筑时，先将室外角色恢复到离开前的地图坐标；
     // enterIndoorPrototype 会快照该位置，退出室内后即可回到原地。
@@ -241,6 +242,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     input.attach()
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)
+    // 总览模式按需渲染：用户操作、相机阻尼或窗口变化时才请求下一帧。
+    renderer.domElement.addEventListener('pointerdown', requestFrame)
+    renderer.domElement.addEventListener('pointermove', requestFrame)
+    renderer.domElement.addEventListener('wheel', requestFrame, { passive: true })
     if (cameraRig.viewMode === '3d') void ensureCampusBuildingModelsLoaded()
 
     const hemi = new THREE.HemisphereLight(0xfff2d8, 0x71865e, 2.2)
@@ -262,7 +267,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     window.addEventListener('keydown', onKeyDown)
     initialized = true
     callbacks.onReady?.()
-    animate(0)
+    requestFrame()
   }
 
 
@@ -972,14 +977,20 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.setSize(width, height)
     cameraRig.resize(width / height)
     logRenderDiagnostics('resize')
+    requestFrame()
+  }
+
+  function requestFrame() {
+    if (disposed || frameId) return
+    frameId = requestAnimationFrame(animate)
   }
 
   function animate(time) {
-    frameId = requestAnimationFrame(animate)
+    frameId = 0
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     if (stairTransition) updateStairTransition(delta)
-    else input?.update(delta)
+    else if (cameraRig?.mode !== 'overview') input?.update(delta)
     if (pendingRoomTransition) {
       const completed = input?.consumeNavigationPathCompletion?.() || false
       if (completed) {
@@ -1100,7 +1111,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         callbacks.onIndoorPromptChange?.(prompt ? { visible: true, text: prompt.text } : { visible: false })
       }
     }
-    const playerSprite = scene?.getObjectByName('CampusPlanPlayerSprite') || scene?.getObjectByName('PixelExplorerSprite')
+    const playerSprite = playerSpriteObject || scene?.getObjectByName('CampusPlanPlayerSprite')
     if (playerSprite && cameraRig?.player) {
       // 第一人称相机位于角色眼部，隐藏自身 Sprite，避免角色贴图遮挡视野。
       playerSprite.visible = cameraRig.mode !== 'firstPerson'
@@ -1112,7 +1123,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       lastPlayerX = cameraRig.player.x
       lastPlayerZ = cameraRig.player.z
     }
-    cameraRig?.update(delta)
+    const cameraChanged = cameraRig?.update(delta) || false
     // 远景地面跟随相机的 X/Z 坐标，避免相机平移或低角度观察时看到有限平面的边缘。
     if (activeHorizonGround && cameraRig?.camera) {
       activeHorizonGround.position.x = cameraRig.camera.position.x
@@ -1120,6 +1131,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     renderer.render(scene, cameraRig.camera)
     if (renderDebugEnabled && ++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
+    // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
+    if (cameraRig?.mode !== 'overview' || cameraChanged) requestFrame()
   }
 
   function updateSceneObject(sceneObject) {
@@ -1647,12 +1660,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function setMode(mode) {
     cameraRig?.setMode(mode)
     input?.setMode(mode)
+    requestFrame()
     if (mode !== 'overview' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
 
   function setViewMode(mode) {
     cameraRig?.setViewMode(mode)
+    requestFrame()
     if (mode === '3d' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
@@ -1661,6 +1676,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig?.focusCampus()
     const spawn = isRpgSample ? campus?.userData.playerSpawn : mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
     input?.resetPosition(spawn || { x: 0, z: 14 })
+    requestFrame()
   }
 
   function dispose() {
@@ -1670,6 +1686,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     window.removeEventListener('keydown', onKeyDown)
     renderer?.domElement?.removeEventListener('pointerdown', onScenePointerDown)
     renderer?.domElement?.removeEventListener('pointerup', onScenePointerUp)
+    renderer?.domElement?.removeEventListener('pointerdown', requestFrame)
+    renderer?.domElement?.removeEventListener('pointermove', requestFrame)
+    renderer?.domElement?.removeEventListener('wheel', requestFrame)
     clearSelection()
     clearNavigationVisuals()
     clearRpgPreview()

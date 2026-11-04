@@ -919,15 +919,16 @@ function addPolygonVertex() {
   let bestIndex = 0, bestLength = -Infinity
   for (let i = 0; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; const length = Math.hypot(b[0]-a[0], b[1]-a[1]); if (length > bestLength) { bestLength = length; bestIndex = i } }
   const a = ring[bestIndex], b = ring[(bestIndex + 1) % ring.length]
-  ring.splice(bestIndex + 1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
-  if (selectedBuilding.value) item.rect = polygonBounds(ring)
+  const footprint = ring.map(point => [...point])
+  footprint.splice(bestIndex + 1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
+  commitFeatureGeometry(item.id, selectedBuilding.value ? { buildings: [{ id: item.id, footprint }] } : { areas: [{ id: item.id, footprint }] })
 }
 function removePolygonVertex(index) {
   const item = selectedBuilding.value || selectedArea.value
   if (!item || item.footprint.length <= 3) return
   snapshot()
-  item.footprint.splice(index, 1)
-  if (selectedBuilding.value) item.rect = polygonBounds(item.footprint)
+  const footprint = item.footprint.filter((_, vertexIndex) => vertexIndex !== index).map(point => [...point])
+  commitFeatureGeometry(item.id, selectedBuilding.value ? { buildings: [{ id: item.id, footprint }] } : { areas: [{ id: item.id, footprint }] })
 }
 function endPointer() { if (boxSelection.value) finishBoxSelection(); drag.value = null }
 function addBuilding(event) {
@@ -980,20 +981,18 @@ function updateBuildingMetric(metric, rawValue) {
   if (metric === 'y') nextBounds[3] = value + oldHeight
   if (nextBounds.every((coordinate, index) => coordinate === oldBounds[index])) return
   snapshot()
-  const nextWidth = nextBounds[2] - nextBounds[0]
-  const nextHeight = nextBounds[3] - nextBounds[1]
-  item.footprint = item.footprint.map(([x, y]) => [
+  const nextWidth = nextBounds[2] - nextBounds[0], nextHeight = nextBounds[3] - nextBounds[1]
+  const footprint = item.footprint.map(([x, y]) => [
     nextBounds[0] + ((x - oldBounds[0]) / oldWidth) * nextWidth,
     nextBounds[1] + ((y - oldBounds[1]) / oldHeight) * nextHeight,
   ])
-  item.rect = polygonBounds(item.footprint)
+  commitFeatureGeometry(item.id, { buildings: [{ id: item.id, footprint }] })
 }
 function rotateBuilding() {
   const item = selectedBuilding.value
   if (!item) return
   snapshot()
-  item.footprint = rotatePolygon(item.footprint, 90)
-  item.rect = polygonBounds(item.footprint)
+  commitFeatureGeometry(item.id, { buildings: [{ id: item.id, footprint: rotatePolygon(item.footprint, 90) }] })
 }
 function addRoadNode() {
   const road = selectedRoad.value
@@ -1002,13 +1001,16 @@ function addRoadNode() {
   let index = 0, longest = -Infinity
   for (let i = 0; i < road.points.length - 1; i++) { const a = road.points[i], b = road.points[i+1]; const length = Math.hypot(b[0]-a[0], b[1]-a[1]); if (length > longest) { longest = length; index = i } }
   const a = road.points[index], b = road.points[index+1]
-  road.points.splice(index+1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
+  const points = road.points.map(point => [...point])
+  points.splice(index+1, 0, [(a[0]+b[0])/2, (a[1]+b[1])/2])
+  commitFeatureGeometry(road.id, { roads: [{ id: road.id, points }] })
 }
 function removeRoadNode(index) {
   const road = selectedRoad.value
   if (!road || road.points.length <= 2) return
   snapshot()
-  road.points.splice(index, 1)
+  const points = road.points.filter((_, pointIndex) => pointIndex !== index).map(point => [...point])
+  commitFeatureGeometry(road.id, { roads: [{ id: road.id, points }] })
 }
 function deleteSelected() {
   if (multiSelection.value.length > 1) { deleteSelectionBatch(); return }

@@ -416,8 +416,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const centerX = (minX + maxX) / 2
     const centerZ = (minZ + maxZ) / 2
     const margin = Math.max(8, Math.max(maxX - minX, maxZ - minZ) * 0.04)
-    const groundWidth = Math.max(20, maxX - minX + margin * 2)
-    const groundDepth = Math.max(20, maxZ - minZ + margin * 2)
+    // 斜视时，有限地面矩形的近侧边缘会投影成横向截断线；将预览地面扩展到远裁剪面范围内，避免露出场景背景。
+    const groundWidth = Math.max(4000, maxX - minX + margin * 2)
+    const groundDepth = Math.max(4000, maxZ - minZ + margin * 2)
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(groundWidth, groundDepth),
       new THREE.MeshStandardMaterial({ color: '#8eae69', roughness: 1 }),

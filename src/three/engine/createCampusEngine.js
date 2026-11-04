@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
-import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry } from '../world/campus/campusSceneData.js'
+import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
@@ -365,6 +365,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           return result
         }
         loadedBuildingModels = result.models || []
+        const assetInventory = createCampusBuildingAssetInventory(
+          spatialLayers?.buildings || [],
+          result.manifest?.buildings || [],
+          mapPixelToWorld,
+        )
+        callbacks.onAssetInventory?.(assetInventory)
+        if (assetInventory.errors.length > 0) console.warn('[CampusAssetInventory] 建筑资产清单关联异常', assetInventory)
+        else if (renderDebugEnabled) console.info('[CampusAssetInventory] 建筑资产清单', assetInventory.summary)
         const modelAudit = validateCampusBuildingModels(loadedBuildingModels, canonicalBuildingIds)
         const geometryRecords = loadedBuildingModels.map(model => {
           model.updateWorldMatrix(true, true)
@@ -391,7 +399,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         const assetAudit = {
           ...modelAudit,
           loadErrorCount: (result.errors || []).length,
-          loadErrors: (result.errors || []).map(item => ({ buildingId: item.buildingId, message: item.error?.message || String(item.error) })),
+          loadErrors: (result.errors || []).map(item => ({ buildingId: item.buildingId, code: item.code, message: item.error?.message || String(item.error) })),
+          skippedCount: (result.skipped || []).length,
+          skipped: result.skipped || [],
           manifestTotal: result.total || 0,
           loadedCount: loadedBuildingModels.length,
         }

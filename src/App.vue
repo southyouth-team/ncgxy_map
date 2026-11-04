@@ -51,9 +51,11 @@ const indoorHistoryOpen = ref(false)
 const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
 const indoorBuildingId = computed(() => indoorDefinition.value?.id || selectedBuildingId.value)
 const initialView = new URLSearchParams(window.location.search).get('view')
-const isCampusExplorer = initialView !== 'editor'
-const showEditor = ref(!isCampusExplorer)
+const isEditorRoute = window.location.pathname.replace(/\\/+$/, '') === '/editor' || initialView === 'editor'
+const isCampusExplorer = !isEditorRoute
+const showEditor = ref(isEditorRoute)
 const editorViewMode = ref('2d')
+const viewMode = ref('2.5d')
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
 const sceneRevision = ref(0)
@@ -65,17 +67,11 @@ const campusPlanDocument = ref(null)
 
 let engine
 
-const modes = isCampusExplorer
-  ? [
-      { id: 'overview', label: '2.5D 总览', hint: '等距校园' },
-      { id: 'thirdPerson', label: '2.5D 探索', hint: '角色漫游' },
-      { id: 'firstPerson', label: '3D 视角', hint: '第一人称' },
-    ]
-  : [
-      { id: 'overview', label: '上帝视角', hint: '像素地图' },
-      { id: 'thirdPerson', label: '第三人称', hint: '跟随漫游' },
-      { id: 'firstPerson', label: '沉浸视角', hint: '第一人称' },
-    ]
+const modes = [
+  { id: 'overview', label: '总览', hint: '校园全景' },
+  { id: 'thirdPerson', label: '跟随', hint: '角色漫游' },
+  { id: 'firstPerson', label: '第一人称', hint: '自由观察' },
+]
 
 function adjacentIndoorFloor(direction) {
   const levels = [...indoorFloors.value].sort((a, b) => a - b)
@@ -352,14 +348,25 @@ function openEditor() {
   showEditor.value = true
   editorViewMode.value = '2d'
   const url = new URL(window.location.href)
-  url.searchParams.set('view', 'editor')
-  window.history.replaceState({}, '', url)
+  url.pathname = '/editor'
+  url.searchParams.delete('view')
+  window.history.pushState({}, '', url)
+}
+
+function switchViewMode(mode) {
+  if (!['2.5d', '3d'].includes(mode)) return
+  viewMode.value = mode
+  engine?.setViewMode(mode)
 }
 
 function switchEditorView(mode, document) {
   editorViewMode.value = mode
-  if (mode === '3d') { activeMode.value = 'overview'; engine?.previewCampusPlan(document) }
-  else engine?.clearRpgPreview()
+  if (mode === '3d') {
+    activeMode.value = 'overview'
+    viewMode.value = '3d'
+    engine?.setViewMode('3d')
+    engine?.previewCampusPlan(document)
+  } else engine?.clearRpgPreview()
 }
 
 async function closeEditor() {
@@ -371,10 +378,13 @@ async function closeEditor() {
   showEditor.value = false
   editorViewMode.value = '2d'
   const url = new URL(window.location.href)
+  url.pathname = '/'
   url.searchParams.delete('view')
   url.searchParams.delete('buildingId')
-  window.history.replaceState({}, '', url)
+  window.history.pushState({}, '', url)
   activeMode.value = 'overview'
+  viewMode.value = '2.5d'
+  engine?.setViewMode('2.5d')
   engine?.setMode('overview')
 }
 
@@ -471,7 +481,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: 'campus', isometricRpg: true, initialPlayerPosition: returnWorldPosition, deferInitialFocus: !requestedBuildingId })
+    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: !requestedBuildingId })
     await engine.init()
     if (!requestedBuildingId) {
       const planDocument = getShowcasePlanDocument()
@@ -522,7 +532,18 @@ onBeforeUnmount(() => {
       <div class="intro-foot">INTERACTIVE CAMPUS MAP</div>
     </section>
 
-    <nav class="mode-switcher" aria-label="视角切换">
+    <nav class="mode-switcher" aria-label="展示模式切换">
+      <button :class="['mode-button', { active: viewMode === '2.5d' }]" @click="switchViewMode('2.5d')">
+        <span class="mode-label">2.5D</span>
+        <span class="mode-hint">等距像素视图</span>
+      </button>
+      <button :class="['mode-button', { active: viewMode === '3d' }]" @click="switchViewMode('3d')">
+        <span class="mode-label">3D</span>
+        <span class="mode-hint">透视立体视图</span>
+      </button>
+    </nav>
+
+    <nav class="mode-switcher camera-mode-switcher" aria-label="相机控制模式">
       <button
         v-for="mode in modes"
         :key="mode.id"

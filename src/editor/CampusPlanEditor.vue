@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, mergeCampusFeatureCollections, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, mergeCampusFeatureCollections, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, duplicateCampusFeature, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
@@ -295,11 +295,9 @@ function pasteCopied() {
   snapshot()
   const pasted = []
   available.forEach(entry => {
-    const clone = JSON.parse(JSON.stringify(entry.feature))
     duplicateSequence += 1
-    clone.id = `copy-${entry.type}-${Date.now()}-${duplicateSequence}`
-    clone.geometry = translateCampusFeatureGeometry(clone.geometry, 24, 24)
-    clone.id = String(clone.id)
+    const cloneId = `copy-${entry.type}-${Date.now()}-${duplicateSequence}`
+    const clone = duplicateCampusFeature(entry.feature, cloneId, 24, 24)
     commitFeatureCollectionMutation(collection => upsertCampusFeature(collection, clone))
     pasted.push({ type: entry.type, id: clone.id })
   })

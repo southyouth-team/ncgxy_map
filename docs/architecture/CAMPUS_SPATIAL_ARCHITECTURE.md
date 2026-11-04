@@ -204,3 +204,16 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 ## 20. 属性面板修改与撤销/重做
 
 属性面板通过 `v-model` 修改对象属性时，必须在用户开始编辑前记录 undo 快照。否则自动保存会持久化修改，但撤销栈中没有修改前状态。当前通过控件 focus 建立快照；未来若引入复杂输入控件，应统一接入编辑事务入口。
+
+
+## 21. 置信度与核验状态的字段隔离
+
+三个字段具有不同语义，不得互相赋值：
+
+- `confidence`：数据置信度等级，仅允许 `low`、`medium`、`high`。
+- `verificationStatus`：人工核验状态，仅允许 `verified`、`unverified`。
+- `qualityStatus`：编辑器迁移期字段，保留历史核验状态；当前规范值为 `verified` 或 `unverified`。
+
+正向序列化时优先保留合法的显式 `confidence` 和 `verificationStatus`；缺失时按 `qualityStatus` 保守推导，未核验对象默认为 low + unverified。旧版 `confidence` 不得作为 `qualityStatus` 的回退来源。
+
+反向适配时分别恢复三个字段，不能用 `qualityStatus` 覆盖 `confidence`。统一质检必须直接针对编辑器生成的 FeatureCollection 执行，以确保保存边界的数据契约与基础校园数据一致。

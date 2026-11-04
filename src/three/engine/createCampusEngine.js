@@ -1777,10 +1777,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
 
-  function focusCampus() {
-    cameraRig?.focusCampus()
+  function resetView() {
     const spawn = isRpgSample ? campus?.userData.playerSpawn : mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
     input?.resetPosition(spawn || { x: 0, z: 14 })
+
+    if (cameraRig?.mode === 'overview') {
+      // 总览只重置当前投影下的取景，不切换相机模式；优先按实际校园内容包络居中。
+      const bounds = campus?.userData.contentBounds
+      if (bounds) {
+        cameraRig.focusBounds(bounds.width, bounds.depth, bounds.centerX, bounds.centerZ)
+      } else {
+        cameraRig.focusBounds(160, 120)
+      }
+    } else if (cameraRig?.mode === 'firstPerson') {
+      // 第一人称保留当前模式和朝向，只将角色位置恢复到默认出生点。
+      cameraRig.updateFirstPersonDesired()
+    } else if (cameraRig?.mode === 'thirdPerson') {
+      // 跟随模式保留当前投影和跟随镜头参数，仅重置角色位置。
+      cameraRig.updateThirdPersonDesired()
+    }
     requestFrame()
   }
 
@@ -1812,5 +1827,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, resetView, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

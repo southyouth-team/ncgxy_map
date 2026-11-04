@@ -4,8 +4,8 @@ const loader = new GLTFLoader()
 const MODEL_ROOT = '/models/buildings/'
 
 /**
- * 从建筑清单加载已制作的 GLB。
- * 建筑坐标使用校园本地米制坐标；模型原点应放在建筑 footprint 中心的地面位置。
+ * 只加载状态为 ready 且模型路径、位置、旋转均明确的 GLB。
+ * 待制作资产仍保留在清单中，但不会被误加载到原点。
  */
 export async function loadCampusBuildingModels(scene, manifestUrl = '/data/buildings.json') {
   const response = await fetch(manifestUrl)
@@ -18,28 +18,50 @@ export async function loadCampusBuildingModels(scene, manifestUrl = '/data/build
   const loaded = []
   const models = []
   const errors = []
+  const skipped = []
+  const seenIds = new Set()
 
   for (const building of buildings) {
-    if (!building || typeof building.buildingId !== 'string') continue
+    if (!building || typeof building.buildingId !== 'string' || !building.buildingId.trim()) {
+      skipped.push({ buildingId: null, code: 'ASSET_BUILDING_ID_MISSING', reason: '清单条目缺少 buildingId' })
+      continue
+    }
+    const buildingId = building.buildingId
+    if (seenIds.has(buildingId)) {
+      errors.push({ buildingId, code: 'ASSET_BUILDING_ID_DUPLICATE', error: new Error('建筑资产清单存在重复 buildingId') })
+      continue
+    }
+    seenIds.add(buildingId)
+
+    if (building.status !== 'ready') {
+      skipped.push({ buildingId, code: 'ASSET_NOT_READY', reason: '资产状态不是 ready' })
+      continue
+    }
+
     const modelUrl = building.modelUrl
-    if (typeof modelUrl !== 'string' || !modelUrl.startsWith(MODEL_ROOT)) continue
+    if (typeof modelUrl !== 'string' || !modelUrl.startsWith(MODEL_ROOT)
+      || !modelUrl.toLowerCase().endsWith('.glb') || modelUrl.includes('..')) {
+      errors.push({ buildingId, code: 'ASSET_MODEL_URL_INVALID', error: new Error('modelUrl 必须是 /models/buildings/ 下的 GLB 文件路径') })
+      continue
+    }
+    if (!Array.isArray(building.position) || building.position.length !== 3 || !building.position.every(Number.isFinite)) {
+      errors.push({ buildingId, code: 'ASSET_POSITION_INVALID', error: new Error('ready 资产必须提供三个有限数值组成的 position') })
+      continue
+    }
+    if (!Number.isFinite(building.rotationY)) {
+      errors.push({ buildingId, code: 'ASSET_ROTATION_INVALID', error: new Error('ready 资产必须明确提供 rotationY（弧度）') })
+      continue
+    }
 
     try {
       const gltf = await loader.loadAsync(modelUrl)
       const model = gltf.scene
-      const position = Array.isArray(building.position) ? building.position : [0, 0, 0]
-      const rotationY = Number.isFinite(building.rotationY) ? building.rotationY : 0
-
-      model.name = building.buildingId
-      model.position.set(
-        Number.isFinite(position[0]) ? position[0] : 0,
-        Number.isFinite(position[1]) ? position[1] : 0,
-        Number.isFinite(position[2]) ? position[2] : 0,
-      )
-      model.rotation.y = rotationY
-      model.userData.buildingId = building.buildingId
+      model.name = buildingId
+      model.position.set(building.position[0], building.position[1], building.position[2])
+      model.rotation.y = building.rotationY
+      model.userData.buildingId = buildingId
       model.userData.objectType = 'building'
-      model.userData.buildingName = building.name || building.buildingId
+      model.userData.buildingName = building.name || buildingId
       model.traverse((object) => {
         if (!object.isMesh) return
         object.castShadow = true
@@ -47,12 +69,12 @@ export async function loadCampusBuildingModels(scene, manifestUrl = '/data/build
       })
 
       scene.add(model)
-      loaded.push(building.buildingId)
+      loaded.push(buildingId)
       models.push(model)
     } catch (error) {
-      errors.push({ buildingId: building.buildingId, error })
+      errors.push({ buildingId, code: 'ASSET_GLB_LOAD_FAILED', error })
     }
   }
 
-  return { loaded, models, errors, total: buildings.length }
+  return { loaded, models, errors, skipped, manifest, total: buildings.length }
 }

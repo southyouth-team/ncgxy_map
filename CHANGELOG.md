@@ -357,3 +357,18 @@
 
 
 - 统一质检集成用例进一步覆盖 Point 树木对象，检查其 objectType、confidence、verificationStatus 与 qualityStatus 同时符合契约。
+
+
+## 2026-11-04 — 第三阶段数据一致性复核
+
+- **CI 验证结果**：提交 `cb408078260a4ecd5e6ce7e637d8662c7a0e021c` 对应 Frontend CI 与 Backend CI 均通过。前端 npm install / npm test / npm run build 成功；后端 NestJS build、PostGIS migrations、API integration tests、PostGIS schema verification 成功。
+- **本轮审查确认**：
+  - 基础 FeatureCollection 已包含 boundary、gate、building、road、area、object；建筑、道路、区域和点对象通过稳定 ID 与编辑器数据合并。
+  - 编辑器保存时生成 FeatureCollection；首页和编辑器三维预览均通过共享空间图层适配器派生渲染输入。
+  - 质量字段 confidence、verificationStatus、qualityStatus 已分离，并覆盖 building、road、water、tree 的回归测试。
+- **尚未完成的架构迁移**：
+  - `CampusPlanEditor.vue` 仍以 buildings / roads / areas / objects 四组响应式数组作为交互工作模型。
+  - FeatureCollection 目前是持久化与渲染边界的规范交换格式，并非编辑器内部唯一权威状态。
+  - 因此第三阶段只能判定为“统一数据契约和共享渲染适配已建立，编辑器内部单一数据源迁移未完成”，不得宣布阶段验收通过。
+- **未完成的验证**：真实浏览器端保存、刷新、首页/编辑器一致性与移动端交互尚未人工验收。
+- **下一步**：设计编辑器 FeatureCollection 单一状态迁移方案，先解决绘制、拖动、撤销重做、批量操作与属性面板对数据集合的写入边界，再分批迁移，保持旧文档兼容；完成后重新跑全量 CI 和浏览器验收。

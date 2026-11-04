@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
@@ -1014,7 +1014,31 @@ function deleteSelected() {
   if (selected.value.type === 'object') objects.value = objects.value.filter(item => item.id !== selected.value.id)
   selected.value = { type: '', id: '' }
 }
-function buildDocument() {
+function commitFeatureCollectionMutation(mutator) {
+  // 属性面板统一通过规范 FeatureCollection mutation API 写入，再投影回迁移期交互视图。
+  const current = toCampusFeatureCollection(buildDocument())
+  const next = mutator(current)
+  const document = fromCampusFeatureCollection(next)
+  buildings.value = document.buildings.map(normalizeBuilding)
+  roads.value = document.roads
+  areas.value = document.areas
+  objects.value = document.objects
+  deletedFeatureIds.value = document.deletedFeatureIds
+}
+function updateSelectedFeatureProperty(key, value, { numeric = false, nested = false } = {}) {
+  const featureId = selected.value.id
+  if (!featureId) return
+  const normalizedValue = numeric && value !== '' ? Number(value) : value
+  commitFeatureCollectionMutation(collection => {
+    const feature = collection.features.find(item => String(item.id) === String(featureId))
+    if (!feature) return collection
+    const patch = nested === 'objectProperties'
+      ? { [key]: normalizedValue }
+      : { [key]: normalizedValue }
+    return updateCampusFeatureProperties(collection, featureId, patch)
+  })
+}
+
   const document = { schemaVersion: 3, deletedFeatureIds: [...deletedFeatureIds.value], coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
   document.featureCollection = toCampusFeatureCollection(document)
   return document
@@ -1141,20 +1165,20 @@ function exportDocument() {
         <div class="inspector-heading"><div class="panel-title">属性检查器</div><span>PROPERTIES</span></div>
         <div class="selected-card"><small>当前选中</small><strong>{{ selectedLabel }}</strong><span>{{ selected.type==='road' ? '道路 / LineString' : selected.type==='building' ? '建筑 / Footprint' : selected.type==='area' ? '校园区域 / Polygon' : '请选择场景对象' }}</span></div>
         <template v-if="selectedBuilding">
-          <label>建筑名称</label><input v-model="selectedBuilding.label" @focus="snapshot">
-          <label>建筑模板</label><select v-model="selectedBuilding.template" @focus="snapshot"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>
+          <label>建筑名称</label><input  :value="selectedBuilding.label" @focus="snapshot" @change="updateSelectedFeatureProperty('name',$event.target.value)">
+          <label>建筑模板</label><select  :value="selectedBuilding.template" @focus="snapshot" @change="updateSelectedFeatureProperty('template',$event.target.value)"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>
           <label>三维建筑参数</label>
           <div class="property-grid">
-            <label>建筑高度<input type="number" min="1" max="80" step="0.2" v-model.number="selectedBuilding.height" @focus="snapshot"></label>
-            <label>楼层数<input type="number" min="1" max="30" step="1" v-model.number="selectedBuilding.floors" @focus="snapshot"></label>
-            <label>窗户密度<input type="number" min="0.1" max="3" step="0.05" v-model.number="selectedBuilding.windowDensity" @focus="snapshot"></label>
-            <label>窗户宽度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowWidth" @focus="snapshot"></label>
-            <label>窗户高度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowHeight" @focus="snapshot"></label>
-            <label>入口宽度<input type="number" min="0.5" max="5" step="0.1" v-model.number="selectedBuilding.doorWidth" @focus="snapshot"></label>
-            <label>屋顶起拱高度<input type="number" min="0" max="8" step="0.1" v-model.number="selectedBuilding.roofRise" @focus="snapshot"></label>
+            <label>建筑高度<input type="number" min="1" max="80" step="0.2"  :value="selectedBuilding.height" @focus="snapshot" @change="updateSelectedFeatureProperty('height',$event.target.value,{numeric:true})"></label>
+            <label>楼层数<input type="number" min="1" max="30" step="1"  :value="selectedBuilding.floors" @focus="snapshot" @change="updateSelectedFeatureProperty('floors',$event.target.value,{numeric:true})"></label>
+            <label>窗户密度<input type="number" min="0.1" max="3" step="0.05"  :value="selectedBuilding.windowDensity" @focus="snapshot" @change="updateSelectedFeatureProperty('windowDensity',$event.target.value,{numeric:true})"></label>
+            <label>窗户宽度<input type="number" min="0.2" max="3" step="0.05"  :value="selectedBuilding.windowWidth" @focus="snapshot" @change="updateSelectedFeatureProperty('windowWidth',$event.target.value,{numeric:true})"></label>
+            <label>窗户高度<input type="number" min="0.2" max="3" step="0.05"  :value="selectedBuilding.windowHeight" @focus="snapshot" @change="updateSelectedFeatureProperty('windowHeight',$event.target.value,{numeric:true})"></label>
+            <label>入口宽度<input type="number" min="0.5" max="5" step="0.1"  :value="selectedBuilding.doorWidth" @focus="snapshot" @change="updateSelectedFeatureProperty('doorWidth',$event.target.value,{numeric:true})"></label>
+            <label>屋顶起拱高度<input type="number" min="0" max="8" step="0.1"  :value="selectedBuilding.roofRise" @focus="snapshot" @change="updateSelectedFeatureProperty('roofRise',$event.target.value,{numeric:true})"></label>
           </div>
-          <label>屋顶样式</label><select v-model="selectedBuilding.roofStyle" @focus="snapshot"><option value="">跟随建筑模板</option><option value="flat">平顶</option><option value="pitched">双坡顶</option><option value="glass">玻璃顶</option><option value="span">跨度双坡顶（受限轮廓）</option></select>
-          <label>主入口所在边</label><select v-model="selectedBuilding.entranceEdgeIndex" @focus="snapshot"><option value="">自动选择最长边</option><option v-for="(_,index) in selectedBuilding.footprint" :key="index" :value="index">第 {{ index + 1 }} 条边</option></select>
+          <label>屋顶样式</label><select  :value="selectedBuilding.roofStyle" @focus="snapshot" @change="updateSelectedFeatureProperty('roofStyle',$event.target.value)"><option value="">跟随建筑模板</option><option value="flat">平顶</option><option value="pitched">双坡顶</option><option value="glass">玻璃顶</option><option value="span">跨度双坡顶（受限轮廓）</option></select>
+          <label>主入口所在边</label><select  :value="selectedBuilding.entranceEdgeIndex" @focus="snapshot" @change="updateSelectedFeatureProperty('entranceEdgeIndex',$event.target.value === '' ? null : Number($event.target.value),{numeric:false})"><option value="">自动选择最长边</option><option v-for="(_,index) in selectedBuilding.footprint" :key="index" :value="index">第 {{ index + 1 }} 条边</option></select>
           <div v-if="!selectedBuildingFootprintValidation.valid" class="geometry-warning">
             <strong>建筑轮廓校验未通过</strong><span v-for="error in selectedBuildingFootprintValidation.errors" :key="error">{{ error }}</span>
           </div>
@@ -1171,20 +1195,20 @@ function exportDocument() {
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。</p><button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
         </template>
         <template v-else-if="selectedArea">
-          <label>区域名称</label><input v-model="selectedArea.name" @focus="snapshot">
-          <label>区域类型</label><select v-model="selectedArea.type" @focus="snapshot"><option v-for="item in areaKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
+          <label>区域名称</label><input  :value="selectedArea.name" @focus="snapshot" @change="updateSelectedFeatureProperty('name',$event.target.value)">
+          <label>区域类型</label><select  :value="selectedArea.type" @focus="snapshot" @change="updateSelectedFeatureProperty('areaType',$event.target.value)"><option v-for="item in areaKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。支持顶点吸附。</p>
           <button class="danger-button" @click="deleteSelected">删除区域</button>
         </template>
         <template v-else-if="selectedObject">
-          <label>对象名称</label><input v-model="selectedObject.name" @focus="snapshot">
-          <label>对象类型</label><select v-model="selectedObject.type" @focus="snapshot"><option v-for="item in objectKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
-          <label>朝向（度）</label><input type="number" v-model.number="selectedObject.properties.rotation" @focus="snapshot">
-          <label>缩放</label><input type="number" min="0.2" max="5" step="0.1" v-model.number="selectedObject.properties.scale" @focus="snapshot">
+          <label>对象名称</label><input  :value="selectedObject.name" @focus="snapshot" @change="updateSelectedFeatureProperty('name',$event.target.value)">
+          <label>对象类型</label><select  :value="selectedObject.type" @focus="snapshot" @change="updateSelectedFeatureProperty('objectType',$event.target.value)"><option v-for="item in objectKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
+          <label>朝向（度）</label><input type="number"  :value="selectedObject.properties.rotation" @focus="snapshot" @change="updateSelectedFeatureProperty('rotation',$event.target.value,{numeric:true,nested:'objectProperties'})">
+          <label>缩放</label><input type="number" min="0.2" max="5" step="0.1"  :value="selectedObject.properties.scale" @focus="snapshot" @change="updateSelectedFeatureProperty('scale',$event.target.value,{numeric:true,nested:'objectProperties'})>
           <button class="danger-button" @click="deleteSelected">删除对象</button>
         </template>
         <template v-else-if="selectedRoad">
-          <label>道路宽度</label><input v-model.number="selectedRoad.width" @focus="snapshot" type="range" min="4" max="24">
+          <label>道路宽度</label><input  :value="selectedRoad.width" @focus="snapshot" @change="updateSelectedFeatureProperty('width',$event.target.value,{numeric:true}) type="range" min="4" max="24">
           <button class="add-button" @click="addRoadNode">＋ 添加道路控制点</button><p class="hint">拖动控制点调整曲线；点击控制点删除（至少保留 2 个）。道路采用平滑曲线显示。</p><button class="danger-button" @click="deleteSelected">删除道路</button>
         </template>
         <div v-else class="empty-inspector"><span class="empty-inspector-icon">⌖</span><strong>尚未选择对象</strong><p>在画布中点击建筑、道路或区域，即可查看并编辑对应属性。</p></div>

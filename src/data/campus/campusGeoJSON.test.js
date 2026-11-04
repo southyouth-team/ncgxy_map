@@ -190,6 +190,7 @@ describe('统一校园空间数据出口', () => {
   it('按稳定 ID 合并首页基础 Feature 与编辑器覆盖，并执行删除标记', () => {
     const base = {
       type: 'FeatureCollection',
+      metadata: { dataset: 'campus-baseline', catalogue: { pois: [{ id: 'poi-library' }] } },
       features: [
         { type: 'Feature', id: 'campus-boundary', properties: { featureType: 'boundary', name: '校界' }, geometry: { type: 'Polygon', coordinates: [] } },
         { type: 'Feature', id: 'campus-gate-east', properties: { featureType: 'gate', name: '东门' }, geometry: { type: 'Point', coordinates: [1, 1] } },
@@ -201,6 +202,7 @@ describe('统一校园空间数据出口', () => {
     }
     const editor = {
       type: 'FeatureCollection',
+      metadata: { editorRevision: 7, catalogue: { editorNotes: [{ id: 'note-1' }] } },
       features: [
         { type: 'Feature', id: 'campus-tree-001', properties: { featureType: 'object', name: '已校准树木' }, geometry: { type: 'Point', coordinates: [3, 3] } },
         { type: 'Feature', id: 'editor-bench-001', properties: { featureType: 'object', name: '新增座椅' }, geometry: { type: 'Point', coordinates: [4, 4] } },
@@ -211,6 +213,14 @@ describe('统一校园空间数据出口', () => {
     expect(merged.features.map(feature => feature.id)).toEqual(['campus-boundary', 'campus-building-001', 'campus-water-001', 'campus-tree-001', 'editor-bench-001'])
     expect(merged.features.find(feature => feature.id === 'campus-tree-001').properties.name).toBe('已校准树木')
     expect(merged.deletedFeatureIds).toEqual(['campus-gate-east', 'campus-road-001'])
+    expect(merged.metadata).toMatchObject({
+      dataset: 'campus-baseline',
+      editorRevision: 7,
+      catalogue: {
+        pois: [{ id: 'poi-library' }],
+        editorNotes: [{ id: 'note-1' }],
+      },
+    })
   })
 
 

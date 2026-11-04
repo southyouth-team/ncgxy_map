@@ -386,3 +386,8 @@ mergeCampusSceneFeatureCollections 合并基础集合与编辑器集合时，del
 ## 43. 服务端保存必须原样保留集合级 metadata
 
 schema v4 的 FeatureCollection metadata 属于规范空间数据的一部分。SaveRpgMapDto 将 document 作为对象接收，服务层校验后直接 JSON.stringify 写入 JSONB；不得通过仅声明已知字段的嵌套 DTO 或白名单映射重建 FeatureCollection。API 集成测试覆盖 metadata.dataset、metadata.catalogue 中基础目录与编辑器扩展目录的 PUT/GET 原样回读。
+
+
+## 44. 编辑器冲突恢复前取消待执行自动保存
+
+当编辑器检测到 revision 冲突后，用户选择重新加载服务端版本时，必须先清除尚未触发的自动保存定时器，再开始读取服务端文档。否则旧本地快照可能在服务端重载完成前再次发起保存请求，造成额外冲突或状态提示抖动。冲突恢复期间若仍有保存请求进行中，则不允许并发执行重载。

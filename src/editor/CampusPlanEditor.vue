@@ -130,15 +130,16 @@ const BASE_CAMPUS_ROADS = CAMPUS_ROAD_CENTERLINES.map(item => ({ ...item, points
 const BASE_CAMPUS_OBJECTS = BASE_CAMPUS_FEATURE_COLLECTION.features
   .filter(feature => feature.properties?.featureType === 'object' && feature.geometry?.type === 'Point')
   .map(feature => {
-    const { featureType, name, source, qualityStatus, confidence, objectType, ...properties } = feature.properties
+    const { featureType, name, source, qualityStatus, objectType, ...properties } = feature.properties
     return {
       id: String(feature.id),
       type: objectType || 'facility',
       name: name || '校园设施',
       geometry: { type: 'Point', coordinates: [...feature.geometry.coordinates] },
+      // confidence 与 verificationStatus 都属于对象业务属性，必须保留。
       properties,
       source,
-      qualityStatus: qualityStatus || confidence || 'unverified',
+      qualityStatus: qualityStatus || properties.verificationStatus || 'unverified',
     }
   })
 function mergeEditorLayer(baseItems, editedItems, deletedIds) {

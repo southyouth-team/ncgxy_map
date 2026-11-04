@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { CAMPUS_BUILDING_FOOTPRINTS } from '../data/campus/campusLayout.js'
-import { validateCampusAssetManifest } from '../data/campus/campusAssetManifest.js'
+import { createCampusAssetManifestFromWorkshopRecords } from '../data/campus/campusAssetManifest.js'
 
 const STORAGE_KEY = 'ncgxy-campus-asset-workshop:v1'
 const DB_NAME = 'ncgxy-campus-asset-files'
@@ -250,51 +250,18 @@ async function removeAsset(asset) {
 }
 
 function exportManifest() {
-  const ready = assets.value.filter(item => item.status === 'ready' && item.deployedConfirmed)
-  const groupedAssets = new Map()
-  for (const item of ready) {
-    const path = item.publicPath
-    const validRoot = item.viewMode === '3d'
-      ? path.startsWith('/models/buildings/') && path.toLowerCase().endsWith('.glb')
-      : path.startsWith('/assets/campus/') && /\.(png|webp|jpe?g)$/i.test(path)
-    if (!validRoot || path.includes('..') || path.includes('\\')) continue
-    const file = {
-      viewMode: item.viewMode,
-      role: 'primary',
-      mediaType: item.viewMode === '3d' ? 'glb' : 'image',
-      format: item.viewMode === '3d' ? 'glb' : path.split('.').pop().toLowerCase(),
-      url: path,
-    }
-    const group = groupedAssets.get(item.featureId) || {
-      assetId: 'campus-' + item.featureId,
-      name: item.featureName || item.name,
-      category: item.category,
-      sourceType: item.sourceType,
-      status: 'ready',
-      files: [],
-      provenance: {
-        provider: item.sourceType === 'ai_generated' ? 'user-selected-ai-tool' : item.sourceType,
-        prompt: item.prompt || '',
-        createdAt: item.createdAt,
-        notes: '由素材工坊人工审核并确认文件已放入项目 public 目录',
-      },
-    }
-    group.files.push(file)
-    groupedAssets.set(item.featureId, group)
-  }
-  const manifest = {
-    schemaVersion: 1,
-    idStrategy: 'stable-spatial-feature-id',
-    assetRoots: ['/assets/campus/', '/models/buildings/'],
-    viewModes: ['2.5d', '3d', 'shared'],
-    sourceTypes: ['ai_generated', 'manual_model', 'procedural', 'external'],
-    statuses: ['draft', 'review', 'ready', 'archived'],
-    assets: [...groupedAssets.values()],
-    bindings: [...groupedAssets.entries()].map(([featureId, asset]) => ({ featureId, assetId: asset.assetId })),
-  }
-  const report = validateCampusAssetManifest(manifest)
+  const { manifest, report, skipped } = createCampusAssetManifestFromWorkshopRecords(
+    assets.value,
+    featureOptions.map(item => item.featureId),
+  )
   if (!report.valid) {
     message.value = '导出校验失败：' + report.errors.map(item => item.message).join('；')
+    return
+  }
+  if (!manifest.assets.length) {
+    message.value = skipped.length
+      ? '没有可导出的资产：请检查文件路径，并确认素材文件已放入项目 public 目录'
+      : '没有已审核且确认入库的素材'
     return
   }
   const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' })
@@ -304,9 +271,8 @@ function exportManifest() {
   anchor.download = 'campus-assets.json'
   anchor.click()
   URL.revokeObjectURL(url)
-  message.value = '正式资产清单已导出。请同时把对应素材文件放入 public 目录，再替换项目清单。'
+  message.value = '已导出 ' + manifest.assets.length + ' 组资产、' + manifest.bindings.length + ' 条空间绑定。请将清单与素材文件一起提交到项目。'
 }
-
 function backToCampus() {
   window.location.assign('/')
 }

@@ -177,6 +177,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     campus.traverse((object) => {
       if (!(object.userData?.buildingId || object.userData?.objectType === 'building')) return
       cameraObstacleRoots.push(object)
+      if (object.userData?.walkable === true) return
       const bounds = new THREE.Box3().setFromObject(object)
       if (bounds.isEmpty()) return
       if (isRpgSample && object.userData?.buildingId === 'sample-teaching-building') {
@@ -232,7 +233,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 树冠用于视觉遮挡，碰撞仅按树干半径计算，避免把整片树冠误判成墙。
     campus.traverse((object) => {
       const radius = Number(object.userData?.collisionRadius)
-      if (!(radius > 0)) return
+      if (!(radius > 0) || object.userData?.walkable === true) return
       const position = object.getWorldPosition(new THREE.Vector3())
       circularObstacles.push({ x: position.x, z: position.z, radius })
     })
@@ -250,7 +251,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const point = mapPixelToWorld(x, y)
       return [point.x, point.z]
     })
-    for (const area of (spatialLayers?.areas || []).filter(item => item.type === 'water' && item.polygon?.length >= 3)) {
+    for (const area of (spatialLayers?.areas || []).filter(item => item.type === 'water' && item.walkable !== true && item.polygon?.length >= 3)) {
       collisionWorld.addPolygonObstacle({
         outer: toWorldRing(area.polygon),
         holes: (area.holes || []).map(toWorldRing),

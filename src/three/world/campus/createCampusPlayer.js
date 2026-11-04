@@ -101,9 +101,41 @@ export function createCampusPlayer(THREE, options = {}) {
   makePart('player-right-eye', [0.055, 0.075, 0.025], materials.eye, head, [0.14, 0.015, 0.27], false)
   makePart('player-nose', [0.07, 0.055, 0.06], materials.skinShade, head, [0, -0.08, 0.285], false)
 
-  // 地面接触阴影由真实光照生成；角色网格全部参与投影。
+  // 独立的柔边接触阴影始终锚定角色脚底，避免静态 shadowMap 缓存后人物移动、阴影仍留在出生点。
+  // 该阴影不参与投影计算，不增加动态 shadow pass；角色的真实体块仍正常接受场景光照。
+  const shadowCanvas = document.createElement('canvas')
+  shadowCanvas.width = 128
+  shadowCanvas.height = 128
+  const shadowContext = shadowCanvas.getContext('2d')
+  const shadowGradient = shadowContext.createRadialGradient(64, 64, 5, 64, 64, 62)
+  shadowGradient.addColorStop(0, 'rgba(18, 22, 17, 0.30)')
+  shadowGradient.addColorStop(0.42, 'rgba(18, 22, 17, 0.17)')
+  shadowGradient.addColorStop(1, 'rgba(18, 22, 17, 0)')
+  shadowContext.fillStyle = shadowGradient
+  shadowContext.fillRect(0, 0, 128, 128)
+  const shadowTexture = new THREE.CanvasTexture(shadowCanvas)
+  shadowTexture.colorSpace = THREE.SRGBColorSpace
+  const contactShadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.5, 28),
+    new THREE.MeshBasicMaterial({
+      map: shadowTexture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  )
+  contactShadow.name = 'player-contact-shadow'
+  contactShadow.rotation.x = -Math.PI / 2
+  contactShadow.position.set(0, 0.027, 0)
+  contactShadow.scale.set(0.92, 1.22, 1)
+  contactShadow.renderOrder = 1
+  contactShadow.castShadow = false
+  contactShadow.receiveShadow = false
+  root.add(contactShadow)
+
+  // 人物不再向静态阴影贴图投射：其位置会持续变化，接触阴影由上方贴片实时跟随。
   root.traverse(object => {
-    if (object.isMesh) object.castShadow = true
+    if (object.isMesh && object !== contactShadow) object.castShadow = false
   })
   root.userData.updateAnimation = function updateAnimation(moving, seconds, dx = 0, dz = 0) {
     const target = this

@@ -449,15 +449,19 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     rpgPreviewGroup = new THREE.Group()
     rpgPreviewGroup.name = 'CampusPlanLivePreview'
 
-    // 保留校园漫游人物：从原始校园场景复制 Sprite 到编辑预览层，
-    // 使二维编辑切换到三维预览时仍能看到人物尺度参照。
+    // 复制完整 3D 人物层级；预览对象独立持有几何/材质，避免退出预览时释放正式场景资源。
     const sourcePlayer = campus?.getObjectByName('PixelExplorerSprite')
-    if (sourcePlayer?.isSprite) {
-      const previewPlayer = sourcePlayer.clone()
+    if (sourcePlayer?.isGroup) {
+      const previewPlayer = sourcePlayer.clone(true)
       previewPlayer.name = 'CampusPlanPlayerSprite'
-      previewPlayer.material = sourcePlayer.material.clone()
+      previewPlayer.traverse(object => {
+        if (!object.isMesh) return
+        object.geometry = object.geometry.clone()
+        if (Array.isArray(object.material)) object.material = object.material.map(material => material.clone())
+        else object.material = object.material.clone()
+      })
+      previewPlayer.userData.updateAnimation = sourcePlayer.userData.updateAnimation?.bind(previewPlayer)
       previewPlayer.position.copy(sourcePlayer.position)
-      previewPlayer.scale.copy(sourcePlayer.scale)
       previewPlayer.visible = true
       rpgPreviewGroup.add(previewPlayer)
       playerSpriteObject = previewPlayer
@@ -1157,13 +1161,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     const playerSprite = playerSpriteObject || scene?.getObjectByName('CampusPlanPlayerSprite')
     if (playerSprite && cameraRig?.player) {
-      // 第一人称相机位于角色眼部，隐藏自身 Sprite，避免角色贴图遮挡视野。
+      // 第一人称相机位于角色眼部，隐藏完整角色模型，避免模型遮挡视野。
       playerSprite.visible = cameraRig.mode !== 'firstPerson'
-      playerSprite.position.set(cameraRig.player.x, isRpgSample ? 1.262 : 2.1, cameraRig.player.z)
+      // cameraRig.player 表示眼部高度，角色根节点需要回落到当前楼层地面。
+      playerSprite.position.set(cameraRig.player.x, Math.max(0, cameraRig.player.y - 1.7), cameraRig.player.z)
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
       const moving = dx * dx + dz * dz > 0.000001
-      campus?.userData.updatePlayerAnimation?.(moving, time / 1000, dx, dz)
+      if (typeof playerSprite.userData.updateAnimation === 'function') {
+        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, dx, dz)
+      } else {
+        campus?.userData.updatePlayerAnimation?.(moving, time / 1000, dx, dz)
+      }
       lastPlayerX = cameraRig.player.x
       lastPlayerZ = cameraRig.player.z
     }

@@ -365,6 +365,13 @@ describe('Campus map API (PostGIS integration)', () => {
         type: 'FeatureCollection',
         features: [unknownFeature],
         deletedFeatureIds: ['removed-gate-01'],
+        metadata: {
+          dataset: 'campus-baseline-v2',
+          catalogue: {
+            pois: [{ id: 'library', name: '图书馆' }],
+            editorNotes: [{ id: 'note-1', text: '保留编辑器扩展目录' }],
+          },
+        },
         vendorCollectionMeta: { preserve: true },
       },
     };

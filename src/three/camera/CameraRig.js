@@ -84,7 +84,8 @@ export class CameraRig {
       if (this.mode === 'overview') this.orbit.enabled = true
       if (this.domElement.hasPointerCapture?.(event.pointerId)) this.domElement.releasePointerCapture(event.pointerId)
     }
-    this.domElement.addEventListener('pointerdown', this.onOverviewPanPointerDown)
+    // 在捕获阶段优先接管右键/中键，避免 OrbitControls 或页面其他监听器先消费右键手势。
+    this.domElement.addEventListener('pointerdown', this.onOverviewPanPointerDown, true)
     this.domElement.addEventListener('pointermove', this.onOverviewPanPointerMove)
     this.domElement.addEventListener('pointerup', this.onOverviewPanPointerUp)
     this.domElement.addEventListener('pointercancel', this.onOverviewPanPointerUp)
@@ -442,7 +443,7 @@ export class CameraRig {
   dispose() {
     this.orbit?.dispose()
     this.domElement?.removeEventListener('contextmenu', this.preventContextMenu)
-    this.domElement?.removeEventListener('pointerdown', this.onOverviewPanPointerDown)
+    this.domElement?.removeEventListener('pointerdown', this.onOverviewPanPointerDown, true)
     this.domElement?.removeEventListener('pointermove', this.onOverviewPanPointerMove)
     this.domElement?.removeEventListener('pointerup', this.onOverviewPanPointerUp)
     this.domElement?.removeEventListener('pointercancel', this.onOverviewPanPointerUp)

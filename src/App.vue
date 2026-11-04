@@ -1,7 +1,6 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
-import CampusPixelMap from './components/CampusPixelMap.vue'
 import CampusPlanEditor from './editor/CampusPlanEditor.vue'
 import IndoorFloorPlanEditor from './components/IndoorFloorPlanEditor.vue'
 import BuildingFootprintEditor from './components/BuildingFootprintEditor.vue'
@@ -52,9 +51,9 @@ const indoorHistoryOpen = ref(false)
 const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
 const indoorBuildingId = computed(() => indoorDefinition.value?.id || selectedBuildingId.value)
 const initialView = new URLSearchParams(window.location.search).get('view')
-const isRpgSample = initialView === 'showcase'
-const showEditor = ref(initialView === 'editor' || isRpgSample)
-const editorViewMode = ref(isRpgSample ? '3d' : '2d')
+const isCampusExplorer = initialView !== 'editor'
+const showEditor = ref(!isCampusExplorer)
+const editorViewMode = ref('2d')
 const selectedObject = ref(null)
 const sceneDocument = ref(null)
 const sceneRevision = ref(0)
@@ -66,7 +65,7 @@ const campusPlanDocument = ref(null)
 
 let engine
 
-const modes = isRpgSample
+const modes = isCampusExplorer
   ? [
       { id: 'overview', label: '场景总览', hint: '校园布局' },
       { id: 'thirdPerson', label: 'RPG 探索', hint: '等距跟随' },
@@ -438,17 +437,9 @@ onMounted(async () => {
   window.addEventListener('resize', updateViewportState)
   window.addEventListener('orientationchange', updateViewportState)
   window.addEventListener('keydown', onExplorerHotkey)
-  // 当前默认入口使用轻量 Canvas 2D 像素地图；Three.js 不再随首页启动。
-  // 保留原三维引擎代码，后续作为独立预览能力按需启用。
-  if (!showEditor.value) {
-    await loadHomepagePlanDocument()
-    loading.value = false
-    engineReady.value = false
-    return
-  }
   try {
-    // 2.5D 展示入口优先读取编辑器已保存的平面文档；无服务端文档时使用统一静态空间数据。
-    if (isRpgSample && !requestedBuildingId) await loadHomepagePlanDocument()
+    // 校园探索与编辑器预览共用同一套校园空间数据；首页默认直接启动 2.5D 主场景。
+    if (!requestedBuildingId) await loadHomepagePlanDocument()
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },
@@ -480,9 +471,9 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: requestedBuildingId ? 'campus' : (isRpgSample ? 'rpg-sample' : 'campus'), initialPlayerPosition: returnWorldPosition, deferInitialFocus: isRpgSample && !requestedBuildingId })
+    }, { sceneType: 'campus', isometricRpg: true, initialPlayerPosition: returnWorldPosition, deferInitialFocus: !requestedBuildingId })
     await engine.init()
-    if (isRpgSample && !requestedBuildingId) {
+    if (!requestedBuildingId) {
       const planDocument = getShowcasePlanDocument()
       const applied = engine.previewCampusPlan(planDocument)
       if (!applied) console.warn('[CampusPlan] 2.5D 预览未能应用平面地图文档')
@@ -503,12 +494,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isRpgSample } ]">
-    <CampusPixelMap v-if="!showEditor" :initial-player-position="returnPixelPosition" :plan-document="campusPlanDocument" @enter-building="openBuildingFromPixelMap" />
-    <div v-if="showEditor && editorViewMode === '3d'" ref="viewport" class="scene-viewport"></div>
+  <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isCampusExplorer } ]">
+    <div ref="viewport" class="scene-viewport" :style="{ display: showEditor && editorViewMode === '2d' ? 'none' : 'block' }"></div>
     <CampusPlanEditor v-if="showEditor && editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 
-    <template v-if="showEditor && editorViewMode === '3d'">
+    <template v-if="!showEditor || editorViewMode === '3d'">
     <header class="topbar">
       <div class="brand-lockup">
         <div class="brand-mark">NC</div>
@@ -518,8 +508,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="showcase-actions">
-        <span class="topbar-status"><span class="status-dot"></span> {{ indoorPrototypeActive ? '室内空间样板 · 非实测布局' : '南昌工学院 · 2.5D 平面数据预览' }}</span>
-        <button class="showcase-back" @click="closeEditor">返回 2D 地图</button>
+        <span class="topbar-status"><span class="status-dot"></span> {{ indoorPrototypeActive ? '室内空间样板 · 非实测布局' : (showEditor ? '地图编辑器 · 3D 预览' : '南昌工学院 · 校园探索') }}</span>
+        <button v-if="showEditor" class="showcase-back" @click="closeEditor">返回校园探索</button>
+        <button v-else class="showcase-back" @click="openEditor">打开地图编辑器</button>
       </div>
     </header>
 

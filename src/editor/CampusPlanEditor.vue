@@ -49,9 +49,10 @@ async function loadEditorDocument() {
     persistenceMessage.value = '编辑器未取得校园 ID 或地图 ID；请确认校园/地图服务初始化成功后重新进入编辑器'
     return
   }
+  // 切换地图或刷新时，先隐藏尚未与服务端版本对齐的空间对象，避免基础数据短暂闪现。
+  documentLoaded.value = false
   try {
     const saved = await apiRequest(`${mapApiPath()}/scene/plan`)
-    let referenceImagePreviewError = ''
     documentRevision.value = Number(saved.revision || 0)
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
@@ -74,23 +75,21 @@ async function loadEditorDocument() {
       if (document.referenceImage) {
         referenceImage.value = document.referenceImage
         referenceImageOpacity.value = Number(document.referenceImage.opacity ?? 0.55)
-        // 底图预览属于辅助资源；资源加载失败不能阻断规范空间文档加载和后续自动保存。
-        if (document.referenceImage.assetId) {
-          try {
-            await loadAssetPreview(document.referenceImage.assetId)
-          } catch (error) {
-            referenceImagePreviewError = `底图预览加载失败：${error.message}`
-          }
-        }
       }
     }
     if (!spatialFeatureCollection.value.features.length) spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value })
+    // 空间数据合并完成后立即开放画布；参考底图是辅助资源，不应延迟建筑和道路首屏。
     documentLoaded.value = true
     lastSavedSnapshot = JSON.stringify(buildDocument())
     persistenceState.value = saved.document ? 'saved' : 'idle'
-    persistenceMessage.value = referenceImagePreviewError || (saved.document
+    persistenceMessage.value = saved.document
       ? `已加载服务端版本 · ${documentRevision.value}`
-      : '当前地图尚无服务端编辑文档，修改后将自动保存')
+      : '当前地图尚无服务端编辑文档，修改后将自动保存'
+    if (document?.referenceImage?.assetId) {
+      void loadAssetPreview(document.referenceImage.assetId).catch(error => {
+        persistenceMessage.value = `底图预览加载失败：${error.message}`
+      })
+    }
   } catch (error) {
     documentLoaded.value = false
     persistenceState.value = 'error'
@@ -1253,6 +1252,7 @@ function exportDocument() {
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
             </defs>
             <rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="#86a765"/><rect v-if="boxSelection" :x="Math.min(boxSelection.start.x,boxSelection.current.x)" :y="Math.min(boxSelection.start.y,boxSelection.current.y)" :width="Math.abs(boxSelection.current.x-boxSelection.start.x)" :height="Math.abs(boxSelection.current.y-boxSelection.start.y)" fill="#4f86bd" fill-opacity=".14" stroke="#3678b8" stroke-width="1.5" stroke-dasharray="5 3" pointer-events="none"/><g v-for="(item,index) in calibrationPoints" :key="`calibration-${index}`" pointer-events="none"><circle :cx="item.source[0]" :cy="item.source[1]" r="7" fill="#e6a84c" stroke="#fff" stroke-width="2"/><text :x="item.source[0]+9" :y="item.source[1]-8" fill="#263b2d" font-size="12">P{{ index+1 }}</text></g><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#grass-pattern)" opacity=".42"/><image v-if="referenceImagePreview" :href="referenceImagePreview" x="0" y="0" width="640" height="480" preserveAspectRatio="none" :opacity="referenceImageOpacity" pointer-events="none"/>
+            <g v-if="documentLoaded">
             <g v-if="layerStates.areas.visible" v-for="area in areas" :key="area.id" class="map-feature" @pointerdown="startAreaDrag($event, area)">
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id || multiSelection.some(entry=>entry.type==='area' && entry.id===area.id) ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
@@ -1274,6 +1274,7 @@ function exportDocument() {
             </g>
             
             <g fill="#435844" font-size="10" font-weight="700"><text x="260" y="178">中心湖区</text><text x="548" y="105">运动场</text><text x="75" y="386">运动场</text></g>
+            </g>
           </svg>
         </div>
         <footer class="stage-footer"><span>工作区 {{ workspaceBounds.width }} × {{ workspaceBounds.height }} · 底图为参考图层，工作区可无限平移 · 空白处拖动 / 空格+拖动 / 中键拖动 / 滚轮缩放</span><span>对象 {{ buildings.length }} 栋建筑 · {{ roads.length }} 条道路 · {{ areas.length }} 个区域</span><span>坐标：可超出原图范围的编辑单位</span></footer>

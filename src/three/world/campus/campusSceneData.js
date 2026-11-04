@@ -186,7 +186,11 @@ export function auditCampusSceneFeatureCoverage(spatialLayers, sceneRoot) {
   const errors = []
 
   sceneRoot?.traverse?.(object => {
-    const data = object.userData || {}
+    // Feature metadata 通常挂在 Group 根节点；向上查找最近的 Feature owner，
+    // 使其子 Mesh 也计入该 Feature 的实际可渲染资源。
+    let owner = object
+    while (owner && (!owner.userData?.featureCategory || owner.userData?.featureId === undefined)) owner = owner.parent
+    const data = owner?.userData || {}
     const category = data.featureCategory
     const id = data.featureId ?? (category === 'buildings' ? data.buildingId : undefined)
     if (!category || id === undefined || !actual[category]) return

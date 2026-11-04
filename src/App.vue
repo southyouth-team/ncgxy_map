@@ -7,7 +7,7 @@ import BuildingFootprintEditor from './components/BuildingFootprintEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 import { CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAN_REFERENCE, mapPixelToWorld } from './data/campus/campusLayout.js'
-import { buildCampusGeoJSON, getCampusSpatialLayers } from './data/campus/campusGeoJSON.js'
+import { buildCampusGeoJSON, getCampusSpatialLayers, mergeCampusSceneFeatureCollections } from './data/campus/campusGeoJSON.js'
 import { toCampusFeatureCollection } from './editor/campusFeatureCollection.js'
 import { expandIndoorBuilding } from './three/indoor/indoorBuildingDefinitions.js'
 
@@ -482,12 +482,11 @@ onMounted(async () => {
     const editorCollection = planDocument?.featureCollection?.type === 'FeatureCollection'
       ? planDocument.featureCollection
       : toCampusFeatureCollection(planDocument || {})
-    // 边界与出入口由校园基础数据维护；可编辑对象以编辑器 FeatureCollection 为准。
-    const structuralFeatures = buildCampusGeoJSON().features.filter(feature => ['boundary', 'gate', 'object'].includes(feature.properties.featureType))
-    const featureById = new Map(structuralFeatures.map(feature => [String(feature.id), feature]))
-    for (const feature of editorCollection.features || []) featureById.set(String(feature.id), feature)
-    const deletedFeatureIds = new Set((editorCollection.deletedFeatureIds || planDocument?.deletedFeatureIds || []).map(String))
-     const campusFeatureCollection = { type: 'FeatureCollection', features: [...featureById.values()].filter(feature => !deletedFeatureIds.has(String(feature.id))), deletedFeatureIds: [...deletedFeatureIds] }
+    // 边界、出入口和基础装饰由基础数据提供；编辑器数据按 ID 覆盖，并应用删除标记。
+    const campusFeatureCollection = mergeCampusSceneFeatureCollections(buildCampusGeoJSON(), {
+      ...editorCollection,
+      deletedFeatureIds: editorCollection.deletedFeatureIds || planDocument?.deletedFeatureIds || [],
+    })
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },

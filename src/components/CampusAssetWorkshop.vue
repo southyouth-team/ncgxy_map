@@ -280,6 +280,11 @@ function backToCampus() {
 watch([selectedFeatureId, viewMode, extraPrompt], () => {
   generatedPrompt.value = ''
 })
+watch([selectedFeatureId, viewMode], () => {
+  resetPreview()
+  publicPath.value = ''
+  fileError.value = ''
+})
 onBeforeUnmount(resetPreview)
 </script>
 

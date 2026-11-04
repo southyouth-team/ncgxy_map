@@ -226,7 +226,8 @@ function alignSelection(mode) {
     const dx = mode === 'left' ? left - b.left : mode === 'right' ? right - b.right : mode === 'centerX' ? centerX - (b.left + b.right) / 2 : 0
     const dy = mode === 'top' ? top - b.top : mode === 'bottom' ? bottom - b.bottom : mode === 'centerY' ? centerY - (b.top + b.bottom) / 2 : 0
     const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
-    commitFeatureGeometry(entry.id, entry.type === 'road' ? { roads: [{ id: entry.id, points: moved }] } : { [entry.type === 'building' ? 'buildings' : 'areas']: [{ id: entry.id, footprint: moved }] })
+    const canonical = spatialFeatureCollection.value.features.find(feature => String(feature.id) === String(entry.id))
+    if (canonical) commitFeatureGeometryValue(entry.id, translateGeometry(canonical.geometry, dx, dy))
   })
 }
 function distributeSelection(axis) {
@@ -249,7 +250,8 @@ function distributeSelection(axis) {
     const dx = axis === 'horizontal' ? delta : 0
     const dy = axis === 'vertical' ? delta : 0
     const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
-    commitFeatureGeometry(entry.id, entry.type === 'road' ? { roads: [{ id: entry.id, points: moved }] } : { [entry.type === 'building' ? 'buildings' : 'areas']: [{ id: entry.id, footprint: moved }] })
+    const canonical = spatialFeatureCollection.value.features.find(feature => String(feature.id) === String(entry.id))
+    if (canonical) commitFeatureGeometryValue(entry.id, translateGeometry(canonical.geometry, dx, dy))
     cursor += entry.bounds[sizeKey] + gap
   })
 }
@@ -1054,7 +1056,15 @@ function commitFeatureGeometryValue(featureId, geometry) {
 function commitFeatureGeometry(featureId, fragment) {
   const feature = toCampusFeatureCollection(fragment).features[0]
   if (!feature) throw new Error('无法将编辑几何转换为校园 Feature')
-  commitFeatureCollectionMutation(collection => updateCampusFeatureGeometry(collection, featureId, feature.geometry))
+  commitFeatureCollectionMutation(collection => {
+    const current = collection.features.find(item => String(item.id) === String(featureId))
+    let geometry = feature.geometry
+    // 顶点编辑只提交外环时，保留现有 Polygon 内环，避免水域岛洞被意外删除。
+    if (geometry.type === 'Polygon' && current?.geometry?.type === 'Polygon' && geometry.coordinates.length === 1 && current.geometry.coordinates.length > 1) {
+      geometry = { ...geometry, coordinates: [...geometry.coordinates, ...current.geometry.coordinates.slice(1)] }
+    }
+    return updateCampusFeatureGeometry(collection, featureId, geometry)
+  })
 }
 function commitFeatureRemoval(featureIds) {
   const ids = featureIds.map(String)

@@ -276,3 +276,12 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 几何交互（整体拖动、顶点/道路节点拖动、多选移动、点对象拖动）应按稳定 Feature ID 调用 `updateCampusFeatureGeometry`，不得以直接修改选中对象引用作为持久状态变更。更新时只替换 geometry，不覆盖 properties、source、confidence、verificationStatus、qualityStatus 等元数据。拖动起点的几何快照用于计算位移；每次指针更新都以当前规范 FeatureCollection 为 mutation 输入。
 
 当前上述主要拖动路径已接入 mutation API，但编辑器加载、历史恢复、保存仍使用 legacy 数组作为迁移期投影；性能与真实浏览器交互尚待验收，不能据此宣称 FeatureCollection 已成为唯一实时状态源。
+
+
+## 29. 编辑器规范空间状态主源
+
+编辑器维护 `spatialFeatureCollection` 作为实时空间状态主源。新增、删除、属性更新、几何更新均通过不可变 FeatureCollection mutation API 更新该集合。保存文档、导出、预览以及历史快照的空间内容必须从该集合派生，不能再由四组 legacy 数组反向组装。
+
+现有 SVG 编辑器仍可通过 `fromCampusFeatureCollection` 获得建筑/道路/区域/对象数组作为兼容视图；兼容数组不是权威数据。加载旧格式时允许先转换为 FeatureCollection；加载服务端 FeatureCollection 时必须优先读取规范集合。撤销/重做恢复后必须同步替换规范集合。
+
+任何尚未迁移的直接几何写入都是迁移缺口，不得将该状态描述为完全完成。当前已迁移主要拖动、对齐/分布、顶点增删、尺寸/旋转、道路节点和复制粘贴路径；仍需通过真实浏览器验收验证交互状态、自动保存和服务端回读。

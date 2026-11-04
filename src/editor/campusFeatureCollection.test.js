@@ -24,7 +24,7 @@ describe('toCampusFeatureCollection', () => {
     expect(result.features[2].properties.featureType).toBe('water')
     expect(result.features[3]).toMatchObject({
       geometry: { type: 'Point', coordinates: [4, 6] },
-      properties: { featureType: 'tree', objectType: 'tree', rotation: 30, scale: 1.2 },
+      properties: { featureType: 'object', objectType: 'tree', rotation: 30, scale: 1.2 },
     })
   })
 

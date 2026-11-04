@@ -51,7 +51,7 @@ const indoorHistoryOpen = ref(false)
 const activeEditableFloor = computed(() => indoorDefinition.value?.floors?.find(floor => floor.level === indoorFloor.value) || null)
 const indoorBuildingId = computed(() => indoorDefinition.value?.id || selectedBuildingId.value)
 const initialView = new URLSearchParams(window.location.search).get('view')
-const isEditorRoute = window.location.pathname.replace(/\\/+$/, '') === '/editor' || initialView === 'editor'
+const isEditorRoute = window.location.pathname.replace(/\/+$/, '') === '/editor' || initialView === 'editor'
 const isCampusExplorer = !isEditorRoute
 const showEditor = ref(isEditorRoute)
 const editorViewMode = ref('2d')

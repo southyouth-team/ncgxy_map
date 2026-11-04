@@ -413,7 +413,7 @@ describe('Campus map API (PostGIS integration)', () => {
       .send({ revision: 1, document: invalid }).expect(400);
 
     const invalidGeometries = [
-      { type: 'MultiPolygon', coordinates: [[[[0, 0], [10, 0], [10, 10], [0, 0]]]] },
+      { type: 'MultiPolygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 0]]] },
       { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10]]] },
       { type: 'GeometryCollection', geometries: [{ type: 'Point', coordinates: [0, Number.NaN] }] },
       { type: 'UnknownGeometry', coordinates: [[0, 0], [1, 1]] },

@@ -209,12 +209,20 @@ describe('toCampusFeatureCollection', () => {
       areas: [{ id: 'history-water', name: '水域', type: 'water', footprint: [[40, 40], [60, 40], [60, 60]], confidence: 'low' }],
       objects: [{ id: 'history-tree', type: 'tree', name: '树木', geometry: { type: 'Point', coordinates: [70, 80] }, properties: { rotation: 15, scale: 1.2 }, qualityStatus: 'unverified' }],
       deletedFeatureIds: ['legacy-gate-01'],
+      metadata: {
+        dataset: 'campus-baseline',
+        catalogue: { pois: [{ id: 'library' }], editorNotes: [{ id: 'note-1' }] },
+      },
     }
     const snapshot = createCampusFeatureSnapshot(document)
     expect(snapshot.type).toBe('CampusFeatureSnapshot')
     expect(snapshot.version).toBe(1)
     expect(snapshot.featureCollection.features).toHaveLength(4)
     expect(snapshot.featureCollection.deletedFeatureIds).toEqual(['legacy-gate-01'])
+    expect(snapshot.featureCollection.metadata).toEqual({
+      dataset: 'campus-baseline',
+      catalogue: { pois: [{ id: 'library' }], editorNotes: [{ id: 'note-1' }] },
+    })
 
     const restored = restoreCampusFeatureSnapshot(JSON.parse(JSON.stringify(snapshot)))
     expect(restored.buildings[0]).toMatchObject({ id: 'history-building', floors: 4, confidence: 'high' })
@@ -222,6 +230,7 @@ describe('toCampusFeatureCollection', () => {
     expect(restored.areas[0]).toMatchObject({ id: 'history-water', type: 'water', confidence: 'low' })
     expect(restored.objects[0]).toMatchObject({ id: 'history-tree', properties: { rotation: 15, scale: 1.2 } })
     expect(restored.deletedFeatureIds).toEqual(['legacy-gate-01'])
+    expect(restored.featureCollection.metadata).toEqual(document.metadata)
   })
 
   it('rejects unsupported canonical history snapshot versions', () => {

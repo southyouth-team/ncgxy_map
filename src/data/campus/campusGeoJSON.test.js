@@ -189,4 +189,17 @@ describe('统一校园空间数据出口', () => {
     expect(merged.deletedFeatureIds).toEqual(['campus-gate-east'])
   })
 
+
+  it('将未定位 POI 与场地台账保存在 FeatureCollection catalogue 中，不伪造空间几何', () => {
+    const collection = buildCampusGeoJSON()
+    expect(collection.metadata.catalogue.pois).toEqual(CAMPUS_POIS)
+    expect(collection.metadata.catalogue.siteAreas).toEqual(CAMPUS_SITE_AREAS)
+    expect(collection.metadata.catalogue.pois.every(poi => poi.position === null || Array.isArray(poi.position))).toBe(true)
+    expect(collection.features.some(feature => feature.id === 'poi-zhiyuan-building')).toBe(false)
+    const layers = getCampusSpatialLayers(collection)
+    expect(layers.pois).toEqual(CAMPUS_POIS)
+    expect(layers.siteAreas).toEqual(CAMPUS_SITE_AREAS)
+  })
+
+
 })

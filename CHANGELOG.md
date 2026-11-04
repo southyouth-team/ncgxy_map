@@ -1,3 +1,13 @@
+## 2026-11-04 — 修复共享场景适配器的属性丢失
+
+- **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/three/world/campus/campusSceneData.js`、`src/three/world/campus/campusSceneData.test.js`。
+- **实际完成**：
+  - 建筑、道路、区域标准图层保留原 Feature 的完整 properties。
+  - 编辑器预览文档将完整属性透传，保留屋顶样式、入口边、窗户密度、门宽、车道数、路面材质等扩展字段。
+  - 增加测试验证建筑、道路和水域属性从 FeatureCollection 到预览输入的保真。
+- **验证状态**：修复代码和测试已提交，等待最新前端/后端 CI；未进行真实浏览器验收。
+- **已知限制**：属性保真只解决数据适配层丢字段问题，不代表首页渲染器已经解释所有扩展属性；仍需逐个补充 renderer capability 和真实数据核验。
+- **下一步**：验证 CI，继续审查基础数据覆盖策略与场景渲染输入；完成第三阶段验收后进入双引擎阶段。
 ## 2026-11-04 — 首页与编辑器预览共用场景数据适配器
 
 - **新增文件**：`src/three/world/campus/campusSceneData.js`、`src/three/world/campus/campusSceneData.test.js`。

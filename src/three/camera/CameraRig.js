@@ -18,8 +18,8 @@ export class CameraRig {
     this.desiredTarget = this.target.clone()
     this.mode = 'overview'
     this.thirdYaw = 0.35
-    this.thirdPitch = this.isometricRpg ? 0.72 : 0.32
-    this.thirdDistance = this.isometricRpg ? 24 : 15
+    this.thirdPitch = 0.32
+    this.thirdDistance = 15
     this.firstYaw = 0
     this.firstPitch = -0.12
     this.player = new THREE.Vector3(0, 1.7, 24)
@@ -87,8 +87,8 @@ export class CameraRig {
     } else {
       if (this.isometricRpg && mode === 'thirdPerson') {
         this.activateCamera(this.overviewCamera)
-        this.thirdPitch = 0.72
-        this.thirdDistance = 24
+        this.thirdPitch = 0.32
+        this.thirdDistance = 15
         this.overviewCamera.zoom = 2.15
         this.overviewCamera.updateProjectionMatrix()
       } else if (previousCamera !== this.perspectiveCamera) {
@@ -98,7 +98,7 @@ export class CameraRig {
       }
       if (mode === 'thirdPerson') {
         this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
-        this.thirdDistance = this.isometricRpg ? 24 : 15
+        this.thirdDistance = 15
         this.updateThirdPersonDesired()
       } else {
         if (previousMode === 'thirdPerson') {
@@ -142,8 +142,7 @@ export class CameraRig {
   rotateThird(dx, dy) {
     this.thirdYaw -= dx * 0.004
     this.thirdPitch = this.isometricRpg
-      ? Math.max(0.58, Math.min(0.92, this.thirdPitch + dy * 0.002))
-      : Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
+      Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
 
@@ -154,7 +153,7 @@ export class CameraRig {
   }
 
   zoomThird(delta) {
-    this.thirdDistance = Math.max(12, Math.min(this.isometricRpg ? 38 : 32, this.thirdDistance + delta * 0.012))
+    this.thirdDistance = Math.max(6, Math.min(32, this.thirdDistance + delta * 0.012))
     this.updateThirdPersonDesired()
   }
 
@@ -253,8 +252,8 @@ export class CameraRig {
     this.applyIsometricOrientation()
     this.player.set(0, 1.7, this.isometricRpg ? 14 : 24)
     if (this.isometricRpg) {
-      this.thirdPitch = 0.72
-      this.thirdDistance = 24
+      this.thirdPitch = 0.32
+      this.thirdDistance = 15
     }
   }
 

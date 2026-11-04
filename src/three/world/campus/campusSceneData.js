@@ -402,3 +402,79 @@ export function auditCampusBuildingModelGeometry(buildings, modelRecords, mapPix
     ],
   }
 }
+
+/**
+ * Build a complete GLB asset worklist from canonical building Features.
+ * Footprint centers are placement candidates, not surveyed building origins.
+ */
+export function createCampusBuildingAssetInventory(buildings, manifestBuildings, mapPixelToWorld) {
+  const manifest = Array.isArray(manifestBuildings) ? manifestBuildings : []
+  const manifestById = new Map()
+  const duplicateManifestIds = []
+  for (const item of manifest) {
+    const id = String(item?.buildingId ?? '')
+    if (!id) continue
+    if (manifestById.has(id)) duplicateManifestIds.push(id)
+    else manifestById.set(id, item)
+  }
+  const canonical = Array.isArray(buildings) ? buildings : []
+  const canonicalIds = new Set(canonical.map(item => String(item?.id ?? '')))
+  const items = canonical.map(building => {
+    const buildingId = String(building?.id ?? '')
+    const configured = manifestById.get(buildingId) || {}
+    const polygon = Array.isArray(building?.polygon) ? building.polygon : []
+    const worldPoints = typeof mapPixelToWorld === 'function'
+      ? polygon.map(point => mapPixelToWorld(point[0], point[1])).filter(point => Number.isFinite(point?.x) && Number.isFinite(point?.z))
+      : []
+    const center = worldPoints.length >= 3 ? {
+      x: (Math.min(...worldPoints.map(point => point.x)) + Math.max(...worldPoints.map(point => point.x))) / 2,
+      z: (Math.min(...worldPoints.map(point => point.z)) + Math.max(...worldPoints.map(point => point.z))) / 2,
+    } : null
+    const hasConfiguredPosition = Array.isArray(configured.position) && configured.position.length === 3 && configured.position.every(Number.isFinite)
+    const sourceRotation = building?.properties?.rotationY
+    const hasConfiguredRotation = Number.isFinite(configured.rotationY)
+    const hasSourceRotation = Number.isFinite(sourceRotation)
+    const rotationY = hasConfiguredRotation ? configured.rotationY : hasSourceRotation ? sourceRotation : null
+    const modelUrl = typeof configured.modelUrl === 'string' && configured.modelUrl.startsWith('/models/buildings/') ? configured.modelUrl : null
+    return {
+      buildingId,
+      name: configured.name || building?.label || buildingId,
+      position: hasConfiguredPosition ? [...configured.position] : center ? [center.x, 0, center.z] : null,
+      positionSource: hasConfiguredPosition ? 'manifest' : center ? 'derived-footprint-aabb-center' : 'unavailable',
+      positionVerified: hasConfiguredPosition && configured.positionVerified === true,
+      rotationY,
+      rotationSource: hasConfiguredRotation ? 'manifest' : hasSourceRotation ? 'canonical-feature' : 'unverified-default-required',
+      rotationVerified: hasConfiguredRotation && configured.rotationVerified === true,
+      modelUrl,
+      assetStatus: modelUrl ? (configured.status || 'configured') : 'pending-model',
+      source: configured.source || null,
+      notes: configured.notes || null,
+    }
+  })
+  const unknownManifestIds = [...manifestById.keys()].filter(id => !canonicalIds.has(id))
+  return {
+    schemaVersion: 1,
+    coordinateSystem: 'local-campus-meter',
+    units: 'meters',
+    items,
+    errors: [
+      ...duplicateManifestIds.map(buildingId => ({ code: 'ASSET_MANIFEST_DUPLICATE_ID', buildingId })),
+      ...unknownManifestIds.map(buildingId => ({ code: 'ASSET_MANIFEST_UNKNOWN_BUILDING', buildingId })),
+    ],
+    summary: {
+      canonicalBuildingCount: canonical.length,
+      configuredModelCount: items.filter(item => item.modelUrl).length,
+      pendingModelCount: items.filter(item => !item.modelUrl).length,
+      configuredPositionCount: items.filter(item => item.positionSource === 'manifest').length,
+      derivedPositionCount: items.filter(item => item.positionSource === 'derived-footprint-aabb-center').length,
+      unverifiedRotationCount: items.filter(item => item.rotationY === null).length,
+      duplicateManifestIdCount: duplicateManifestIds.length,
+      unknownManifestIdCount: unknownManifestIds.length,
+    },
+    limitations: [
+      '由 footprint 轴对齐包围盒推导的位置只是模型摆放候选点，不是测绘确认的建筑原点。',
+      '没有可靠方向数据时 rotationY 保持 null；模型资产进入 ready 状态前必须人工确认旋转角。',
+      '没有模型文件的建筑保留在待制作清单，不会尝试加载虚构路径。',
+    ],
+  }
+}

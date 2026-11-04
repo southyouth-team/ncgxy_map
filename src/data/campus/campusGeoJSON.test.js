@@ -166,4 +166,27 @@ describe('统一校园空间数据出口', () => {
     expect(features.find(feature => feature.id === CAMPUS_ROAD_CENTERLINES[0].id).geometry.type).toBe('LineString')
     expect(features.find(feature => feature.id === CAMPUS_BUILDING_FOOTPRINTS[0].id).geometry.type).toBe('Polygon')
   })
+  it('按稳定 ID 合并首页基础 Feature 与编辑器覆盖，并执行删除标记', () => {
+    const base = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', id: 'campus-boundary', properties: { featureType: 'boundary', name: '校界' }, geometry: { type: 'Polygon', coordinates: [] } },
+        { type: 'Feature', id: 'campus-gate-east', properties: { featureType: 'gate', name: '东门' }, geometry: { type: 'Point', coordinates: [1, 1] } },
+        { type: 'Feature', id: 'campus-tree-001', properties: { featureType: 'object', name: '旧树木', source: 'legacy-scene-decoration' }, geometry: { type: 'Point', coordinates: [2, 2] } },
+      ],
+    }
+    const editor = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', id: 'campus-tree-001', properties: { featureType: 'object', name: '已校准树木' }, geometry: { type: 'Point', coordinates: [3, 3] } },
+        { type: 'Feature', id: 'editor-bench-001', properties: { featureType: 'object', name: '新增座椅' }, geometry: { type: 'Point', coordinates: [4, 4] } },
+      ],
+      deletedFeatureIds: ['campus-gate-east'],
+    }
+    const merged = mergeCampusSceneFeatureCollections(base, editor)
+    expect(merged.features.map(feature => feature.id)).toEqual(['campus-boundary', 'campus-tree-001', 'editor-bench-001'])
+    expect(merged.features.find(feature => feature.id === 'campus-tree-001').properties.name).toBe('已校准树木')
+    expect(merged.deletedFeatureIds).toEqual(['campus-gate-east'])
+  })
+
 })

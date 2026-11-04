@@ -1,3 +1,12 @@
+## 2026-11-04 — 统一编辑器与基础数据质量字段契约
+
+- **修改文件**：`src/editor/campusFeatureCollection.js`、`src/data/campus/campusGeoJSON.test.js`。
+- **实际完成**：
+  - 编辑器 Feature 序列化时保留 `qualityStatus`，同时规范化输出 `confidence` 与 `verificationStatus`。
+  - 旧编辑器文档缺少标准字段时使用保守默认值 low / unverified；已核验状态映射为 medium / verified。
+  - 增加端到端适配器单测：编辑器建筑、道路、区域和点对象生成的 FeatureCollection 必须通过统一空间数据质检。
+- **验证状态**：代码与测试已提交，等待最新 CI。
+- **已知限制**：默认置信度只是数据治理初值，不代表真实精度；后续需由可靠来源逐对象校准。
 ## 2026-11-04 — 修复区域删除绕过统一删除契约
 
 - **修改文件**：`src/editor/CampusPlanEditor.vue`。

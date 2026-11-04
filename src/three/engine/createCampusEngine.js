@@ -7,7 +7,7 @@ import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
-import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
+import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { fromCampusFeatureCollection, toCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
@@ -145,6 +145,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
     // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
     campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE, options.featureCollection || null)
+    // 碰撞与渲染必须读取同一份规范化空间数据；不能让已移动/删除的旧湖泊继续留在碰撞层。
+    const spatialLayers = isRpgSample ? null : createCampusSceneRenderData(options.featureCollection || undefined).layers
     scene.add(campus)
     cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
@@ -243,11 +245,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 树木、长椅和路灯使用圆形碰撞体，避免 AABB 方形外扩占用过多步行空间。
     for (const obstacle of circularObstacles) collisionWorld.addCircleObstacle(obstacle)
     // 湖水不可通行；中央湖区保留 holes 中定义的岛屿步行区域。
-    for (const area of (isRpgSample ? [] : CAMPUS_AREAS.filter(item => item.type === 'water' && item.polygon?.length >= 3))) {
-      const toWorldRing = ring => ring.map(([x, y]) => {
-        const point = mapPixelToWorld(x, y)
-        return [point.x, point.z]
-      })
+    // 必须使用与首页/编辑器预览相同的 FeatureCollection 派生层，不能读取过期静态 CAMPUS_AREAS。
+    const toWorldRing = ring => ring.map(([x, y]) => {
+      const point = mapPixelToWorld(x, y)
+      return [point.x, point.z]
+    })
+    for (const area of (spatialLayers?.areas || []).filter(item => item.type === 'water' && item.polygon?.length >= 3)) {
       collisionWorld.addPolygonObstacle({
         outer: toWorldRing(area.polygon),
         holes: (area.holes || []).map(toWorldRing),

@@ -396,3 +396,15 @@ schema v4 的 FeatureCollection metadata 属于规范空间数据的一部分。
 ## 45. 服务端 GeoJSON geometry 必须按类型校验结构
 
 schema v4 的 FeatureCollection 服务端校验不能仅递归检查坐标是否为有限数字；必须先识别 GeoJSON 标准 geometry 类型，再按各类型的坐标嵌套结构校验。Point/MultiPoint、LineString/MultiLineString、Polygon/MultiPolygon 分别校验 Position、线段、闭合 LinearRing 和多层集合结构；GeometryCollection 递归校验子 geometry，并设置递归深度上限。Position 至少包含两个有限数值，LineString 至少两个 Position，Polygon 的每个 LinearRing 至少四个 Position 且首尾位置一致。未知 geometry 类型、错误嵌套、非有限坐标和非法环必须拒绝。当前编辑器主要生产 Point、LineString、Polygon；对暂不渲染的合法扩展类型仍须在 FeatureCollection 中原样保留。
+
+
+## 46. 自动保存失败不得无限重试同一快照
+
+编辑器自动保存请求必须区分“请求期间发生新编辑”与“本次请求失败但内容未变化”：
+
+- 保存开始时固定本次请求快照 `requestSnapshot`。
+- 请求完成后，只有当前文档快照与 `requestSnapshot` 不同，才安排一次短延迟补发，以保存请求进行期间产生的新编辑。
+- 若本次请求失败且文档没有变化，不得仅因当前快照仍不同于上次成功保存快照而循环重试；应保留错误状态，等待用户后续编辑或显式重试入口。
+- 版本冲突仍进入独立冲突状态，不得自动覆盖服务端版本。
+
+该规则防止网络中断或服务端持续异常时，以固定间隔无限发送同一份失败文档。仍需浏览器验证：保存请求进行中继续编辑、请求失败后的停止行为、后续编辑是否重新触发自动保存，以及 409 冲突后的服务端重载。

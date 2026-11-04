@@ -200,7 +200,8 @@ export function restoreCampusFeatureSnapshot(snapshot = {}) {
   if (snapshot?.type !== 'CampusFeatureSnapshot' || snapshot.version !== 1) {
     throw new Error('不支持的校园空间历史快照版本')
   }
-  return fromCampusFeatureCollection(snapshot.featureCollection || {})
+  const featureCollection = snapshot.featureCollection || { type: 'FeatureCollection', features: [], deletedFeatureIds: [] }
+  return { ...fromCampusFeatureCollection(featureCollection), featureCollection }
 }
 
 

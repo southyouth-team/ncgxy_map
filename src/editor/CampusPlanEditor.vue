@@ -192,11 +192,12 @@ function beginFeatureDrag(event, type, item) {
   if (isMultiDrag) {
     const items = multiSelection.value.filter(entry => !isLayerLocked(entry.type)).map(entry => {
       const feature = featureCollection(entry.type).find(candidate => candidate.id === entry.id)
-      return feature ? { type: entry.type, id: entry.id, geometry: featureGeometry(entry.type, feature) } : null
+      return feature ? { type: entry.type, id: entry.id, geometry: JSON.parse(JSON.stringify(spatialFeatureCollection.value.features.find(item => String(item.id) === String(entry.id))?.geometry)) } : null
     }).filter(Boolean)
     drag.value = { type: 'multi', start, items }
   } else {
-    drag.value = type === 'road' ? { type: 'road', id: item.id, start, points: featureGeometry(type, item) } : { type, id: item.id, start, footprint: featureGeometry(type, item) }
+    const canonicalFeature = spatialFeatureCollection.value.features.find(feature => String(feature.id) === String(item.id))
+    drag.value = { type, id: item.id, start, geometry: JSON.parse(JSON.stringify(canonicalFeature?.geometry)) }
   }
   event.currentTarget.setPointerCapture?.(event.pointerId)
 }
@@ -860,11 +861,7 @@ function movePointer(event) {
   if (currentDrag.type === 'multi') {
     const updates = currentDrag.items.map(entry => {
       const dx = p.x - currentDrag.start.x, dy = p.y - currentDrag.start.y
-      const moved = entry.geometry.map(([x, y]) => [x + dx, y + dy])
-      const fragment = entry.type === 'road'
-        ? { roads: [{ id: entry.id, points: moved }] }
-        : { [entry.type === 'building' ? 'buildings' : 'areas']: [{ id: entry.id, footprint: moved }] }
-      return { id: entry.id, geometry: toCampusFeatureCollection(fragment).features[0]?.geometry }
+      return { id: entry.id, geometry: translateGeometry(entry.geometry, dx, dy) }
     }).filter(entry => entry.geometry)
     commitFeatureCollectionMutation(collection => updates.reduce(
       (next, entry) => updateCampusFeatureGeometry(next, entry.id, entry.geometry),
@@ -883,16 +880,16 @@ function movePointer(event) {
     }
   } else if (currentDrag.type === 'building') {
     const item = buildings.value.find(entry => entry.id === currentDrag.id)
-    if (item) commitFeatureGeometry(item.id, { buildings: [{ id: item.id, footprint: movePolygon(currentDrag.footprint, p.x - currentDrag.start.x, p.y - currentDrag.start.y) }] })
+    if (item) commitFeatureGeometryValue(item.id, translateGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
   } else if (currentDrag.type === 'object') {
     const item = objects.value.find(entry => entry.id === currentDrag.id)
     if (item) commitFeatureGeometry(item.id, { objects: [{ id: item.id, geometry: { type: 'Point', coordinates: [currentDrag.position[0] + p.x - currentDrag.start.x, currentDrag.position[1] + p.y - currentDrag.start.y] } }] })
   } else if (currentDrag.type === 'area') {
     const item = areas.value.find(entry => entry.id === currentDrag.id)
-    if (item) commitFeatureGeometry(item.id, { areas: [{ id: item.id, footprint: movePolygon(currentDrag.footprint, p.x - currentDrag.start.x, p.y - currentDrag.start.y) }] })
+    if (item) commitFeatureGeometryValue(item.id, translateGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
   } else if (currentDrag.type === 'road') {
     const item = roads.value.find(entry => entry.id === currentDrag.id)
-    if (item) commitFeatureGeometry(item.id, { roads: [{ id: item.id, points: movePolygon(currentDrag.points, p.x - currentDrag.start.x, p.y - currentDrag.start.y) }] })
+    if (item) commitFeatureGeometryValue(item.id, translateGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
   } else if (currentDrag.type === 'node') {
     const item = roads.value.find(entry => entry.id === currentDrag.id)
     if (item) {
@@ -1039,6 +1036,20 @@ function commitFeatureUpsert(fragment) {
     (next, feature) => upsertCampusFeature(next, feature),
     collection,
   ))
+}
+function translateGeometry(geometry, dx, dy) {
+  if (!geometry) return geometry
+  const translatePoint = ([x, y, ...rest]) => [x + dx, y + dy, ...rest]
+  const mapCoordinates = (coordinates, depth) => depth === 1
+    ? coordinates.map(translatePoint)
+    : coordinates.map(child => mapCoordinates(child, depth - 1))
+  const depth = geometry.type === 'Point' ? 0 : geometry.type === 'LineString' ? 1 : geometry.type === 'Polygon' ? 2 : geometry.type === 'MultiPolygon' ? 3 : -1
+  if (geometry.type === 'Point') return { ...geometry, coordinates: translatePoint(geometry.coordinates) }
+  if (depth < 0) throw new Error(`不支持平移几何类型：${geometry.type}`)
+  return { ...geometry, coordinates: mapCoordinates(geometry.coordinates, depth) }
+}
+function commitFeatureGeometryValue(featureId, geometry) {
+  commitFeatureCollectionMutation(collection => updateCampusFeatureGeometry(collection, featureId, geometry))
 }
 function commitFeatureGeometry(featureId, fragment) {
   const feature = toCampusFeatureCollection(fragment).features[0]

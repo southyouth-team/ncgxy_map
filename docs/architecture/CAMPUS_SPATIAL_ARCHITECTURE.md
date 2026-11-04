@@ -361,3 +361,8 @@ legacy 编辑器投影不是规范数据完整性的判断依据。当前编辑�
 未知 Feature 类型即使暂不被当前渲染图层识别，也必须留在传入的 FeatureCollection 中；渲染适配器不支持绘制不等于数据可以被删除。当前渲染图层只消费已支持的几何/featureType，未知 Feature 的可视化属于后续能力，不阻断其保存和往返完整性。
 
 服务端 API 集成测试已验证 v4 FeatureCollection 的 PUT/GET 回读、JSONB 扩展属性、Polygon 内环、删除 tombstone 和 revision 冲突。Frontend CI 与 Backend CI 在提交 `b315858` 均成功。真实浏览器仍需验证自动保存、刷新回读、编辑器关闭后首页刷新和 2.5D/3D 预览一致性；legacy 数组仍是兼容交互投影，不应标记为完全移除。
+
+
+## 39. 建筑 Polygon 内环兼容投影
+
+建筑规范 Feature 的 Polygon 可以包含外环和一个或多个内环（例如建筑中庭、镂空区域）。legacy 编辑器投影必须保留这些内环：FeatureCollection → building.footprint/building.holes → FeatureCollection 的转换不得只保留外环。几何编辑更新外环时仍须沿用规范 Feature 中已有内环。新增回归测试验证建筑内环的双向转换坐标完全一致。

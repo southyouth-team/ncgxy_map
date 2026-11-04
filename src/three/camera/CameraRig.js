@@ -109,7 +109,6 @@ export class CameraRig {
       }
       if (mode === 'thirdPerson') {
         this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
-        this.thirdDistance = this.isometricRpg ? 13 : 15
         this.updateThirdPersonDesired()
       } else {
         if (previousMode === 'thirdPerson') {

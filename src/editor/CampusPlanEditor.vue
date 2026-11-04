@@ -1204,11 +1204,11 @@ function exportDocument() {
           <label>对象名称</label><input  :value="selectedObject.name" @focus="snapshot" @change="updateSelectedFeatureProperty('name',$event.target.value)">
           <label>对象类型</label><select  :value="selectedObject.type" @focus="snapshot" @change="updateSelectedFeatureProperty('objectType',$event.target.value)"><option v-for="item in objectKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
           <label>朝向（度）</label><input type="number"  :value="selectedObject.properties.rotation" @focus="snapshot" @change="updateSelectedFeatureProperty('rotation',$event.target.value,{numeric:true,nested:'objectProperties'})">
-          <label>缩放</label><input type="number" min="0.2" max="5" step="0.1"  :value="selectedObject.properties.scale" @focus="snapshot" @change="updateSelectedFeatureProperty('scale',$event.target.value,{numeric:true,nested:'objectProperties'})>
+          <label>缩放</label><input type="number" min="0.2" max="5" step="0.1"  :value="selectedObject.properties.scale" @focus="snapshot" @change="updateSelectedFeatureProperty('scale',$event.target.value,{numeric:true})">
           <button class="danger-button" @click="deleteSelected">删除对象</button>
         </template>
         <template v-else-if="selectedRoad">
-          <label>道路宽度</label><input  :value="selectedRoad.width" @focus="snapshot" @change="updateSelectedFeatureProperty('width',$event.target.value,{numeric:true}) type="range" min="4" max="24">
+          <label>道路宽度</label><input type="range"  :value="selectedRoad.width" @focus="snapshot" @change="updateSelectedFeatureProperty('width',$event.target.value,{numeric:true})" min="4" max="24">
           <button class="add-button" @click="addRoadNode">＋ 添加道路控制点</button><p class="hint">拖动控制点调整曲线；点击控制点删除（至少保留 2 个）。道路采用平滑曲线显示。</p><button class="danger-button" @click="deleteSelected">删除道路</button>
         </template>
         <div v-else class="empty-inspector"><span class="empty-inspector-icon">⌖</span><strong>尚未选择对象</strong><p>在画布中点击建筑、道路或区域，即可查看并编辑对应属性。</p></div>

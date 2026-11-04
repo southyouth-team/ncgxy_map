@@ -289,6 +289,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function clearRpgPreview() {
     editorPreviewActive = false
+    activeHorizonGround = null
     if (rpgPreviewGroup) {
       scene?.remove(rpgPreviewGroup)
       disposeObjectGroup(rpgPreviewGroup)

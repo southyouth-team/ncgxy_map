@@ -50,12 +50,7 @@ async function loadEditorDocument() {
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
       deletedFeatureIds.value = [...new Set([...(document.featureCollection?.deletedFeatureIds || []), ...(document.deletedFeatureIds || [])].map(String))]
-      const baseCollection = toCampusFeatureCollection({
-        buildings: BASE_CAMPUS_BUILDINGS,
-        roads: BASE_CAMPUS_ROADS,
-        areas: BASE_CAMPUS_AREAS,
-        objects: BASE_CAMPUS_OBJECTS,
-      })
+      const baseCollection = BASE_CAMPUS_FEATURE_COLLECTION
       const savedCollection = document.featureCollection?.type === 'FeatureCollection'
         ? document.featureCollection
         : toCampusFeatureCollection(document)
@@ -162,7 +157,7 @@ const areas = ref(BASE_CAMPUS_AREAS.map(item => ({ ...item })))
 const roads = ref(BASE_CAMPUS_ROADS.map(item => ({ ...item })))
 const objects = ref(BASE_CAMPUS_OBJECTS.map(item => ({ ...item, geometry: { ...item.geometry, coordinates: [...item.geometry.coordinates] }, properties: { ...item.properties } })))
 // FeatureCollection 是编辑器唯一的空间状态；legacy 数组仅作为模板/交互兼容投影。
-const spatialFeatureCollection = ref(toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value }))
+const spatialFeatureCollection = ref(toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, metadata: BASE_CAMPUS_FEATURE_COLLECTION.metadata }))
 const objectKinds = [{ value: 'tree', label: '树木' }, { value: 'streetlight', label: '路灯' }, { value: 'bench', label: '座椅' }, { value: 'sculpture', label: '雕塑' }]
 const objectKind = ref('tree')
 const selectedObject = computed(() => objects.value.find(item => item.id === selected.value.id && selected.value.type === 'object') || null)

@@ -643,3 +643,11 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - 拖动期间临时关闭 OrbitControls 输入，按透视相机视场高度与画布高度换算每像素世界位移，并将相机位置和 OrbitControls target 同步平移。
 - 平移向量投影到水平地面，保持观察中心高度；松开指针后恢复 OrbitControls，左键旋转和滚轮缩放继续工作。
 - 2.5D 仍保持独立的地图平移输入与 2.5D/3D 观察中心隔离。
+
+
+## 74. 3D 总览右键平移事件优先级（2026-11-05）
+
+- 右键/中键平移的 `pointerdown` 在画布 DOM 捕获阶段接管，避免 OrbitControls 或其他冒泡阶段监听器先行处理右键手势。
+- 被接管的指针手势执行 `preventDefault` 与 `stopPropagation`，随后由 CameraRig 独立更新相机位置和观察中心；指针释放后恢复 OrbitControls。
+- 3D 左键旋转、滚轮缩放、中键平移及 2.5D 平移规则不变。
+- 验收需确认右键拖动可连续平移、松开后左键仍可旋转且滚轮缩放正常；浏览器实际加载的版本必须包含本节对应提交。

@@ -81,12 +81,12 @@ export function createRpgSampleScene(THREE) {
   }
   // 场景底板与草地图块：统一硬边和低频配色，避免写实材质混入。
   addBox('sample-earth-base', 0, -0.65, 0, 54, 0.65, 42, materials.grassDark)
-  // 相机压低时，样板地块边缘会形成贯穿画面的硬水平线。
-  // 在地块底部铺设远景延展地面，避免镜头看到演示地图的矩形边界。
+  // 远景地面必须位于底板顶面之上，否则会被底板侧面/底面遮挡，
+  // 镜头倾斜时仍会露出背景并形成水平分界线。
   const horizonGround = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), materials.grassDark)
   horizonGround.name = 'sample-horizon-ground'
   horizonGround.rotation.x = -Math.PI / 2
-  horizonGround.position.y = -0.66
+  horizonGround.position.y = 0.001
   horizonGround.receiveShadow = true
   root.add(horizonGround)
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(53.5, 41.5), materials.grass)

@@ -320,3 +320,8 @@ Polygon 几何编辑必须明确区分整体变换和外环顶点编辑：
 ## 33. 历史恢复必须保留规范集合
 
 `restoreCampusFeatureSnapshot` 返回兼容编辑器数组的同时，必须返回原始规范 `featureCollection`。撤销/重做恢复时直接替换编辑器的规范集合，不得通过 legacy 数组重新构建，否则当前编辑器不支持的 Feature 类型和扩展属性会丢失。兼容数组仅用于已支持对象类型的交互投影。
+
+
+## 34. 复制粘贴必须以规范 Feature 为输入
+
+编辑器复制操作从规范 FeatureCollection 按稳定 ID 读取完整 Feature；粘贴通过 `duplicateCampusFeature` 生成新 ID 并平移 geometry，properties 和 provenance 原样保留，再通过 `upsertCampusFeature` 写入规范集合。禁止从 legacy 数组重建复制数据，以免丢失 Polygon 内环、质量元数据或未来扩展属性。

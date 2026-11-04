@@ -716,3 +716,15 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - 检查空间 Feature 是否缺失、场景是否出现源数据之外的 Feature、Feature 节点是否没有 Mesh/Line/Points，以及 Mesh 是否缺少 geometry/material。
 - 场景异常通过 `onSceneAudit` 回调提供结构化报告，并输出 `[CampusSceneAudit]` 警告；使用 `?render-debug=1` 可在控制台查看通过时的分类统计。
 - 此项检查验证程序化场景装配覆盖，不验证 GLB 异步资产是否成功替换、模型几何与 footprint 的精确偏差、建筑高度与源属性是否一致、纹理内容是否正确，也不能替代 GPU 实际渲染验收。异步 GLB 加载另有 `onAssetsLoaded/onAssetError` 事件，可作为下一层资产审计入口。
+
+
+## 24. GLB 建筑资产加载审计
+
+异步建筑 GLB 加载完成后，使用 `validateCampusBuildingModels(models, canonicalBuildingIds)` 执行资产级检查：
+
+- 每个模型必须具有稳定 `buildingId`，且该 ID 应存在于规范建筑 Feature 集合；重复 ID、未知 ID 均作为异常报告。
+- 模型必须包含至少一个 Mesh；每个 Mesh 必须有 geometry 和 material，并具有有限且三轴尺寸大于零的局部包围盒。
+- 汇总加载模型数、Mesh 数和三角面数；加载失败列表仍由 GLB loader 的 `errors` 单独提供。
+- 通过 `onAssetAudit` 回调向业务层输出结构化结果；异常输出 `[CampusAssetAudit]`，`?render-debug=1` 下可查看通过报告。
+- GLB 资产是程序化建筑的增强/替换视觉层；缺失 GLB 不代表空间 Feature 丢失。此审计不验证模型与 footprint 的实际位置/旋转偏差，不验证楼层高度与源数据语义，也不衡量 GPU draw call 或帧时间。
+

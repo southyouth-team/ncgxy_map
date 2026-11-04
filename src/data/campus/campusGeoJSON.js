@@ -348,6 +348,11 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
   const seenIds = new Set()
   const allowedConfidence = new Set(['low', 'medium', 'high'])
   const allowedStatus = new Set(['verified', 'unverified'])
+  const expectedGeometryByType = {
+    boundary: 'Polygon', building: 'Polygon', area: 'Polygon', green: 'Polygon',
+    water: 'Polygon', sports: 'Polygon', plaza: 'Polygon', parking: 'Polygon',
+    road: 'LineString', gate: 'Point', poi: 'Point', object: 'Point',
+  }
 
   if (collection?.type !== 'FeatureCollection') {
     errors.push({ code: 'INVALID_COLLECTION_TYPE', message: '根节点必须是 FeatureCollection' })
@@ -429,7 +434,13 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
       seenIds.add(featureId)
     }
 
+    if (feature?.type !== 'Feature') {
+      errors.push({ code: 'INVALID_FEATURE_TYPE', featureId, path: `features[${index}].type`, message: '集合成员必须是 GeoJSON Feature' })
+    }
     const properties = feature?.properties || {}
+    if (!properties.featureType || !expectedGeometryByType[properties.featureType]) {
+      errors.push({ code: 'UNSUPPORTED_FEATURE_TYPE', featureId, message: 'Feature 必须声明受支持的 featureType' })
+    }
     if (!allowedConfidence.has(properties.confidence)) {
       errors.push({ code: 'INVALID_CONFIDENCE', featureId, message: 'confidence 必须为 low、medium 或 high' })
     }
@@ -445,9 +456,8 @@ export function validateCampusGeoJSON(collection = buildCampusGeoJSON(), dataset
       errors.push({ code: 'UNSUPPORTED_GEOMETRY', featureId, message: '仅允许 Polygon、LineString 或 Point 几何' })
       continue
     }
-    const expectedGeometry = properties.featureType === 'road' ? 'LineString'
-      : ['gate', 'poi'].includes(properties.featureType) ? 'Point' : 'Polygon'
-    if (['road', 'area', 'building', 'boundary', 'gate', 'poi'].includes(properties.featureType) && geometry.type !== expectedGeometry) {
+    const expectedGeometry = expectedGeometryByType[properties.featureType]
+    if (expectedGeometry && geometry.type !== expectedGeometry) {
       errors.push({ code: 'GEOMETRY_TYPE_MISMATCH', featureId, message: `${properties.featureType} 要素应使用 ${expectedGeometry}` })
     }
     if (geometry.type === 'Point' && (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2 || !geometry.coordinates.slice(0, 2).every(Number.isFinite))) {

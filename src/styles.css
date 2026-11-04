@@ -348,3 +348,7 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 @media (pointer: coarse), (max-width: 760px) {
   .control-card { display: none !important; }
 }
+
+@media (max-width: 760px) {
+  .asset-workshop-entry { display: none; }
+}

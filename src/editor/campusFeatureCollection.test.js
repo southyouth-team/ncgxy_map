@@ -85,6 +85,23 @@ describe('toCampusFeatureCollection', () => {
     })
     expect(result.features).toEqual([])
   })
+  it('round-trips building Polygon interior rings through the legacy adapter', async () => {
+    const source = {
+      buildings: [{
+        id: 'building-with-courtyard',
+        label: '教学楼',
+        footprint: [[0, 0], [20, 0], [20, 20], [0, 20]],
+        holes: [[[5, 5], [10, 5], [10, 10], [5, 10]]],
+        floors: 3,
+      }],
+    };
+    const canonical = toCampusFeatureCollection(source);
+    expect(canonical.features[0].geometry.coordinates).toHaveLength(2);
+    const projected = fromCampusFeatureCollection(canonical);
+    expect(projected.buildings[0].holes).toEqual([[[5, 5], [10, 5], [10, 10], [5, 10]]]);
+    expect(toCampusFeatureCollection(projected).features[0].geometry.coordinates).toEqual(canonical.features[0].geometry.coordinates);
+  });
+
   it('round-trips supported feature types through the legacy editor adapter', async () => {
     const { fromCampusFeatureCollection } = await import('./campusFeatureCollection.js')
     const source = {

@@ -1039,6 +1039,7 @@ function updateSelectedFeatureProperty(key, value, { numeric = false, nested = f
   })
 }
 
+function buildDocument() {
   const document = { schemaVersion: 3, deletedFeatureIds: [...deletedFeatureIds.value], coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
   document.featureCollection = toCampusFeatureCollection(document)
   return document

@@ -7,6 +7,9 @@ export class CameraRig {
     // 展示投影与相机操控模式分离：2.5D 使用正交投影，3D 使用透视投影。
     this.viewMode = options.viewMode === '3d' ? '3d' : '2.5d'
     this.domElement = domElement
+    // 右键拖动用于 3D 总览平移，必须屏蔽浏览器原生菜单，否则拖动可能被菜单打断。
+    this.preventContextMenu = event => event.preventDefault()
+    this.domElement.addEventListener('contextmenu', this.preventContextMenu)
     this.aspect = 1
     this.overviewSpan = 190
     this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.5, 3200)
@@ -75,7 +78,9 @@ export class CameraRig {
     this.orbit.enableRotate = this.viewMode === '3d'
     // 3D 总览遵循常见三维地图操作：左键旋转、右键平移；2.5D 左右键均平移。
     this.orbit.mouseButtons.LEFT = this.viewMode === '3d' ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
+    // 右键和中键均提供平移，避免触控板/鼠标中键习惯差异导致无法操作。
     this.orbit.mouseButtons.RIGHT = this.THREE.MOUSE.PAN
+    this.orbit.mouseButtons.MIDDLE = this.THREE.MOUSE.PAN
     if (this.orbit.touches) {
       this.orbit.touches.ONE = this.viewMode === '3d' ? this.THREE.TOUCH.ROTATE : this.THREE.TOUCH.PAN
       this.orbit.touches.TWO = this.THREE.TOUCH.DOLLY_PAN
@@ -391,5 +396,6 @@ export class CameraRig {
 
   dispose() {
     this.orbit?.dispose()
+    this.domElement?.removeEventListener('contextmenu', this.preventContextMenu)
   }
 }

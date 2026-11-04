@@ -151,15 +151,15 @@ export class ScenesService {
         id = String(current[0].id);
         await manager.query(
           `UPDATE campus_plan_document SET schema_version=$1,document=$2::jsonb,
-           revision=$2,updated_by=$3,updated_at=now() WHERE id=$4`,
+           revision=$3,updated_by=$4,updated_at=now() WHERE id=$5`,
           [Number(document.schemaVersion),JSON.stringify(nextDocument),nextRevision,userId,id],
         );
       } else {
         const inserted = await manager.query(
           `INSERT INTO campus_plan_document
            (campus_id,map_id,schema_version,document,revision,created_by,updated_by)
-           VALUES ($1,$2,2,$3::jsonb,$4,$5,$5) RETURNING id`,
-          [campusId,mapId,JSON.stringify(nextDocument),nextRevision,userId],
+           VALUES ($1,$2,$3,$4::jsonb,$5,$6,$6) RETURNING id`,
+          [campusId,mapId,Number(document.schemaVersion),JSON.stringify(nextDocument),nextRevision,userId],
         );
         id = String(inserted[0].id);
       }

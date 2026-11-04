@@ -172,6 +172,9 @@ describe('统一校园空间数据出口', () => {
       features: [
         { type: 'Feature', id: 'campus-boundary', properties: { featureType: 'boundary', name: '校界' }, geometry: { type: 'Polygon', coordinates: [] } },
         { type: 'Feature', id: 'campus-gate-east', properties: { featureType: 'gate', name: '东门' }, geometry: { type: 'Point', coordinates: [1, 1] } },
+        { type: 'Feature', id: 'campus-building-001', properties: { featureType: 'building', name: '教学楼' }, geometry: { type: 'Polygon', coordinates: [[[2,2],[4,2],[4,4],[2,4],[2,2]]] } },
+        { type: 'Feature', id: 'campus-road-001', properties: { featureType: 'road', name: '主路', width: 8 }, geometry: { type: 'LineString', coordinates: [[1,1],[5,5]] } },
+        { type: 'Feature', id: 'campus-water-001', properties: { featureType: 'area', category: 'water', name: '湖泊' }, geometry: { type: 'Polygon', coordinates: [[[6,6],[8,6],[8,8],[6,8],[6,6]]] } },
         { type: 'Feature', id: 'campus-tree-001', properties: { featureType: 'object', name: '旧树木', source: 'legacy-scene-decoration' }, geometry: { type: 'Point', coordinates: [2, 2] } },
       ],
     }
@@ -181,10 +184,10 @@ describe('统一校园空间数据出口', () => {
         { type: 'Feature', id: 'campus-tree-001', properties: { featureType: 'object', name: '已校准树木' }, geometry: { type: 'Point', coordinates: [3, 3] } },
         { type: 'Feature', id: 'editor-bench-001', properties: { featureType: 'object', name: '新增座椅' }, geometry: { type: 'Point', coordinates: [4, 4] } },
       ],
-      deletedFeatureIds: ['campus-gate-east'],
+      deletedFeatureIds: ['campus-gate-east', 'campus-road-001'],
     }
     const merged = mergeCampusSceneFeatureCollections(base, editor)
-    expect(merged.features.map(feature => feature.id)).toEqual(['campus-boundary', 'campus-tree-001', 'editor-bench-001'])
+    expect(merged.features.map(feature => feature.id)).toEqual(['campus-boundary', 'campus-building-001', 'campus-water-001', 'campus-tree-001', 'editor-bench-001'])
     expect(merged.features.find(feature => feature.id === 'campus-tree-001').properties.name).toBe('已校准树木')
     expect(merged.deletedFeatureIds).toEqual(['campus-gate-east'])
   })

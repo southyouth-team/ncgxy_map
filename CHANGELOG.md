@@ -520,3 +520,12 @@
 - `toCampusFeatureCollection` 与 `fromCampusFeatureCollection` 现在双向保留建筑 `holes`。
 - 新增建筑 Polygon 内环完整 round-trip 回归测试，验证所有 ring 坐标不变。
 - CI 等待本次代码提交触发；浏览器端仍需执行实际编辑验收。
+
+
+## 2026-11-04 — 修复首页场景合并时集合级 metadata 丢失
+
+- 发现首页合并基础校园数据与编辑器 FeatureCollection 时，只返回基础数据 metadata，编辑器集合级扩展 metadata 会被丢弃。
+- 合并策略调整为基础 metadata 提供默认值、编辑器 metadata 同名字段优先；双方 catalogue 按子键合并。
+- 新增回归测试，覆盖基础目录与编辑器扩展目录同时保留。
+- 更新空间架构文档第 40 节，明确首页合并的 metadata 保留契约。
+- 本次修改的 CI 需以最新提交为准；浏览器端首页刷新和编辑器回读仍待真实环境验收。

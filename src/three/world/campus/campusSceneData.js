@@ -280,3 +280,125 @@ export function validateCampusBuildingModels(models, canonicalBuildingIds = []) 
 
   return { valid: errors.length === 0, errorCount: errors.length, errors, summary }
 }
+
+
+/**
+ * Compare loaded GLB world bounds with canonical building footprints.
+ * Polygon AABBs are a coarse diagnostic; concave and rotated footprints can
+ * legitimately differ from an axis-aligned model box.
+ */
+export function auditCampusBuildingModelGeometry(buildings, modelRecords, mapPixelToWorld, options = {}) {
+  const centerTolerance = Number.isFinite(options.centerTolerance) ? options.centerTolerance : 2.5
+  const sizeRelativeTolerance = Number.isFinite(options.sizeRelativeTolerance) ? options.sizeRelativeTolerance : 0.35
+  const heightTolerance = Number.isFinite(options.heightTolerance) ? options.heightTolerance : 1.5
+  const models = new Map((Array.isArray(modelRecords) ? modelRecords : []).map(model => [String(model.buildingId), model]))
+  const errors = []
+  const results = []
+  const push = (code, buildingId, message, details = {}) => errors.push({ code, buildingId, message, ...details })
+  let notLoadedCount = 0
+  let checkedCount = 0
+
+  for (const building of Array.isArray(buildings) ? buildings : []) {
+    const id = String(building?.id ?? '')
+    const model = models.get(id)
+    if (!model) {
+      notLoadedCount += 1
+      results.push({ buildingId: id, status: 'not_loaded' })
+      continue
+    }
+    checkedCount += 1
+    const polygon = Array.isArray(building.polygon) ? building.polygon : []
+    const worldPoints = polygon.map(point => mapPixelToWorld(point[0], point[1]))
+      .filter(point => Number.isFinite(point?.x) && Number.isFinite(point?.z))
+    if (worldPoints.length < 3) {
+      results.push({ buildingId: id, status: 'not_comparable', reason: 'invalid_canonical_footprint' })
+      continue
+    }
+    const expected = {
+      minX: Math.min(...worldPoints.map(point => point.x)),
+      maxX: Math.max(...worldPoints.map(point => point.x)),
+      minZ: Math.min(...worldPoints.map(point => point.z)),
+      maxZ: Math.max(...worldPoints.map(point => point.z)),
+    }
+    const bounds = model.bounds || {}
+    const values = [bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ, bounds.minY, bounds.maxY]
+    if (!values.every(Number.isFinite)) {
+      push('GLB_WORLD_BOUNDS_INVALID', id, '模型世界包围盒缺少有限坐标')
+      results.push({ buildingId: id, status: 'invalid_model_bounds' })
+      continue
+    }
+    const expectedCenter = { x: (expected.minX + expected.maxX) / 2, z: (expected.minZ + expected.maxZ) / 2 }
+    const actualCenter = { x: (bounds.minX + bounds.maxX) / 2, z: (bounds.minZ + bounds.maxZ) / 2 }
+    const centerOffset = Math.hypot(actualCenter.x - expectedCenter.x, actualCenter.z - expectedCenter.z)
+    const expectedWidth = expected.maxX - expected.minX
+    const expectedDepth = expected.maxZ - expected.minZ
+    const actualWidth = bounds.maxX - bounds.minX
+    const actualDepth = bounds.maxZ - bounds.minZ
+    const widthError = expectedWidth > 0 ? Math.abs(actualWidth - expectedWidth) / expectedWidth : null
+    const depthError = expectedDepth > 0 ? Math.abs(actualDepth - expectedDepth) / expectedDepth : null
+    const itemErrors = []
+    if (centerOffset > centerTolerance) {
+      itemErrors.push('GLB_FOOTPRINT_CENTER_OFFSET')
+      push('GLB_FOOTPRINT_CENTER_OFFSET', id, '模型世界包围盒中心偏离建筑 footprint 包围盒中心', { centerOffset, tolerance: centerTolerance })
+    }
+    if (widthError !== null && widthError > sizeRelativeTolerance) {
+      itemErrors.push('GLB_FOOTPRINT_WIDTH_MISMATCH')
+      push('GLB_FOOTPRINT_WIDTH_MISMATCH', id, '模型世界包围盒宽度与 footprint 粗略宽度不一致', { relativeError: widthError, tolerance: sizeRelativeTolerance })
+    }
+    if (depthError !== null && depthError > sizeRelativeTolerance) {
+      itemErrors.push('GLB_FOOTPRINT_DEPTH_MISMATCH')
+      push('GLB_FOOTPRINT_DEPTH_MISMATCH', id, '模型世界包围盒深度与 footprint 粗略深度不一致', { relativeError: depthError, tolerance: sizeRelativeTolerance })
+    }
+    const expectedHeight = Number(building.height)
+    const actualHeight = bounds.maxY - bounds.minY
+    let heightStatus = 'not_comparable'
+    if (Number.isFinite(expectedHeight) && expectedHeight > 0) {
+      const tolerance = Math.max(heightTolerance, expectedHeight * 0.2)
+      heightStatus = Math.abs(actualHeight - expectedHeight) <= tolerance ? 'matched' : 'mismatch'
+      if (heightStatus === 'mismatch') {
+        itemErrors.push('GLB_BUILDING_HEIGHT_MISMATCH')
+        push('GLB_BUILDING_HEIGHT_MISMATCH', id, '模型实际高度与建筑源数据高度不一致', { actualHeight, expectedHeight, tolerance })
+      }
+    }
+    const transform = model.transform || {}
+    if (![transform.x, transform.y, transform.z, transform.rotationY].every(value => value === undefined || Number.isFinite(value))) {
+      itemErrors.push('GLB_TRANSFORM_NON_FINITE')
+      push('GLB_TRANSFORM_NON_FINITE', id, '模型根节点位置或旋转包含非有限数值')
+    }
+    results.push({
+      buildingId: id,
+      status: itemErrors.length ? 'mismatch' : 'checked',
+      centerOffset,
+      widthRelativeError: widthError,
+      depthRelativeError: depthError,
+      actualHeight,
+      expectedHeight: Number.isFinite(expectedHeight) && expectedHeight > 0 ? expectedHeight : null,
+      heightStatus,
+      rotationY: Number.isFinite(transform.rotationY) ? transform.rotationY : null,
+      checks: itemErrors,
+    })
+  }
+
+  const canonicalIds = new Set((Array.isArray(buildings) ? buildings : []).map(item => String(item?.id ?? '')))
+  const unknownModelIds = [...models.keys()].filter(id => !canonicalIds.has(id))
+  for (const id of unknownModelIds) push('GLB_GEOMETRY_UNKNOWN_BUILDING', id, '模型没有对应的规范建筑 footprint')
+  return {
+    valid: errors.length === 0,
+    errorCount: errors.length,
+    errors,
+    results,
+    summary: {
+      canonicalBuildingCount: Array.isArray(buildings) ? buildings.length : 0,
+      loadedModelCount: models.size,
+      checkedCount,
+      notLoadedCount,
+      mismatchCount: results.filter(item => item.status === 'mismatch' || item.status === 'invalid_model_bounds').length,
+      unknownModelCount: unknownModelIds.length,
+    },
+    limitations: [
+      '占地尺寸使用 footprint 与模型世界包围盒的轴对齐包围盒比较；凹形、斜边或旋转建筑可能产生近似误差。',
+      '仅当建筑源数据提供明确 height 时才比较高度；缺失高度标记为 not_comparable。',
+      '模型旋转角仅记录，不与预期角度比较，因为当前规范建筑 Feature 未提供统一的方向基准。',
+    ],
+  }
+}

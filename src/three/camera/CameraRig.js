@@ -43,6 +43,51 @@ export class CameraRig {
     this.obstructionMargin = 0.38
     this.orbit = null
     this.createOrbitControls(this.camera)
+    // 3D 总览独立处理右键/中键拖动，避免 OrbitControls 鼠标映射被浏览器或其他监听器干扰。
+    this.panPointer = null
+    this.onOverviewPanPointerDown = event => {
+      if (this.mode !== 'overview' || this.viewMode !== '3d' || ![1, 2].includes(event.button)) return
+      event.preventDefault()
+      event.stopPropagation()
+      this.panPointer = { id: event.pointerId, x: event.clientX, y: event.clientY }
+      this.orbit.enabled = false
+      this.domElement.setPointerCapture?.(event.pointerId)
+    }
+    this.onOverviewPanPointerMove = event => {
+      if (!this.panPointer || event.pointerId !== this.panPointer.id) return
+      event.preventDefault()
+      const dx = event.clientX - this.panPointer.x
+      const dy = event.clientY - this.panPointer.y
+      this.panPointer.x = event.clientX
+      this.panPointer.y = event.clientY
+      const distance = this.camera.position.distanceTo(this.orbit.target)
+      const viewHeight = 2 * distance * Math.tan(this.THREE.MathUtils.degToRad(this.perspectiveCamera.fov) / 2)
+      const scale = viewHeight / Math.max(this.domElement.clientHeight, 1)
+      const right = new this.THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0)
+      right.y = 0
+      if (right.lengthSq() > 0.000001) right.normalize()
+      const forward = this.camera.getWorldDirection(new this.THREE.Vector3())
+      forward.y = 0
+      if (forward.lengthSq() > 0.000001) forward.normalize()
+      const offset = right.multiplyScalar(-dx * scale).add(forward.multiplyScalar(dy * scale))
+      this.camera.position.add(offset)
+      this.orbit.target.add(offset)
+      this.overviewTargets['3d'].copy(this.orbit.target)
+      this.currentPosition.copy(this.camera.position)
+      this.currentTarget.copy(this.orbit.target)
+      this.camera.updateMatrixWorld()
+      this.orbit.update()
+    }
+    this.onOverviewPanPointerUp = event => {
+      if (!this.panPointer || event.pointerId !== this.panPointer.id) return
+      this.panPointer = null
+      if (this.mode === 'overview') this.orbit.enabled = true
+      if (this.domElement.hasPointerCapture?.(event.pointerId)) this.domElement.releasePointerCapture(event.pointerId)
+    }
+    this.domElement.addEventListener('pointerdown', this.onOverviewPanPointerDown)
+    this.domElement.addEventListener('pointermove', this.onOverviewPanPointerMove)
+    this.domElement.addEventListener('pointerup', this.onOverviewPanPointerUp)
+    this.domElement.addEventListener('pointercancel', this.onOverviewPanPointerUp)
     this.transitioningToOverview = false
     this.applyIsometricOrientation()
   }
@@ -397,5 +442,9 @@ export class CameraRig {
   dispose() {
     this.orbit?.dispose()
     this.domElement?.removeEventListener('contextmenu', this.preventContextMenu)
+    this.domElement?.removeEventListener('pointerdown', this.onOverviewPanPointerDown)
+    this.domElement?.removeEventListener('pointermove', this.onOverviewPanPointerMove)
+    this.domElement?.removeEventListener('pointerup', this.onOverviewPanPointerUp)
+    this.domElement?.removeEventListener('pointercancel', this.onOverviewPanPointerUp)
   }
 }

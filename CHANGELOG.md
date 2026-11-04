@@ -492,3 +492,13 @@
 - 验证未来类型 Feature 不会因为 legacy 投影无法识别而从规范集合消失。
 - 验证 vendor 扩展属性、confidence、verificationStatus、Polygon 内环和多来源删除标记在历史恢复后保持。
 - 保存文档仍以 `spatialFeatureCollection` 为权威空间 payload；服务端保存和刷新回读需结合实际浏览器环境验收。
+
+
+## 2026-11-04 — 修复 schema v4 FeatureCollection 服务端持久化契约
+
+- 修复前后端 schema 版本不一致：编辑器提交 schemaVersion 4，后端原先只接受 v2，导致规范空间文档无法保存。
+- 后端现在接受 schema v2/v3/v4，v4 必须包含规范 FeatureCollection；保留 v2 旧文档保存兼容。
+- 服务端校验 FeatureCollection 类型、Feature 稳定 ID 唯一性、geometry 结构、有限坐标、properties 对象、删除 tombstone 和文档体积。
+- `campus_plan_document.schema_version` 现在存储实际文档版本，不再固定写入 2。
+- 新增 PostGIS API 集成测试：v4 FeatureCollection 保存/回读、未知 Feature 与扩展属性保留、tombstone 保留、重复 ID 拒绝、版本冲突，以及旧 v2 文档兼容。
+- CI 尚待本提交触发后的最新结果；浏览器端真实自动保存和刷新验收仍未完成。

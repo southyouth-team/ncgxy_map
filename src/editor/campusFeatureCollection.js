@@ -274,3 +274,22 @@ export function removeCampusFeatures(collection, featureIds, { recordDeleted = f
       : current.deletedFeatureIds,
   }
 }
+
+
+/**
+ * Translate a canonical GeoJSON geometry without dropping Polygon interior rings.
+ * Coordinates are in the editor's campus-plan-pixel space.
+ */
+export function translateCampusFeatureGeometry(geometry, dx, dy) {
+  if (!geometry || !Number.isFinite(dx) || !Number.isFinite(dy)) {
+    throw new Error('几何平移参数无效')
+  }
+  const translatePoint = ([x, y, ...rest]) => [Number(x) + dx, Number(y) + dy, ...rest]
+  const mapCoordinates = (coordinates, depth) => depth === 1
+    ? coordinates.map(translatePoint)
+    : coordinates.map(child => mapCoordinates(child, depth - 1))
+  if (geometry.type === 'Point') return { ...geometry, coordinates: translatePoint(geometry.coordinates) }
+  const depth = geometry.type === 'LineString' ? 1 : geometry.type === 'Polygon' ? 2 : geometry.type === 'MultiPolygon' ? 3 : -1
+  if (depth < 0) throw new Error(`不支持平移几何类型：${geometry.type}`)
+  return { ...geometry, coordinates: mapCoordinates(geometry.coordinates, depth) }
+}

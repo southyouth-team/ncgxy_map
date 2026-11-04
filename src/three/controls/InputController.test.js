@@ -74,3 +74,38 @@ describe('InputController navigation path', () => {
     expect(controller.consumeNavigationPathCompletion()).toBe(false)
   })
 })
+
+describe('InputController first-person controls', () => {
+  it('prevents browser scrolling and moves forward relative to first-person yaw', () => {
+    const { controller, cameraRig, collisionWorld } = createController()
+    controller.setMode('firstPerson')
+    const preventDefault = vi.fn()
+
+    controller.onKeyDown({ key: 'w', target: { tagName: 'CANVAS' }, preventDefault })
+    controller.update(0.1)
+
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(collisionWorld.move).toHaveBeenCalledWith(cameraRig.player, 0, 0.9)
+    expect(cameraRig.player).toMatchObject({ x: 0, z: 0.9 })
+    expect(cameraRig.updateFirstPersonDesired).toHaveBeenCalledOnce()
+  })
+
+  it('does not capture movement keys while the user is editing a form field', () => {
+    const { controller } = createController()
+    controller.setMode('firstPerson')
+    const preventDefault = vi.fn()
+
+    controller.onKeyDown({ key: 'w', target: { tagName: 'INPUT' }, preventDefault })
+
+    expect(controller.keys.has('w')).toBe(false)
+    expect(preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('clears held movement keys when the browser window loses focus', () => {
+    const { controller } = createController()
+    controller.keys.add('w')
+    controller.onWindowBlur()
+
+    expect(controller.keys.size).toBe(0)
+  })
+})

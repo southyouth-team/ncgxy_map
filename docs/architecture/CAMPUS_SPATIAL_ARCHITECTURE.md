@@ -376,3 +376,8 @@ legacy 编辑器投影不是规范数据完整性的判断依据。当前编辑�
 ## 41. 首页合并必须继承双方 tombstone
 
 mergeCampusSceneFeatureCollections 合并基础集合与编辑器集合时，deletedFeatureIds 必须取双方删除标记的稳定去重并集，再统一过滤 Feature。即使当前基础校园集合通常不携带 tombstone，也不能让通用合并边界依赖这一隐含前提；未来基础数据版本或多来源合并携带删除标记时，已删除 Feature 不得因合并而复活。
+
+
+## 42. 编辑器加载必须保留基础集合 metadata
+
+编辑器初始化和加载服务端文档时，基础 FeatureCollection 必须直接来自 buildCampusGeoJSON() 的完整结果，不能仅从建筑、道路、区域、点对象四组兼容数组重新构建，否则 metadata.catalogue 等未定位目录信息会丢失。toCampusFeatureCollection() 在承担兼容转换职责时必须透传 document.metadata；mergeCampusFeatureCollections() 对基础与编辑器 metadata 采用基础默认、编辑器同名字段优先的策略，catalogue 按子键合并。首页和编辑器必须遵守同一集合级元数据保留语义。

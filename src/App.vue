@@ -485,7 +485,7 @@ onMounted(async () => {
     // 边界、出入口和基础装饰由基础数据提供；编辑器数据按 ID 覆盖，并应用删除标记。
     const campusFeatureCollection = mergeCampusSceneFeatureCollections(buildCampusGeoJSON(), {
       ...editorCollection,
-      deletedFeatureIds: editorCollection.deletedFeatureIds || planDocument?.deletedFeatureIds || [],
+      deletedFeatureIds: [...new Set([...(editorCollection.deletedFeatureIds || []), ...(planDocument?.deletedFeatureIds || [])].map(String))],
     })
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },

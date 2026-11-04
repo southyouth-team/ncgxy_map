@@ -330,12 +330,12 @@ export function auditCampusBuildingModelGeometry(buildings, modelRecords, mapPix
     const expectedCenter = { x: (expected.minX + expected.maxX) / 2, z: (expected.minZ + expected.maxZ) / 2 }
     const actualCenter = { x: (bounds.minX + bounds.maxX) / 2, z: (bounds.minZ + bounds.maxZ) / 2 }
     const centerOffset = Math.hypot(actualCenter.x - expectedCenter.x, actualCenter.z - expectedCenter.z)
-    const expectedWidth = expected.maxX - expected.minX
-    const expectedDepth = expected.maxZ - expected.minZ
-    const actualWidth = bounds.maxX - bounds.minX
-    const actualDepth = bounds.maxZ - bounds.minZ
-    const widthError = expectedWidth > 0 ? Math.abs(actualWidth - expectedWidth) / expectedWidth : null
-    const depthError = expectedDepth > 0 ? Math.abs(actualDepth - expectedDepth) / expectedDepth : null
+    // Sort dimensions so a correctly rotated 90-degree rectangular model is not
+    // falsely reported as a width/depth swap.
+    const expectedDimensions = [expected.maxX - expected.minX, expected.maxZ - expected.minZ].sort((a, b) => b - a)
+    const actualDimensions = [bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ].sort((a, b) => b - a)
+    const widthError = expectedDimensions[0] > 0 ? Math.abs(actualDimensions[0] - expectedDimensions[0]) / expectedDimensions[0] : null
+    const depthError = expectedDimensions[1] > 0 ? Math.abs(actualDimensions[1] - expectedDimensions[1]) / expectedDimensions[1] : null
     const itemErrors = []
     if (centerOffset > centerTolerance) {
       itemErrors.push('GLB_FOOTPRINT_CENTER_OFFSET')
@@ -343,11 +343,11 @@ export function auditCampusBuildingModelGeometry(buildings, modelRecords, mapPix
     }
     if (widthError !== null && widthError > sizeRelativeTolerance) {
       itemErrors.push('GLB_FOOTPRINT_WIDTH_MISMATCH')
-      push('GLB_FOOTPRINT_WIDTH_MISMATCH', id, '模型世界包围盒宽度与 footprint 粗略宽度不一致', { relativeError: widthError, tolerance: sizeRelativeTolerance })
+      push('GLB_FOOTPRINT_WIDTH_MISMATCH', id, '模型世界包围盒长边与 footprint 粗略长边不一致', { relativeError: widthError, tolerance: sizeRelativeTolerance })
     }
     if (depthError !== null && depthError > sizeRelativeTolerance) {
       itemErrors.push('GLB_FOOTPRINT_DEPTH_MISMATCH')
-      push('GLB_FOOTPRINT_DEPTH_MISMATCH', id, '模型世界包围盒深度与 footprint 粗略深度不一致', { relativeError: depthError, tolerance: sizeRelativeTolerance })
+      push('GLB_FOOTPRINT_DEPTH_MISMATCH', id, '模型世界包围盒短边与 footprint 粗略短边不一致', { relativeError: depthError, tolerance: sizeRelativeTolerance })
     }
     const expectedHeight = Number(building.height)
     const actualHeight = bounds.maxY - bounds.minY

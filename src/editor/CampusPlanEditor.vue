@@ -126,9 +126,14 @@ async function saveEditorDocument() {
     }
   } finally {
     persistenceBusy.value = false
-    if (documentLoaded.value && !revisionConflict.value && JSON.stringify(buildDocument()) !== lastSavedSnapshot) {
+    // 只在请求期间确实产生了新编辑时补发保存；失败且内容未变化时停止重试，
+    // 避免网络/服务端持续异常导致每 500ms 无限自动请求。
+    if (documentLoaded.value && !revisionConflict.value && JSON.stringify(buildDocument()) !== requestSnapshot) {
       if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
-      autoSaveTimer = window.setTimeout(() => saveEditorDocument(), 500)
+      autoSaveTimer = window.setTimeout(() => {
+        autoSaveTimer = null
+        saveEditorDocument()
+      }, 500)
     }
   }
 }

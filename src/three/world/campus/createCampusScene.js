@@ -95,7 +95,8 @@ export function createCampusScene(THREE, featureCollection = null) {
     }
     if (!area.rect) continue
     if (area.type === 'sports') {
-      addGroundPatch('area-' + area.id + '-earth', area.rect, mats.sports, 0.035)
+      if (area.polygon?.length >= 3) addPolygon('area-' + area.id + '-earth', area.polygon, mats.sports, 0.035, area.holes)
+      else addGroundPatch('area-' + area.id + '-earth', area.rect, mats.sports, 0.035)
       const bounds = mapRectToWorld(area.rect)
       const inset = new THREE.Mesh(new THREE.BoxGeometry(bounds.width - 0.9, 0.035, bounds.depth - 0.9), mats.pathEdge)
       inset.position.set(bounds.x, 0.09, bounds.z)
@@ -327,7 +328,7 @@ export function createCampusScene(THREE, featureCollection = null) {
   CAMPUS_OBJECTS.forEach((item, index) => {
     const point = mapPixelToWorld(item.position[0], item.position[1])
     let object
-    if (item.type === 'tree') object = addPixelTree(THREE, root, point.x, point.z, item.scale, index, mats)
+    if (item.type === 'tree') object = addPixelTree(THREE, root, point.x, point.z, 1, index, mats)
     else if (['bench', 'seat'].includes(item.type)) object = addPixelBench(THREE, root, point.x, point.z, mats)
     else if (['streetlight', 'lamp'].includes(item.type)) object = addPixelLamp(THREE, root, point.x, point.z, mats)
     else {

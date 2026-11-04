@@ -423,3 +423,8 @@ schema v4 的 FeatureCollection 服务端校验不能仅递归检查坐标是否
 - 若文档已成功加载、无正在执行的保存、无版本冲突且内容存在未保存变化，应立即启动一次保存请求。
 - 若已有保存请求正在执行，不并发提交；由该请求完成后的快照比较机制处理请求期间的新编辑。
 - 该策略降低组件卸载导致的 debounce 修改丢失风险，但不承诺浏览器整页关闭、强制刷新、断网或进程终止时请求一定完成。若需要覆盖这些场景，应另行设计本地恢复队列或可靠后台同步协议。
+
+
+## 49. 撤销/重做快照必须保留 FeatureCollection metadata
+
+FeatureCollection 的集合级 metadata 与 features、deletedFeatureIds 同属规范空间数据。创建 CampusFeatureSnapshot 时必须完整复制 metadata，不能只保存空间 Feature 与删除标记。恢复快照后 metadata.dataset、metadata.catalogue 和未知扩展字段必须保持不变，避免撤销/重做后下一次自动保存将集合级元数据永久清除。测试必须覆盖 metadata 经 JSON 序列化和恢复的 round-trip。

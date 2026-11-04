@@ -82,8 +82,8 @@ export class CameraRig {
     this.orbit.enabled = false
 
     if (mode === 'overview') {
-      this.activateCamera(this.overviewCamera)
-      this.resetOverviewZoom()
+      this.activateCamera(this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera)
+      if (this.viewMode === '2.5d') this.resetOverviewZoom()
       this.transitioningToOverview = true
       this.desiredPosition.set(0, 145, 145)
       this.desiredTarget.set(0, 0, 0)
@@ -279,8 +279,8 @@ export class CameraRig {
 
   focusCampus() {
     this.mode = 'overview'
-    this.activateCamera(this.overviewCamera)
-    this.resetOverviewZoom()
+    this.activateCamera(this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera)
+    if (this.viewMode === '2.5d') this.resetOverviewZoom()
     this.transitioningToOverview = true
     this.orbit.target.set(0, 0, 0)
     this.applyIsometricOrientation()

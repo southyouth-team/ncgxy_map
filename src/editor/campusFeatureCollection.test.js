@@ -311,3 +311,22 @@ describe('mergeCampusFeatureCollections', () => {
     expect(() => mergeCampusFeatureCollections({}, { type: 'FeatureCollection', features: [] })).toThrow('基础校园 FeatureCollection 无效')
   })
 })
+
+describe('restoreCampusFeatureSnapshot', () => {
+  it('preserves unknown features in the canonical collection while projecting supported editor features', () => {
+    const collection = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', id: 'known-tree', geometry: { type: 'Point', coordinates: [1, 2] }, properties: { featureType: 'object', objectType: 'tree' } },
+        { type: 'Feature', id: 'future-fixture', geometry: { type: 'Point', coordinates: [3, 4] }, properties: { featureType: 'future-fixture', vendorData: { keep: true } } },
+      ],
+      deletedFeatureIds: ['old-gate'],
+    }
+    const restored = restoreCampusFeatureSnapshot(createCampusFeatureSnapshot({ featureCollection: collection }))
+    expect(restored.objects).toHaveLength(1)
+    expect(restored.featureCollection.features).toHaveLength(2)
+    expect(restored.featureCollection.features[1].properties.vendorData).toEqual({ keep: true })
+    expect(restored.featureCollection.deletedFeatureIds).toEqual(['old-gate'])
+  })
+})
+

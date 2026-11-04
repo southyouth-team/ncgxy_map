@@ -262,3 +262,10 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 属性检查器不得直接对选中对象引用执行双向绑定。属性修改应显式提供 Feature ID 和字段 patch，经规范 FeatureCollection mutation API 更新，再通过兼容适配器刷新当前交互视图。对象属性和几何仍须保持既定语义：Point 对象的 rotation/scale 属于 properties，区域类型通过 areaType 映射，建筑显示名称通过 Feature properties.name 映射。
 
 当前属性检查器已采用该写入路径；画布绘制、拖动、顶点编辑、复制粘贴等操作尚未全部迁移。此处属于分阶段迁移状态，不构成编辑器唯一状态源验收。
+
+
+## 27. 新增与删除的 Feature mutation 接入
+
+编辑器新增空间要素应先将 legacy 输入转换为 Feature，再通过 `upsertCampusFeature` 按稳定 ID 写入 FeatureCollection；删除应通过 `removeCampusFeatures` 完成。删除基础校园 Feature 时必须记录 tombstone，防止基础数据合并时对象复活。mutation 完成后，当前迁移期交互数组由 `fromCampusFeatureCollection` 重新派生。
+
+目前属性检查器、手工新增、AI 识图导入、单选删除和批量删除已接入该流程。拖动、顶点和道路节点编辑、复制粘贴仍有 legacy 数组直接写入点，不能将此阶段描述为唯一数据源完成。

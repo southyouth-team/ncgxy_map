@@ -167,57 +167,86 @@ function openRing(ring) {
  * 几何只从 FeatureCollection 派生，不在渲染端重复维护。
  */
 export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
-  const boundary = collection.features.find(feature => feature.properties.featureType === 'boundary') || null
-  const gates = collection.features
-    .filter(feature => feature.properties.featureType === 'gate')
-    .map(feature => ({ id: feature.id, name: feature.properties.name, position: feature.geometry.coordinates, confidence: feature.properties.confidence }))
+  const features = Array.isArray(collection?.features) ? collection.features : []
+  const featureType = feature => feature?.properties?.featureType
+  const confidenceOf = feature => feature.properties.confidence || feature.properties.qualityStatus || 'low'
+  const boundary = features.find(feature => featureType(feature) === 'boundary') || null
+  const gates = features
+    .filter(feature => featureType(feature) === 'gate' && feature.geometry?.type === 'Point')
+    .map(feature => ({ id: feature.id, name: feature.properties.name, position: feature.geometry.coordinates, confidence: confidenceOf(feature) }))
   const pois = CAMPUS_POIS.map(poi => ({ ...poi }))
   const siteAreas = CAMPUS_SITE_AREAS.map(area => ({ ...area }))
-  const areas = collection.features
-    .filter(feature => feature.properties.featureType === 'area')
+  // 编辑器 FeatureCollection 使用 green/water/sports/plaza/parking 作为直接类型；
+  // 基础校园底图仍使用 area + category。此处统一归一化，不复制几何数据。
+  const areaTypes = new Set(['area', 'green', 'water', 'sports', 'plaza', 'parking'])
+  const areas = features
+    .filter(feature => areaTypes.has(featureType(feature)) && feature.geometry?.type === 'Polygon')
     .map(feature => {
-      const rings = feature.geometry.coordinates
+      const rings = feature.geometry.coordinates || []
       const polygon = openRing(rings[0])
       const xs = polygon.map(point => point[0])
       const ys = polygon.map(point => point[1])
-      const category = feature.properties.category
+      const category = feature.properties.category || feature.properties.areaType ||
+        (featureType(feature) === 'green' ? 'vegetation' : featureType(feature))
       return {
         id: feature.id,
         name: feature.properties.name,
         type: category,
-        confidence: feature.properties.confidence,
+        confidence: confidenceOf(feature),
         polygon,
         holes: rings.slice(1).map(openRing),
-        rect: category === 'sports'
+        rect: category === 'sports' && polygon.length
           ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
           : null,
       }
     })
 
-  const roads = collection.features
-    .filter(feature => feature.properties.featureType === 'road')
+  const roads = features
+    .filter(feature => featureType(feature) === 'road' && feature.geometry?.type === 'LineString')
     .map(feature => ({
       id: feature.id,
       name: feature.properties.name,
-      confidence: feature.properties.confidence,
+      confidence: confidenceOf(feature),
       points: feature.geometry.coordinates,
-      width: feature.properties.width,
+      width: Number(feature.properties.width) > 0 ? Number(feature.properties.width) : 12,
     }))
 
-  const buildings = collection.features
-    .filter(feature => feature.properties.featureType === 'building')
+  const buildings = features
+    .filter(feature => featureType(feature) === 'building' && feature.geometry?.type === 'Polygon')
     .map(feature => ({
       id: feature.id,
       label: feature.properties.name,
-      confidence: feature.properties.confidence,
+      confidence: confidenceOf(feature),
       polygon: openRing(feature.geometry.coordinates[0]),
+      floors: feature.properties.floors,
+      height: feature.properties.height,
+      template: feature.properties.template,
+      source: feature.properties.source,
+      qualityStatus: feature.properties.qualityStatus,
     }))
 
-  return { boundary, gates, areas, roads, buildings, pois, roadGraph: buildCampusRoadGraph(
-      collection.features.filter(feature => feature.properties.featureType === 'road'),
-      collection.features.filter(feature => feature.properties.featureType === 'gate'),
+  const objects = features
+    .filter(feature => feature.geometry?.type === 'Point' && !['gate', 'poi'].includes(featureType(feature)))
+    .map(feature => ({
+      id: feature.id,
+      type: feature.properties.objectType || featureType(feature) || 'facility',
+      name: feature.properties.name,
+      position: feature.geometry.coordinates,
+      rotation: Number(feature.properties.rotation) || 0,
+      scale: Number(feature.properties.scale) > 0 ? Number(feature.properties.scale) : 1,
+      properties: { ...feature.properties },
+      source: feature.properties.source,
+      qualityStatus: feature.properties.qualityStatus,
+    }))
+
+  return {
+    boundary, gates, areas, roads, buildings, objects, pois,
+    roadGraph: buildCampusRoadGraph(
+      features.filter(feature => featureType(feature) === 'road'),
+      features.filter(feature => featureType(feature) === 'gate'),
     ),
-    siteAreas }
+    siteAreas,
+  }
 }
 
 

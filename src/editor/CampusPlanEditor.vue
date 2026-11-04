@@ -736,7 +736,7 @@ function finishBoxSelection() {
 function startBuildingDrag(event, item) { beginFeatureDrag(event, 'building', item) }
 function startAreaDrag(event, area) { beginFeatureDrag(event, 'area', area) }
 function startObjectDrag(event, item) {
-  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('area')) return
+  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('object')) return
   event.stopPropagation(); selected.value = { type: 'object', id: item.id }; snapshot()
   drag.value = { type: 'object', id: item.id, start: point(event), position: [...item.geometry.coordinates] }
   event.currentTarget.setPointerCapture?.(event.pointerId)

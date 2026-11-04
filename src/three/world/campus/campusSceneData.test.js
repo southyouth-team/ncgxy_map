@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createCampusSceneRenderData } from './campusSceneData.js'
+import { buildCampusGeoJSON } from '../../../data/campus/campusGeoJSON.js'
+import { createCampusSceneRenderData, validateCampusSceneRenderData } from './campusSceneData.js'
 
 describe('campus scene shared render adapter', () => {
   it('derives homepage and editor preview inputs from the same FeatureCollection', () => {
@@ -29,5 +30,31 @@ describe('campus scene shared render adapter', () => {
     expect(result.previewDocument.areas[0].source).toBe('campus-plan-reference')
     expect(result.previewDocument.objects[0].geometry.coordinates).toEqual(result.layers.objects[0].position)
     expect(result.previewDocument.objects[0].properties.rotation).toBe(30)
+  })
+
+  it('passes the automated source -> layer -> preview consistency audit for the full campus dataset', () => {
+    const collection = buildCampusGeoJSON()
+    const result = createCampusSceneRenderData(collection)
+    const report = validateCampusSceneRenderData(collection, result)
+
+    expect(report.valid).toBe(true)
+    expect(report.errorCount).toBe(0)
+    expect(report.summary.checkedCount).toBeGreaterThan(0)
+    expect(report.summary.buildings).toBe(collection.features.filter(feature => feature.properties.featureType === 'building').length)
+    expect(report.summary.roads).toBe(collection.features.filter(feature => feature.properties.featureType === 'road').length)
+  })
+
+  it('detects missing features, geometry drift and walkability divergence in a render projection', () => {
+    const collection = buildCampusGeoJSON()
+    const result = createCampusSceneRenderData(collection)
+    result.layers.objects.pop()
+    result.previewDocument.buildings[0].footprint[0][0] += 1
+    result.previewDocument.roads[0].walkable = !result.previewDocument.roads[0].walkable
+
+    const report = validateCampusSceneRenderData(collection, result)
+    expect(report.valid).toBe(false)
+    expect(report.errors.map(error => error.code)).toContain('MISSING_FEATURE')
+    expect(report.errors.map(error => error.code)).toContain('PREVIEW_GEOMETRY_MISMATCH')
+    expect(report.errors.map(error => error.code)).toContain('WALKABILITY_MISMATCH')
   })
 })

@@ -69,9 +69,8 @@ button { font: inherit; }
 .topbar-status { font: 10px 'DM Mono', monospace; letter-spacing: 1.2px; color: rgba(239,236,222,.78); }
 .status-dot, .coordinate-dot { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: #b9c99c; box-shadow: 0 0 12px #b9c99c; vertical-align: 1px; }
 .intro-card { position: absolute; z-index: 2; left: 5.1%; top: 27%; width: 270px; pointer-events: none; }
-/* 上帝视角以地图浏览为主，隐藏大标题与说明面板，避免遮挡校园主体。 */
+/* 总览模式隐藏装饰性标题，但保留操作指南，确保交互说明可见。 */
 .app-shell.is-overview .intro-card,
-.app-shell.is-overview .control-card,
 .app-shell.is-rpg-sample .intro-card { display: none; }
 
 .eyebrow { color: #d7bd82; font: 10px 'DM Mono', monospace; letter-spacing: 2px; }
@@ -107,7 +106,7 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 .first-person-hint { position: absolute; z-index: 2; left: 50%; bottom: 130px; transform: translateX(-50%); padding: 8px 13px; color: rgba(255,255,255,.72); background: rgba(10,20,22,.6); font-size: 10px; pointer-events: none; }
 @media (max-width: 760px) {
   .topbar { height: 68px; padding: 0 18px; }
-  .brand-subtitle, .topbar-status, .intro-card, .control-card { display: none; }
+  .brand-subtitle, .topbar-status, .intro-card { display: none; }
   .mode-switcher { bottom: 42px; width: calc(100% - 24px); justify-content: center; }
   .mode-button { min-width: 0; flex: 1; padding: 10px 7px; text-align: center; }
   .mode-label { font-size: 11px; }
@@ -304,3 +303,22 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 
 /* 建筑占地扩建工具 */
 .indoor-footprint-tools{margin:8px 0;padding:10px;background:#f2f5f0;border:1px solid #dce4dc;border-radius:5px}.indoor-footprint-tools strong{display:block;font-size:12px;color:#405548}.indoor-footprint-tools small{display:block;margin-top:5px;font-size:10px;color:#748176}.indoor-expansion-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.indoor-expansion-buttons button{padding:6px 9px;border:1px solid #cbd7cc;border-radius:4px;background:#fff;color:#42604b;font-size:11px;cursor:pointer}
+
+
+/* 总览操作指南在桌面端与触屏端均保持可见。 */
+@media (pointer: coarse), (max-width: 760px) {
+  .app-shell.is-overview .control-card {
+    display: block;
+    top: 58px;
+    right: 10px;
+    width: min(270px, calc(100vw - 20px));
+    max-height: calc(100dvh - 142px);
+    overflow-y: auto;
+    padding: 11px 12px;
+    background: rgba(14,25,29,.9);
+  }
+  .app-shell.is-overview .control-heading { margin-bottom: 8px; }
+  .app-shell.is-overview .control-row { gap: 7px; margin: 7px 0; font-size: 9px; }
+  .app-shell.is-overview kbd { min-width: 0; font-size: 8px; }
+  .app-shell.is-overview .control-foot { margin-top: 8px; padding-top: 7px; }
+}

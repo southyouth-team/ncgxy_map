@@ -120,7 +120,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
     campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE)
     scene.add(campus)
-    cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample) })
+    cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     const playerSprite = campus.getObjectByName('PixelExplorerSprite')
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
@@ -1591,6 +1591,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     input?.setMode(mode)
   }
 
+  function setViewMode(mode) {
+    cameraRig?.setViewMode(mode)
+  }
+
   function focusCampus() {
     cameraRig?.focusCampus()
     const spawn = isRpgSample ? campus?.userData.playerSpawn : mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
@@ -1620,5 +1624,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, focusCampus, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

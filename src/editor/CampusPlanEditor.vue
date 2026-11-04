@@ -620,11 +620,7 @@ function restore(raw) {
     areas.value = document.areas
     objects.value = document.objects
     // 历史快照携带完整规范集合；直接恢复可保留当前兼容视图尚不支持的 Feature 类型。
-    spatialFeatureCollection.value = {
-      ...state.featureCollection,
-      features: [...(state.featureCollection?.features || [])],
-      deletedFeatureIds: [...(state.featureCollection?.deletedFeatureIds || [])],
-    }
+    spatialFeatureCollection.value = document.featureCollection
     deletedFeatureIds.value = spatialFeatureCollection.value.deletedFeatureIds
     return
   }

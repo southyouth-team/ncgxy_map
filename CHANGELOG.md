@@ -1,3 +1,11 @@
+## 2026-11-05 — 修复撤销/重做后建筑渲染异常
+
+- 历史快照从规范 FeatureCollection 投影回旧版编辑器建筑数组时，原适配器未重建 `rect` 边界字段；画布标签渲染读取 `rect[0]` 时触发运行时异常。
+- `fromCampusFeatureCollection` 现在根据 Polygon 外环计算并补齐兼容 `rect`，保证撤销/重做恢复的数据满足现有编辑器视图契约。
+- 编辑器历史恢复入口额外执行 `normalizeBuilding`，作为旧文档和历史快照的防御性归一化。
+- 增加回归测试，覆盖 FeatureCollection → undo snapshot → restore 后建筑 `rect` 与 footprint 的一致性。
+- 本次不改变规范 GeoJSON geometry、Feature properties、metadata、tombstone 或服务端保存协议。
+
 ## 2026-11-05 — 修复 2D 编辑器刷新时空间对象闪现
 
 - 编辑器原先在服务端文档 GET 完成前就渲染本地基础建筑、道路和区域；随后再替换为基础数据与服务端 FeatureCollection 合并结果，刷新时会出现首屏闪现/消失。

@@ -8,7 +8,7 @@
 const ASSET_ROOTS = ['/assets/campus/', '/models/buildings/', '/api/v1/assets/visual-assets/'];
 const VIEW_MODES = ['2.5d', '3d', 'shared'];
 const SOURCES = ['ai_generated', 'manual_model', 'procedural', 'external'];
-const STATUSES = ['draft', 'review', 'ready', 'archived'];
+const STATUSES = ['draft', 'review', 'ready', 'rejected', 'archived'];
 const CATEGORIES = ['building', 'vegetation', 'facility', 'road', 'area', 'character', 'decoration', 'other'];
 const MEDIA_TYPES = ['image', 'spritesheet', 'texture', 'glb'];
 const FILE_ROLES = ['primary', 'thumbnail', 'albedo', 'normal', 'roughness', 'emissive'];

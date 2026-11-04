@@ -502,3 +502,13 @@
 - `campus_plan_document.schema_version` 现在存储实际文档版本，不再固定写入 2。
 - 新增 PostGIS API 集成测试：v4 FeatureCollection 保存/回读、未知 Feature 与扩展属性保留、tombstone 保留、重复 ID 拒绝、版本冲突，以及旧 v2 文档兼容。
 - 最新提交 `b315858` 的 Frontend CI 与 Backend CI 均 completed success；浏览器端真实自动保存和刷新验收仍未完成。
+
+
+## 2026-11-04 — 核对 FeatureCollection 读取与首页消费链路
+
+- 核对 `GET scene/plan`：服务端直接读取并返回 JSONB document，不经 legacy 数组白名单转换。
+- 核对编辑器加载：优先读取服务端规范 FeatureCollection，与基础校园集合按稳定 ID 合并，tombstone 参与最终过滤。
+- 核对首页加载：读取同一 `scene/plan` 文档，合并后将规范 FeatureCollection 传入 Three.js 主场景。
+- 核对 2.5D 主场景和编辑器 3D 预览：均通过 `createCampusSceneRenderData` / `getCampusSpatialLayers` 派生可渲染图层；未识别 Feature 暂不渲染，但不会因图层适配而从原集合删除。
+- 最新源码提交 `b315858` 的 Frontend CI 与 Backend CI 均成功；本次仅补充架构核对记录。
+- 尚未完成真实浏览器自动保存、刷新回读和首页/编辑器预览一致性验收；legacy 数组仍保留为交互兼容投影。

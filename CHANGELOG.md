@@ -1,3 +1,11 @@
+## 2026-11-05 — Three.js 场景装配覆盖审计
+
+- 场景构建时为建筑、道路分段、水域/场地区域网格和点设施写入稳定 Feature ID 与分类元数据。
+- 新增 `auditCampusSceneFeatureCoverage`，在正式校园场景初始化后遍历 Three.js 场景树，检查每个规范空间 Feature 是否实际生成可渲染节点，并检测意外节点、缺失几何/材质及重复源 ID。
+- 场景异常通过 `onSceneAudit` 回调暴露；异常时输出 `[CampusSceneAudit]` 警告。附加 `?render-debug=1` 时，审计通过也输出分类统计。
+- 新增运行时场景审计单元测试，覆盖完整装配、缺失节点、非可渲染节点、意外节点和缺失资源。
+- 当前检查验证的是程序化校园场景树的 Feature 覆盖与 Mesh 资源完整性；异步 GLB 模型加载结果、建筑高度偏差、材质贴图内容和实际 GPU 视觉效果仍需单独检查，不能将本审计误报为完整渲染验收。
+
 ## 2026-11-05 — 增加 2.5D / 3D 共享空间数据一致性自动审计
 
 - 在共享场景数据适配层增加 `validateCampusSceneRenderData`，按稳定 Feature ID 对比源 FeatureCollection、渲染归一化图层和编辑器预览投影。

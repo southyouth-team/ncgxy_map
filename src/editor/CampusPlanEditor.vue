@@ -92,6 +92,8 @@ async function loadEditorDocument() {
       ? `已加载服务端版本 · ${documentRevision.value}`
       : '当前地图尚无服务端编辑文档，修改后将自动保存')
   } catch (error) {
+    documentLoaded.value = false
+    persistenceState.value = 'error'
     persistenceMessage.value = `读取已保存编辑文档失败：${error.message}`
   }
 }

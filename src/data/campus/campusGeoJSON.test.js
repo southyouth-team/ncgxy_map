@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CAMPUS_AREAS, CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_ROAD_CENTERLINES } from './campusLayout.js'
 import { buildCampusGeoJSON, getCampusSpatialLayers, validateCampusGeoJSON, CAMPUS_SPATIAL_DATASET } from './campusGeoJSON.js'
 import { CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_BUILDING_METADATA, buildCampusRoadGraph } from './campusInventory.js'
+import { toCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
 
 describe('统一校园空间数据出口', () => {
   it('明确使用同一套参考图像像素坐标，不伪装成测绘坐标', () => {
@@ -52,6 +53,22 @@ describe('统一校园空间数据出口', () => {
     expect(layers.buildings).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
     expect(layers.roads[0].points).toEqual(collection.features.find(feature => feature.id === layers.roads[0].id).geometry.coordinates)
     expect(layers.buildings[0].polygon[0]).toEqual(collection.features.find(feature => feature.id === layers.buildings[0].id).geometry.coordinates[0][0])
+  })
+
+
+
+  it('将编辑器保存的 FeatureCollection 直接归一化为校园渲染图层', () => {
+    const edited = toCampusFeatureCollection({
+      buildings: [{ id: 'edit-building', label: '新教学楼', footprint: [[10, 10], [30, 10], [30, 25]], floors: 6, confidence: 'medium' }],
+      roads: [{ id: 'edit-road', name: '新支路', points: [[0, 20], [20, 30]], width: 9, confidence: 'high' }],
+      areas: [{ id: 'edit-water', name: '景观水池', type: 'water', footprint: [[40, 40], [60, 40], [60, 60]], confidence: 'medium' }],
+      objects: [{ id: 'edit-tree', type: 'tree', name: '香樟树', geometry: { type: 'Point', coordinates: [70, 80] }, properties: { rotation: 45, scale: 1.4 } }],
+    })
+    const layers = getCampusSpatialLayers(edited)
+    expect(layers.buildings[0]).toMatchObject({ id: 'edit-building', label: '新教学楼', floors: 6 })
+    expect(layers.roads[0]).toMatchObject({ id: 'edit-road', name: '新支路', width: 9 })
+    expect(layers.areas[0]).toMatchObject({ id: 'edit-water', name: '景观水池', type: 'water' })
+    expect(layers.objects[0]).toMatchObject({ id: 'edit-tree', type: 'tree', position: [70, 80], rotation: 45, scale: 1.4 })
   })
 
 

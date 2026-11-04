@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuilding, roadToPolygon, roadNetworkToMultiPolygon, calculateWorkspaceBounds } from './campusEditorDocument.js'
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, mergeCampusFeatureCollections, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
@@ -50,18 +50,25 @@ async function loadEditorDocument() {
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
       deletedFeatureIds.value = [...new Set([...(document.featureCollection?.deletedFeatureIds || []), ...(document.deletedFeatureIds || [])].map(String))]
-      const normalized = document.featureCollection?.type === 'FeatureCollection'
-        ? fromCampusFeatureCollection(document.featureCollection)
-        : document
-      const deletedIds = deletedFeatureIds.value
-      if (Array.isArray(normalized.buildings)) buildings.value = mergeEditorLayer(BASE_CAMPUS_BUILDINGS, normalized.buildings.map(normalizeBuilding), deletedIds)
-      if (Array.isArray(normalized.areas)) areas.value = mergeEditorLayer(BASE_CAMPUS_AREAS, normalized.areas.map(area => ({ ...area, footprint: area.polygon || area.footprint || [] })), deletedIds)
-      if (Array.isArray(normalized.roads)) roads.value = mergeEditorLayer(BASE_CAMPUS_ROADS, normalized.roads, deletedIds)
-      if (Array.isArray(normalized.objects)) {
-        const validObjects = normalized.objects.filter(item => item?.geometry?.type === 'Point' && Array.isArray(item.geometry.coordinates))
-        objects.value = mergeEditorLayer(BASE_CAMPUS_OBJECTS, validObjects, deletedIds)
-      }
-      spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedIds })
+      const baseCollection = toCampusFeatureCollection({
+        buildings: BASE_CAMPUS_BUILDINGS,
+        roads: BASE_CAMPUS_ROADS,
+        areas: BASE_CAMPUS_AREAS,
+        objects: BASE_CAMPUS_OBJECTS,
+      })
+      const savedCollection = document.featureCollection?.type === 'FeatureCollection'
+        ? document.featureCollection
+        : toCampusFeatureCollection(document)
+      spatialFeatureCollection.value = mergeCampusFeatureCollections(baseCollection, {
+        ...savedCollection,
+        deletedFeatureIds: deletedFeatureIds.value,
+      })
+      deletedFeatureIds.value = spatialFeatureCollection.value.deletedFeatureIds
+      const normalized = fromCampusFeatureCollection(spatialFeatureCollection.value)
+      buildings.value = normalized.buildings.map(normalizeBuilding)
+      areas.value = normalized.areas
+      roads.value = normalized.roads
+      objects.value = normalized.objects
       if (document.calibration?.controlPoints) calibrationPoints.value = document.calibration.controlPoints
       if (document.referenceImage) {
         referenceImage.value = document.referenceImage

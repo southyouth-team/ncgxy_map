@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildCampusGeoJSON } from '../../../data/campus/campusGeoJSON.js'
-import { createCampusSceneRenderData, validateCampusSceneRenderData, auditCampusSceneFeatureCoverage } from './campusSceneData.js'
+import { createCampusSceneRenderData, validateCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels } from './campusSceneData.js'
 
 describe('campus scene shared render adapter', () => {
   it('derives homepage and editor preview inputs from the same FeatureCollection', () => {
@@ -110,5 +110,57 @@ describe('campus Three.js scene coverage audit', () => {
     }
     const report = auditCampusSceneFeatureCoverage(layers, scene)
     expect(report.errors.map(error => error.code)).toContain('SCENE_FEATURE_MATERIAL_MISSING')
+  })
+})
+
+
+describe('campus GLB building asset audit', () => {
+  function createModel(buildingId) {
+    const mesh = {
+      isMesh: true,
+      geometry: {
+        boundingBox: { min: { x: 0, y: 0, z: 0 }, max: { x: 8, y: 12, z: 6 } },
+        attributes: { position: { count: 36 } },
+      },
+      material: {},
+    }
+    return {
+      name: buildingId,
+      userData: { buildingId },
+      traverse(callback) { callback(this); callback(mesh) },
+    }
+  }
+
+  it('accepts GLB models with known IDs, geometry and material', () => {
+    const report = validateCampusBuildingModels([createModel('building-1')], ['building-1'])
+    expect(report.valid).toBe(true)
+    expect(report.summary.modelCount).toBe(1)
+    expect(report.summary.meshCount).toBe(1)
+    expect(report.summary.triangleCount).toBe(12)
+  })
+
+  it('detects unknown and duplicate building models', () => {
+    const report = validateCampusBuildingModels(
+      [createModel('unknown'), createModel('unknown')],
+      ['building-1'],
+    )
+    expect(report.errors.map(error => error.code)).toContain('GLB_BUILDING_ID_UNKNOWN')
+    expect(report.errors.map(error => error.code)).toContain('GLB_BUILDING_ID_DUPLICATE')
+  })
+
+  it('detects empty models and missing mesh resources', () => {
+    const empty = { name: 'empty', userData: { buildingId: 'empty' }, traverse(callback) { callback(this) } }
+    const broken = {
+      name: 'broken',
+      userData: { buildingId: 'broken' },
+      traverse(callback) {
+        callback(this)
+        callback({ isMesh: true, geometry: null, material: null })
+      },
+    }
+    const report = validateCampusBuildingModels([empty, broken], ['empty', 'broken'])
+    expect(report.errors.map(error => error.code)).toContain('GLB_MESH_MISSING')
+    expect(report.errors.map(error => error.code)).toContain('GLB_MESH_RESOURCE_MISSING')
+    expect(report.errors.map(error => error.code)).toContain('GLB_BOUNDS_INVALID')
   })
 })

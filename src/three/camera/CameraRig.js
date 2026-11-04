@@ -141,8 +141,7 @@ export class CameraRig {
 
   rotateThird(dx, dy) {
     this.thirdYaw -= dx * 0.004
-    this.thirdPitch = this.isometricRpg
-      Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
+    this.thirdPitch = Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
 

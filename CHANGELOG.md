@@ -1,3 +1,9 @@
+## 2026-11-05 — 修复 NestJS body parser 注册的 TypeScript 编译错误
+
+- `INestApplication` 不提供 `useBodyParser()` 方法；此前关闭默认 parser 后调用该方法会触发 TS2339。
+- 改为从 Express 导入 `json` / `urlencoded` 中间件，并通过 `app.use()` 显式注册；JSON 请求体上限仍为 16 MiB，URL-encoded 请求体上限仍为 1 MiB。
+- 不改变 15 MiB 空间文档业务校验、GeoJSON 校验及 revision 乐观锁；需通过 Backend CI 和本地构建确认。
+
 ## 2026-11-05 — 修复平面地图保存请求体超限
 
 - 浏览器联调日志确认，Express 默认 JSON body-parser 上限为 100 KiB；实际平面编辑文档请求体为 187,529 字节（约 183.1 KiB），在进入 ScenesController/ScenesService 前即触发 PayloadTooLargeError。

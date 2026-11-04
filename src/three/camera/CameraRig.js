@@ -21,10 +21,11 @@ export class CameraRig {
     this.desiredTarget = this.target.clone()
     this.mode = 'overview'
     this.thirdYaw = 0.35
-    // 2.5D 跟随采用宝可梦式斜俯视：约 50° 向下观察，并留出足够环境视野。
-    // 3D 跟随仍使用较低的肩后视角，避免影响透视模式的空间感。
-    this.thirdPitch = this.viewMode === '2.5d' ? 0.88 : 0.32
-    this.thirdDistance = this.viewMode === '2.5d' ? 18 : 15
+    // 宝可梦式 2.5D：固定世界方位的高位斜俯视，镜头只跟随玩家位置，不绕到玩家背后。
+    // thirdPitch 为相对水平面的仰角；1.08 rad 约等于 62° 向下观察。
+    this.thirdPitch = this.viewMode === '2.5d' ? 1.08 : 0.32
+    this.thirdDistance = this.viewMode === '2.5d' ? 34 : 15
+    this.fixed2dYaw = 0
     this.firstYaw = 0
     this.firstPitch = -0.12
     this.player = new THREE.Vector3(0, 1.7, 24)
@@ -100,15 +101,21 @@ export class CameraRig {
       }
       if (mode === 'thirdPerson') {
         if (this.viewMode === '2.5d') {
-          this.thirdPitch = 0.88
-          this.thirdDistance = 18
+          this.thirdPitch = 1.08
+          this.thirdDistance = 34
+          this.thirdYaw = this.fixed2dYaw
         } else {
           this.thirdPitch = 0.32
           this.thirdDistance = 15
         }
       }
       if (mode === 'thirdPerson') {
-        this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
+        if (this.viewMode === '2.5d') {
+          // 固定地图方位，不根据切换前相机位置计算人物背后方向。
+          this.thirdYaw = this.fixed2dYaw
+        } else {
+          this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
+        }
         this.updateThirdPersonDesired()
       } else {
         if (previousMode === 'thirdPerson') {
@@ -177,8 +184,9 @@ export class CameraRig {
       targetCamera.position.copy(previousPosition)
       targetCamera.quaternion.copy(previousQuaternion)
       if (this.mode === 'thirdPerson') {
-        this.thirdPitch = viewMode === '2.5d' ? 0.88 : 0.32
-        this.thirdDistance = viewMode === '2.5d' ? 18 : 15
+        this.thirdPitch = viewMode === '2.5d' ? 1.08 : 0.32
+        this.thirdDistance = viewMode === '2.5d' ? 34 : 15
+        if (viewMode === '2.5d') this.thirdYaw = this.fixed2dYaw
       }
     }
 
@@ -209,9 +217,9 @@ export class CameraRig {
     )
     this.desiredTarget.set(this.player.x, this.player.y + 0.7, this.player.z)
     if (this.viewMode === '2.5d' && this.camera === this.overviewCamera) {
-      // 正交相机通过 zoom 控制视野：距离 18 时约能看到 81 个世界单位的纵向环境，
-      // 同时保留角色辨识度；滚轮缩放仍通过 thirdDistance 连续联动。
-      this.overviewCamera.zoom = Math.max(1.5, Math.min(2.65, 42.3 / this.thirdDistance))
+      // 固定斜俯视使用正交投影，默认纵向视野约 48 个世界单位，接近经典宝可梦地图的取景密度。
+      // 镜头空间距离与地图缩放解耦，避免改变俯仰角时人物比例忽大忽小。
+      this.overviewCamera.zoom = Math.max(2.2, Math.min(5.2, 190 / 48 / (this.thirdDistance / 34)))
       this.overviewCamera.updateProjectionMatrix()
     }
   }
@@ -227,10 +235,10 @@ export class CameraRig {
   }
 
   rotateThird(dx, dy) {
-    this.thirdYaw -= dx * 0.004
     const is2dFollow = this.viewMode === '2.5d'
-    const minPitch = is2dFollow ? 0.62 : -0.05
-    const maxPitch = is2dFollow ? 1.12 : 0.85
+    if (!is2dFollow) this.thirdYaw -= dx * 0.004
+    const minPitch = is2dFollow ? 0.98 : -0.05
+    const maxPitch = is2dFollow ? 1.18 : 0.85
     this.thirdPitch = Math.max(minPitch, Math.min(maxPitch, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
@@ -242,7 +250,7 @@ export class CameraRig {
   }
 
   zoomThird(delta) {
-    this.thirdDistance = Math.max(6, Math.min(32, this.thirdDistance + delta * 0.012))
+    this.thirdDistance = Math.max(this.viewMode === '2.5d' ? 24 : 6, Math.min(this.viewMode === '2.5d' ? 46 : 32, this.thirdDistance + delta * 0.012))
     this.updateThirdPersonDesired()
   }
 
@@ -342,8 +350,9 @@ export class CameraRig {
     this.applyIsometricOrientation()
     this.player.set(0, 1.7, this.isometricRpg ? 14 : 24)
     if (this.viewMode === '2.5d') {
-      this.thirdPitch = 0.88
-      this.thirdDistance = 18
+      this.thirdPitch = 1.08
+      this.thirdDistance = 34
+      this.thirdYaw = this.fixed2dYaw
     }
   }
 

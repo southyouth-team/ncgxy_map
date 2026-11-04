@@ -532,7 +532,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: !requestedBuildingId, featureCollection: campusFeatureCollection })
+    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: Boolean(requestedBuildingId), featureCollection: campusFeatureCollection })
     await engine.init()
     if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {

@@ -157,7 +157,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
     const spawn = campus.userData.playerSpawn || fallbackSpawn
     cameraRig.player.set(playerSpriteObject?.position.x ?? spawn.x, 1.7, playerSpriteObject?.position.z ?? spawn.z)
-    if (isRpgSample && !options.deferInitialFocus) cameraRig.focusBounds(campus.userData.sampleBounds.width, campus.userData.sampleBounds.depth)
+    if (isRpgSample && !options.deferInitialFocus && campus.userData.sampleBounds) {
+      cameraRig.resize(Math.max(0.1, container.clientWidth / Math.max(container.clientHeight, 1)))
+      cameraRig.focusBounds(campus.userData.sampleBounds.width, campus.userData.sampleBounds.depth)
+    } else if (!isRpgSample && !options.deferInitialFocus && campus.userData.contentBounds) {
+      const bounds = campus.userData.contentBounds
+      // 首页首次进入按真实校园内容包络居中并适配当前视口；不影响后续用户手动操作。
+      cameraRig.resize(Math.max(0.1, container.clientWidth / Math.max(container.clientHeight, 1)))
+      cameraRig.focusBounds(bounds.width, bounds.depth, bounds.centerX, bounds.centerZ, { immediate: true })
+    }
     // 从像素地图进入建筑时，先将室外角色恢复到离开前的地图坐标；
     // enterIndoorPrototype 会快照该位置，退出室内后即可回到原地。
     if (Number.isFinite(options.initialPlayerPosition?.x) && Number.isFinite(options.initialPlayerPosition?.z)) {

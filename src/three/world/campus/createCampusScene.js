@@ -410,6 +410,17 @@ export function createCampusScene(THREE, featureCollection = null) {
   ))
   const contentMargin = Math.max(2.5, maxRoadHalfWidth + 1.25)
   if (Number.isFinite(contentBounds.minX) && Number.isFinite(contentBounds.minZ)) {
+    // 首屏构图与漫游边界使用同一份实际内容包络；相机聚焦不应把底图原点误当成校园中心。
+    root.userData.contentBounds = {
+      minX: contentBounds.minX,
+      maxX: contentBounds.maxX,
+      minZ: contentBounds.minZ,
+      maxZ: contentBounds.maxZ,
+      centerX: (contentBounds.minX + contentBounds.maxX) / 2,
+      centerZ: (contentBounds.minZ + contentBounds.maxZ) / 2,
+      width: contentBounds.maxX - contentBounds.minX,
+      depth: contentBounds.maxZ - contentBounds.minZ,
+    }
     root.userData.walkableBounds = {
       minX: contentBounds.minX - contentMargin,
       maxX: contentBounds.maxX + contentMargin,

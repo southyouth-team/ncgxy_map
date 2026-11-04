@@ -7,7 +7,8 @@ import BuildingFootprintEditor from './components/BuildingFootprintEditor.vue'
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
 import { CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_PLAN_REFERENCE, mapPixelToWorld } from './data/campus/campusLayout.js'
-import { getCampusSpatialLayers } from './data/campus/campusGeoJSON.js'
+import { buildCampusGeoJSON, getCampusSpatialLayers } from './data/campus/campusGeoJSON.js'
+import { toCampusFeatureCollection } from './editor/campusFeatureCollection.js'
 import { expandIndoorBuilding } from './three/indoor/indoorBuildingDefinitions.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
@@ -477,6 +478,15 @@ onMounted(async () => {
   try {
     // 校园探索与编辑器预览共用同一套校园空间数据；首页默认直接启动 2.5D 主场景。
     if (!requestedBuildingId) await loadHomepagePlanDocument()
+    const planDocument = requestedBuildingId ? null : getShowcasePlanDocument()
+    const editorCollection = planDocument?.featureCollection?.type === 'FeatureCollection'
+      ? planDocument.featureCollection
+      : toCampusFeatureCollection(planDocument || {})
+    // 边界与出入口由校园基础数据维护；可编辑对象以编辑器 FeatureCollection 为准。
+    const structuralFeatures = buildCampusGeoJSON().features.filter(feature => ['boundary', 'gate'].includes(feature.properties.featureType))
+    const featureById = new Map(structuralFeatures.map(feature => [String(feature.id), feature]))
+    for (const feature of editorCollection.features || []) featureById.set(String(feature.id), feature)
+    const campusFeatureCollection = { type: 'FeatureCollection', features: [...featureById.values()] }
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },
@@ -508,13 +518,8 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: !requestedBuildingId })
+    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: !requestedBuildingId, featureCollection: campusFeatureCollection })
     await engine.init()
-    if (!requestedBuildingId) {
-      const planDocument = getShowcasePlanDocument()
-      const applied = engine.previewCampusPlan(planDocument)
-      if (!applied) console.warn('[CampusPlan] 2.5D 预览未能应用平面地图文档')
-    }
     if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {
     errorMessage.value = error?.message || '三维场景初始化失败'

@@ -12,6 +12,30 @@ import { CAMPUS_BOUNDARY, CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_B
  * 坐标保持在校园参考平面图的图像像素系；所有展示端应消费此数据，
  * 不得在 2D / 2.5D / 3D 中重复维护位置。当前数据仍是人工近似数字化。
  */
+
+// 当前程序化环境资产的既有坐标迁移为 Feature，后续可由编辑器逐个校准与替换。
+const CAMPUS_DECORATION_OBJECTS = [
+  ...[
+    [176,82,0.9],[205,52,0.82],[244,75,0.88],[286,105,0.82],[285,145,0.9],
+    [285,180,0.82],[292,210,0.9],[286,250,0.82],[282,290,0.9],[285,340,0.82],
+    [175,300,0.88],[190,330,0.82],[220,355,0.9],[245,390,0.82],[275,425,0.9],
+    [445,118,0.82],[470,92,0.9],[520,82,0.82],[575,92,0.9],[620,125,0.82],
+    [650,170,0.9],[660,225,0.82],[645,285,0.9],[610,330,0.82],[565,355,0.9],
+    [510,360,0.82],[465,335,0.9],[435,290,0.82],[420,235,0.9],[425,180,0.82],
+    [650,155,0.9],[700,155,0.82],[755,160,0.9],[800,165,0.82],
+    [810,300,0.9],[790,330,0.82],[760,335,0.9],[720,330,0.82],
+    [500,445,0.9],[550,440,0.82],[610,440,0.9],[670,440,0.82],[730,440,0.9],
+    [785,430,0.82],[330,160,0.9],[300,185,0.82],[300,310,0.9],[320,340,0.82],
+    [380,340,0.9],[400,365,0.82],[365,430,0.9],[320,440,0.82],
+  ].map(([x,y,scale], index) => ({ id: 'campus-tree-' + String(index + 1).padStart(3,'0'), type: 'tree', x, y, scale, source: 'legacy-scene-decoration' })),
+  ...[[295,160],[310,190],[300,270],[300,370],[350,155],[405,160],[445,350],[470,365],[525,365],[585,350],[640,330],[655,160],[690,160],[745,165],[800,165],[810,330],[770,340],[725,340],[520,445],[600,445],[680,445],[745,445],[240,435],[190,420]]
+    .map(([x,y], index) => ({ id: 'campus-flower-' + String(index + 1).padStart(3,'0'), type: 'flower', x, y, scale: 1, source: 'legacy-scene-decoration' })),
+  ...[[300,175],[420,350],[185,330],[545,365],[650,345],[740,340],[250,420],[690,445]]
+    .map(([x,y], index) => ({ id: 'campus-bench-' + String(index + 1).padStart(3,'0'), type: 'bench', x, y, scale: 1, source: 'legacy-scene-decoration' })),
+  ...[[295,175],[405,165],[445,350],[640,345],[700,335],[785,315],[520,445],[610,445],[730,435],[185,330],[245,415],[800,175]]
+    .map(([x,y], index) => ({ id: 'campus-lamp-' + String(index + 1).padStart(3,'0'), type: 'streetlight', x, y, scale: 1, source: 'legacy-scene-decoration' })),
+]
+
 export const CAMPUS_SPATIAL_DATASET = Object.freeze({
   id: 'ncgxy-main-campus',
   version: 2,
@@ -144,6 +168,25 @@ export function buildCampusGeoJSON() {
         buildingNumber: CAMPUS_BUILDING_METADATA[building.id]?.buildingNumber ?? null,
       },
       geometry: { type: 'Polygon', coordinates: [ring] },
+    })
+  }
+
+  for (const object of CAMPUS_DECORATION_OBJECTS) {
+    features.push({
+      type: 'Feature',
+      id: object.id,
+      properties: {
+        id: object.id,
+        name: object.type === 'tree' ? '校园绿化树木' : object.type === 'flower' ? '景观花卉' : object.type === 'bench' ? '公共座椅' : '校园路灯',
+        featureType: 'object',
+        objectType: object.type,
+        scale: object.scale,
+        confidence: 'low',
+        qualityStatus: 'unverified',
+        verificationStatus: 'unverified',
+        source: object.source,
+      },
+      geometry: { type: 'Point', coordinates: [object.x, object.y] },
     })
   }
 

@@ -235,7 +235,7 @@ async function saveDraft() {
       featureName: selectedFeature.value.name,
       category: 'building',
       sourceType: sourceType.value,
-      status: 'draft',
+      status: 'review',
       viewMode: viewMode.value,
       fileName: selectedFile.value.name,
       fileType: selectedFile.value.type || (viewMode.value === '3d' ? 'model/gltf-binary' : 'image/webp'),
@@ -250,7 +250,7 @@ async function saveDraft() {
     assets.value.unshift(record)
     persistAssets()
     activeAssetId.value = assetId
-    message.value = '候选素材已保存到当前浏览器的本地暂存库；尚未进入正式资产清单。'
+    message.value = '候选素材已保存，状态为待审核。审核通过后将自动上传服务器并登记正式资产清单。'
     resetPreview()
     selectedFile.value = null
   } catch (error) {
@@ -300,6 +300,47 @@ async function removeAsset(asset) {
   }
   persistAssets()
   message.value = '本地候选记录已删除'
+}
+
+
+async function approveAsset(asset) {
+  if (!asset || asset.status === 'ready' || saving.value) return
+  saving.value = true
+  fileError.value = ''
+  message.value = '正在上传素材并登记正式资产清单……'
+  try {
+    const blob = await readFile(asset.fileKey)
+    if (!blob) throw new Error('本地候选文件不存在，请重新生成或上传')
+    const form = new FormData()
+    form.append('file', blob, asset.fileName)
+    form.append('featureId', asset.featureId)
+    form.append('viewMode', asset.viewMode)
+    form.append('sourceType', asset.sourceType)
+    form.append('name', asset.name)
+    form.append('generationModel', asset.generationModel || '')
+    form.append('prompt', asset.prompt || '')
+    const response = await fetch(API_BASE + '/assets/visual-assets', {
+      method: 'POST',
+      headers: { 'X-Dev-User-Id': DEV_USER_ID },
+      body: form,
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || '正式入库失败：HTTP ' + response.status)
+    updateAsset({
+      status: 'ready',
+      deployedConfirmed: true,
+      remoteFileId: payload.fileId,
+      remoteUrl: payload.url,
+      assetId: payload.assetId || asset.assetId,
+      approvedAt: new Date().toISOString(),
+    })
+    message.value = '审核通过，素材已自动上传服务器并登记正式资产清单。'
+  } catch (error) {
+    fileError.value = error.message || '素材入库失败'
+    message.value = '入库失败，候选仍保留在本地待审核状态，可重试。'
+  } finally {
+    saving.value = false
+  }
 }
 
 function exportManifest() {
@@ -357,7 +398,7 @@ onBeforeUnmount(resetPreview)
       <div><strong>{{ assets.length }}</strong><span>本地候选</span></div>
       <div><strong>{{ readyCount }}</strong><span>已审核并确认入库</span></div>
       <div><strong>2.5D / 3D</strong><span>双视角资产</span></div>
-      <p>当前为浏览器本地暂存，不会自动上传服务器或修改正式校园场景。</p>
+      <p>候选先在浏览器暂存；审核通过后自动上传服务器并登记正式清单。</p>
     </section>
 
     <div class="workshop-grid">
@@ -409,7 +450,7 @@ onBeforeUnmount(resetPreview)
         <label class="upload-zone">
           <input type="file" :accept="viewMode === '3d' ? '.glb,model/gltf-binary' : 'image/png,image/webp,image/jpeg'" @change="onFileChange" />
           <strong>选择 AI 生成文件或建模文件</strong>
-          <span>{{ selectedFile ? selectedFile.name + ' · ' + Math.ceil(selectedFile.size / 1024) + ' KB' : '文件会暂存到当前浏览器 IndexedDB' }}</span>
+          <span>{{ selectedFile ? selectedFile.name + ' · ' + Math.ceil(selectedFile.size / 1024) + ' KB' : '文件先暂存到浏览器，审核通过后自动上传服务器' }}</span>
         </label>
         <div v-if="previewUrl" class="asset-preview">
           <img v-if="selectedFile?.type.startsWith('image/') || selectedAsset?.viewMode === '2.5d'" :src="previewUrl" alt="素材预览" />
@@ -424,7 +465,7 @@ onBeforeUnmount(resetPreview)
     </div>
 
     <section class="workshop-panel library-panel">
-      <div class="panel-heading"><span>03 / 候选审核</span><small>仅 ready 且确认文件已入库的素材可导出</small></div>
+      <div class="panel-heading"><span>03 / 候选审核</span><small>审核通过后自动上传并登记服务器资产清单</small></div>
       <div v-if="!assets.length" class="empty-state">还没有候选素材。先生成提示词，再上传第一份 AI 素材。</div>
       <div v-else class="asset-table">
         <button v-for="asset in assets" :key="asset.assetId" :class="['asset-row', { active: activeAssetId === asset.assetId }]" @click="selectAsset(asset)">
@@ -442,23 +483,23 @@ onBeforeUnmount(resetPreview)
           <label>正式文件路径<input :value="selectedAsset.publicPath" @input="updateAsset({ publicPath: $event.target.value, deployedConfirmed: false })" /></label>
           <label class="confirm-row"><input type="checkbox" :checked="selectedAsset.deployedConfirmed" @change="updateAsset({ deployedConfirmed: $event.target.checked, status: $event.target.checked ? 'ready' : 'review' })" />我已将对应文件放入项目 public 目录并核对路径</label>
           <div class="button-row">
+            <button class="primary-button" :disabled="selectedAsset.status === 'ready' || saving" @click="approveAsset(selectedAsset)">{{ saving ? '入库中…' : selectedAsset.status === 'ready' ? '已正式入库' : '审核通过并自动入库' }}</button>
             <button class="secondary-button" @click="downloadAsset(selectedAsset)">下载原始文件</button>
-            <button class="secondary-button" @click="updateAsset({ status: 'review', deployedConfirmed: false })">设为待审核</button>
+            <button class="secondary-button" :disabled="selectedAsset.status === 'ready'" @click="updateAsset({ status: 'review', deployedConfirmed: false })">设为待审核</button>
             <button class="danger-button" @click="removeAsset(selectedAsset)">删除候选</button>
           </div>
           <small class="hint">审核前请检查：风格一致、边缘干净、比例合理、无文字水印、文件格式正确；3D 模型还需检查朝向、原点、地面高度和网格结构。</small>
         </div>
       </div>
       <div class="export-row">
-        <button class="primary-button" :disabled="!readyCount" @click="exportManifest">导出正式资产清单</button>
-        <span>导出前会重新校验路径、素材类型和空间 Feature 绑定。</span>
+        <span>正式资产清单由服务端自动维护，无需手动导出或复制文件。</span>
       </div>
       <p v-if="message" class="status-message">{{ message }}</p>
     </section>
 
     <footer class="workshop-footer">
       <strong>数据边界</strong>
-      <span>素材工坊只维护视觉资产。建筑位置、footprint、碰撞、walkable 和道路连接仍由校园空间 FeatureCollection 管理。AI 图片由服务端代理调用；生成结果保存到浏览器本地候选库，仍需人工审核并放入项目 public 目录后才能导出正式清单。3D GLB 暂不由图片模型生成。</span>
+      <span>素材工坊只维护视觉资产。建筑位置、footprint、碰撞、walkable 和道路连接仍由校园空间 FeatureCollection 管理。AI 图片由服务端代理调用；候选文件暂存于浏览器；审核通过后自动写入服务端持久化目录和正式资产清单。3D GLB 暂不由图片模型生成。</span>
     </footer>
   </main>
 </template>

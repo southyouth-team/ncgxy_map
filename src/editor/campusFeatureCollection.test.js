@@ -209,4 +209,22 @@ describe('toCampusFeatureCollection', () => {
     expect(() => updateCampusFeatureGeometry(collection, 'missing', { type: 'Point', coordinates: [0, 0] })).toThrow('找不到空间要素：missing')
   })
 
+
+  it('round-trips inspector property patches through canonical features', () => {
+    const source = {
+      buildings: [{ id: 'inspector-building', label: '旧教学楼', template: '教学楼', footprint: [[0, 0], [10, 0], [10, 10]], floors: 2 }],
+      roads: [],
+      areas: [{ id: 'inspector-water', name: '旧水域', type: 'water', footprint: [[20, 20], [30, 20], [30, 30]] }],
+      objects: [{ id: 'inspector-tree', type: 'tree', name: '旧树木', geometry: { type: 'Point', coordinates: [40, 40] }, properties: { rotation: 0, scale: 1 } }],
+    }
+    let collection = toCampusFeatureCollection(source)
+    collection = updateCampusFeatureProperties(collection, 'inspector-building', { name: '新教学楼', floors: 5 })
+    collection = updateCampusFeatureProperties(collection, 'inspector-water', { name: '新水域', areaType: 'water' })
+    collection = updateCampusFeatureProperties(collection, 'inspector-tree', { name: '新树木', rotation: 90, scale: 1.5 })
+    const restored = fromCampusFeatureCollection(collection)
+    expect(restored.buildings[0]).toMatchObject({ label: '新教学楼', floors: 5 })
+    expect(restored.areas[0]).toMatchObject({ name: '新水域', type: 'water' })
+    expect(restored.objects[0]).toMatchObject({ name: '新树木', properties: { rotation: 90, scale: 1.5 } })
+  })
+
 })

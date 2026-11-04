@@ -385,8 +385,21 @@ export function createCampusScene(THREE, featureCollection = null) {
     }
     value.forEach(includeCoordinates)
   }
-  includeCoordinates(CAMPUS_AREAS.flatMap(area => [area.polygon || [], area.holes || [], area.rect || []]))
-  includeCoordinates(CAMPUS_BUILDING_FOOTPRINTS.map(building => building.polygon || building.footprint || building.rect || []))
+  const includePixelRect = rect => {
+    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite)) return
+    const [left, top, right, bottom] = rect
+    includePixelCoordinate([left, top])
+    includePixelCoordinate([right, bottom])
+  }
+  CAMPUS_AREAS.forEach(area => {
+    includeCoordinates(area.polygon || [])
+    includeCoordinates(area.holes || [])
+    includePixelRect(area.rect)
+  })
+  CAMPUS_BUILDING_FOOTPRINTS.forEach(building => {
+    includeCoordinates(building.polygon || building.footprint || [])
+    includePixelRect(building.rect)
+  })
   includeCoordinates(CAMPUS_ROAD_CENTERLINES.map(road => road.points || []))
   includeCoordinates(CAMPUS_OBJECTS.map(object => object.position || []))
   includeCoordinates(spatialLayers.boundary?.geometry?.coordinates || [])

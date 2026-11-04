@@ -512,3 +512,11 @@
 - 核对 2.5D 主场景和编辑器 3D 预览：均通过 `createCampusSceneRenderData` / `getCampusSpatialLayers` 派生可渲染图层；未识别 Feature 暂不渲染，但不会因图层适配而从原集合删除。
 - 最新源码提交 `b315858` 的 Frontend CI 与 Backend CI 均成功；本次仅补充架构核对记录。
 - 尚未完成真实浏览器自动保存、刷新回读和首页/编辑器预览一致性验收；legacy 数组仍保留为交互兼容投影。
+
+
+## 2026-11-04 — 修复建筑 Polygon 内环双向投影
+
+- 发现建筑 Feature 从规范 Polygon 投影到 legacy building 数组时只保留外环，导致兼容适配结果丢失中庭/镂空环。
+- `toCampusFeatureCollection` 与 `fromCampusFeatureCollection` 现在双向保留建筑 `holes`。
+- 新增建筑 Polygon 内环完整 round-trip 回归测试，验证所有 ring 坐标不变。
+- CI 等待本次代码提交触发；浏览器端仍需执行实际编辑验收。

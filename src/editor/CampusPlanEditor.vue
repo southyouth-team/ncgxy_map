@@ -469,30 +469,30 @@ async function recognizeReferenceImage(assetId = savedAssetId.value) {
         const ring = (feature.geometry.coordinates?.[0] || []).map(toEditorPoint)
         if (ring.length < 4) continue
         if (feature.type === 'building') {
-          buildings.value.push({
+          commitFeatureUpsert({ buildings: [{
             id: `ai-building-${job.id}-${added}`, label: feature.name || '识别建筑',
             template: generateSceneAssets.value ? '教学楼' : '识别建筑',
             rect: polygonBounds(ring), footprint: ring, floors: null,
             confidence: feature.confidence, source: 'ai-vision', reviewRequired: feature.reviewRequired,
             materialHint: feature.properties?.materialHint || null,
-          })
+          }] })
         } else {
-          areas.value.push({
+          commitFeatureUpsert({ areas: [{
             id: `ai-area-${job.id}-${added}`, name: feature.name || feature.type,
             type: feature.type === 'green' ? 'vegetation' : feature.type,
             footprint: ring, confidence: feature.confidence,
             source: 'ai-vision', reviewRequired: feature.reviewRequired,
-          })
+          }] })
         }
         added++
       } else if (feature.geometry.type === 'LineString' && feature.type === 'road') {
         const points = feature.geometry.coordinates.map(toEditorPoint)
         if (points.length >= 2) {
-          roads.value.push({
+          commitFeatureUpsert({ roads: [{
             id: `ai-road-${job.id}-${added}`, points,
             width: Math.max(4, Number(feature.properties?.width) || 10),
             confidence: feature.confidence, source: 'ai-vision', reviewRequired: feature.reviewRequired,
-          })
+          }] })
           added++
         }
       }
@@ -923,7 +923,7 @@ function addBuilding(event) {
   const position = event?.clientX != null ? point(event) : { x: 305, y: 232 }
   const id = `placed-building-${Date.now()}`
   const rect = [position.x - 25, position.y - 12, position.x + 25, position.y + 12]
-  buildings.value.push({ id, label: newBuilding.value, template: newBuilding.value, rect, footprint: rectToPolygon(rect), floors: null, confidence: 'unverified' })
+  commitFeatureUpsert({ buildings: [{ id, label: newBuilding.value, template: newBuilding.value, rect, footprint: rectToPolygon(rect), floors: null, confidence: 'unverified' }] })
   selected.value = { type: 'building', id }
   tool.value = 'select'
 }

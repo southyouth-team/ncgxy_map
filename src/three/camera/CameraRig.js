@@ -21,9 +21,10 @@ export class CameraRig {
     this.desiredTarget = this.target.clone()
     this.mode = 'overview'
     this.thirdYaw = 0.35
-    // 采用宝可梦式 3/4 俯视跟随视角，而不是接近水平的肩后镜头。
-    this.thirdPitch = this.isometricRpg ? 0.95 : 0.32
-    this.thirdDistance = this.isometricRpg ? 13 : 15
+    // 2.5D 跟随采用宝可梦式斜俯视：约 50° 向下观察，并留出足够环境视野。
+    // 3D 跟随仍使用较低的肩后视角，避免影响透视模式的空间感。
+    this.thirdPitch = this.viewMode === '2.5d' ? 0.88 : 0.32
+    this.thirdDistance = this.viewMode === '2.5d' ? 18 : 15
     this.firstYaw = 0
     this.firstPitch = -0.12
     this.player = new THREE.Vector3(0, 1.7, 24)
@@ -97,11 +98,14 @@ export class CameraRig {
         targetCamera.quaternion.copy(previousCamera.quaternion)
         this.activateCamera(targetCamera)
       }
-      if (this.isometricRpg && this.viewMode === '2.5d' && mode === 'thirdPerson') {
-        this.thirdPitch = 0.95
-        this.thirdDistance = 13
-        this.overviewCamera.zoom = 2.8
-        this.overviewCamera.updateProjectionMatrix()
+      if (mode === 'thirdPerson') {
+        if (this.viewMode === '2.5d') {
+          this.thirdPitch = 0.88
+          this.thirdDistance = 18
+        } else {
+          this.thirdPitch = 0.32
+          this.thirdDistance = 15
+        }
       }
       if (mode === 'thirdPerson') {
         this.thirdYaw = Math.atan2(this.camera.position.x - this.player.x, this.camera.position.z - this.player.z)
@@ -173,6 +177,10 @@ export class CameraRig {
       // 跟随与第一人称的镜头位置由角色状态驱动，切换投影后再按各自模式重算目标位置。
       targetCamera.position.copy(previousPosition)
       targetCamera.quaternion.copy(previousQuaternion)
+      if (this.mode === 'thirdPerson') {
+        this.thirdPitch = viewMode === '2.5d' ? 0.88 : 0.32
+        this.thirdDistance = viewMode === '2.5d' ? 18 : 15
+      }
     }
 
     this.activateCamera(targetCamera)
@@ -201,8 +209,10 @@ export class CameraRig {
       this.player.z + Math.cos(this.thirdYaw) * horizontal,
     )
     this.desiredTarget.set(this.player.x, this.player.y + 0.7, this.player.z)
-    if (this.isometricRpg && this.camera === this.overviewCamera) {
-      this.overviewCamera.zoom = Math.max(1.1, Math.min(3.1, 51.6 / this.thirdDistance))
+    if (this.viewMode === '2.5d' && this.camera === this.overviewCamera) {
+      // 正交相机通过 zoom 控制视野：距离 18 时约能看到 81 个世界单位的纵向环境，
+      // 同时保留角色辨识度；滚轮缩放仍通过 thirdDistance 连续联动。
+      this.overviewCamera.zoom = Math.max(1.5, Math.min(2.65, 42.3 / this.thirdDistance))
       this.overviewCamera.updateProjectionMatrix()
     }
   }
@@ -219,8 +229,9 @@ export class CameraRig {
 
   rotateThird(dx, dy) {
     this.thirdYaw -= dx * 0.004
-    const minPitch = this.isometricRpg ? 0.62 : -0.05
-    const maxPitch = this.isometricRpg ? 1.18 : 0.85
+    const is2dFollow = this.viewMode === '2.5d'
+    const minPitch = is2dFollow ? 0.62 : -0.05
+    const maxPitch = is2dFollow ? 1.12 : 0.85
     this.thirdPitch = Math.max(minPitch, Math.min(maxPitch, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
@@ -331,9 +342,9 @@ export class CameraRig {
     this.orbit.target.set(0, 0, 0)
     this.applyIsometricOrientation()
     this.player.set(0, 1.7, this.isometricRpg ? 14 : 24)
-    if (this.isometricRpg) {
-      this.thirdPitch = 0.95
-      this.thirdDistance = 13
+    if (this.viewMode === '2.5d') {
+      this.thirdPitch = 0.88
+      this.thirdDistance = 18
     }
   }
 

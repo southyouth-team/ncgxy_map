@@ -340,7 +340,7 @@ describe('Campus map API (PostGIS integration)', () => {
         type: 'Polygon',
         coordinates: [
           [[0, 0], [20, 0], [20, 20], [0, 0]],
-          [[4, 4], [8, 4], [4, 4]],
+          [[4, 4], [8, 4], [8, 8], [4, 4]],
         ],
       },
       properties: {
@@ -411,6 +411,28 @@ describe('Campus map API (PostGIS integration)', () => {
     await request(app.getHttpServer())
       .put(planUrl).set(auth)
       .send({ revision: 1, document: invalid }).expect(400);
+
+    const invalidGeometries = [
+      { type: 'MultiPolygon', coordinates: [[[[0, 0], [10, 0], [10, 10], [0, 0]]]] },
+      { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10]]] },
+      { type: 'GeometryCollection', geometries: [{ type: 'Point', coordinates: [0, Number.NaN] }] },
+      { type: 'UnknownGeometry', coordinates: [[0, 0], [1, 1]] },
+    ];
+    for (const [index, geometry] of invalidGeometries.entries()) {
+      await request(app.getHttpServer())
+        .put(planUrl).set(auth)
+        .send({
+          revision: 1,
+          document: {
+            ...document,
+            featureCollection: {
+              ...document.featureCollection,
+              features: [{ ...unknownFeature, id: `invalid-geometry-${index}`, geometry }],
+            },
+          },
+        })
+        .expect(400);
+    }
 
     const afterInvalid = await request(app.getHttpServer())
       .get(planUrl).set(auth).expect(200);

@@ -58,4 +58,10 @@ describe('campus visual asset manifest', () => {
     pending.assets[0].status = 'review'
     expect(resolveCampusVisualAsset(pending, 'building-001', '2.5d').reason).toBe('asset-not-ready')
   })
+  it('requires a primary visual file before an asset can be marked ready', () => {
+    const thumbnailOnly = structuredClone(manifest)
+    thumbnailOnly.assets[0].files = [thumbnailOnly.assets[0].files[2]]
+    const report = validateCampusAssetManifest(thumbnailOnly)
+    expect(report.errors.map(error => error.code)).toContain('ASSET_READY_WITHOUT_PRIMARY')
+  })
 })

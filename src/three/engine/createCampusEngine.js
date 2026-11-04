@@ -251,11 +251,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const point = mapPixelToWorld(x, y)
       return [point.x, point.z]
     })
-    for (const area of (spatialLayers?.areas || []).filter(item => item.type === 'water' && item.walkable !== true && item.polygon?.length >= 3)) {
+    for (const area of (spatialLayers?.areas || []).filter(item => item.walkable !== true && item.polygon?.length >= 3)) {
       collisionWorld.addPolygonObstacle({
         outer: toWorldRing(area.polygon),
         holes: (area.holes || []).map(toWorldRing),
       })
+    }
+    // 道路默认可通行；若编辑者显式设置为不可通行，则按道路宽度生成面碰撞。
+    const blockedRoads = (spatialLayers?.roads || []).filter(road => road.walkable === false)
+    if (blockedRoads.length) {
+      for (const polygon of roadNetworkToMultiPolygon(blockedRoads)) {
+        const outer = polygon[0]
+        if (!outer?.length) continue
+        collisionWorld.addPolygonObstacle({
+          outer: toWorldRing(outer.slice(0, -1)),
+          holes: polygon.slice(1).map(ring => toWorldRing(ring.slice(0, -1))),
+        })
+      }
     }
     outdoorCollisionWorld = collisionWorld
     cameraRig.setObstructionObjects(cameraObstacleRoots)

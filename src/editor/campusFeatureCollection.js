@@ -111,7 +111,7 @@ export function toCampusFeatureCollection(document = {}) {
     ));
   }
 
-  return { type: 'FeatureCollection', features };
+  return { type: 'FeatureCollection', features, deletedFeatureIds: [...new Set((document.deletedFeatureIds || []).map(String))] };
 }
 
 /**
@@ -120,7 +120,7 @@ export function toCampusFeatureCollection(document = {}) {
  * this adapter keeps older UI controls operational during phased migration.
  */
 export function fromCampusFeatureCollection(collection = {}) {
-  const result = { buildings: [], roads: [], areas: [], objects: [] };
+  const result = { buildings: [], roads: [], areas: [], objects: [], deletedFeatureIds: [...new Set((collection.deletedFeatureIds || []).map(String))] };
   for (const feature of collection.features || []) {
     const properties = { ...(feature.properties || {}) };
     const type = properties.featureType;

@@ -366,3 +366,8 @@ legacy 编辑器投影不是规范数据完整性的判断依据。当前编辑�
 ## 39. 建筑 Polygon 内环兼容投影
 
 建筑规范 Feature 的 Polygon 可以包含外环和一个或多个内环（例如建筑中庭、镂空区域）。legacy 编辑器投影必须保留这些内环：FeatureCollection → building.footprint/building.holes → FeatureCollection 的转换不得只保留外环。几何编辑更新外环时仍须沿用规范 Feature 中已有内环。新增回归测试验证建筑内环的双向转换坐标完全一致。
+
+
+## 40. 首页场景合并的 metadata 保留
+
+首页合并基础校园 FeatureCollection 与编辑器 FeatureCollection 时，除按稳定 ID 合并 Feature、应用 tombstone 外，还必须合并集合级 metadata。基础 metadata 作为默认值，编辑器 metadata 的同名字段优先；双方均包含 catalogue 时按 catalogue 子键合并，避免编辑器保存的扩展目录或数据版本信息在首页加载时丢失。该操作不修改输入集合，并继续保留未知 Feature。

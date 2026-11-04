@@ -792,6 +792,16 @@ onBeforeUnmount(() => {
   if (referenceImagePreview.value.startsWith('blob:')) URL.revokeObjectURL(referenceImagePreview.value)
   window.removeEventListener('keyup', onWindowKeyUp)
 })
+// 父组件在其 onMounted 中异步解析校园/地图 ID；子组件 onMounted 会更早执行。
+ // 若首次挂载时 ID 尚未就绪，需在 props 注入后重新加载，不能只依赖一次性 onMounted。
+watch(
+  () => [String(props.campusId || ''), String(props.mapId || '')].join(':'),
+  (identifiers) => {
+    if (identifiers !== ':' && props.campusId && props.mapId && !documentLoaded.value) {
+      loadEditorDocument()
+    }
+  },
+)
 watch(() => JSON.stringify(buildDocument()), (snapshot) => {
   if (!documentLoaded.value || !props.campusId || !props.mapId || revisionConflict.value) return
   if (snapshot === lastSavedSnapshot) return

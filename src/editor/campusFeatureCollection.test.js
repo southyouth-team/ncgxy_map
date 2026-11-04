@@ -32,6 +32,19 @@ describe('translateCampusFeatureGeometry', () => {
   })
 })
 
+describe('fromCampusFeatureCollection baseline area compatibility', () => {
+  it('keeps both baseline lakes when projecting area + category GeoJSON into the editor', async () => {
+    const { buildCampusGeoJSON } = await import('../data/campus/campusGeoJSON.js')
+    const baseline = buildCampusGeoJSON()
+    const projected = fromCampusFeatureCollection(baseline)
+    const lakes = projected.areas.filter(area => area.type === 'water')
+
+    expect(lakes.map(area => area.id)).toEqual(['central-lake', 'west-lake'])
+    expect(lakes.map(area => area.name)).toEqual(['中央湖区', '西侧湖区'])
+    expect(lakes.every(area => area.footprint.length >= 3)).toBe(true)
+  })
+})
+
 describe('toCampusFeatureCollection', () => {
   it('normalizes buildings, roads, areas and point objects into one feature collection', () => {
     const result = toCampusFeatureCollection({

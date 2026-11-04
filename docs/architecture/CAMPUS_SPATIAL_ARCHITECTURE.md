@@ -336,3 +336,8 @@ Polygon 几何编辑必须明确区分整体变换和外环顶点编辑：
 - Point 对象拖动直接更新 Point coordinates，不能重新创建 Feature 或覆盖其业务元数据。
 - 复制粘贴从规范 Feature 读取，并以新 ID 复制完整 Feature；几何偏移使用统一变换函数。
 - legacy 数组可以用于渲染兼容模板和交互计算，但不得成为几何写入的权威来源。
+
+
+## 36. 未知 Feature 的兼容投影与持久化
+
+legacy 编辑器投影不是规范数据完整性的判断依据。当前编辑器只支持部分 Feature 类型映射到旧数组；未映射类型允许不出现在 legacy 数组中，但必须原样留在 `spatialFeatureCollection`。保存文档、undo/redo 和服务端刷新回读均以规范集合为依据。任何兼容投影、属性更新、几何更新和删除操作都不得通过重建 legacy 数组覆盖规范集合。

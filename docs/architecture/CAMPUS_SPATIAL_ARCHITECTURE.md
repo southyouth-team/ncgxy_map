@@ -692,3 +692,15 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 
 - 手机端通过视口/触控媒体条件全局隐藏 `.control-card`，不得限定在总览模式；跟随和第一人称模式同样不显示。
 - 桌面端保留操作指南。
+
+
+## 22. 双引擎共享数据链路自动审计
+
+首页校园场景与编辑器预览统一通过 `createCampusSceneRenderData` 从同一 FeatureCollection 派生空间图层。自动审计函数 `validateCampusSceneRenderData` 对以下阶段执行稳定 ID 与几何契约核对：
+
+1. 源 FeatureCollection：按 building、road、area/green/water/sports/plaza/parking、Point object 分类建立期望对象清单。
+2. 归一化空间图层：核对对象 ID 完整性、重复项和几何坐标；Polygon 外环闭合点在归一化时剥离，洞区逐环保留。
+3. 编辑器预览投影：核对相同对象集合、建筑 footprint、道路中心线、区域外环/洞区、点设施坐标，以及 walkable 属性一致性。
+4. 输出结构化报告：包含分类数量、检查总数、错误数量及错误代码（缺失、意外对象、重复 ID、几何不一致、通行属性不一致）。
+
+该审计是数据管线的确定性回归测试，不代表 WebGL 最终画面、异步 GLB 资源、材质贴图或运行时碰撞的完整证明。以上运行时行为仍需由场景装配测试和浏览器抽样验收补充。当前校园底图数据仍标注为人工近似数字化，不应将自动一致性通过误解为地理位置已完成测绘核验。

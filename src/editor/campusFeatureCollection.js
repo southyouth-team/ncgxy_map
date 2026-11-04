@@ -293,3 +293,35 @@ export function translateCampusFeatureGeometry(geometry, dx, dy) {
   if (depth < 0) throw new Error(`不支持平移几何类型：${geometry.type}`)
   return { ...geometry, coordinates: mapCoordinates(geometry.coordinates, depth) }
 }
+
+
+/**
+ * Merge immutable campus baseline features with a saved editor FeatureCollection.
+ * Saved features override baseline IDs; tombstones always win. Unknown feature
+ * types are retained so a newer editor does not silently erase future data.
+ */
+export function mergeCampusFeatureCollections(baseCollection = {}, editedCollection = {}) {
+  if (baseCollection.type !== 'FeatureCollection' || !Array.isArray(baseCollection.features)) {
+    throw new Error('基础校园 FeatureCollection 无效')
+  }
+  if (editedCollection.type !== 'FeatureCollection' || !Array.isArray(editedCollection.features)) {
+    throw new Error('编辑器 FeatureCollection 无效')
+  }
+  const deletedFeatureIds = [...new Set([
+    ...(baseCollection.deletedFeatureIds || []),
+    ...(editedCollection.deletedFeatureIds || []),
+  ].map(String))]
+  const deleted = new Set(deletedFeatureIds)
+  const byId = new Map(baseCollection.features.map(feature => [String(feature.id), feature]))
+  for (const feature of editedCollection.features) {
+    if (!feature?.id) continue
+    byId.set(String(feature.id), feature)
+  }
+  return {
+    ...baseCollection,
+    ...editedCollection,
+    type: 'FeatureCollection',
+    features: [...byId.values()].filter(feature => !deleted.has(String(feature.id))),
+    deletedFeatureIds,
+  }
+}

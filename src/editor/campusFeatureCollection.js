@@ -27,26 +27,30 @@ function closeRing(points) {
 }
 
 function createFeature(id, featureType, name, geometry, properties = {}, source = 'manual', qualityStatus = 'unverified') {
-  const normalizedProperties = {
-    featureType,
-    name: name || '未命名要素',
-    source,
-    qualityStatus,
-    ...properties,
-  }
-  // 兼容编辑器旧字段：confidence 描述置信度等级，verificationStatus 描述核验状态。
-  // qualityStatus 保留编辑器原值，不能直接把 unverified 当作置信度等级。
-  if (!['low', 'medium', 'high'].includes(normalizedProperties.confidence)) {
-    normalizedProperties.confidence = qualityStatus === 'verified' ? 'medium' : 'low'
-  }
-  if (!['verified', 'unverified'].includes(normalizedProperties.verificationStatus)) {
-    normalizedProperties.verificationStatus = qualityStatus === 'verified' ? 'verified' : 'unverified'
-  }
+  // 置信度与核验状态是两个独立维度，禁止互相覆盖或混用。
+  const normalizedQualityStatus = ['verified', 'unverified'].includes(qualityStatus)
+    ? qualityStatus
+    : 'unverified'
+  const confidence = ['low', 'medium', 'high'].includes(properties.confidence)
+    ? properties.confidence
+    : normalizedQualityStatus === 'verified' ? 'medium' : 'low'
+  const verificationStatus = ['verified', 'unverified'].includes(properties.verificationStatus)
+    ? properties.verificationStatus
+    : normalizedQualityStatus
+
   return {
     type: 'Feature',
     id: String(id),
     geometry,
-    properties: normalizedProperties,
+    properties: {
+      ...properties,
+      featureType,
+      name: name || '未命名要素',
+      source,
+      qualityStatus: normalizedQualityStatus,
+      confidence,
+      verificationStatus,
+    },
   };
 }
 
@@ -69,7 +73,7 @@ export function toCampusFeatureCollection(document = {}) {
       { type: 'Polygon', coordinates: [closeRing(footprint)] },
       { ...properties, template: template || null },
       building.source || 'campus-layout',
-      building.qualityStatus || building.confidence || 'unverified',
+      building.qualityStatus || 'unverified',
     ));
   }
 
@@ -83,7 +87,7 @@ export function toCampusFeatureCollection(document = {}) {
       { type: 'LineString', coordinates: cloneCoordinates(points) },
       { ...properties, width: Number(width) > 0 ? Number(width) : 12 },
       road.source || 'campus-layout',
-      road.qualityStatus || road.confidence || 'unverified',
+      road.qualityStatus || 'unverified',
     ));
   }
 
@@ -101,7 +105,7 @@ export function toCampusFeatureCollection(document = {}) {
       { type: 'Polygon', coordinates },
       { ...properties, areaType: type || featureType },
       area.source || 'campus-layout',
-      area.qualityStatus || area.confidence || 'unverified',
+      area.qualityStatus || 'unverified',
     ));
   }
 
@@ -143,14 +147,14 @@ export function fromCampusFeatureCollection(collection = {}) {
 
     if (type === 'building' && feature.geometry?.type === 'Polygon') {
       const footprint = (feature.geometry.coordinates?.[0] || []).slice(0, -1);
-      result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, confidence: qualityStatus, source });
+      result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (type === 'road' && feature.geometry?.type === 'LineString') {
-      result.roads.push({ ...properties, id: String(feature.id), name, points: feature.geometry.coordinates, width: properties.width, confidence: qualityStatus, source });
+      result.roads.push({ ...properties, id: String(feature.id), name, points: feature.geometry.coordinates, width: properties.width, confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (['green', 'water', 'sports', 'plaza', 'parking'].includes(type) && feature.geometry?.type === 'Polygon') {
       const areaType = properties.areaType || ({ green: 'vegetation' }[type] || type);
       delete properties.areaType;
       const polygon = (feature.geometry.coordinates?.[0] || []).slice(0, -1)
-      result.areas.push({ ...properties, id: String(feature.id), name, type: areaType, polygon, footprint: polygon, holes: (feature.geometry.coordinates || []).slice(1), confidence: qualityStatus, source });
+      result.areas.push({ ...properties, id: String(feature.id), name, type: areaType, polygon, footprint: polygon, holes: (feature.geometry.coordinates || []).slice(1), confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (feature.geometry?.type === 'Point') {
       const objectType = properties.objectType || type || 'facility';
       delete properties.objectType;

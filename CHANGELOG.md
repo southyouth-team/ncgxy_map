@@ -484,3 +484,11 @@
 - 道路节点增删直接提交 LineString coordinates，不再通过 legacy road points 数组重建。
 - 编辑器空间几何更新已移除旧的 `commitFeatureGeometry(fragment)` 写入入口；legacy 数组仅作为兼容视图和交互派生数据。
 - 本轮完成代码静态检查，确认编辑器不再存在直接写入 `footprint/points/coordinates` 的旧路径；CI 结果以最新提交工作流为准，浏览器端验收仍待完成。
+
+
+## 2026-11-04 — 未知 Feature 连续变更与历史持久性回归测试
+
+- 新增未知 Polygon Feature 的连续属性修改、几何修改、已知 Feature 新增、legacy 投影、历史快照恢复和删除 tombstone 测试。
+- 验证未来类型 Feature 不会因为 legacy 投影无法识别而从规范集合消失。
+- 验证 vendor 扩展属性、confidence、verificationStatus、Polygon 内环和多来源删除标记在历史恢复后保持。
+- 保存文档仍以 `spatialFeatureCollection` 为权威空间 payload；服务端保存和刷新回读需结合实际浏览器环境验收。

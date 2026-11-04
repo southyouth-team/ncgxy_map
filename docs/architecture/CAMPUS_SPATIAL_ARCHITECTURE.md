@@ -269,3 +269,10 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 编辑器新增空间要素应先将 legacy 输入转换为 Feature，再通过 `upsertCampusFeature` 按稳定 ID 写入 FeatureCollection；删除应通过 `removeCampusFeatures` 完成。删除基础校园 Feature 时必须记录 tombstone，防止基础数据合并时对象复活。mutation 完成后，当前迁移期交互数组由 `fromCampusFeatureCollection` 重新派生。
 
 目前属性检查器、手工新增、AI 识图导入、单选删除和批量删除已接入该流程。拖动、顶点和道路节点编辑、复制粘贴仍有 legacy 数组直接写入点，不能将此阶段描述为唯一数据源完成。
+
+
+## 28. 几何交互写入规范
+
+几何交互（整体拖动、顶点/道路节点拖动、多选移动、点对象拖动）应按稳定 Feature ID 调用 `updateCampusFeatureGeometry`，不得以直接修改选中对象引用作为持久状态变更。更新时只替换 geometry，不覆盖 properties、source、confidence、verificationStatus、qualityStatus 等元数据。拖动起点的几何快照用于计算位移；每次指针更新都以当前规范 FeatureCollection 为 mutation 输入。
+
+当前上述主要拖动路径已接入 mutation API，但编辑器加载、历史恢复、保存仍使用 legacy 数组作为迁移期投影；性能与真实浏览器交互尚待验收，不能据此宣称 FeatureCollection 已成为唯一实时状态源。

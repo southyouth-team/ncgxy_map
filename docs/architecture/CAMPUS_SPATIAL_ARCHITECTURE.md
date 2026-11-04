@@ -559,6 +559,6 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - `Feature.properties.walkable` 是人物漫游碰撞的唯一业务开关，类型默认值集中定义于 `src/data/campus/walkability.js`。
 - 默认策略：building/water=false；普通 area/green/plaza/sports/parking、road、boundary、gate=true；object 中 tree/bench/streetlight/lamp/sculpture/facility=false，flower/plant/grass/decoration=true。
 - 显式布尔值优先于类型默认值，支持单个对象例外；编辑器属性检查器可修改该字段，修改纳入 FeatureCollection 历史和保存机制。
-- 场景构建将 walkable 写入建筑/点对象 userData；引擎仅为 walkable=false 的建筑和实体设施注册碰撞体，水域 Polygon 同样尊重显式覆盖。
+- 场景构建将 walkable 写入建筑/点对象 userData；引擎仅为 walkable=false 的建筑和实体设施注册碰撞体，所有不可通行区域按 Polygon/洞区注册，不可通行道路按宽度转为面碰撞。
 - 相机遮挡根集合仍保留建筑对象，不因人物可通行设置而移除视觉相机避障引用。
 - 验收：空地/绿地/道路可走；默认建筑/湖水/树木/座椅/路灯不可穿越；将单个对象改为允许通行后人物可穿过；改回禁止通行后恢复阻挡；刷新后属性保持。

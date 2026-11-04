@@ -15,7 +15,7 @@ describe('统一校园空间数据出口', () => {
     const collection = buildCampusGeoJSON()
     expect(collection.type).toBe('FeatureCollection')
     expect(collection.features).toHaveLength(
-      CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length + 98,
+      CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length + 96,
     )
     const ids = collection.features.map(feature => feature.id)
     expect(new Set(ids).size).toBe(ids.length)
@@ -60,7 +60,7 @@ describe('统一校园空间数据出口', () => {
   it('将原场景环境装饰纳入统一 FeatureCollection，避免渲染器硬编码坐标', () => {
     const collection = buildCampusGeoJSON()
     const objects = collection.features.filter(feature => feature.properties.featureType === 'object')
-    expect(objects.length).toBe(98)
+    expect(objects.length).toBe(96)
     expect(objects.some(feature => feature.properties.objectType === 'tree')).toBe(true)
     expect(objects.some(feature => feature.properties.objectType === 'flower')).toBe(true)
     expect(objects.some(feature => feature.properties.objectType === 'bench')).toBe(true)
@@ -87,7 +87,7 @@ describe('统一校园空间数据出口', () => {
     const report = validateCampusGeoJSON()
     expect(report.valid).toBe(true)
     expect(report.errorCount).toBe(0)
-    expect(report.featureCount).toBe(CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length)
+    expect(report.featureCount).toBe(CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length + 96)
   })
 
   it('质检能识别越界坐标、重复 ID 和无效道路宽度', () => {

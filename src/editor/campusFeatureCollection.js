@@ -27,17 +27,26 @@ function closeRing(points) {
 }
 
 function createFeature(id, featureType, name, geometry, properties = {}, source = 'manual', qualityStatus = 'unverified') {
+  const normalizedProperties = {
+    featureType,
+    name: name || '未命名要素',
+    source,
+    qualityStatus,
+    ...properties,
+  }
+  // 兼容编辑器旧字段：confidence 描述置信度等级，verificationStatus 描述核验状态。
+  // qualityStatus 保留编辑器原值，不能直接把 unverified 当作置信度等级。
+  if (!['low', 'medium', 'high'].includes(normalizedProperties.confidence)) {
+    normalizedProperties.confidence = qualityStatus === 'verified' ? 'medium' : 'low'
+  }
+  if (!['verified', 'unverified'].includes(normalizedProperties.verificationStatus)) {
+    normalizedProperties.verificationStatus = qualityStatus === 'verified' ? 'verified' : 'unverified'
+  }
   return {
     type: 'Feature',
     id: String(id),
     geometry,
-    properties: {
-      featureType,
-      name: name || '未命名要素',
-      source,
-      qualityStatus,
-      ...properties,
-    },
+    properties: normalizedProperties,
   };
 }
 

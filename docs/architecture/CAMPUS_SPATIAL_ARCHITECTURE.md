@@ -302,3 +302,16 @@ Polygon 几何编辑必须明确区分整体变换和外环顶点编辑：
 ## 31. 统一几何平移函数
 
 `translateCampusFeatureGeometry(geometry, dx, dy)` 是规范 GeoJSON 几何的纯函数，支持 Point、LineString、Polygon、MultiPolygon。对 Polygon/MultiPolygon 的每一个 ring 应用相同位移，返回新几何，不修改输入。编辑器拖动、多选移动、对齐和分布必须复用此函数，避免通过 legacy 外环 footprint 重建几何而丢失水域内环。
+
+
+## 32. 服务端 FeatureCollection 与基础校园数据合并
+
+编辑器加载服务端文档时，必须优先读取保存的规范 FeatureCollection。使用 `mergeCampusFeatureCollections(base, edited)` 合并基础校园 FeatureCollection 与保存集合：
+
+1. 基础集合提供未被编辑覆盖的默认空间对象。
+2. 保存集合中相同稳定 ID 的 Feature 覆盖基础 Feature。
+3. `deletedFeatureIds` tombstone 优先级最高，合并结果必须过滤对应 Feature。
+4. 不认识的 Feature 类型必须保留在规范集合中，不能因为兼容投影暂不支持而在保存时丢失。
+5. legacy 数组仅从合并后的规范集合派生，不能再作为服务端 FeatureCollection 的重建来源。
+
+当前兼容投影仍只识别编辑器已支持的建筑、道路、区域和 Point 对象；未来 Feature 类型可保留但暂不能通过旧 SVG 工具编辑。

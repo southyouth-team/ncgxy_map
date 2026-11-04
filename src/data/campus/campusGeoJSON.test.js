@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CAMPUS_AREAS, CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_ROAD_CENTERLINES } from './campusLayout.js'
-import { buildCampusGeoJSON, getCampusSpatialLayers, validateCampusGeoJSON, CAMPUS_SPATIAL_DATASET } from './campusGeoJSON.js'
+import { buildCampusGeoJSON, getCampusSpatialLayers, validateCampusGeoJSON, CAMPUS_SPATIAL_DATASET, mergeCampusSceneFeatureCollections } from './campusGeoJSON.js'
 import { CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_BUILDING_METADATA, buildCampusRoadGraph } from './campusInventory.js'
 import { toCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
 

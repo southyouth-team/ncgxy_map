@@ -11,6 +11,7 @@ export function createCampusSceneRenderData(featureCollection) {
     layers,
     previewDocument: {
       buildings: layers.buildings.map(building => ({
+        ...(building.properties || {}),
         id: building.id,
         label: building.label,
         footprint: building.polygon,
@@ -22,6 +23,7 @@ export function createCampusSceneRenderData(featureCollection) {
         qualityStatus: building.qualityStatus,
       })),
       roads: layers.roads.map(road => ({
+        ...(road.properties || {}),
         id: road.id,
         name: road.name,
         points: road.points,
@@ -29,6 +31,7 @@ export function createCampusSceneRenderData(featureCollection) {
         confidence: road.confidence,
       })),
       areas: layers.areas.map(area => ({
+        ...(area.properties || {}),
         id: area.id,
         name: area.name,
         type: area.type,

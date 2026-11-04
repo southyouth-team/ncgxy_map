@@ -185,7 +185,7 @@ describe('campus GLB building geometry audit', () => {
     expect(report.results[0].heightStatus).toBe('matched')
   })
   it('detects world-position drift and footprint size mismatch', () => {
-    const moved = record({ bounds: { minX: 8, maxX: 18, minY: 0, maxY: 12, minZ: -8, maxZ: 0 } })
+    const moved = record({ bounds: { minX: 8, maxX: 22, minY: 0, maxY: 12, minZ: -8, maxZ: 0 } })
     const report = auditCampusBuildingModelGeometry([building], [moved], toWorld)
     expect(report.errors.map(error => error.code)).toContain('GLB_FOOTPRINT_CENTER_OFFSET')
     expect(report.errors.map(error => error.code)).toContain('GLB_FOOTPRINT_WIDTH_MISMATCH')

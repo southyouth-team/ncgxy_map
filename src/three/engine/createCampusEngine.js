@@ -457,8 +457,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       previewPlayer.traverse(object => {
         if (!object.isMesh) return
         object.geometry = object.geometry.clone()
-        if (Array.isArray(object.material)) object.material = object.material.map(material => material.clone())
-        else object.material = object.material.clone()
+        const cloneMaterial = material => {
+          const cloned = material.clone()
+          // 预览副本独立持有贴图；退出预览释放资源时不能销毁正式角色的接触阴影纹理。
+          if (material.map) cloned.map = material.map.clone()
+          return cloned
+        }
+        if (Array.isArray(object.material)) object.material = object.material.map(cloneMaterial)
+        else object.material = cloneMaterial(object.material)
       })
       previewPlayer.userData.updateAnimation = sourcePlayer.userData.updateAnimation?.bind(previewPlayer)
       previewPlayer.position.copy(sourcePlayer.position)

@@ -297,3 +297,8 @@ Polygon 几何编辑必须明确区分整体变换和外环顶点编辑：
 - 对于 LineString，整体变换只修改中心线坐标；道路宽度仍属于 properties，不得烘焙或丢失。
 
 编辑器当前的建筑/区域/道路整体拖动、多选拖动、对齐/分布已改为规范 geometry 变换；区域外环顶点编辑保留已有内环。真实浏览器交互与自动保存回读仍待验收。
+
+
+## 31. 统一几何平移函数
+
+`translateCampusFeatureGeometry(geometry, dx, dy)` 是规范 GeoJSON 几何的纯函数，支持 Point、LineString、Polygon、MultiPolygon。对 Polygon/MultiPolygon 的每一个 ring 应用相同位移，返回新几何，不修改输入。编辑器拖动、多选移动、对齐和分布必须复用此函数，避免通过 legacy 外环 footprint 重建几何而丢失水域内环。

@@ -27,6 +27,7 @@ const documentLoaded = ref(false)
 const revisionConflict = ref(false)
 let autoSaveTimer = null
 let lastSavedSnapshot = ''
+const deletedFeatureIds = ref([])
 const authHeaders = () => ({ 'X-Dev-User-Id': props.devUserId })
 const mapApiPath = () => `/campuses/${props.campusId}/maps/${props.mapId}`
 async function apiRequest(path, options = {}) {
@@ -47,6 +48,7 @@ async function loadEditorDocument() {
     documentRevision.value = Number(saved.revision || 0)
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
+      deletedFeatureIds.value = [...new Set(document.featureCollection?.deletedFeatureIds || document.deletedFeatureIds || [])].map(String)
       const normalized = document.featureCollection?.type === 'FeatureCollection'
         ? fromCampusFeatureCollection(document.featureCollection)
         : document
@@ -561,7 +563,7 @@ const roadPath = (points) => {
   return path + ' L ' + last[0] + ' ' + last[1]
 }
 function snapshot() {
-  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value }))
+  history.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value }))
   if (history.value.length > 40) history.value.shift()
   future.value = []
 }
@@ -571,10 +573,11 @@ function restore(raw) {
   roads.value = state.roads
   areas.value = state.areas || areas.value
   objects.value = state.objects || []
+  deletedFeatureIds.value = state.deletedFeatureIds || []
 }
 function undo() {
   if (!history.value.length) return
-  future.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value }))
+  future.value.push(JSON.stringify({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value }))
   restore(history.value.pop())
 }
 function redo() {
@@ -958,7 +961,9 @@ function deleteSelected() {
   if (multiSelection.value.length > 1) { deleteSelectionBatch(); return }
   if (!selected.value.id || isLayerLocked(selected.value.type)) return
   snapshot()
-  if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
+  const selectedFeature = featureCollection(selected.value.type).find(item => item.id === selected.value.id)
+   if (selectedFeature?.source === 'legacy-scene-decoration') deletedFeatureIds.value = [...new Set([...deletedFeatureIds.value, String(selected.value.id)])]
+   if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'road') roads.value = roads.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'area') areas.value = areas.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'object') objects.value = objects.value.filter(item => item.id !== selected.value.id)

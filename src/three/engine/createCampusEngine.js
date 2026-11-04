@@ -296,7 +296,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       .then(({ loadCampusBuildingModels }) => loadCampusBuildingModels(scene))
       .then((result) => {
         if (disposed || !scene) {
-          for (const model of result.models || []) disposeObjectGroup(model)
+          for (const model of result.models || []) {
+            model.parent?.remove(model)
+            disposeObjectGroup(model)
+          }
           return result
         }
         loadedBuildingModels = result.models || []

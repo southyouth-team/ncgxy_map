@@ -272,7 +272,7 @@ function handleEditorKeydown(event) {
   if (modifier && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelected(); return }
   if (modifier && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteCopied(); return }
   if ((event.key === 'Delete' || event.key === 'Backspace') && (selected.value.id || multiSelection.value.length)) { event.preventDefault(); deleteSelected() }
-  if (event.key === 'Escape') { clearMultiSelection(); selected.value = { type: '', id: '' } }
+  if (event.key === 'Escape') { cancelGeometryDraft(); tool.value = 'select'; clearMultiSelection(); selected.value = { type: '', id: '' } }
 }
 const tool = ref('select')
 const draftPoints = ref([])

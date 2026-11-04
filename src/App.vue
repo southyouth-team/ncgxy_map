@@ -567,7 +567,7 @@ onBeforeUnmount(() => {
       <div class="showcase-actions">
         <span class="topbar-status"><span class="status-dot"></span> {{ indoorPrototypeActive ? '室内空间样板 · 非实测布局' : (showEditor ? '地图编辑器 · 3D 预览' : '南昌工学院 · 校园探索') }}</span>
         <button v-if="showEditor" class="showcase-back" @click="closeEditor">返回校园探索</button>
-        <button v-else class="showcase-back" @click="openEditor">打开地图编辑器</button>
+        <button v-else class="showcase-back editor-entry" @click="openEditor">打开地图编辑器</button>
       </div>
     </header>
 
@@ -660,8 +660,8 @@ onBeforeUnmount(() => {
 
     <div class="bottom-bar">
       <div class="coordinates"><span class="coordinate-dot"></span> CAMPUS / NANCHANG · CHINA</div>
-      <button class="reset-button" @click="focusCampus"><span>↗</span> 重置视角</button>
     </div>
+    <button class="reset-button" aria-label="重置视角" @click="focusCampus"><span>↗</span> 重置视角</button>
 
     <div v-if="indoorPrototypeActive" class="indoor-floor-hud"><strong>{{ indoorBuildingName }}</strong><span>{{ indoorFloor }} 楼 · 共 {{ indoorFloors.length }} 层</span><small>靠近楼梯后按 E 上楼或下楼</small><button @click="closeEditor">返回校园</button></div>
     <aside v-if="indoorPrototypeActive && indoorEditorOpen" class="indoor-layout-editor">

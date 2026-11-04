@@ -43,7 +43,12 @@ async function apiRequest(path, options = {}) {
   return payload
 }
 async function loadEditorDocument() {
-  if (!props.campusId || !props.mapId) return
+  if (!props.campusId || !props.mapId) {
+    documentLoaded.value = false
+    persistenceState.value = 'error'
+    persistenceMessage.value = '编辑器未取得校园 ID 或地图 ID；请确认校园/地图服务初始化成功后重新进入编辑器'
+    return
+  }
   try {
     const saved = await apiRequest(`${mapApiPath()}/scene/plan`)
     let referenceImagePreviewError = ''

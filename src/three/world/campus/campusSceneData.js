@@ -228,3 +228,52 @@ export function auditCampusSceneFeatureCoverage(spatialLayers, sceneRoot) {
   ]))
   return { valid: errors.length === 0, errorCount: errors.length, errors, summary }
 }
+
+
+/**
+ * Validate asynchronously loaded GLB building roots without requiring a WebGL renderer.
+ * A missing GLB is not an error: the procedural building remains the fallback renderer.
+ */
+export function validateCampusBuildingModels(models, canonicalBuildingIds = []) {
+  const knownIds = new Set(Array.from(canonicalBuildingIds, id => String(id)))
+  const seen = new Set()
+  const errors = []
+  const summary = { modelCount: Array.isArray(models) ? models.length : 0, meshCount: 0, triangleCount: 0 }
+  const push = (code, buildingId, message) => errors.push({ code, buildingId, message })
+
+  for (const model of Array.isArray(models) ? models : []) {
+    const id = String(model?.userData?.buildingId ?? model?.name ?? '')
+    if (!id) {
+      push('GLB_BUILDING_ID_MISSING', null, 'GLB 模型缺少 buildingId')
+      continue
+    }
+    if (seen.has(id)) push('GLB_BUILDING_ID_DUPLICATE', id, '同一建筑加载了多个 GLB 模型')
+    seen.add(id)
+    if (knownIds.size && !knownIds.has(id)) push('GLB_BUILDING_ID_UNKNOWN', id, 'GLB 模型 ID 不存在于规范建筑空间数据')
+
+    let hasMesh = false
+    let hasValidBounds = false
+    model.traverse?.(object => {
+      if (!object.isMesh) return
+      hasMesh = true
+      summary.meshCount += 1
+      if (!object.geometry || !object.material) {
+        push('GLB_MESH_RESOURCE_MISSING', id, 'GLB Mesh 缺少 geometry 或 material')
+        return
+      }
+      const geometry = object.geometry
+      if (!geometry.boundingBox) geometry.computeBoundingBox?.()
+      const bounds = geometry.boundingBox
+      if (bounds && [bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z].every(Number.isFinite)) {
+        const size = bounds.getSize ? bounds.getSize({ x: 0, y: 0, z: 0 }) : null
+        if (size && size.x > 0 && size.y > 0 && size.z > 0) hasValidBounds = true
+      }
+      const indexCount = geometry.index?.count ?? geometry.attributes?.position?.count ?? 0
+      summary.triangleCount += geometry.index ? Math.floor(indexCount / 3) : Math.floor(indexCount / 3)
+    })
+    if (!hasMesh) push('GLB_MESH_MISSING', id, 'GLB 场景中没有 Mesh')
+    else if (!hasValidBounds) push('GLB_BOUNDS_INVALID', id, 'GLB 模型没有有效的三维包围尺寸')
+  }
+
+  return { valid: errors.length === 0, errorCount: errors.length, errors, summary }
+}

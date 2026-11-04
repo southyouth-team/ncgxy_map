@@ -36,7 +36,8 @@ export class CameraRig {
   }
 
   applyIsometricOrientation() {
-    this.camera.position.set(0, 145, 145)
+    // 默认总览采用更低的斜视角，避免高位俯拍造成建筑缺乏立体感。
+    this.camera.position.set(0, 105, 145)
     this.camera.lookAt(0, 0, 0)
     this.currentPosition.copy(this.camera.position)
     this.currentTarget.set(0, 0, 0)

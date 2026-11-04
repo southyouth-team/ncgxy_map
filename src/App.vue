@@ -330,7 +330,7 @@ function onExplorerHotkey(event) {
 }
 
 function focusCampus() {
-  engine?.focusCampus()
+  engine?.resetView()
 }
 
 function openBuildingFromPixelMap(payload) {

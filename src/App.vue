@@ -81,9 +81,9 @@ function adjacentIndoorFloor(direction) {
 
 function openSelectedBuildingInCampus() {
   if (!selectedBuildingId.value) return
-  // RPG 样板场景与真实校园场景是两套 sceneType；进入室内前切换到校园底图场景。
+  // 室内建筑入口只传递建筑 ID；校园探索始终使用统一的 campus 场景，不再依赖旧 showcase 查询参数。
   const url = new URL(window.location.href)
-  url.searchParams.set('view', 'showcase')
+  url.searchParams.delete('view')
   url.searchParams.set('buildingId', selectedBuildingId.value)
   url.searchParams.delete('returnX')
   url.searchParams.delete('returnY')

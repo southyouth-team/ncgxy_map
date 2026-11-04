@@ -7,7 +7,7 @@ export class CameraRig {
     this.domElement = domElement
     this.aspect = 1
     // 默认总览收紧视野，避免校园主体在宽屏中占比过小。
-    this.overviewSpan = 150
+    this.overviewSpan = 125
     this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.1, 3000)
     this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 3000)
     this.camera = this.overviewCamera

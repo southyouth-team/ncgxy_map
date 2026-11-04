@@ -315,3 +315,8 @@ Polygon 几何编辑必须明确区分整体变换和外环顶点编辑：
 5. legacy 数组仅从合并后的规范集合派生，不能再作为服务端 FeatureCollection 的重建来源。
 
 当前兼容投影仍只识别编辑器已支持的建筑、道路、区域和 Point 对象；未来 Feature 类型可保留但暂不能通过旧 SVG 工具编辑。
+
+
+## 33. 历史恢复必须保留规范集合
+
+`restoreCampusFeatureSnapshot` 返回兼容编辑器数组的同时，必须返回原始规范 `featureCollection`。撤销/重做恢复时直接替换编辑器的规范集合，不得通过 legacy 数组重新构建，否则当前编辑器不支持的 Feature 类型和扩展属性会丢失。兼容数组仅用于已支持对象类型的交互投影。

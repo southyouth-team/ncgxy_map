@@ -455,3 +455,9 @@ CampusPlanEditor 可能在父组件 App 的异步初始化完成前先执行自�
 ## 54. 平面编辑文档请求体大小限制
 
 Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 FeatureCollection 的平面编辑文档。Nest 启动时关闭默认 body parser，并显式注册 16 MiB JSON parser；URL-encoded parser 单独保留 1 MiB 上限。16 MiB 请求上限与 ScenesService 当前 15 MiB 文档序列化大小校验对齐。该调整只解决 HTTP 请求体解析层限制，不放宽业务 schema、几何校验、权限或 revision 乐观锁。验收必须确认 PUT 成功、revision 递增，并通过 GET 回读验证完整文档。
+
+## 55. Express 请求体解析器注册
+
+- Nest 应用通过 `NestFactory.create(AppModule, { bodyParser: false })` 关闭默认解析器，避免 Express 默认 100 KiB JSON 限制先行拦截空间文档。
+- 在 Express 平台显式注册 `json({ limit: '16mb' })` 与 `urlencoded({ extended: true, limit: '1mb' })`，使用 `app.use()` 挂载中间件；不调用 `INestApplication` 未声明的 `useBodyParser()`。
+- 16 MiB 传输上限与 15 MiB 场景文档业务上限保持边界关系，业务校验仍是最终约束。

@@ -140,7 +140,8 @@ export function fromCampusFeatureCollection(collection = {}) {
     } else if (['green', 'water', 'sports', 'plaza', 'parking'].includes(type) && feature.geometry?.type === 'Polygon') {
       const areaType = properties.areaType || ({ green: 'vegetation' }[type] || type);
       delete properties.areaType;
-      result.areas.push({ ...properties, id: String(feature.id), name, type: areaType, footprint: (feature.geometry.coordinates?.[0] || []).slice(0, -1), holes: (feature.geometry.coordinates || []).slice(1), confidence: qualityStatus, source });
+      const polygon = (feature.geometry.coordinates?.[0] || []).slice(0, -1)
+      result.areas.push({ ...properties, id: String(feature.id), name, type: areaType, polygon, footprint: polygon, holes: (feature.geometry.coordinates || []).slice(1), confidence: qualityStatus, source });
     } else if (feature.geometry?.type === 'Point') {
       const objectType = properties.objectType || type || 'facility';
       delete properties.objectType;

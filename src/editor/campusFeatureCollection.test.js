@@ -41,7 +41,9 @@ describe('toCampusFeatureCollection', () => {
       [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
       [[2, 2], [4, 2], [4, 4], [2, 2]],
     ])
-    expect(result.features[0].properties.qualityStatus).toBe('medium')
+    expect(result.features[0].properties.qualityStatus).toBe('unverified')
+    expect(result.features[0].properties.confidence).toBe('medium')
+    expect(result.features[0].properties.verificationStatus).toBe('unverified')
   })
 
   it('skips malformed legacy records instead of emitting invalid GeoJSON', () => {

@@ -548,3 +548,12 @@
 - 新增回归测试覆盖 metadata 透传与 catalogue 合并。
 - 更新空间架构文档第 42 节。
 - CI 以本次最新 HEAD 结果为准；浏览器端真实加载、自动保存和刷新回读仍待验收。
+
+
+## 2026-11-05 — 补充服务端集合级 metadata 持久化回归测试
+
+- 核对 SaveRpgMapDto：document 是整体对象字段，未声明嵌套白名单 DTO；全局 ValidationPipe 不会递归剥离 document 内的未知 FeatureCollection properties/metadata。
+- ScenesService 对规范文档执行结构校验后直接 JSON.stringify 写入 JSONB，读取时直接返回 document。
+- 扩展 schema v4 API 集成测试，加入 metadata.dataset 与 metadata.catalogue（基础目录和编辑器扩展目录），验证 PUT/GET 完整对象相等。
+- 更新空间架构文档第 43 节。
+- 本次新增测试尚待 GitHub Actions 执行；浏览器端完整验收仍未完成。

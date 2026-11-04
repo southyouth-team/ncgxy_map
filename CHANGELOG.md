@@ -3,6 +3,7 @@
 - **修改文件**：`src/editor/campusFeatureCollection.js`、`src/data/campus/campusGeoJSON.test.js`。
 - **实际完成**：
   - 编辑器 Feature 序列化时保留 `qualityStatus`，同时规范化输出 `confidence` 与 `verificationStatus`。
+- 进一步修正点对象的规范类型：GeoJSON `featureType` 固定为 `object`，树木/座椅/路灯等具体类别写入 `objectType`。此前把 tree 直接作为 featureType 与统一 Point 对象契约不一致，现已对齐基础数据模型。
   - 旧编辑器文档缺少标准字段时使用保守默认值 low / unverified；已核验状态映射为 medium / verified。
   - 增加端到端适配器单测：编辑器建筑、道路、区域和点对象生成的 FeatureCollection 必须通过统一空间数据质检。
 - **验证状态**：代码与测试已提交，等待最新 CI。

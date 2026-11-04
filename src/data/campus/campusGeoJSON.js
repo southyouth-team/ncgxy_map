@@ -228,7 +228,7 @@ export function mergeCampusSceneFeatureCollections(baseCollection = buildCampusG
   for (const feature of editorCollection?.features || []) {
     if (feature?.id !== undefined && feature?.id !== null) featureById.set(String(feature.id), feature)
   }
-  const deletedFeatureIds = [...new Set((editorCollection?.deletedFeatureIds || []).map(String))]
+  const deletedFeatureIds = [...new Set([...(baseCollection?.deletedFeatureIds || []), ...(editorCollection?.deletedFeatureIds || [])].map(String))]
   const deleted = new Set(deletedFeatureIds)
   const baseMetadata = baseCollection?.metadata || {}
   const editorMetadata = editorCollection?.metadata || {}

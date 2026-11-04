@@ -371,3 +371,8 @@ legacy 编辑器投影不是规范数据完整性的判断依据。当前编辑�
 ## 40. 首页场景合并的 metadata 保留
 
 首页合并基础校园 FeatureCollection 与编辑器 FeatureCollection 时，除按稳定 ID 合并 Feature、应用 tombstone 外，还必须合并集合级 metadata。基础 metadata 作为默认值，编辑器 metadata 的同名字段优先；双方均包含 catalogue 时按 catalogue 子键合并，避免编辑器保存的扩展目录或数据版本信息在首页加载时丢失。该操作不修改输入集合，并继续保留未知 Feature。
+
+
+## 41. 首页合并必须继承双方 tombstone
+
+mergeCampusSceneFeatureCollections 合并基础集合与编辑器集合时，deletedFeatureIds 必须取双方删除标记的稳定去重并集，再统一过滤 Feature。即使当前基础校园集合通常不携带 tombstone，也不能让通用合并边界依赖这一隐含前提；未来基础数据版本或多来源合并携带删除标记时，已删除 Feature 不得因合并而复活。

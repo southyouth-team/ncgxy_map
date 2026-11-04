@@ -191,6 +191,7 @@ describe('统一校园空间数据出口', () => {
     const base = {
       type: 'FeatureCollection',
       metadata: { dataset: 'campus-baseline', catalogue: { pois: [{ id: 'poi-library' }] } },
+      deletedFeatureIds: ['base-deleted-obsolete-feature'],
       features: [
         { type: 'Feature', id: 'campus-boundary', properties: { featureType: 'boundary', name: '校界' }, geometry: { type: 'Polygon', coordinates: [] } },
         { type: 'Feature', id: 'campus-gate-east', properties: { featureType: 'gate', name: '东门' }, geometry: { type: 'Point', coordinates: [1, 1] } },
@@ -212,7 +213,7 @@ describe('统一校园空间数据出口', () => {
     const merged = mergeCampusSceneFeatureCollections(base, editor)
     expect(merged.features.map(feature => feature.id)).toEqual(['campus-boundary', 'campus-building-001', 'campus-water-001', 'campus-tree-001', 'editor-bench-001'])
     expect(merged.features.find(feature => feature.id === 'campus-tree-001').properties.name).toBe('已校准树木')
-    expect(merged.deletedFeatureIds).toEqual(['campus-gate-east', 'campus-road-001'])
+    expect(merged.deletedFeatureIds).toEqual(['base-deleted-obsolete-feature', 'campus-gate-east', 'campus-road-001'])
     expect(merged.metadata).toMatchObject({
       dataset: 'campus-baseline',
       editorRevision: 7,

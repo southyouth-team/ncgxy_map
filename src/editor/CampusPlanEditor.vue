@@ -1159,7 +1159,7 @@ function exportDocument() {
           <label>区域名称</label><input v-model="selectedArea.name">
           <label>区域类型</label><select v-model="selectedArea.type"><option v-for="item in areaKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。支持顶点吸附。</p>
-          <button class="danger-button" @click="!isLayerLocked('area') && (snapshot(), areas = areas.filter(item => item.id !== selectedArea.id), selected = {type:'',id:''})">删除区域</button>
+          <button class="danger-button" @click="deleteSelected">删除区域</button>
         </template>
         <template v-else-if="selectedObject">
           <label>对象名称</label><input v-model="selectedObject.name">

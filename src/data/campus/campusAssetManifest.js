@@ -181,7 +181,7 @@ export function createCampusAssetManifestFromWorkshopRecords(records, knownFeatu
     const is3d = record.viewMode === '3d';
     const validPath = isSafeAssetPath(url) && (is3d
       ? url.startsWith('/models/buildings/') && url.toLowerCase().endsWith('.glb')
-      : record.viewMode === '2.5d' && url.startsWith('/assets/campus/') && /\\.(png|webp|jpe?g)$/i.test(url));
+      : record.viewMode === '2.5d' && url.startsWith('/assets/campus/') && /\.(png|webp|jpe?g)$/i.test(url));
     if (!validPath || !isNonEmptyString(record.featureId)) {
       skipped.push({ assetId: record.assetId || null, reason: 'invalid-path-or-feature', publicPath: url || null });
       continue;

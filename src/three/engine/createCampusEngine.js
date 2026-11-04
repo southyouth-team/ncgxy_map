@@ -1647,13 +1647,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function setMode(mode) {
     cameraRig?.setMode(mode)
     input?.setMode(mode)
-    if (mode !== 'overview') void ensureCampusBuildingModelsLoaded()
+    if (mode !== 'overview' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
 
   function setViewMode(mode) {
     cameraRig?.setViewMode(mode)
-    if (mode === '3d') void ensureCampusBuildingModelsLoaded()
+    if (mode === '3d' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
 

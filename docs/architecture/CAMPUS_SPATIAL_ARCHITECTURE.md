@@ -217,3 +217,8 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 正向序列化时优先保留合法的显式 `confidence` 和 `verificationStatus`；缺失时按 `qualityStatus` 保守推导，未核验对象默认为 low + unverified。旧版 `confidence` 不得作为 `qualityStatus` 的回退来源。
 
 反向适配时分别恢复三个字段，不能用 `qualityStatus` 覆盖 `confidence`。统一质检必须直接针对编辑器生成的 FeatureCollection 执行，以确保保存边界的数据契约与基础校园数据一致。
+
+
+## 22. 点对象基础数据加载规则
+
+编辑器从基础 FeatureCollection 初始化 Point 对象时，必须保留 `confidence` 与 `verificationStatus` 在对象 `properties` 中；编辑器迁移字段 `qualityStatus` 只能来自同名字段或 `verificationStatus`，禁止回退到置信度字段。点对象的坐标、朝向、缩放、来源及质量元数据必须在加载、保存和反向适配中完整保留。

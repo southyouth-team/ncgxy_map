@@ -47,11 +47,12 @@ describe('campus scene shared render adapter', () => {
   it('detects missing features, geometry drift and walkability divergence in a render projection', () => {
     const collection = buildCampusGeoJSON()
     const result = createCampusSceneRenderData(collection)
-    result.layers.objects.pop()
-    result.previewDocument.buildings[0].footprint[0][0] += 1
-    result.previewDocument.roads[0].walkable = !result.previewDocument.roads[0].walkable
+    const corrupted = structuredClone(result)
+    corrupted.layers.objects.pop()
+    corrupted.previewDocument.buildings[0].footprint[0][0] += 1
+    corrupted.previewDocument.roads[0].walkable = !corrupted.previewDocument.roads[0].walkable
 
-    const report = validateCampusSceneRenderData(collection, result)
+    const report = validateCampusSceneRenderData(collection, corrupted)
     expect(report.valid).toBe(false)
     expect(report.errors.map(error => error.code)).toContain('MISSING_FEATURE')
     expect(report.errors.map(error => error.code)).toContain('PREVIEW_GEOMETRY_MISMATCH')

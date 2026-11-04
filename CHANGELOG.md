@@ -501,4 +501,4 @@
 - 服务端校验 FeatureCollection 类型、Feature 稳定 ID 唯一性、geometry 结构、有限坐标、properties 对象、删除 tombstone 和文档体积。
 - `campus_plan_document.schema_version` 现在存储实际文档版本，不再固定写入 2。
 - 新增 PostGIS API 集成测试：v4 FeatureCollection 保存/回读、未知 Feature 与扩展属性保留、tombstone 保留、重复 ID 拒绝、版本冲突，以及旧 v2 文档兼容。
-- CI 尚待本提交触发后的最新结果；浏览器端真实自动保存和刷新验收仍未完成。
+- 最新提交 `b315858` 的 Frontend CI 与 Backend CI 均 completed success；浏览器端真实自动保存和刷新验收仍未完成。

@@ -242,6 +242,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     input.attach()
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)
+    renderer.domElement.addEventListener('pointerup', requestFrame)
     // 总览模式按需渲染：用户操作、相机阻尼或窗口变化时才请求下一帧。
     renderer.domElement.addEventListener('pointerdown', requestFrame)
     renderer.domElement.addEventListener('pointermove', requestFrame)
@@ -338,6 +339,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       disposeObjectGroup(rpgPreviewGroup)
       rpgPreviewGroup = null
     }
+    playerSpriteObject = campus?.getObjectByName('PixelExplorerSprite') || null
+    requestFrame()
     // 基础校园由 campus 容器和独立加载的 GLB 建筑共同组成。
     // 预览退出时必须恢复两类对象，不能只恢复 campus 容器。
     if (campus) campus.visible = true
@@ -394,6 +397,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const ground=new THREE.Mesh(new THREE.PlaneGeometry(width*unit,height*unit),new THREE.MeshStandardMaterial({color:'#6eaa55',roughness:1}))
     ground.rotation.x=-Math.PI/2; ground.position.set(0,-.09,0); ground.receiveShadow=true; rpgPreviewGroup.add(ground)
     scene.add(rpgPreviewGroup)
+    requestFrame()
     if (campus) campus.visible = false
     loadedBuildingModels.forEach((model) => { model.visible = false })
     cameraRig?.focusBounds(width*unit,height*unit)
@@ -429,6 +433,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       previewPlayer.scale.copy(sourcePlayer.scale)
       previewPlayer.visible = true
       rpgPreviewGroup.add(previewPlayer)
+      playerSpriteObject = previewPlayer
     }
     const calibratedPoint = (x, y) => mapEditorPointToCalibratedWorld(
       [x, y],
@@ -681,6 +686,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig?.focusBounds(contentWidth + margin * 2, contentDepth + margin * 2, centerX, centerZ, { immediate: true })
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
     else if (cameraRig.mode === 'thirdPerson') cameraRig.updateThirdPersonDesired()
+    requestFrame()
     return true
   }
 
@@ -881,6 +887,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function selectObject(featureId) {
+    requestFrame()
     const target = campus?.children?.find((item) => String(item.userData?.featureId) === String(featureId))
     if (!target) return clearSelection()
     if (selectedFeatureObject === target) return
@@ -897,6 +904,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function clearSelection() {
+    requestFrame()
     if (!selectedFeatureObject && !selectedIndoorObject) return
     if (selectedFeatureObject) restoreSelectionHighlight()
     selectedIndoorObject = null
@@ -1158,6 +1166,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
     item.sceneObject = sceneObject
     if (wasSelected) selectObject(item.feature.id)
+    requestFrame()
     return true
   }
 
@@ -1686,6 +1695,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     window.removeEventListener('keydown', onKeyDown)
     renderer?.domElement?.removeEventListener('pointerdown', onScenePointerDown)
     renderer?.domElement?.removeEventListener('pointerup', onScenePointerUp)
+    renderer?.domElement?.removeEventListener('pointerup', requestFrame)
     renderer?.domElement?.removeEventListener('pointerdown', requestFrame)
     renderer?.domElement?.removeEventListener('pointermove', requestFrame)
     renderer?.domElement?.removeEventListener('wheel', requestFrame)

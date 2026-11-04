@@ -619,8 +619,13 @@ function restore(raw) {
     roads.value = document.roads
     areas.value = document.areas
     objects.value = document.objects
-    deletedFeatureIds.value = document.deletedFeatureIds
-    spatialFeatureCollection.value = toCampusFeatureCollection(document)
+    // 历史快照携带完整规范集合；直接恢复可保留当前兼容视图尚不支持的 Feature 类型。
+    spatialFeatureCollection.value = {
+      ...state.featureCollection,
+      features: [...(state.featureCollection?.features || [])],
+      deletedFeatureIds: [...(state.featureCollection?.deletedFeatureIds || [])],
+    }
+    deletedFeatureIds.value = spatialFeatureCollection.value.deletedFeatureIds
     return
   }
   // 兼容当前会话中旧版历史快照，避免热更新/历史恢复时丢失数据。

@@ -6,11 +6,13 @@ export class CameraRig {
     this.isometricRpg = Boolean(options.isometricRpg)
     this.domElement = domElement
     this.aspect = 1
-    this.overviewSpan = 190
+    // 默认总览收紧视野，避免校园主体在宽屏中占比过小。
+    this.overviewSpan = 150
     this.overviewCamera = new THREE.OrthographicCamera(-95, 95, 95, -95, 0.1, 3000)
     this.perspectiveCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 3000)
     this.camera = this.overviewCamera
-    this.camera.position.set(0, 145, 145)
+    // 降低相机仰俯高度并保留斜视纵深，采用更适合校园漫游的约 36° 俯角。
+    this.camera.position.set(0, 105, 145)
     this.target = new THREE.Vector3(0, 0, 0)
     this.currentPosition = this.camera.position.clone()
     this.currentTarget = this.target.clone()
@@ -217,7 +219,8 @@ export class CameraRig {
   focusBounds(width, depth, centerX = 0, centerZ = 0, options = {}) {
     const aspect = Math.max(this.aspect, 0.1)
     const fitHeight = Math.max(Number(depth) || 60, (Number(width) || 80) / aspect, 20)
-    const span = fitHeight * 1.15
+    // 样板区默认放大约 28%，优先看清建筑、道路与交互物，而不是留过多空白。
+    const span = fitHeight * 0.9
     const targetX = Number.isFinite(centerX) ? centerX : 0
     const targetZ = Number.isFinite(centerZ) ? centerZ : 0
     this.overviewSpan = span
@@ -229,7 +232,8 @@ export class CameraRig {
     this.mode = 'overview'
     this.activateCamera(this.overviewCamera)
     this.desiredTarget.set(targetX, 0, targetZ)
-    this.desiredPosition.set(targetX, span * 0.78, targetZ + span * 0.78)
+    // 相机高度低于水平后退距离，降低俯视感，同时保持地面布局可读性。
+    this.desiredPosition.set(targetX, span * 0.62, targetZ + span * 0.78)
     this.orbit.target.set(targetX, 0, targetZ)
 
     if (options.immediate) {

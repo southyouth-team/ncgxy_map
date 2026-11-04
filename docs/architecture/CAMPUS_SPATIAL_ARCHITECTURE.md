@@ -248,3 +248,10 @@ Feature 序列化适配器必须保留原始 `qualityStatus`，并确保以上�
 编辑器 undo/redo 历史现统一存储版本化 `CampusFeatureSnapshot`，其空间载荷为单一 GeoJSON FeatureCollection，删除标记随快照保存。恢复通过规范反向适配器生成当前交互模型；旧版四数组历史快照保留读取兼容。
 
 该改动收敛了历史记录的空间数据契约，但不改变当前编辑器四组响应式数组仍作为实时工作状态的事实。不能将此项改动等同于 FeatureCollection 已成为编辑器唯一可变状态。
+
+
+## 25. 按稳定 Feature ID 执行空间状态变更
+
+规范 FeatureCollection 的变更必须通过不可变 mutation API 完成，当前提供 upsert、properties patch、geometry replacement 和批量删除。所有操作以稳定 Feature.id 定位，删除可写入 tombstone，恢复同 ID Feature 时清除对应 tombstone。
+
+这些函数是实时编辑器迁移的基础契约。迁移完成前，旧数组工作模型仍然存在；不得在 UI 中同时维护两套可写状态，也不得用深度 watch 做双向同步。

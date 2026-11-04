@@ -354,3 +354,6 @@
 - 修复编辑器初始化基础点对象时将 `confidence` 从业务属性中剥离的问题。
 - `qualityStatus` 不再回退读取 `confidence`；优先使用历史质量状态，其次使用 `verificationStatus`，最终保守回退为 unverified。
 - 增加点对象往返转换测试，确保 confidence、verificationStatus、rotation、scale 均保留。
+
+
+- 统一质检集成用例进一步覆盖 Point 树木对象，检查其 objectType、confidence、verificationStatus 与 qualityStatus 同时符合契约。

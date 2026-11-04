@@ -1,3 +1,14 @@
+## 2026-11-04 — 抽取首页 Feature 合并契约
+
+- **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`src/App.vue`。
+- **实际完成**：
+  - 新增纯函数 `mergeCampusSceneFeatureCollections`，集中处理基础边界/出入口/环境对象与编辑器 FeatureCollection 的合并。
+  - 同 ID 编辑器 Feature 覆盖基础 Feature；编辑器新增 Feature 保留；删除标记在合并末端统一过滤。
+  - 首页初始化改为调用统一合并函数，移除 Vue 生命周期中的临时 Map 合并逻辑。
+  - 增加覆盖、追加、删除优先级单元测试。
+- **验证状态**：代码已提交，等待本次提交对应的前端/后端 CI；未进行真实浏览器验收。
+- **已知限制**：基础校园建筑/道路/区域的完整权威数据源仍未统一；未定位 POI 和场地记录暂不生成伪造几何。
+- **下一步**：梳理基础 POI、场地台账与 FeatureCollection 的关系，明确未定位记录模型；随后统一首页与编辑器预览的场景构建适配器。
 ## 2026-11-04 — 编辑器基础对象删除同步
 
 - **修改文件**：`src/editor/CampusPlanEditor.vue`、`src/editor/campusFeatureCollection.js`、`src/editor/campusFeatureCollection.test.js`、`src/App.vue`。

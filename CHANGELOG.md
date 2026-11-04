@@ -474,3 +474,13 @@
 - 粘贴通过 `upsertCampusFeature` 写入规范集合；Point、LineString、Polygon、MultiPolygon 使用统一几何平移逻辑。
 - 新增复制测试，覆盖 Polygon 内环、质量元数据、扩展属性和源对象不可变。
 - 复制粘贴的实际画布交互、撤销/重做及保存回读仍需浏览器验收。
+
+
+## 2026-11-04 — 复制粘贴与几何编辑全面接入规范集合
+
+- 复制从规范 FeatureCollection 读取完整 Feature；粘贴使用 `duplicateCampusFeature` 生成新 ID、平移 geometry 并保留全部 properties。
+- 建筑/区域顶点拖动、道路节点拖动、点对象拖动改为直接更新规范 geometry。
+- 增加/删除 Polygon 顶点、建筑尺寸调整与旋转统一提交 Polygon 外环，同时保留现有内环。
+- 道路节点增删直接提交 LineString coordinates，不再通过 legacy road points 数组重建。
+- 编辑器空间几何更新已移除旧的 `commitFeatureGeometry(fragment)` 写入入口；legacy 数组仅作为兼容视图和交互派生数据。
+- 本轮完成代码静态检查，确认编辑器不再存在直接写入 `footprint/points/coordinates` 的旧路径；CI 结果以最新提交工作流为准，浏览器端验收仍待完成。

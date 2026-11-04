@@ -406,6 +406,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
     }
     for (const road of document.roads || []) addSourcePoints(road.points)
+    for (const object of document.objects || []) if (object.geometry?.type === 'Point') addSourcePoints([object.geometry.coordinates])
     const workspace = document.workspaceBounds
     if (workspace && [workspace.minX, workspace.minY, workspace.maxX, workspace.maxY].every(Number.isFinite)) {
       addSourcePoints([[workspace.minX, workspace.minY], [workspace.maxX, workspace.minY], [workspace.maxX, workspace.maxY], [workspace.minX, workspace.maxY]])
@@ -474,6 +475,46 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         mesh.position.y = 0.02
         rpgPreviewGroup.add(mesh)
       }
+    }
+
+    // 点/实例类对象直接从统一 Feature 文档生成；不再依赖画布硬编码装饰。
+    for (const feature of document.objects || []) {
+      if (feature.geometry?.type !== 'Point' || !Array.isArray(feature.geometry.coordinates)) continue
+      const point = calibratedPoint(feature.geometry.coordinates[0], feature.geometry.coordinates[1])
+      const type = feature.type || feature.properties?.type || 'tree'
+      const scale = Math.max(0.2, Number(feature.properties?.scale) || 1)
+      const group = new THREE.Group()
+      group.name = `campus-feature-${feature.id || type}`
+      group.userData.campusFeatureId = feature.id
+      group.userData.objectType = type
+      group.position.set(point.x, 0, point.z)
+      group.rotation.y = THREE.MathUtils.degToRad(Number(feature.properties?.rotation) || 0)
+      if (type === 'tree') {
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * scale, 0.16 * scale, 1.1 * scale, 5), new THREE.MeshStandardMaterial({ color: '#79583b', roughness: 1 }))
+        trunk.position.y = 0.55 * scale
+        const crown = new THREE.Mesh(new THREE.ConeGeometry(0.72 * scale, 1.65 * scale, 6), new THREE.MeshStandardMaterial({ color: '#477b48', roughness: 1 }))
+        crown.position.y = 1.75 * scale
+        group.add(trunk, crown)
+      } else if (type === 'streetlight') {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045 * scale, 0.06 * scale, 2.8 * scale, 6), new THREE.MeshStandardMaterial({ color: '#59645e', metalness: 0.35, roughness: 0.6 }))
+        pole.position.y = 1.4 * scale
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16 * scale, 8, 6), new THREE.MeshStandardMaterial({ color: '#f5dfa0', emissive: '#b68a42', emissiveIntensity: 0.25 }))
+        lamp.position.set(0, 2.82 * scale, 0)
+        group.add(pole, lamp)
+      } else if (type === 'bench') {
+        const material = new THREE.MeshStandardMaterial({ color: '#98734f', roughness: 0.9 })
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1 * scale, 0.12 * scale, 0.38 * scale), material)
+        seat.position.y = 0.48 * scale
+        const back = new THREE.Mesh(new THREE.BoxGeometry(1.1 * scale, 0.48 * scale, 0.1 * scale), material)
+        back.position.set(0, 0.76 * scale, -0.14 * scale)
+        group.add(seat, back)
+      } else {
+        const sculpture = new THREE.Mesh(new THREE.OctahedronGeometry(0.55 * scale, 0), new THREE.MeshStandardMaterial({ color: '#8c7b9e', roughness: 0.65, metalness: 0.18 }))
+        sculpture.position.y = 0.58 * scale
+        group.add(sculpture)
+      }
+      group.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true } })
+      rpgPreviewGroup.add(group)
     }
 
     const roadNetwork = roadNetworkToMultiPolygon(document.roads)

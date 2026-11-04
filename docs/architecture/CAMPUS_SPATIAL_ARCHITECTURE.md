@@ -350,3 +350,14 @@ legacy 编辑器投影不是规范数据完整性的判断依据。当前编辑�
 服务端以 JSONB 原样持久化规范集合，结构校验不应通过白名单重建 Feature properties，未知业务字段必须保留。至少校验 FeatureCollection 类型、features 数组、稳定 ID 非空且唯一、geometry 结构、坐标有限、properties 为对象、tombstone 为字符串数组和文档体积上限。数据库 schema_version 应与文档 schemaVersion 同步。
 
 端到端验收必须验证 PUT 后 GET 回读完整 FeatureCollection、未知 Feature、扩展 properties、Polygon 内环和删除 tombstone，并验证 revision 冲突不会覆盖服务端已有版本。
+
+
+## 38. 服务端读取、首页合并与渲染消费闭环
+
+平面编辑文档的读取链路为 `GET /campuses/:campusId/maps/:mapId/scene/plan` → `ScenesService.findPlan` → `campus_plan_document.document` JSONB。读取接口返回数据库文档对象，不按建筑/道路/区域白名单重建 FeatureCollection。编辑器 `loadEditorDocument` 优先使用 `document.featureCollection`，将基础校园 FeatureCollection 与服务端集合按稳定 ID 合并，并将 tombstone 应用于合并结果。
+
+首页 `loadHomepagePlanDocument` 读取同一平面编辑文档；启动场景前将规范 FeatureCollection 与基础校园数据合并，再传入 `createCampusEngine`。Three.js 校园场景通过 `createCampusSceneRenderData` / `getCampusSpatialLayers` 从 FeatureCollection 派生建筑、道路、区域和 Point 图层。编辑器 3D 预览也使用同一 `createCampusSceneRenderData` 适配边界。
+
+未知 Feature 类型即使暂不被当前渲染图层识别，也必须留在传入的 FeatureCollection 中；渲染适配器不支持绘制不等于数据可以被删除。当前渲染图层只消费已支持的几何/featureType，未知 Feature 的可视化属于后续能力，不阻断其保存和往返完整性。
+
+服务端 API 集成测试已验证 v4 FeatureCollection 的 PUT/GET 回读、JSONB 扩展属性、Polygon 内环、删除 tombstone 和 revision 冲突。Frontend CI 与 Backend CI 在提交 `b315858` 均成功。真实浏览器仍需验证自动保存、刷新回读、编辑器关闭后首页刷新和 2.5D/3D 预览一致性；legacy 数组仍是兼容交互投影，不应标记为完全移除。

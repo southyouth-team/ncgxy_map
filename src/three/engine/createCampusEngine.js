@@ -415,10 +415,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const maxZ = Math.max(...worldPoints.map(point => point.z))
     const centerX = (minX + maxX) / 2
     const centerZ = (minZ + maxZ) / 2
-    const margin = Math.max(8, Math.max(maxX - minX, maxZ - minZ) * 0.04)
-    // 斜视时，有限地面矩形的近侧边缘会投影成横向截断线；将预览地面扩展到远裁剪面范围内，避免露出场景背景。
-    const groundWidth = Math.max(4000, maxX - minX + margin * 2)
-    const groundDepth = Math.max(4000, maxZ - minZ + margin * 2)
+    // 内容边界只由校园要素/工作区决定；远景地面尺寸不能参与相机取景和角色活动边界计算。
+    const contentWidth = Math.max(20, maxX - minX)
+    const contentDepth = Math.max(20, maxZ - minZ)
+    const margin = Math.max(8, Math.max(contentWidth, contentDepth) * 0.04)
+    // 远景地面只负责填充视野，不代表校园内容范围。
+    const groundWidth = Math.max(4000, contentWidth + margin * 2)
+    const groundDepth = Math.max(4000, contentDepth + margin * 2)
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(groundWidth, groundDepth),
       new THREE.MeshStandardMaterial({ color: '#8eae69', roughness: 1 }),
@@ -557,8 +560,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     loadedBuildingModels.forEach((model) => { model.visible = false })
     // 编辑器实时预览使用当前文档的地面边界和建筑碰撞体，不能沿用旧校园场景的碰撞数据。
     const previewBounds = {
-      minX: centerX - groundWidth / 2, maxX: centerX + groundWidth / 2,
-      minZ: centerZ - groundDepth / 2, maxZ: centerZ + groundDepth / 2,
+      minX: minX - margin, maxX: maxX + margin,
+      minZ: minZ - margin, maxZ: maxZ + margin,
     }
     const previewObstacles = []
     rpgPreviewGroup.updateMatrixWorld(true)
@@ -572,7 +575,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const safeSpawn = collisionWorld.resolvePosition(cameraRig.player)
     cameraRig.player.x = safeSpawn.x
     cameraRig.player.z = safeSpawn.z
-    cameraRig?.focusBounds(groundWidth, groundDepth, centerX, centerZ, { immediate: true })
+    // 相机按真实校园内容范围取景，不能按 4000 单位的远景地面取景。
+    cameraRig?.focusBounds(contentWidth + margin * 2, contentDepth + margin * 2, centerX, centerZ, { immediate: true })
     if (cameraRig.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
     else if (cameraRig.mode === 'thirdPerson') cameraRig.updateThirdPersonDesired()
     return true

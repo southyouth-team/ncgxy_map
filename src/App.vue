@@ -410,6 +410,13 @@ async function loadHomepagePlanDocument() {
     const maps = await request(`/campuses/${campus.id}/maps`)
     const map = maps.find((item) => item.slug === 'main') || maps[0]
     if (!map) return
+    // 编辑器持久化依赖这两个服务端标识；即使编辑文档尚不存在，也必须先初始化 ID。
+    // 否则 CampusPlanEditor 会一直处于 documentLoaded=false，自动保存监听和手动保存都会被禁用。
+    sceneDocument.value = {
+      ...(sceneDocument.value || {}),
+      campusId: String(campus.id),
+      mapId: String(map.id),
+    }
     const saved = await request(`/campuses/${campus.id}/maps/${map.id}/scene/plan`)
     if (saved.document?.coordinateSystem === 'campus-plan-pixel') campusPlanDocument.value = saved.document
   } catch (error) {

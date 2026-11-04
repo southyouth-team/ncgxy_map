@@ -70,7 +70,7 @@ export function toCampusFeatureCollection(document = {}) {
       id,
       'building',
       label || building.name || template,
-      { type: 'Polygon', coordinates: [closeRing(footprint)] },
+      { type: 'Polygon', coordinates: [closeRing(footprint), ...(building.holes || []).filter(hole => Array.isArray(hole) && hole.length >= 3).map(closeRing)] },
       { ...properties, template: template || null },
       building.source || 'campus-layout',
       building.qualityStatus || 'unverified',
@@ -147,7 +147,8 @@ export function fromCampusFeatureCollection(collection = {}) {
 
     if (type === 'building' && feature.geometry?.type === 'Polygon') {
       const footprint = (feature.geometry.coordinates?.[0] || []).slice(0, -1);
-      result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, confidence: properties.confidence || 'low', qualityStatus, source });
+      const holes = (feature.geometry.coordinates || []).slice(1).map(ring => ring.slice(0, -1));
+      result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, holes, confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (type === 'road' && feature.geometry?.type === 'LineString') {
       result.roads.push({ ...properties, id: String(feature.id), name, points: feature.geometry.coordinates, width: properties.width, confidence: properties.confidence || 'low', qualityStatus, source });
     } else if (['green', 'water', 'sports', 'plaza', 'parking'].includes(type) && feature.geometry?.type === 'Polygon') {

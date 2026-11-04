@@ -461,3 +461,10 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - Nest 应用通过 `NestFactory.create(AppModule, { bodyParser: false })` 关闭默认解析器，避免 Express 默认 100 KiB JSON 限制先行拦截空间文档。
 - 在 Express 平台显式注册 `json({ limit: '16mb' })` 与 `urlencoded({ extended: true, limit: '1mb' })`，使用 `app.use()` 挂载中间件；不调用 `INestApplication` 未声明的 `useBodyParser()`。
 - 16 MiB 传输上限与 15 MiB 场景文档业务上限保持边界关系，业务校验仍是最终约束。
+
+## 56. 2D 编辑器空间对象首屏一致性
+
+- `CampusPlanEditor` 的本地基础数组仅是加载期间的初始状态，不能在服务端保存文档尚未读取时作为最终空间视图展示。
+- SVG 空间对象组由 `documentLoaded` 门控；只有服务端文档 GET、基础 FeatureCollection 与编辑 FeatureCollection 合并、legacy 交互投影完成后才显示对象。
+- 参考底图预览属于非关键辅助资源，采用后台异步加载，不能阻塞空间文档就绪。
+- 本修复只调整首屏可见时序，不改变 FeatureCollection 的数据权威性、合并优先级、tombstone 语义或保存协议。

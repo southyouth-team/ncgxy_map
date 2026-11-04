@@ -251,8 +251,7 @@ async function removeAsset(asset) {
 
 function exportManifest() {
   const ready = assets.value.filter(item => item.status === 'ready' && item.deployedConfirmed)
-  const bindings = new Map()
-  const manifestAssets = []
+  const groupedAssets = new Map()
   for (const item of ready) {
     const path = item.publicPath
     const validRoot = item.viewMode === '3d'
@@ -266,21 +265,22 @@ function exportManifest() {
       format: item.viewMode === '3d' ? 'glb' : path.split('.').pop().toLowerCase(),
       url: path,
     }
-    manifestAssets.push({
-      assetId: item.assetId,
-      name: item.name,
+    const group = groupedAssets.get(item.featureId) || {
+      assetId: 'campus-' + item.featureId,
+      name: item.featureName || item.name,
       category: item.category,
       sourceType: item.sourceType,
       status: 'ready',
-      files: [file],
+      files: [],
       provenance: {
         provider: item.sourceType === 'ai_generated' ? 'user-selected-ai-tool' : item.sourceType,
         prompt: item.prompt || '',
         createdAt: item.createdAt,
         notes: '由素材工坊人工审核并确认文件已放入项目 public 目录',
       },
-    })
-    bindings.set(item.featureId, item.assetId)
+    }
+    group.files.push(file)
+    groupedAssets.set(item.featureId, group)
   }
   const manifest = {
     schemaVersion: 1,
@@ -289,8 +289,8 @@ function exportManifest() {
     viewModes: ['2.5d', '3d', 'shared'],
     sourceTypes: ['ai_generated', 'manual_model', 'procedural', 'external'],
     statuses: ['draft', 'review', 'ready', 'archived'],
-    assets: manifestAssets,
-    bindings: [...bindings.entries()].map(([featureId, assetId]) => ({ featureId, assetId })),
+    assets: [...groupedAssets.values()],
+    bindings: [...groupedAssets.entries()].map(([featureId, asset]) => ({ featureId, assetId: asset.assetId })),
   }
   const report = validateCampusAssetManifest(manifest)
   if (!report.valid) {
@@ -449,11 +449,11 @@ onBeforeUnmount(resetPreview)
 .workshop-panel{padding:22px;border:1px solid #d9e1d7;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(37,53,45,.035)}
 .panel-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:20px;font-size:12px;font-weight:800;letter-spacing:.7px}.panel-heading small{font-size:10px;font-weight:500;color:#8a978d}
 .workshop-panel label{display:flex;flex-direction:column;gap:7px;margin:13px 0;font-size:11px;font-weight:700;color:#526257}
-.workshop-panel input:not([type=file]):not([type=checkbox]),.workshop-panel select,.workshop-panel textarea{width:100%;padding:10px 11px;border:1px solid #dce4da;border-radius:6px;background:#fbfcfa;color:#26372e;font:12px inherit;outline:none}
+.workshop-panel input:not([type=file]):not([type=checkbox]),.workshop-panel select,.workshop-panel textarea{width:100%;padding:10px 11px;border:1px solid #dce4da;border-radius:6px;background:#fbfcfa;color:#26372e;font:inherit;font-size:12px;outline:none}
 .workshop-panel textarea{resize:vertical;line-height:1.65}.workshop-panel input:focus,.workshop-panel select:focus,.workshop-panel textarea:focus{border-color:#829b83}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .button-row{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
-.primary-button,.secondary-button,.danger-button{padding:9px 13px;border:1px solid #315b43;border-radius:6px;background:#315b43;color:#fff;font:600 11px inherit;cursor:pointer}
+.primary-button,.secondary-button,.danger-button{padding:9px 13px;border:1px solid #315b43;border-radius:6px;background:#315b43;color:#fff;font:inherit;font-size:11px;font-weight:600;cursor:pointer}
 .secondary-button{border-color:#d6dfd4;background:#fff;color:#465b4b}.danger-button{border-color:#ecd3cf;background:#fff7f6;color:#a24d43}
 button:disabled{opacity:.45;cursor:not-allowed}
 .hint{font-size:10px;line-height:1.7;color:#8b988e}

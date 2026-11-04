@@ -728,3 +728,20 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - 通过 `onAssetAudit` 回调向业务层输出结构化结果；异常输出 `[CampusAssetAudit]`，`?render-debug=1` 下可查看通过报告。
 - GLB 资产是程序化建筑的增强/替换视觉层；缺失 GLB 不代表空间 Feature 丢失。此审计不验证模型与 footprint 的实际位置/旋转偏差，不验证楼层高度与源数据语义，也不衡量 GPU draw call 或帧时间。
 
+
+
+## 25. GLB 建筑模型与规范 footprint 几何偏差审计
+
+异步 GLB 加载后，引擎使用 `Box3.setFromObject` 计算模型世界坐标包围盒，并调用 `auditCampusBuildingModelGeometry` 对比规范建筑 Feature：
+
+- 以稳定 buildingId 关联模型与建筑 Feature。
+- 将建筑 footprint 像素坐标通过 `mapPixelToWorld` 转换为校园世界坐标，计算 footprint 轴对齐包围盒。
+- 检查模型包围盒中心与 footprint 包围盒中心的水平偏移，默认容差 2.5 世界单位。
+- 检查模型宽度/深度与 footprint 包围盒尺寸的相对误差，默认阈值 35%。
+- 只有 Feature 提供明确正数 height 时才比较模型实际 Y 高度；容差为 max(1.5, 源高度的 20%)。缺失源高度标记为不可比较。
+- 输出 `onAssetGeometryAudit` 结构化报告；异常输出 `[CampusAssetGeometryAudit]`，调试模式下输出统计。
+- 未加载模型标记为 `not_loaded`，不会作为异常；没有规范 footprint 的模型 ID 会单独报错。
+- 模型旋转角只记录、不判定，因为当前规范建筑 Feature 尚无统一的方向基准。
+- 该对比使用轴对齐包围盒而非多边形精确重叠：凹形、斜边、旋转 footprint 会产生近似误差，结果应作为资产定位/尺度问题筛查，不作为碰撞几何的最终证明。
+- 当前 GLB 清单 `public/data/buildings.json` 为空，故当前真实模型匹配数为 0；只有录入建筑模型后才能形成逐栋偏差结论。
+

@@ -552,3 +552,13 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - 水域碰撞从 `createCampusSceneRenderData(featureCollection).layers.areas` 中筛选 `type=water` 的 Polygon，并保留所有 holes。这样湖泊移动、删除、重绘后，碰撞边界与实际水面同步，内环岛屿保持可通行。
 - 建筑墙段、独立设施圆形碰撞和校园 walkableBounds 仍按各自明确语义注册；本次不通过关闭碰撞来解决空地阻挡。
 - 验收：空地可自由行走；水面不可穿越；湖中岛屿可行走；编辑器修改水域后首页渲染与碰撞位置一致。
+
+
+## 65. 校园空间要素通行属性（2026-11-05）
+
+- `Feature.properties.walkable` 是人物漫游碰撞的唯一业务开关，类型默认值集中定义于 `src/data/campus/walkability.js`。
+- 默认策略：building/water=false；普通 area/green/plaza/sports/parking、road、boundary、gate=true；object 中 tree/bench/streetlight/lamp/sculpture/facility=false，flower/plant/grass/decoration=true。
+- 显式布尔值优先于类型默认值，支持单个对象例外；编辑器属性检查器可修改该字段，修改纳入 FeatureCollection 历史和保存机制。
+- 场景构建将 walkable 写入建筑/点对象 userData；引擎仅为 walkable=false 的建筑和实体设施注册碰撞体，水域 Polygon 同样尊重显式覆盖。
+- 相机遮挡根集合仍保留建筑对象，不因人物可通行设置而移除视觉相机避障引用。
+- 验收：空地/绿地/道路可走；默认建筑/湖水/树木/座椅/路灯不可穿越；将单个对象改为允许通行后人物可穿过；改回禁止通行后恢复阻挡；刷新后属性保持。

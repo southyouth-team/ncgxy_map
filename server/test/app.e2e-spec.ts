@@ -330,4 +330,105 @@ describe('Campus map API (PostGIS integration)', () => {
       .send({ revision: 1, definition }).expect(403);
   });
 
+
+  it('persists schema v4 canonical FeatureCollection without dropping unknown features or tombstones', async () => {
+    const planUrl = `${base}/campuses/${campusId}/maps/${mapId}/scene/plan`;
+    const unknownFeature = {
+      type: 'Feature',
+      id: 'future-zone-01',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [[0, 0], [20, 0], [20, 20], [0, 0]],
+          [[4, 4], [8, 4], [4, 4]],
+        ],
+      },
+      properties: {
+        featureType: 'future-zone',
+        source: 'survey-v2',
+        confidence: 'high',
+        verificationStatus: 'verified',
+        vendorData: { model: 'future', revision: 9 },
+      },
+    };
+    const document = {
+      schemaVersion: 4,
+      mapId,
+      coordinateSystem: 'campus-plan-pixel',
+      units: 'pixel',
+      deletedFeatureIds: ['removed-gate-01'],
+      buildings: [],
+      areas: [],
+      roads: [],
+      objects: [],
+      featureCollection: {
+        type: 'FeatureCollection',
+        features: [unknownFeature],
+        deletedFeatureIds: ['removed-gate-01'],
+        vendorCollectionMeta: { preserve: true },
+      },
+    };
+
+    const saved = await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 0, document })
+      .expect(200);
+    expect(Number(saved.body.revision)).toBe(1);
+    expect(Number(saved.body.schemaVersion)).toBe(4);
+
+    const loaded = await request(app.getHttpServer())
+      .get(planUrl).set(auth).expect(200);
+    expect(Number(loaded.body.revision)).toBe(1);
+    expect(Number(loaded.body.schema_version || loaded.body.schemaVersion)).toBe(4);
+    expect(loaded.body.document.featureCollection).toEqual(document.featureCollection);
+    expect(loaded.body.document.deletedFeatureIds).toEqual(['removed-gate-01']);
+
+    const persisted = await db.query(
+      'SELECT schema_version,document FROM campus_plan_document WHERE campus_id=$1 AND map_id=$2',
+      [campusId, mapId],
+    );
+    expect(Number(persisted[0].schema_version)).toBe(4);
+    expect(persisted[0].document.featureCollection.features[0].properties.vendorData).toEqual({ model: 'future', revision: 9 });
+
+    await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 0, document }).expect(409);
+
+    const invalid = {
+      ...document,
+      featureCollection: {
+        ...document.featureCollection,
+        features: [unknownFeature, unknownFeature],
+      },
+    };
+    await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 1, document: invalid }).expect(400);
+
+    const afterInvalid = await request(app.getHttpServer())
+      .get(planUrl).set(auth).expect(200);
+    expect(Number(afterInvalid.body.revision)).toBe(1);
+    expect(afterInvalid.body.document.featureCollection.features).toHaveLength(1);
+  });
+
+  it('continues accepting legacy schema v2 plan documents', async () => {
+    const planUrl = `${base}/campuses/${campusId}/maps/${mapId}/scene/plan`;
+    const legacyDocument = {
+      schemaVersion: 2,
+      mapId,
+      coordinateSystem: 'campus-plan-pixel',
+      buildings: [],
+      areas: [],
+      roads: [],
+      objects: [],
+    };
+    const saved = await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 1, document: legacyDocument }).expect(200);
+    expect(Number(saved.body.revision)).toBe(2);
+    expect(Number(saved.body.schemaVersion)).toBe(2);
+    const loaded = await request(app.getHttpServer()).get(planUrl).set(auth).expect(200);
+    expect(loaded.body.document.schemaVersion).toBe(2);
+  });
+
 });

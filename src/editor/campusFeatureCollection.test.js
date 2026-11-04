@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot } from './campusFeatureCollection.js'
+import { toCampusFeatureCollection, fromCampusFeatureCollection, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, upsertCampusFeature, updateCampusFeatureProperties, updateCampusFeatureGeometry, removeCampusFeatures } from './campusFeatureCollection.js'
 
 describe('toCampusFeatureCollection', () => {
   it('normalizes buildings, roads, areas and point objects into one feature collection', () => {
@@ -176,6 +176,37 @@ describe('toCampusFeatureCollection', () => {
 
   it('rejects unsupported canonical history snapshot versions', () => {
     expect(() => restoreCampusFeatureSnapshot({ type: 'CampusFeatureSnapshot', version: 99 })).toThrow('不支持的校园空间历史快照版本')
+  })
+
+
+  it('mutates canonical features immutably by stable ID', () => {
+    const original = {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', id: 'building-1', geometry: { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 0]]] }, properties: { featureType: 'building', name: '旧名称', floors: 2 } }],
+      deletedFeatureIds: ['tree-1'],
+    }
+    const renamed = updateCampusFeatureProperties(original, 'building-1', { name: '新名称', floors: 3 })
+    expect(renamed.features[0].properties).toMatchObject({ name: '新名称', floors: 3 })
+    expect(original.features[0].properties).toMatchObject({ name: '旧名称', floors: 2 })
+    const moved = updateCampusFeatureGeometry(renamed, 'building-1', { type: 'Polygon', coordinates: [[[1, 1], [11, 1], [11, 11], [1, 1]]] })
+    expect(moved.features[0].geometry.coordinates[0][0]).toEqual([1, 1])
+    expect(moved.features[0].properties.name).toBe('新名称')
+
+    const added = upsertCampusFeature(moved, { type: 'Feature', id: 'tree-1', geometry: { type: 'Point', coordinates: [5, 5] }, properties: { featureType: 'object' } })
+    expect(added.features).toHaveLength(2)
+    expect(added.deletedFeatureIds).toEqual([])
+    const removed = removeCampusFeatures(added, ['building-1', 'tree-1'], { recordDeleted: true })
+    expect(removed.features).toHaveLength(0)
+    expect(removed.deletedFeatureIds).toEqual(['building-1', 'tree-1'])
+    expect(original.features).toHaveLength(1)
+    expect(original.deletedFeatureIds).toEqual(['tree-1'])
+  })
+
+  it('rejects missing IDs and updates to unknown features', () => {
+    const collection = { type: 'FeatureCollection', features: [], deletedFeatureIds: [] }
+    expect(() => upsertCampusFeature(collection, { geometry: { type: 'Point', coordinates: [0, 0] } })).toThrow('Feature 必须包含稳定 ID 和 geometry')
+    expect(() => updateCampusFeatureProperties(collection, 'missing', { name: 'x' })).toThrow('找不到空间要素：missing')
+    expect(() => updateCampusFeatureGeometry(collection, 'missing', { type: 'Point', coordinates: [0, 0] })).toThrow('找不到空间要素：missing')
   })
 
 })

@@ -61,6 +61,7 @@ async function loadEditorDocument() {
         const validObjects = normalized.objects.filter(item => item?.geometry?.type === 'Point' && Array.isArray(item.geometry.coordinates))
         objects.value = mergeEditorLayer(BASE_CAMPUS_OBJECTS, validObjects, deletedIds)
       }
+      spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedIds })
       if (document.calibration?.controlPoints) calibrationPoints.value = document.calibration.controlPoints
       if (document.referenceImage) {
         referenceImage.value = document.referenceImage
@@ -68,6 +69,7 @@ async function loadEditorDocument() {
         if (document.referenceImage.assetId) await loadAssetPreview(document.referenceImage.assetId)
       }
     }
+    if (!spatialFeatureCollection.value.features.length) spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value })
     documentLoaded.value = true
     lastSavedSnapshot = JSON.stringify(buildDocument())
     persistenceMessage.value = saved.document ? `已加载服务端版本 · ${documentRevision.value}` : '当前地图尚无服务端编辑文档，修改后将自动保存'
@@ -152,6 +154,8 @@ const buildings = ref(BASE_CAMPUS_BUILDINGS.map(item => ({ ...item })))
 const areas = ref(BASE_CAMPUS_AREAS.map(item => ({ ...item })))
 const roads = ref(BASE_CAMPUS_ROADS.map(item => ({ ...item })))
 const objects = ref(BASE_CAMPUS_OBJECTS.map(item => ({ ...item, geometry: { ...item.geometry, coordinates: [...item.geometry.coordinates] }, properties: { ...item.properties } })))
+// FeatureCollection 是编辑器唯一的空间状态；legacy 数组仅作为模板/交互兼容投影。
+const spatialFeatureCollection = ref(toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value }))
 const objectKinds = [{ value: 'tree', label: '树木' }, { value: 'streetlight', label: '路灯' }, { value: 'bench', label: '座椅' }, { value: 'sculpture', label: '雕塑' }]
 const objectKind = ref('tree')
 const selectedObject = computed(() => objects.value.find(item => item.id === selected.value.id && selected.value.type === 'object') || null)
@@ -1016,9 +1020,9 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function commitFeatureCollectionMutation(mutator) {
-  // 属性面板统一通过规范 FeatureCollection mutation API 写入，再投影回迁移期交互视图。
-  const current = toCampusFeatureCollection(buildDocument())
-  const next = mutator(current)
+  // 所有空间写入都以规范 FeatureCollection 为输入和输出；数组只用于兼容现有模板。
+  const next = mutator(spatialFeatureCollection.value)
+  spatialFeatureCollection.value = next
   const document = fromCampusFeatureCollection(next)
   buildings.value = document.buildings.map(normalizeBuilding)
   roads.value = document.roads
@@ -1057,9 +1061,24 @@ function updateSelectedFeatureProperty(key, value, { numeric = false, nested = f
 }
 
 function buildDocument() {
-  const document = { schemaVersion: 3, deletedFeatureIds: [...deletedFeatureIds.value], coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
-  document.featureCollection = toCampusFeatureCollection(document)
-  return document
+  // 保存、历史、预览均从唯一空间状态派生；legacy 数组不再反向生成空间数据。
+  const projected = fromCampusFeatureCollection(spatialFeatureCollection.value)
+  return {
+    schemaVersion: 4,
+    deletedFeatureIds: [...spatialFeatureCollection.value.deletedFeatureIds],
+    coordinateSystem: 'campus-plan-pixel',
+    units: 'pixel',
+    worldUnitsPerCampusUnit: 1,
+    source: 'campusLayout.js',
+    referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null,
+    calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null,
+    workspaceBounds: workspaceBounds.value,
+    areas: projected.areas.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })),
+    buildings: projected.buildings.map(normalizeBuilding),
+    roads: projected.roads,
+    objects: projected.objects,
+    featureCollection: spatialFeatureCollection.value,
+  }
 }
 function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {

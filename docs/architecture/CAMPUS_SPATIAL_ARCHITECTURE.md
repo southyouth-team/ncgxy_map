@@ -381,3 +381,8 @@ mergeCampusSceneFeatureCollections 合并基础集合与编辑器集合时，del
 ## 42. 编辑器加载必须保留基础集合 metadata
 
 编辑器初始化和加载服务端文档时，基础 FeatureCollection 必须直接来自 buildCampusGeoJSON() 的完整结果，不能仅从建筑、道路、区域、点对象四组兼容数组重新构建，否则 metadata.catalogue 等未定位目录信息会丢失。toCampusFeatureCollection() 在承担兼容转换职责时必须透传 document.metadata；mergeCampusFeatureCollections() 对基础与编辑器 metadata 采用基础默认、编辑器同名字段优先的策略，catalogue 按子键合并。首页和编辑器必须遵守同一集合级元数据保留语义。
+
+
+## 43. 服务端保存必须原样保留集合级 metadata
+
+schema v4 的 FeatureCollection metadata 属于规范空间数据的一部分。SaveRpgMapDto 将 document 作为对象接收，服务层校验后直接 JSON.stringify 写入 JSONB；不得通过仅声明已知字段的嵌套 DTO 或白名单映射重建 FeatureCollection。API 集成测试覆盖 metadata.dataset、metadata.catalogue 中基础目录与编辑器扩展目录的 PUT/GET 原样回读。

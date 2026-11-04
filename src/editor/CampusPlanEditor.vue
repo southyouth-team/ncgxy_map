@@ -82,6 +82,7 @@ async function loadEditorDocument() {
     if (!spatialFeatureCollection.value.features.length) spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value })
     documentLoaded.value = true
     lastSavedSnapshot = JSON.stringify(buildDocument())
+    persistenceState.value = saved.document ? 'saved' : 'idle'
     persistenceMessage.value = referenceImagePreviewError || (saved.document
       ? `已加载服务端版本 · ${documentRevision.value}`
       : '当前地图尚无服务端编辑文档，修改后将自动保存')
@@ -107,7 +108,11 @@ async function loadAssetPreview(assetId) {
   savedAssetId.value = assetId
 }
 async function saveEditorDocument() {
-  if (!props.campusId || !props.mapId) { persistenceMessage.value = '缺少校园或地图 ID，无法持久化'; return }
+  if (!props.campusId || !props.mapId) {
+    persistenceState.value = 'error'
+    persistenceMessage.value = '缺少校园或地图 ID，无法持久化'
+    return
+  }
   if (persistenceBusy.value || revisionConflict.value) return
   const document = { ...buildDocument(), mapId: String(props.mapId) }
   const requestSnapshot = JSON.stringify(buildDocument())
@@ -132,7 +137,7 @@ async function saveEditorDocument() {
       persistenceMessage.value = '检测到版本冲突：服务端已有其他编辑者的新版本。本地修改已保留，请导出本地版本或重新加载服务端版本。'
     } else {
       persistenceState.value = 'error'
-      persistenceMessage.value = error.message
+      persistenceMessage.value = `保存失败：${error.message}`
     }
   } finally {
     persistenceBusy.value = false
@@ -785,6 +790,8 @@ onBeforeUnmount(() => {
 watch(() => JSON.stringify(buildDocument()), (snapshot) => {
   if (!documentLoaded.value || !props.campusId || !props.mapId || revisionConflict.value) return
   if (snapshot === lastSavedSnapshot) return
+  persistenceState.value = 'dirty'
+  persistenceMessage.value = '检测到未保存修改，等待自动保存…'
   if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
   autoSaveTimer = window.setTimeout(() => {
     if (persistenceBusy.value) {
@@ -1154,7 +1161,7 @@ function exportDocument() {
         <button @click="undo" :disabled="!history.length">撤销</button><button @click="redo" :disabled="!future.length">重做</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
         <button title="缩小（-）" @click="zoomAt(Math.max(.05, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配工作区</button><button title="放大（+）" @click="zoomAt(Math.min(8, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
-        <button @click="preview3d">三维预览</button><span class="save-indicator" :class="persistenceState">{{ persistenceBusy ? '正在保存…' : persistenceState === 'saved' ? '已自动保存' : persistenceState === 'conflict' ? '版本冲突' : persistenceState === 'error' ? '保存失败' : '自动保存已开启' }}</span><button @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
+        <button @click="preview3d">三维预览</button><span class="save-indicator" :class="persistenceState" :title="persistenceMessage">{{ persistenceBusy ? '正在保存…' : persistenceState === 'saved' ? `已保存 · v${documentRevision}` : persistenceState === 'dirty' ? '有未保存修改' : persistenceState === 'conflict' ? '保存冲突' : persistenceState === 'error' ? '保存失败' : '等待修改' }}</span><button @click="saveEditorDocument" :disabled="persistenceBusy || revisionConflict || !documentLoaded">立即保存</button><button @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
       </div>
     </header>
     <div class="workspace">

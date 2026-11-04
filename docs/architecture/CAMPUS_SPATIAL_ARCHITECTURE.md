@@ -511,3 +511,14 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - 显式添加 `?render-debug=1` 后，渲染诊断输出 renderer draw calls、triangles、points、lines、geometries、textures、场景对象数、Mesh 数以及最近一次 renderer.render CPU 提交耗时。
 - 诊断数据用于区分 CPU 提交开销、draw-call 压力、几何/纹理资源规模与 GPU 像素填充压力；浏览器端仍需结合 DevTools Performance/GPU 信息判断真实 GPU 执行时间。
 - 以上优化不修改 FeatureCollection、Feature geometry、对象 ID、碰撞体、自动保存、撤销/重做和首页/编辑器数据一致性契约。
+
+
+## 61. 渲染质量、阴影缓存与深度精度（2026-11-05）
+
+- 2.5D/3D 总览均保留定向光阴影。阴影贴图使用 PCFSoftShadowMap，2048×2048 分辨率；静态场景通过 renderer.shadowMap.autoUpdate=false 缓存阴影，不能因相机平移/缩放重新计算。
+- 场景几何变化必须显式设置 renderer.shadowMap.needsUpdate：基础/GLB 资产加载、RPG/校园编辑预览切换、室内楼层重建/退出、场景对象几何替换均属于失效边界。
+- WebGL 开启 MSAA；绘制倍率按设备 DPR 与约 240 万像素缓冲区预算自适应。CanvasTexture 像素素材继续使用 NearestFilter，MSAA 只处理几何边缘。
+- 正交/透视相机 near/far 调整为 0.5/3200，避免不必要的超大深度范围降低深度缓冲精度。若仍出现局部闪烁，需进一步用 WebGL 深度可视化和对象重叠检查定位具体几何，而不是全局关闭深度测试。
+- 阴影缓存与 requestAnimationFrame 按需调度分离：静止总览仍停止持续帧循环；场景变更只请求一帧并更新阴影贴图。
+- 浏览器验收必须检查 2.5D 阴影、3D 阴影、编辑预览切换、室内楼层切换、近景建筑/道路/水岸边缘和缩放时的闪烁。自动化构建无法替代实际 GPU 视觉验收。
+

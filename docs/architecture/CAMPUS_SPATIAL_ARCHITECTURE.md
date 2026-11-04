@@ -65,3 +65,16 @@
 - 2.5D/3D 切换不能通过加载不同虚构校园场景实现。
 - 当前样板场景只作为视觉验证资产；逐步将其视觉规范迁移到真实校园数据渲染。
 - 室内能力保留但不占用当前户外建模主线。
+
+## 7. 统一 FeatureCollection 迁移状态
+
+当前编辑器的交互层仍使用 buildings / roads / areas / objects 四类集合，以降低现有工具、属性面板和撤销重做逻辑的迁移风险；但保存与预览边界已增加标准 GeoJSON `featureCollection`：
+
+- 建筑：Polygon，名称、楼层、模板等放入 properties。
+- 道路：LineString，中心线保持为权威几何，width 保存在 properties。
+- 绿地/水域/运动场/广场/停车场：Polygon，支持内环 holes。
+- 树木/路灯/座椅/雕塑等：Point，类型、朝向、缩放等放入 properties。
+- 每个 Feature 保留稳定 id、source、qualityStatus；坐标仍为 campus-plan-pixel，不是经纬度或米制坐标。
+
+编辑器加载优先读取 FeatureCollection，并通过过渡适配器提供旧交互集合；保存时生成 FeatureCollection；Three.js 编辑器预览优先消费 FeatureCollection，再适配到当前渲染流程。旧 buildings/roads/areas/objects 字段暂时保留为兼容字段，尚未完成服务端 canonical-only 存储和所有渲染器的统一迁移。
+

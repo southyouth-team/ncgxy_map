@@ -1126,20 +1126,20 @@ function exportDocument() {
         <div class="inspector-heading"><div class="panel-title">属性检查器</div><span>PROPERTIES</span></div>
         <div class="selected-card"><small>当前选中</small><strong>{{ selectedLabel }}</strong><span>{{ selected.type==='road' ? '道路 / LineString' : selected.type==='building' ? '建筑 / Footprint' : selected.type==='area' ? '校园区域 / Polygon' : '请选择场景对象' }}</span></div>
         <template v-if="selectedBuilding">
-          <label>建筑名称</label><input v-model="selectedBuilding.label">
-          <label>建筑模板</label><select v-model="selectedBuilding.template"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>
+          <label>建筑名称</label><input v-model="selectedBuilding.label" @focus="snapshot">
+          <label>建筑模板</label><select v-model="selectedBuilding.template" @focus="snapshot"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>
           <label>三维建筑参数</label>
           <div class="property-grid">
-            <label>建筑高度<input type="number" min="1" max="80" step="0.2" v-model.number="selectedBuilding.height"></label>
-            <label>楼层数<input type="number" min="1" max="30" step="1" v-model.number="selectedBuilding.floors"></label>
-            <label>窗户密度<input type="number" min="0.1" max="3" step="0.05" v-model.number="selectedBuilding.windowDensity"></label>
-            <label>窗户宽度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowWidth"></label>
-            <label>窗户高度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowHeight"></label>
-            <label>入口宽度<input type="number" min="0.5" max="5" step="0.1" v-model.number="selectedBuilding.doorWidth"></label>
-            <label>屋顶起拱高度<input type="number" min="0" max="8" step="0.1" v-model.number="selectedBuilding.roofRise"></label>
+            <label>建筑高度<input type="number" min="1" max="80" step="0.2" v-model.number="selectedBuilding.height" @focus="snapshot"></label>
+            <label>楼层数<input type="number" min="1" max="30" step="1" v-model.number="selectedBuilding.floors" @focus="snapshot"></label>
+            <label>窗户密度<input type="number" min="0.1" max="3" step="0.05" v-model.number="selectedBuilding.windowDensity" @focus="snapshot"></label>
+            <label>窗户宽度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowWidth" @focus="snapshot"></label>
+            <label>窗户高度<input type="number" min="0.2" max="3" step="0.05" v-model.number="selectedBuilding.windowHeight" @focus="snapshot"></label>
+            <label>入口宽度<input type="number" min="0.5" max="5" step="0.1" v-model.number="selectedBuilding.doorWidth" @focus="snapshot"></label>
+            <label>屋顶起拱高度<input type="number" min="0" max="8" step="0.1" v-model.number="selectedBuilding.roofRise" @focus="snapshot"></label>
           </div>
-          <label>屋顶样式</label><select v-model="selectedBuilding.roofStyle"><option value="">跟随建筑模板</option><option value="flat">平顶</option><option value="pitched">双坡顶</option><option value="glass">玻璃顶</option><option value="span">跨度双坡顶（受限轮廓）</option></select>
-          <label>主入口所在边</label><select v-model="selectedBuilding.entranceEdgeIndex"><option value="">自动选择最长边</option><option v-for="(_,index) in selectedBuilding.footprint" :key="index" :value="index">第 {{ index + 1 }} 条边</option></select>
+          <label>屋顶样式</label><select v-model="selectedBuilding.roofStyle" @focus="snapshot"><option value="">跟随建筑模板</option><option value="flat">平顶</option><option value="pitched">双坡顶</option><option value="glass">玻璃顶</option><option value="span">跨度双坡顶（受限轮廓）</option></select>
+          <label>主入口所在边</label><select v-model="selectedBuilding.entranceEdgeIndex" @focus="snapshot"><option value="">自动选择最长边</option><option v-for="(_,index) in selectedBuilding.footprint" :key="index" :value="index">第 {{ index + 1 }} 条边</option></select>
           <div v-if="!selectedBuildingFootprintValidation.valid" class="geometry-warning">
             <strong>建筑轮廓校验未通过</strong><span v-for="error in selectedBuildingFootprintValidation.errors" :key="error">{{ error }}</span>
           </div>
@@ -1156,20 +1156,20 @@ function exportDocument() {
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。</p><button class="add-button" @click="rotateBuilding">↻ 旋转 90°</button><button class="danger-button" @click="deleteSelected">删除建筑</button>
         </template>
         <template v-else-if="selectedArea">
-          <label>区域名称</label><input v-model="selectedArea.name">
-          <label>区域类型</label><select v-model="selectedArea.type"><option v-for="item in areaKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
+          <label>区域名称</label><input v-model="selectedArea.name" @focus="snapshot">
+          <label>区域类型</label><select v-model="selectedArea.type" @focus="snapshot"><option v-for="item in areaKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。支持顶点吸附。</p>
           <button class="danger-button" @click="deleteSelected">删除区域</button>
         </template>
         <template v-else-if="selectedObject">
-          <label>对象名称</label><input v-model="selectedObject.name">
-          <label>对象类型</label><select v-model="selectedObject.type"><option v-for="item in objectKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
-          <label>朝向（度）</label><input type="number" v-model.number="selectedObject.properties.rotation">
-          <label>缩放</label><input type="number" min="0.2" max="5" step="0.1" v-model.number="selectedObject.properties.scale">
+          <label>对象名称</label><input v-model="selectedObject.name" @focus="snapshot">
+          <label>对象类型</label><select v-model="selectedObject.type" @focus="snapshot"><option v-for="item in objectKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
+          <label>朝向（度）</label><input type="number" v-model.number="selectedObject.properties.rotation" @focus="snapshot">
+          <label>缩放</label><input type="number" min="0.2" max="5" step="0.1" v-model.number="selectedObject.properties.scale" @focus="snapshot">
           <button class="danger-button" @click="deleteSelected">删除对象</button>
         </template>
         <template v-else-if="selectedRoad">
-          <label>道路宽度</label><input v-model.number="selectedRoad.width" type="range" min="4" max="24">
+          <label>道路宽度</label><input v-model.number="selectedRoad.width" @focus="snapshot" type="range" min="4" max="24">
           <button class="add-button" @click="addRoadNode">＋ 添加道路控制点</button><p class="hint">拖动控制点调整曲线；点击控制点删除（至少保留 2 个）。道路采用平滑曲线显示。</p><button class="danger-button" @click="deleteSelected">删除道路</button>
         </template>
         <div v-else class="empty-inspector"><span class="empty-inspector-icon">⌖</span><strong>尚未选择对象</strong><p>在画布中点击建筑、道路或区域，即可查看并编辑对应属性。</p></div>

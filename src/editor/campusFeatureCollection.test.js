@@ -39,9 +39,11 @@ describe('toCampusFeatureCollection', () => {
       roads: [{ id: 'r1', points: [[0, 5], [20, 5]], width: 8 }],
       areas: [{ id: 'a1', name: '湖泊', type: 'water', footprint: [[2, 2], [8, 2], [8, 8]] }],
       objects: [{ id: 'o1', type: 'tree', name: '香樟', geometry: { type: 'Point', coordinates: [4, 6] }, properties: { rotation: 30, scale: 1.2 } }],
+      metadata: { dataset: 'baseline', catalogue: { pois: [{ id: 'library' }] } },
     })
 
     expect(result.type).toBe('FeatureCollection')
+    expect(result.metadata).toEqual({ dataset: 'baseline', catalogue: { pois: [{ id: 'library' }] } })
     expect(result.features).toHaveLength(4)
     expect(result.features.map(feature => feature.id)).toEqual(['b1', 'r1', 'a1', 'o1'])
     expect(result.features[0].geometry).toEqual({

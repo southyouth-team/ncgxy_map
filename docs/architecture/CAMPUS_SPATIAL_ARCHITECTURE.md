@@ -175,3 +175,14 @@
 5. 单项和批量删除基础对象都必须写入 tombstone；保存文档时同时写入顶层兼容字段和 FeatureCollection 字段。
 
 这避免了编辑器只保存局部改动后，首页因只合并编辑器文档而丢失未被编辑的基础建筑、道路或区域。恢复对象需要移除对应 tombstone，后续将提供明确的恢复操作和冲突审计。
+
+## 17. Feature 类型与几何契约质检
+
+空间数据质检必须校验业务类型和几何类型的一致性，而不只是检查坐标数值：
+- `boundary/building/area/green/water/sports/plaza/parking` 必须是 Polygon。
+- `road` 必须是 LineString。
+- `gate/poi/object` 必须是 Point。
+- 每个集合成员必须是 Feature，且声明受支持的 `properties.featureType`。
+- 新增业务类型必须先更新类型契约和测试，再允许进入正式数据集。
+
+这能拦截水域被错误写成 Point、树木被错误写成 Polygon 等静默进入渲染流程的问题。当前仍只接受 Polygon、LineString、Point；MultiPolygon/MultiLineString 尚未纳入渲染适配器契约。

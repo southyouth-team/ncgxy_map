@@ -2,6 +2,7 @@ import {
   CAMPUS_PLAN_REFERENCE, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
 import { createCampusSceneRenderData } from './campusSceneData.js'
+import { createCampusPlayer } from './createCampusPlayer.js'
 
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
@@ -353,49 +354,13 @@ export function createCampusScene(THREE, featureCollection = null) {
   // 环境资产全部由统一 FeatureCollection 驱动；不再在渲染器内维护独立坐标清单。
 
 
-  const canvas = document.createElement('canvas')
-  canvas.width = 32
-  canvas.height = 48
-  const ctx = canvas.getContext('2d')
-  const pixel = (x, y, w, h, color) => { ctx.fillStyle = color; ctx.fillRect(x, y, w, h) }
-  const drawFrame = (step = 0) => {
-    ctx.clearRect(0, 0, 32, 48)
-    pixel(11,2,10,3,'#493b31')
-    pixel(8,5,16,12,'#edc29a')
-    pixel(8,5,16,4,'#79523e')
-    pixel(6,10,3,8,'#79523e')
-    pixel(23,10,3,8,'#79523e')
-    pixel(11,11,3,3,'#343c40')
-    pixel(19,11,3,3,'#343c40')
-    pixel(12,18,8,3,'#f3e4c4')
-    pixel(8,21,16,13,'#6b9363')
-    const swing = step === 1 ? 2 : step === 3 ? -2 : 0
-    pixel(5,22+swing,3,10,'#edc29a')
-    pixel(24,22-swing,3,10,'#edc29a')
-    pixel(9+swing,34,6,10-Math.abs(swing),'#625344')
-    pixel(18-swing,34,6,10-Math.abs(swing),'#625344')
-    pixel(8+swing,44,8,3,'#493b31')
-    pixel(18-swing,44,8,3,'#493b31')
-  }
-  drawFrame()
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.magFilter = THREE.NearestFilter
-  texture.minFilter = THREE.NearestFilter
-  texture.colorSpace = THREE.SRGBColorSpace
-  const character = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }))
-  character.name = 'PixelExplorerSprite'
+  const character = createCampusPlayer(THREE)
   const spawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
-  character.position.set(spawn.x, 2.1, spawn.z)
-  character.scale.set(2.4, 3.6, 1)
+  character.position.set(spawn.x, 0, spawn.z)
   root.add(character)
   root.userData.playerSprite = character
-  let lastFrame = -1
-  root.userData.updatePlayerAnimation = (moving, seconds) => {
-    const frame = moving ? Math.floor(seconds / 0.14) % 4 : 0
-    if (frame === lastFrame) return
-    lastFrame = frame
-    drawFrame(frame)
-    texture.needsUpdate = true
+  root.userData.updatePlayerAnimation = (moving, seconds, dx = 0, dz = 0) => {
+    character.userData.updateAnimation?.call(character, moving, seconds, dx, dz)
   }
 
   const halfW = worldWidth / 2

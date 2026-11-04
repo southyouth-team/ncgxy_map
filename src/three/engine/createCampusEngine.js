@@ -364,6 +364,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       disposeObjectGroup(rpgPreviewGroup)
       rpgPreviewGroup = null
     }
+    invalidateShadowMap()
     playerSpriteObject = campus?.getObjectByName('PixelExplorerSprite') || null
     requestFrame()
     // 基础校园由 campus 容器和独立加载的 GLB 建筑共同组成。
@@ -686,6 +687,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
 
     scene.add(rpgPreviewGroup)
+    invalidateShadowMap()
     cameraRig?.setObstructionObjects(rpgPreviewGroup.children.filter(object => object.userData?.objectType === 'building'))
     if (campus) campus.visible = false
     // GLB 建筑模型直接挂载在 scene 下，不属于 campus 容器；必须单独隐藏，
@@ -1225,6 +1227,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     group.position.y = (level - 1) * indoorBuilding.floorHeight
     scene.add(group)
     if (indoorGroup) { scene.remove(indoorGroup); disposeObjectGroup(indoorGroup) }
+    invalidateShadowMap()
     indoorGroup = group
     currentIndoorFloor = level
     collisionWorld = new CollisionWorld(indoorBuilding.bounds, group.userData.collisionObstacles, 0.48)
@@ -1669,6 +1672,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!indoorGroup || !outdoorState) return false
     scene.remove(indoorGroup)
     disposeObjectGroup(indoorGroup)
+    invalidateShadowMap()
     indoorGroup = null
     stairInteractionActive = false
     nearIndoorRoom = null

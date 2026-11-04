@@ -347,3 +347,10 @@
 
 - 修正 `getCampusSpatialLayers` 的置信度读取：只接受 low / medium / high；缺失或非法值回退为 low，不再把 `qualityStatus: unverified` 当作置信度。
 - 修正旧测试中将 `confidence: medium` 错误断言为 `qualityStatus: medium` 的语义混淆，改为分别断言三个字段。
+
+
+### 点对象质量元数据回读修复
+
+- 修复编辑器初始化基础点对象时将 `confidence` 从业务属性中剥离的问题。
+- `qualityStatus` 不再回退读取 `confidence`；优先使用历史质量状态，其次使用 `verificationStatus`，最终保守回退为 unverified。
+- 增加点对象往返转换测试，确保 confidence、verificationStatus、rotation、scale 均保留。

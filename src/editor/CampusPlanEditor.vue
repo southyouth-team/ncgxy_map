@@ -225,8 +225,7 @@ function alignSelection(mode) {
     const dx = mode === 'left' ? left - b.left : mode === 'right' ? right - b.right : mode === 'centerX' ? centerX - (b.left + b.right) / 2 : 0
     const dy = mode === 'top' ? top - b.top : mode === 'bottom' ? bottom - b.bottom : mode === 'centerY' ? centerY - (b.top + b.bottom) / 2 : 0
     const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
-    if (entry.type === 'road') entry.feature.points = moved
-    else { entry.feature.footprint = moved; if (entry.type === 'building') entry.feature.rect = polygonBounds(moved) }
+    commitFeatureGeometry(entry.id, entry.type === 'road' ? { roads: [{ id: entry.id, points: moved }] } : { [entry.type === 'building' ? 'buildings' : 'areas']: [{ id: entry.id, footprint: moved }] })
   })
 }
 function distributeSelection(axis) {
@@ -249,8 +248,7 @@ function distributeSelection(axis) {
     const dx = axis === 'horizontal' ? delta : 0
     const dy = axis === 'vertical' ? delta : 0
     const moved = featureGeometry(entry.type, entry.feature).map(point => [point[0] + dx, point[1] + dy])
-    if (entry.type === 'road') entry.feature.points = moved
-    else { entry.feature.footprint = moved; if (entry.type === 'building') entry.feature.rect = polygonBounds(moved) }
+    commitFeatureGeometry(entry.id, entry.type === 'road' ? { roads: [{ id: entry.id, points: moved }] } : { [entry.type === 'building' ? 'buildings' : 'areas']: [{ id: entry.id, footprint: moved }] })
     cursor += entry.bounds[sizeKey] + gap
   })
 }
@@ -295,7 +293,8 @@ function pasteCopied() {
     if (Array.isArray(clone.points)) clone.points = clone.points.map(([x, y]) => [x + 24, y + 24])
     if (clone.geometry?.type === 'Point') clone.geometry.coordinates = clone.geometry.coordinates.map(value => value + 24)
     if (Array.isArray(clone.rect)) clone.rect = [clone.rect[0] + 24, clone.rect[1] + 24, clone.rect[2] + 24, clone.rect[3] + 24]
-    featureCollection(entry.type).push(clone)
+    const fragment = entry.type === 'building' ? { buildings: [clone] } : entry.type === 'road' ? { roads: [clone] } : entry.type === 'object' ? { objects: [clone] } : { areas: [clone] }
+    commitFeatureUpsert(fragment)
     pasted.push({ type: entry.type, id: clone.id })
   })
   multiSelection.value = pasted
@@ -611,6 +610,7 @@ function restore(raw) {
     areas.value = document.areas
     objects.value = document.objects
     deletedFeatureIds.value = document.deletedFeatureIds
+    spatialFeatureCollection.value = toCampusFeatureCollection(document)
     return
   }
   // 兼容当前会话中旧版历史快照，避免热更新/历史恢复时丢失数据。
@@ -619,6 +619,7 @@ function restore(raw) {
   areas.value = state.areas || []
   objects.value = state.objects || []
   deletedFeatureIds.value = state.deletedFeatureIds || []
+  spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value })
 }
 function undo() {
   if (!history.value.length) return

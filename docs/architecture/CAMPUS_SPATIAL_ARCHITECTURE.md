@@ -138,3 +138,12 @@
 - 合并函数为纯数据函数，可在单元测试中验证，不将合并规则散落在 Vue 生命周期内。
 
 当前建筑、道路和区域仍由编辑器 FeatureCollection 提供覆盖/新增；基础校园台账中尚未具备可定位几何的 POI 与场地记录继续保持待定位状态，不伪造 Point/Polygon。后续应在统一数据契约中为未定位记录定义独立的非空间状态，而不是将空坐标塞入 GeoJSON Feature。
+
+## 13. 非空间校园目录与空间 Feature 的边界
+
+尚未取得可靠坐标的 POI、场地和建筑身份台账不应伪装成 GeoJSON Point/Polygon。基础 FeatureCollection 的 `metadata.catalogue` 保存非空间目录：
+- `pois`：名称、分类、名称来源状态、定位状态、可选 buildingId/position。
+- `siteAreas`：场地名称/分类、几何状态与来源；geometry 为空时不生成 Feature。
+- `buildingMetadata`：建筑身份、用途分类、楼栋编号和 footprint 核验状态。
+
+`getCampusSpatialLayers` 从同一 FeatureCollection 的 catalogue 读取 POI/场地目录；合并基础 Feature 与编辑器 Feature 时保留基础 metadata。目录记录与空间几何是同一数据集中的不同数据域，待取得可靠定位后再转为正式 Feature，并保留稳定 ID 和来源。

@@ -876,18 +876,23 @@ function movePointer(event) {
     const item = collection.find(entry => entry.id === currentDrag.id)
     if (item) {
       const candidate = snapEnabled.value ? snapPoint(p, currentDrag.index) : p
-      const footprint = item.footprint.map(point => [...point])
-      footprint[currentDrag.index] = [candidate.x, candidate.y]
-      commitFeatureGeometry(currentDrag.id, currentDrag.featureType === 'building'
-        ? { buildings: [{ id: item.id, footprint }] }
-        : { areas: [{ id: item.id, footprint }] })
+      const canonical = spatialFeatureCollection.value.features.find(feature => String(feature.id) === String(currentDrag.id))
+      if (canonical?.geometry?.type === 'Polygon') {
+        const geometry = {
+          ...canonical.geometry,
+          coordinates: canonical.geometry.coordinates.map((ring, ringIndex) => ringIndex === 0
+            ? ring.map((point, index) => index === currentDrag.index ? [candidate.x, candidate.y] : point)
+            : ring),
+        }
+        commitFeatureGeometryValue(currentDrag.id, geometry)
+      }
     }
   } else if (currentDrag.type === 'building') {
     const item = buildings.value.find(entry => entry.id === currentDrag.id)
     if (item) commitFeatureGeometryValue(item.id, translateCampusFeatureGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
   } else if (currentDrag.type === 'object') {
     const item = objects.value.find(entry => entry.id === currentDrag.id)
-    if (item) commitFeatureGeometry(item.id, { objects: [{ id: item.id, geometry: { type: 'Point', coordinates: [currentDrag.position[0] + p.x - currentDrag.start.x, currentDrag.position[1] + p.y - currentDrag.start.y] } }] })
+    if (item) commitFeatureGeometryValue(item.id, { type: 'Point', coordinates: [currentDrag.position[0] + p.x - currentDrag.start.x, currentDrag.position[1] + p.y - currentDrag.start.y] })
   } else if (currentDrag.type === 'area') {
     const item = areas.value.find(entry => entry.id === currentDrag.id)
     if (item) commitFeatureGeometryValue(item.id, translateCampusFeatureGeometry(currentDrag.geometry, p.x - currentDrag.start.x, p.y - currentDrag.start.y))
@@ -897,9 +902,11 @@ function movePointer(event) {
   } else if (currentDrag.type === 'node') {
     const item = roads.value.find(entry => entry.id === currentDrag.id)
     if (item) {
-      const points = item.points.map(point => [...point])
-      points[currentDrag.index] = [p.x, p.y]
-      commitFeatureGeometry(item.id, { roads: [{ id: item.id, points }] })
+      const canonical = spatialFeatureCollection.value.features.find(feature => String(feature.id) === String(item.id))
+      if (canonical?.geometry?.type === 'LineString') {
+        const coordinates = canonical.geometry.coordinates.map((point, index) => index === currentDrag.index ? [p.x, p.y] : point)
+        commitFeatureGeometryValue(item.id, { ...canonical.geometry, coordinates })
+      }
     }
   }
 }

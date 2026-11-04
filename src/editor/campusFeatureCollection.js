@@ -326,3 +326,20 @@ export function mergeCampusFeatureCollections(baseCollection = {}, editedCollect
     deletedFeatureIds,
   }
 }
+
+
+/**
+ * Clone a canonical Feature with a new stable ID and translated geometry.
+ * All business properties and provenance metadata are retained.
+ */
+export function duplicateCampusFeature(feature, id, dx = 0, dy = 0) {
+  if (!feature || feature.type !== 'Feature' || !feature.geometry || id == null || String(id).trim() === '') {
+    throw new Error('复制 Feature 参数无效')
+  }
+  return {
+    ...feature,
+    id: String(id),
+    geometry: translateCampusFeatureGeometry(feature.geometry, dx, dy),
+    properties: { ...(feature.properties || {}) },
+  }
+}

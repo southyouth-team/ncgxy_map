@@ -120,8 +120,10 @@ async function saveEditorDocument() {
     return
   }
   if (persistenceBusy.value || revisionConflict.value) return
-  const document = { ...buildDocument(), mapId: String(props.mapId) }
-  const requestSnapshot = JSON.stringify(buildDocument())
+  // 单次构建并序列化，避免每次保存重复遍历完整空间文档。
+  const documentData = buildDocument()
+  const requestSnapshot = JSON.stringify(documentData)
+  const document = { ...documentData, mapId: String(props.mapId) }
   persistenceBusy.value = true
   persistenceState.value = 'saving'
   persistenceMessage.value = ''
@@ -810,20 +812,27 @@ watch(
     }
   },
 )
-watch(() => JSON.stringify(buildDocument()), (snapshot) => {
-  if (!documentLoaded.value || !props.campusId || !props.mapId || revisionConflict.value) return
-  if (snapshot === lastSavedSnapshot) return
-  persistenceState.value = 'dirty'
-  persistenceMessage.value = '检测到未保存修改，等待自动保存…'
-  if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
-  autoSaveTimer = window.setTimeout(() => {
-    if (persistenceBusy.value) {
-      autoSaveTimer = window.setTimeout(() => saveEditorDocument(), 500)
-      return
-    }
-    saveEditorDocument()
-  }, 1500)
-})
+watch(
+  [buildings, roads, areas, objects, deletedFeatureIds],
+  () => {
+    if (!documentLoaded.value || !props.campusId || !props.mapId || revisionConflict.value) return
+    persistenceState.value = 'dirty'
+    persistenceMessage.value = '检测到未保存修改，等待自动保存…'
+    if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
+    // 编辑拖动时不再对每次鼠标事件同步 JSON.stringify 整份地图；深度变更由 Vue 批处理，
+    // 仅在 1.5 秒防抖窗口结束后生成一次快照并判断是否真的需要保存。
+    autoSaveTimer = window.setTimeout(() => {
+      autoSaveTimer = null
+      if (persistenceBusy.value) {
+        autoSaveTimer = window.setTimeout(() => saveEditorDocument(), 500)
+        return
+      }
+      if (JSON.stringify(buildDocument()) === lastSavedSnapshot) return
+      saveEditorDocument()
+    }, 1500)
+  },
+  { deep: true, flush: 'post' },
+)
 function point(event) {
   const svg = event.currentTarget.ownerSVGElement || event.currentTarget
   const p = svg.createSVGPoint()

@@ -83,7 +83,7 @@ export function createRpgSampleScene(THREE) {
   addBox('sample-earth-base', 0, -0.65, 0, 54, 0.65, 42, materials.grassDark)
   // 远景地面必须位于底板顶面之上，否则会被底板侧面/底面遮挡，
   // 镜头倾斜时仍会露出背景并形成水平分界线。
-  const horizonGround = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), materials.grassDark)
+  const horizonGround = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), materials.grassDark)
   horizonGround.name = 'sample-horizon-ground'
   horizonGround.rotation.x = -Math.PI / 2
   horizonGround.position.y = 0.001

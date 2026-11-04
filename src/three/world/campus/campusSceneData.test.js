@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildCampusGeoJSON } from '../../../data/campus/campusGeoJSON.js'
-import { createCampusSceneRenderData, validateCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels } from './campusSceneData.js'
+import { createCampusSceneRenderData, validateCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry } from './campusSceneData.js'
 
 describe('campus scene shared render adapter', () => {
   it('derives homepage and editor preview inputs from the same FeatureCollection', () => {
@@ -162,5 +162,50 @@ describe('campus GLB building asset audit', () => {
     expect(report.errors.map(error => error.code)).toContain('GLB_MESH_MISSING')
     expect(report.errors.map(error => error.code)).toContain('GLB_MESH_RESOURCE_MISSING')
     expect(report.errors.map(error => error.code)).toContain('GLB_BOUNDS_INVALID')
+  })
+})
+
+
+describe('campus GLB building geometry audit', () => {
+  const toWorld = (x, y) => ({ x, z: -y })
+  const building = { id: 'b1', polygon: [[0,0],[10,0],[10,8],[0,8]], height: 12 }
+  function record(overrides = {}) {
+    return {
+      buildingId: 'b1',
+      bounds: { minX: 0, maxX: 10, minY: 0, maxY: 12, minZ: -8, maxZ: 0 },
+      transform: { x: 5, y: 0, z: -4, rotationY: 0 },
+      ...overrides,
+    }
+  }
+  it('accepts a model aligned with the canonical footprint and height', () => {
+    const report = auditCampusBuildingModelGeometry([building], [record()], toWorld)
+    expect(report.valid).toBe(true)
+    expect(report.summary.checkedCount).toBe(1)
+    expect(report.results[0].status).toBe('checked')
+    expect(report.results[0].heightStatus).toBe('matched')
+  })
+  it('detects world-position drift and footprint size mismatch', () => {
+    const moved = record({ bounds: { minX: 8, maxX: 18, minY: 0, maxY: 12, minZ: -8, maxZ: 0 } })
+    const report = auditCampusBuildingModelGeometry([building], [moved], toWorld)
+    expect(report.errors.map(error => error.code)).toContain('GLB_FOOTPRINT_CENTER_OFFSET')
+    expect(report.errors.map(error => error.code)).toContain('GLB_FOOTPRINT_WIDTH_MISMATCH')
+  })
+  it('detects height drift only when canonical source height exists', () => {
+    const tall = record({ bounds: { minX: 0, maxX: 10, minY: 0, maxY: 30, minZ: -8, maxZ: 0 } })
+    const report = auditCampusBuildingModelGeometry([building], [tall], toWorld)
+    expect(report.errors.map(error => error.code)).toContain('GLB_BUILDING_HEIGHT_MISMATCH')
+    const withoutHeight = auditCampusBuildingModelGeometry([{ ...building, height: undefined }], [tall], toWorld)
+    expect(withoutHeight.results[0].heightStatus).toBe('not_comparable')
+    expect(withoutHeight.errors.map(error => error.code)).not.toContain('GLB_BUILDING_HEIGHT_MISMATCH')
+  })
+  it('marks missing models as not_loaded rather than as errors', () => {
+    const report = auditCampusBuildingModelGeometry([building], [], toWorld)
+    expect(report.valid).toBe(true)
+    expect(report.summary.notLoadedCount).toBe(1)
+    expect(report.results[0].status).toBe('not_loaded')
+  })
+  it('reports model IDs without a canonical footprint', () => {
+    const report = auditCampusBuildingModelGeometry([], [record()], toWorld)
+    expect(report.errors.map(error => error.code)).toContain('GLB_GEOMETRY_UNKNOWN_BUILDING')
   })
 })

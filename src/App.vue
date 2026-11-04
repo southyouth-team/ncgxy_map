@@ -3,6 +3,8 @@ import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
 const CampusPlanEditor = defineAsyncComponent(() => import('./editor/CampusPlanEditor.vue'))
 const IndoorFloorPlanEditor = defineAsyncComponent(() => import('./components/IndoorFloorPlanEditor.vue'))
+const CampusAssetWorkshop = defineAsyncComponent(() => import('./components/CampusAssetWorkshop.vue'))
+const isAssetWorkshopRoute = window.location.pathname.replace(/\/+$/, '') === '/asset-workshop'
 const BuildingFootprintEditor = defineAsyncComponent(() => import('./components/BuildingFootprintEditor.vue'))
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
@@ -333,6 +335,10 @@ function focusCampus() {
   engine?.resetView()
 }
 
+function openAssetWorkshop() {
+  window.location.assign('/asset-workshop')
+}
+
 function openBuildingFromPixelMap(payload) {
   const buildingId = payload?.buildingId
   if (!(campusPlanDocument.value?.buildings || CAMPUS_BUILDING_FOOTPRINTS).some(item => item.id === buildingId)) return
@@ -484,6 +490,7 @@ async function handleBrowserNavigation() {
 }
 
 onMounted(async () => {
+  if (isAssetWorkshopRoute) return
   updateViewportState()
   window.addEventListener('resize', updateViewportState)
   window.addEventListener('orientationchange', updateViewportState)
@@ -551,7 +558,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isCampusExplorer } ]">
+  <CampusAssetWorkshop v-if="isAssetWorkshopRoute" />
+  <main v-else ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isCampusExplorer } ]">
     <div ref="viewport" class="scene-viewport" :style="{ display: showEditor && editorViewMode === '2d' ? 'none' : 'block' }"></div>
     <CampusPlanEditor v-if="showEditor && editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />
 
@@ -566,6 +574,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="showcase-actions">
         <span class="topbar-status"><span class="status-dot"></span> {{ indoorPrototypeActive ? '室内空间样板 · 非实测布局' : (showEditor ? '地图编辑器 · 3D 预览' : '南昌工学院 · 校园探索') }}</span>
+        <button class="showcase-back asset-workshop-entry" @click="openAssetWorkshop">AI 素材工坊</button>
         <button v-if="showEditor" class="showcase-back" @click="closeEditor">返回校园探索</button>
         <button v-else class="showcase-back editor-entry" @click="openEditor">打开地图编辑器</button>
       </div>

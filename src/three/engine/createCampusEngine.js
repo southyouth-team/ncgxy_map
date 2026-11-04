@@ -321,6 +321,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         }
         cameraRig?.setObstructionObjects([...cameraObstacleRoots, ...loadedBuildingModels])
         callbacks.onAssetsLoaded?.(result)
+        requestFrame()
         return result
       })
       .catch((error) => {
@@ -1199,6 +1200,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     roomReturnPosition = null
     pendingRoomTransition = null
     callbacks.onIndoorStateChange?.({ active: true, floor: level, floors: indoorBuilding.floors.map(item => item.level), buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: null })
+    requestFrame()
     return true
   }
 
@@ -1242,6 +1244,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     cameraRig.thirdDistance = 8
     cameraRig.updateThirdPersonDesired()
+    requestFrame()
     return true
   }
 
@@ -1559,6 +1562,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig.player.y = nextFloorBaseY + nextHeightOffset
     cameraRig.updateThirdPersonDesired()
     callbacks.onIndoorStateChange?.({ active: true, floor: currentIndoorFloor, floors: levels, buildingId: indoorBuilding.id, buildingName: indoorBuilding.name, prototype: true, nearStairs: false, nearRoom: null, activeRoom: null })
+    requestFrame()
     return true
   }
 
@@ -1659,6 +1663,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig.updateThirdPersonDesired()
     outdoorState = null
     callbacks.onIndoorStateChange?.({ active: false })
+    requestFrame()
     return true
   }
 

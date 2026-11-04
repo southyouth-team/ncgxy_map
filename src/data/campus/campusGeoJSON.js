@@ -5,6 +5,7 @@ import {
   CAMPUS_ROAD_CENTERLINES,
   CAMPUS_ROAD_WIDTHS,
 } from './campusLayout.js'
+import { getDefaultWalkable } from './walkability.js'
 import { CAMPUS_BOUNDARY, CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_BUILDING_METADATA, buildCampusRoadGraph } from './campusInventory.js'
 
 /**
@@ -88,6 +89,7 @@ export function buildCampusGeoJSON() {
       verificationStatus: CAMPUS_BOUNDARY.verificationStatus,
       source: CAMPUS_BOUNDARY.source,
       boundaryStatus: CAMPUS_BOUNDARY.boundaryStatus,
+      walkable: getDefaultWalkable('boundary'),
     },
     geometry: { type: 'Polygon', coordinates: [closeRing(CAMPUS_BOUNDARY.polygon)] },
   })
@@ -106,6 +108,7 @@ export function buildCampusGeoJSON() {
         accessModes: gate.accessModes,
         source: gate.source,
         positionNote: gate.positionNote,
+        walkable: getDefaultWalkable('gate'),
       },
       geometry: { type: 'Point', coordinates: [...gate.position] },
     })
@@ -122,6 +125,7 @@ export function buildCampusGeoJSON() {
         name: area.name,
         featureType: 'area',
         category: area.type,
+        walkable: getDefaultWalkable('area', { category: area.type }),
         confidence: area.confidence || 'low',
         verificationStatus: 'unverified',
         source: CAMPUS_SPATIAL_DATASET.source,
@@ -142,6 +146,7 @@ export function buildCampusGeoJSON() {
         confidence: road.confidence || 'low',
         verificationStatus: 'unverified',
         width: CAMPUS_ROAD_WIDTHS[road.id] || 12,
+        walkable: getDefaultWalkable('road'),
         source: CAMPUS_SPATIAL_DATASET.source,
       },
       geometry: { type: 'LineString', coordinates: road.points.map(([x, y]) => [x, y]) },
@@ -166,6 +171,7 @@ export function buildCampusGeoJSON() {
         identityStatus: CAMPUS_BUILDING_METADATA[building.id]?.identityStatus || 'pending',
         footprintStatus: CAMPUS_BUILDING_METADATA[building.id]?.footprintStatus || 'approximate',
         buildingNumber: CAMPUS_BUILDING_METADATA[building.id]?.buildingNumber ?? null,
+        walkable: getDefaultWalkable('building'),
       },
       geometry: { type: 'Polygon', coordinates: [ring] },
     })
@@ -180,6 +186,7 @@ export function buildCampusGeoJSON() {
         name: object.type === 'tree' ? '校园绿化树木' : object.type === 'flower' ? '景观花卉' : object.type === 'bench' ? '公共座椅' : '校园路灯',
         featureType: 'object',
         objectType: object.type,
+        walkable: getDefaultWalkable('object', { objectType: object.type }),
         scale: object.scale,
         confidence: 'low',
         qualityStatus: 'unverified',
@@ -282,6 +289,7 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
         id: feature.id,
         name: feature.properties.name,
         type: category,
+        walkable: getDefaultWalkable('area', { ...feature.properties, category }),
         confidence: confidenceOf(feature),
         polygon,
         holes: rings.slice(1).map(openRing),
@@ -317,6 +325,7 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
       floors: feature.properties.floors,
       height: feature.properties.height,
       template: feature.properties.template,
+      walkable: getDefaultWalkable('building', feature.properties),
       source: feature.properties.source,
       qualityStatus: feature.properties.qualityStatus,
       properties: { ...feature.properties },
@@ -331,6 +340,7 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
       position: feature.geometry.coordinates,
       rotation: Number(feature.properties.rotation) || 0,
       scale: Number(feature.properties.scale) > 0 ? Number(feature.properties.scale) : 1,
+      walkable: getDefaultWalkable('object', feature.properties),
       properties: { ...feature.properties },
       source: feature.properties.source,
       qualityStatus: feature.properties.qualityStatus,

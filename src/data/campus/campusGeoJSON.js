@@ -193,7 +193,15 @@ export function buildCampusGeoJSON() {
   return {
     type: 'FeatureCollection',
     name: CAMPUS_SPATIAL_DATASET.id,
-    metadata: CAMPUS_SPATIAL_DATASET,
+    metadata: {
+      ...CAMPUS_SPATIAL_DATASET,
+      // 未定位 POI/场地作为非空间目录记录保存，不伪造 GeoJSON 几何。
+      catalogue: {
+        pois: CAMPUS_POIS.map(item => ({ ...item })),
+        siteAreas: CAMPUS_SITE_AREAS.map(item => ({ ...item })),
+        buildingMetadata: Object.fromEntries(Object.entries(CAMPUS_BUILDING_METADATA).map(([id, value]) => [id, { ...value }])),
+      },
+    },
     features,
   }
 }
@@ -225,6 +233,7 @@ export function mergeCampusSceneFeatureCollections(baseCollection = buildCampusG
   const deleted = new Set(deletedFeatureIds)
   return {
     type: 'FeatureCollection',
+    metadata: baseCollection?.metadata || {},
     features: [...featureById.values()].filter(feature => !deleted.has(String(feature.id))),
     deletedFeatureIds,
   }
@@ -243,8 +252,9 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
   const gates = features
     .filter(feature => featureType(feature) === 'gate' && feature.geometry?.type === 'Point')
     .map(feature => ({ id: feature.id, name: feature.properties.name, position: feature.geometry.coordinates, confidence: confidenceOf(feature) }))
-  const pois = CAMPUS_POIS.map(poi => ({ ...poi }))
-  const siteAreas = CAMPUS_SITE_AREAS.map(area => ({ ...area }))
+  const catalogue = collection?.metadata?.catalogue || {}
+  const pois = (catalogue.pois || CAMPUS_POIS).map(poi => ({ ...poi }))
+  const siteAreas = (catalogue.siteAreas || CAMPUS_SITE_AREAS).map(area => ({ ...area }))
   // 编辑器 FeatureCollection 使用 green/water/sports/plaza/parking 作为直接类型；
   // 基础校园底图仍使用 area + category。此处统一归一化，不复制几何数据。
   const areaTypes = new Set(['area', 'green', 'water', 'sports', 'plaza', 'parking'])

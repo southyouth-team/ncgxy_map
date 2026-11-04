@@ -5,6 +5,7 @@ import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
 import { toCampusFeatureCollection, fromCampusFeatureCollection, mergeCampusFeatureCollections, createCampusFeatureSnapshot, restoreCampusFeatureSnapshot, updateCampusFeatureProperties, updateCampusFeatureGeometry, translateCampusFeatureGeometry, duplicateCampusFeature, upsertCampusFeature, removeCampusFeatures } from './campusFeatureCollection.js'
 import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
+import { getDefaultWalkable } from '../data/campus/walkability.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
@@ -195,6 +196,10 @@ const spatialFeatureCollection = ref(toCampusFeatureCollection({ buildings: buil
 const objectKinds = [{ value: 'tree', label: '树木' }, { value: 'streetlight', label: '路灯' }, { value: 'bench', label: '座椅' }, { value: 'sculpture', label: '雕塑' }]
 const objectKind = ref('tree')
 const selectedObject = computed(() => objects.value.find(item => item.id === selected.value.id && selected.value.type === 'object') || null)
+const selectedFeature = computed(() => spatialFeatureCollection.value.features.find(item => String(item.id) === String(selected.value.id)) || null)
+const selectedFeatureWalkable = computed(() => selectedFeature.value
+  ? getDefaultWalkable(selectedFeature.value.properties?.featureType, selectedFeature.value.properties)
+  : true)
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 const multiSelection = ref([])
 const boxSelection = ref(null)
@@ -1298,6 +1303,14 @@ function exportDocument() {
       <aside class="inspector">
         <div class="inspector-heading"><div class="panel-title">属性检查器</div><span>PROPERTIES</span></div>
         <div class="selected-card"><small>当前选中</small><strong>{{ selectedLabel }}</strong><span>{{ selected.type==='road' ? '道路 / LineString' : selected.type==='building' ? '建筑 / Footprint' : selected.type==='area' ? '校园区域 / Polygon' : '请选择场景对象' }}</span></div>
+        <template v-if="selectedFeature">
+          <label>通行设置</label>
+          <select :value="String(selectedFeatureWalkable)" @focus="snapshot" @change="updateSelectedFeatureProperty('walkable',$event.target.value === 'true')">
+            <option value="true">允许通行</option>
+            <option value="false">禁止通行</option>
+          </select>
+          <small class="property-hint">默认按对象类型设置，可在此处单独覆盖。</small>
+        </template>
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input  :value="selectedBuilding.label" @focus="snapshot" @change="updateSelectedFeatureProperty('name',$event.target.value)">
           <label>建筑模板</label><select  :value="selectedBuilding.template" @focus="snapshot" @change="updateSelectedFeatureProperty('template',$event.target.value)"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
-import { createCampusSceneRenderData } from '../world/campus/campusSceneData.js'
+import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
@@ -150,6 +150,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 基础空间图层已为校园建筑注册精确墙段/footprint 碰撞；GLB 仅替换视觉模型，
     // 不得再用 GLB 世界 AABB 叠加粗碰撞，否则不规则建筑外侧空地也会被封住。
     const canonicalBuildingIds = new Set((spatialLayers?.buildings || []).map(building => String(building.id)))
+    if (!isRpgSample && spatialLayers) {
+      const sceneAudit = auditCampusSceneFeatureCoverage(spatialLayers, campus)
+      callbacks.onSceneAudit?.(sceneAudit)
+      if (sceneAudit.errorCount > 0) console.warn('[CampusSceneAudit] 检测到场景装配异常', sceneAudit)
+      else if (renderDebugEnabled) console.info('[CampusSceneAudit] 场景装配检查通过', sceneAudit.summary)
+    }
     scene.add(campus)
     cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。

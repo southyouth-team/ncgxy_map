@@ -167,3 +167,63 @@ export function resolveCampusVisualAsset(manifest, featureId, viewMode) {
     asset,
   };
 }
+
+/**
+ * Convert reviewed browser-workshop records into the deployable manifest.
+ * Multiple view variants for one Feature are grouped under one stable assetId.
+ */
+export function createCampusAssetManifestFromWorkshopRecords(records, knownFeatureIds = null) {
+  const groups = new Map();
+  const skipped = [];
+  for (const record of Array.isArray(records) ? records : []) {
+    if (record?.status !== 'ready' || record?.deployedConfirmed !== true) continue;
+    const url = record.publicPath;
+    const is3d = record.viewMode === '3d';
+    const validPath = isSafeAssetPath(url) && (is3d
+      ? url.startsWith('/models/buildings/') && url.toLowerCase().endsWith('.glb')
+      : record.viewMode === '2.5d' && url.startsWith('/assets/campus/') && /\\.(png|webp|jpe?g)$/i.test(url));
+    if (!validPath || !isNonEmptyString(record.featureId)) {
+      skipped.push({ assetId: record.assetId || null, reason: 'invalid-path-or-feature', publicPath: url || null });
+      continue;
+    }
+    const featureId = String(record.featureId);
+    const asset = groups.get(featureId) || {
+      assetId: 'campus-' + featureId,
+      name: record.featureName || record.name || featureId,
+      category: record.category || 'other',
+      sourceType: SOURCES.includes(record.sourceType) ? record.sourceType : 'ai_generated',
+      status: 'ready',
+      files: [],
+      provenance: {
+        provider: record.sourceType === 'ai_generated' ? 'user-selected-ai-tool' : (record.sourceType || 'unknown'),
+        prompt: record.prompt || '',
+        createdAt: record.createdAt || null,
+        notes: '由素材工坊人工审核并确认文件已放入项目 public 目录',
+      },
+    };
+    asset.files.push({
+      viewMode: record.viewMode,
+      role: 'primary',
+      mediaType: is3d ? 'glb' : 'image',
+      format: is3d ? 'glb' : url.split('.').pop().toLowerCase(),
+      url,
+    });
+    groups.set(featureId, asset);
+  }
+
+  const manifest = {
+    schemaVersion: 1,
+    idStrategy: 'stable-spatial-feature-id',
+    assetRoots: ASSET_ROOTS,
+    viewModes: VIEW_MODES,
+    sourceTypes: SOURCES,
+    statuses: STATUSES,
+    assets: [...groups.values()],
+    bindings: [...groups.entries()].map(([featureId, asset]) => ({ featureId, assetId: asset.assetId })),
+  };
+  return {
+    manifest,
+    report: validateCampusAssetManifest(manifest, knownFeatureIds),
+    skipped,
+  };
+}

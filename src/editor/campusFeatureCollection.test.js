@@ -310,6 +310,22 @@ describe('toCampusFeatureCollection', () => {
 
 })
 
+it('reconstructs the legacy building rect required by undo/redo rendering', () => {
+    const source = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        id: 'undo-building',
+        geometry: { type: 'Polygon', coordinates: [[[12, 18], [42, 18], [42, 58], [12, 58], [12, 18]]] },
+        properties: { featureType: 'building', name: '撤销测试建筑', template: '教学楼' },
+      }],
+      deletedFeatureIds: [],
+    }
+    const snapshot = createCampusFeatureSnapshot({ featureCollection: source })
+    const restored = restoreCampusFeatureSnapshot(JSON.parse(JSON.stringify(snapshot)))
+    expect(restored.buildings[0].rect).toEqual([12, 18, 42, 58])
+    expect(restored.buildings[0].footprint).toEqual([[12, 18], [42, 18], [42, 58], [12, 58]])
+  })
 describe('mergeCampusFeatureCollections', () => {
   it('lets saved features override baseline IDs and tombstones remove baseline features', () => {
     const base = {

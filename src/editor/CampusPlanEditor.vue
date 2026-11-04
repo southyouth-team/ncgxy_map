@@ -68,13 +68,22 @@ async function loadEditorDocument() {
       if (document.referenceImage) {
         referenceImage.value = document.referenceImage
         referenceImageOpacity.value = Number(document.referenceImage.opacity ?? 0.55)
-        if (document.referenceImage.assetId) await loadAssetPreview(document.referenceImage.assetId)
+        // 底图预览属于辅助资源；资源加载失败不能阻断规范空间文档加载和后续自动保存。
+        if (document.referenceImage.assetId) {
+          try {
+            await loadAssetPreview(document.referenceImage.assetId)
+          } catch (error) {
+            persistenceMessage.value = `底图预览加载失败：${error.message}`
+          }
+        }
       }
     }
     if (!spatialFeatureCollection.value.features.length) spatialFeatureCollection.value = toCampusFeatureCollection({ buildings: buildings.value, roads: roads.value, areas: areas.value, objects: objects.value, deletedFeatureIds: deletedFeatureIds.value })
     documentLoaded.value = true
     lastSavedSnapshot = JSON.stringify(buildDocument())
-    persistenceMessage.value = saved.document ? `已加载服务端版本 · ${documentRevision.value}` : '当前地图尚无服务端编辑文档，修改后将自动保存'
+    if (!persistenceMessage.value.startsWith('底图预览加载失败：')) {
+      persistenceMessage.value = saved.document ? `已加载服务端版本 · ${documentRevision.value}` : '当前地图尚无服务端编辑文档，修改后将自动保存'
+    }
   } catch (error) {
     persistenceMessage.value = `读取已保存编辑文档失败：${error.message}`
   }

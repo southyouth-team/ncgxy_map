@@ -444,7 +444,7 @@ FeatureCollection 的集合级 metadata 与 features、deletedFeatureIds 同属�
 
 首页通过校园列表和地图列表确定当前校园与地图后，必须先将稳定的 `campusId`、`mapId` 写入共享的 `sceneDocument`，再挂载或初始化 `CampusPlanEditor`。该标识初始化不能依赖编辑器文档已经存在：首次创建编辑文档时，服务端 GET 可能返回空 document，但编辑器仍必须能够使用校园/地图 ID 完成空文档初始化和后续 PUT。
 
-若缺少任一 ID，编辑器必须进入显式错误状态，禁用持久化并向用户展示缺失原因；不得静默保持“等待修改”。自动保存验收应确认：创建 Feature 后快照监听触发 dirty，PUT 返回新 revision，刷新后 GET 回读包含该 Feature。
+若缺少任一 ID，或空间文档 GET 请求失败，编辑器必须进入显式错误状态，禁用持久化并向用户展示具体原因；不得静默保持“等待修改”。自动保存验收应确认：创建 Feature 后快照监听触发 dirty，PUT 返回新 revision，刷新后 GET 回读包含该 Feature。
 
 
 ## 53. Vue 父子生命周期下的编辑器 ID 延迟注入

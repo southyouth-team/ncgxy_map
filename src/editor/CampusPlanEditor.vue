@@ -49,7 +49,7 @@ async function loadEditorDocument() {
     documentRevision.value = Number(saved.revision || 0)
     const document = saved.document
     if (document?.coordinateSystem === 'campus-plan-pixel') {
-      deletedFeatureIds.value = [...new Set(document.featureCollection?.deletedFeatureIds || document.deletedFeatureIds || [])].map(String)
+      deletedFeatureIds.value = [...new Set([...(document.featureCollection?.deletedFeatureIds || []), ...(document.deletedFeatureIds || [])].map(String))]
       const normalized = document.featureCollection?.type === 'FeatureCollection'
         ? fromCampusFeatureCollection(document.featureCollection)
         : document

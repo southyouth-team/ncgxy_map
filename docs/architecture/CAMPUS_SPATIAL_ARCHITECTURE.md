@@ -704,3 +704,15 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 4. 输出结构化报告：包含分类数量、检查总数、错误数量及错误代码（缺失、意外对象、重复 ID、几何不一致、通行属性不一致）。
 
 该审计是数据管线的确定性回归测试，不代表 WebGL 最终画面、异步 GLB 资源、材质贴图或运行时碰撞的完整证明。以上运行时行为仍需由场景装配测试和浏览器抽样验收补充。当前校园底图数据仍标注为人工近似数字化，不应将自动一致性通过误解为地理位置已完成测绘核验。
+
+
+
+## 23. Three.js 实际场景装配覆盖审计
+
+正式校园场景创建后运行 `auditCampusSceneFeatureCoverage(spatialLayers, campus)`，将规范空间层与实际 Three.js 场景树进行对照。
+
+- 场景节点必须标记 `featureId` 与 `featureCategory`；建筑、道路段、区域网格、点设施分别使用 buildings/roads/areas/objects 分类。
+- 建筑每栋至少生成一个可渲染节点；道路允许一个 Feature 对应多个路面/路缘 Mesh；水域可对应床面和水面多个网格；运动场等区域允许多层网格。
+- 检查空间 Feature 是否缺失、场景是否出现源数据之外的 Feature、Feature 节点是否没有 Mesh/Line/Points，以及 Mesh 是否缺少 geometry/material。
+- 场景异常通过 `onSceneAudit` 回调提供结构化报告，并输出 `[CampusSceneAudit]` 警告；使用 `?render-debug=1` 可在控制台查看通过时的分类统计。
+- 此项检查验证程序化场景装配覆盖，不验证 GLB 异步资产是否成功替换、模型几何与 footprint 的精确偏差、建筑高度与源属性是否一致、纹理内容是否正确，也不能替代 GPU 实际渲染验收。异步 GLB 加载另有 `onAssetsLoaded/onAssetError` 事件，可作为下一层资产审计入口。

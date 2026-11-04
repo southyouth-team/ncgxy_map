@@ -325,3 +325,14 @@ Polygon 几何编辑必须明确区分整体变换和外环顶点编辑：
 ## 34. 复制粘贴必须以规范 Feature 为输入
 
 编辑器复制操作从规范 FeatureCollection 按稳定 ID 读取完整 Feature；粘贴通过 `duplicateCampusFeature` 生成新 ID 并平移 geometry，properties 和 provenance 原样保留，再通过 `upsertCampusFeature` 写入规范集合。禁止从 legacy 数组重建复制数据，以免丢失 Polygon 内环、质量元数据或未来扩展属性。
+
+
+## 35. 几何编辑写入边界收敛
+
+编辑器中的几何变更必须通过 `updateCampusFeatureGeometry` 作用于规范 FeatureCollection：
+
+- Polygon 外环顶点增删、拖动、建筑尺寸调整和旋转仅替换外环，原有内环必须保留。
+- LineString 道路节点增删/拖动直接更新中心线坐标，宽度等业务属性保留在 properties。
+- Point 对象拖动直接更新 Point coordinates，不能重新创建 Feature 或覆盖其业务元数据。
+- 复制粘贴从规范 Feature 读取，并以新 ID 复制完整 Feature；几何偏移使用统一变换函数。
+- legacy 数组可以用于渲染兼容模板和交互计算，但不得成为几何写入的权威来源。

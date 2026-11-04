@@ -280,6 +280,7 @@ export function createCampusScene(THREE, featureCollection = null) {
     root.add(foundation)
     group.position.set(bounds.x, 0.16, bounds.z)
     group.userData.buildingId = item.id
+    group.userData.walkable = item.walkable === true
     group.userData.objectType = 'building'
     group.userData.displayName = item.label
     group.userData.footprintType = item.polygon ? 'polygon' : 'rect'
@@ -346,6 +347,7 @@ export function createCampusScene(THREE, featureCollection = null) {
       object.userData.featureId = item.id
       object.userData.displayName = item.name || item.type
       object.userData.objectType = item.type
+      object.userData.walkable = item.walkable === true
       object.rotation.y = Number(item.rotation || 0) * Math.PI / 180
       object.scale.multiplyScalar(item.scale || 1)
     }

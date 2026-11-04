@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildCampusGeoJSON } from '../../../data/campus/campusGeoJSON.js'
-import { createCampusSceneRenderData, validateCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry } from './campusSceneData.js'
+import { createCampusSceneRenderData, validateCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from './campusSceneData.js'
 
 describe('campus scene shared render adapter', () => {
   it('derives homepage and editor preview inputs from the same FeatureCollection', () => {
@@ -207,5 +207,49 @@ describe('campus GLB building geometry audit', () => {
   it('reports model IDs without a canonical footprint', () => {
     const report = auditCampusBuildingModelGeometry([], [record()], toWorld)
     expect(report.errors.map(error => error.code)).toContain('GLB_GEOMETRY_UNKNOWN_BUILDING')
+  })
+})
+
+
+describe('campus building asset inventory', () => {
+  const toWorld = (x, y) => ({ x: x * 0.5 - 10, z: y * 0.5 - 20 })
+  const buildings = [
+    { id: 'b1', label: '教学楼一', polygon: [[0,0],[20,0],[20,10],[0,10]], properties: {} },
+    { id: 'b2', label: '实验楼', polygon: [[40,20],[60,20],[60,40],[40,40]], properties: { rotationY: 1.2 } },
+  ]
+
+  it('generates placement candidates from canonical footprints without inventing model files', () => {
+    const inventory = createCampusBuildingAssetInventory(buildings, [], toWorld)
+    expect(inventory.summary.canonicalBuildingCount).toBe(2)
+    expect(inventory.summary.pendingModelCount).toBe(2)
+    expect(inventory.items[0].position).toEqual([-5, 0, -17.5])
+    expect(inventory.items[0].positionSource).toBe('derived-footprint-aabb-center')
+    expect(inventory.items[0].modelUrl).toBeNull()
+    expect(inventory.items[0].rotationY).toBeNull()
+    expect(inventory.items[1].rotationY).toBe(1.2)
+  })
+
+  it('uses explicitly configured position and rotation for a ready asset', () => {
+    const inventory = createCampusBuildingAssetInventory(buildings, [{
+      buildingId: 'b1',
+      position: [1, 0, 2],
+      positionVerified: true,
+      rotationY: 0.5,
+      rotationVerified: true,
+      modelUrl: '/models/buildings/b1.glb',
+      status: 'ready',
+    }], toWorld)
+    expect(inventory.items[0].position).toEqual([1, 0, 2])
+    expect(inventory.items[0].rotationY).toBe(0.5)
+    expect(inventory.items[0].assetStatus).toBe('ready')
+    expect(inventory.summary.configuredModelCount).toBe(1)
+  })
+
+  it('reports duplicate and unknown manifest building IDs', () => {
+    const inventory = createCampusBuildingAssetInventory(buildings, [
+      { buildingId: 'b1' }, { buildingId: 'b1' }, { buildingId: 'ghost' },
+    ], toWorld)
+    expect(inventory.errors.map(error => error.code)).toContain('ASSET_MANIFEST_DUPLICATE_ID')
+    expect(inventory.errors.map(error => error.code)).toContain('ASSET_MANIFEST_UNKNOWN_BUILDING')
   })
 })

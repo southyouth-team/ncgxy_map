@@ -9,6 +9,7 @@ import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuilding
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
+import { fromCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
 import { createCampusMaterials, createPixelBuilding, validateBuildingFootprint } from '../world/campus/campusAssetLibrary.js'
 
@@ -358,7 +359,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function previewCampusPlan(document) {
-    if (!scene || !document || !Array.isArray(document.buildings) || !Array.isArray(document.roads)) return false
+    if (!scene || !document) return false
+    // Prefer the canonical GeoJSON FeatureCollection; legacy arrays are a transitional UI adapter.
+    if (document.featureCollection?.type === 'FeatureCollection') {
+      document = { ...document, ...fromCampusFeatureCollection(document.featureCollection) }
+    }
+    if (!Array.isArray(document.buildings) || !Array.isArray(document.roads)) return false
     clearRpgPreview()
     editorPreviewActive = true
     rpgPreviewGroup = new THREE.Group()

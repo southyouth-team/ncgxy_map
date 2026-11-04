@@ -113,3 +113,47 @@ export function toCampusFeatureCollection(document = {}) {
 
   return { type: 'FeatureCollection', features };
 }
+
+/**
+ * Transitional adapter for existing editor/rendering consumers.
+ * New persistence and renderer boundaries should prefer FeatureCollection;
+ * this adapter keeps older UI controls operational during phased migration.
+ */
+export function fromCampusFeatureCollection(collection = {}) {
+  const result = { buildings: [], roads: [], areas: [], objects: [] };
+  for (const feature of collection.features || []) {
+    const properties = { ...(feature.properties || {}) };
+    const type = properties.featureType;
+    const name = properties.name || '未命名要素';
+    const source = properties.source || 'manual';
+    const qualityStatus = properties.qualityStatus || 'unverified';
+    delete properties.featureType;
+    delete properties.name;
+    delete properties.source;
+    delete properties.qualityStatus;
+
+    if (type === 'building' && feature.geometry?.type === 'Polygon') {
+      const footprint = (feature.geometry.coordinates?.[0] || []).slice(0, -1);
+      result.buildings.push({ ...properties, id: String(feature.id), label: name, footprint, confidence: qualityStatus, source });
+    } else if (type === 'road' && feature.geometry?.type === 'LineString') {
+      result.roads.push({ ...properties, id: String(feature.id), name, points: feature.geometry.coordinates, width: properties.width, confidence: qualityStatus, source });
+    } else if (['green', 'water', 'sports', 'plaza', 'parking'].includes(type) && feature.geometry?.type === 'Polygon') {
+      const areaType = properties.areaType || ({ green: 'vegetation' }[type] || type);
+      delete properties.areaType;
+      result.areas.push({ ...properties, id: String(feature.id), name, type: areaType, footprint: (feature.geometry.coordinates?.[0] || []).slice(0, -1), holes: (feature.geometry.coordinates || []).slice(1), confidence: qualityStatus, source });
+    } else if (feature.geometry?.type === 'Point') {
+      const objectType = properties.objectType || type || 'facility';
+      delete properties.objectType;
+      result.objects.push({
+        id: String(feature.id),
+        type: objectType,
+        name,
+        geometry: { type: 'Point', coordinates: feature.geometry.coordinates },
+        properties,
+        source,
+        qualityStatus,
+      });
+    }
+  }
+  return result;
+}

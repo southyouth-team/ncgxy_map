@@ -1,4 +1,4 @@
-import { getCampusSpatialLayers } from '../../data/campus/campusGeoJSON.js'
+import { getCampusSpatialLayers } from '../../../data/campus/campusGeoJSON.js'
 
 /**
  * Shared normalization boundary for the homepage renderer and editor preview.

@@ -365,17 +365,52 @@ export function createCampusScene(THREE, featureCollection = null) {
     character.userData.updateAnimation?.call(character, moving, seconds, dx, dz)
   }
 
-  const halfW = worldWidth / 2
-  const halfD = worldDepth / 2
-  // 可活动区域需要覆盖校园外围环线道路及道路外侧缓冲地带。
-  // 旧边界向内缩 2 个世界单位，再叠加角色半径后，会把外围道路整体排除在可行走范围外。
-  // 地面之外仍有无限远景草地，因此这里保留 12 个世界单位的外围活动缓冲区。
-  const perimeterWalkableMargin = 12
-  root.userData.walkableBounds = {
-    minX: -halfW - perimeterWalkableMargin,
-    maxX: halfW + perimeterWalkableMargin,
-    minZ: -halfD - perimeterWalkableMargin,
-    maxZ: halfD + perimeterWalkableMargin,
+  // 活动边界以所有空间要素的真实几何范围计算，而不是以底图矩形计算。
+  // 这样湖泊、操场、建筑和外围道路即使超出参考底图边框，也仍在可活动区域内。
+  const contentBounds = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity }
+  const includePixelCoordinate = coordinate => {
+    if (!Array.isArray(coordinate) || coordinate.length < 2 ||
+      !Number.isFinite(Number(coordinate[0])) || !Number.isFinite(Number(coordinate[1]))) return
+    const point = mapPixelToWorld(Number(coordinate[0]), Number(coordinate[1]))
+    contentBounds.minX = Math.min(contentBounds.minX, point.x)
+    contentBounds.maxX = Math.max(contentBounds.maxX, point.x)
+    contentBounds.minZ = Math.min(contentBounds.minZ, point.z)
+    contentBounds.maxZ = Math.max(contentBounds.maxZ, point.z)
+  }
+  const includeCoordinates = value => {
+    if (!Array.isArray(value)) return
+    if (value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]))) {
+      includePixelCoordinate(value)
+      return
+    }
+    value.forEach(includeCoordinates)
+  }
+  includeCoordinates(CAMPUS_AREAS.flatMap(area => [area.polygon || [], area.holes || [], area.rect || []]))
+  includeCoordinates(CAMPUS_BUILDING_FOOTPRINTS.map(building => building.polygon || building.footprint || building.rect || []))
+  includeCoordinates(CAMPUS_ROAD_CENTERLINES.map(road => road.points || []))
+  includeCoordinates(CAMPUS_OBJECTS.map(object => object.position || []))
+  includeCoordinates(spatialLayers.boundary?.geometry?.coordinates || [])
+  includeCoordinates(spatialLayers.gates.map(gate => gate.position || []))
+  const maxRoadHalfWidth = Math.max(0, ...CAMPUS_ROAD_CENTERLINES.map(road =>
+    Number(road.width || 12) * worldWidth /
+      (CAMPUS_PLAN_REFERENCE.mapBounds.right - CAMPUS_PLAN_REFERENCE.mapBounds.left) * 0.7,
+  ))
+  const contentMargin = Math.max(2.5, maxRoadHalfWidth + 1.25)
+  if (Number.isFinite(contentBounds.minX) && Number.isFinite(contentBounds.minZ)) {
+    root.userData.walkableBounds = {
+      minX: contentBounds.minX - contentMargin,
+      maxX: contentBounds.maxX + contentMargin,
+      minZ: contentBounds.minZ - contentMargin,
+      maxZ: contentBounds.maxZ + contentMargin,
+    }
+  } else {
+    // 防御性回退：正常校园数据应始终包含边界 Polygon。
+    root.userData.walkableBounds = {
+      minX: -worldWidth / 2 - contentMargin,
+      maxX: worldWidth / 2 + contentMargin,
+      minZ: -worldDepth / 2 - contentMargin,
+      maxZ: worldDepth / 2 + contentMargin,
+    }
   }
   root.userData.isVisualPrototype = true
   root.userData.assetStyle = 'isometric-pixel-campus'

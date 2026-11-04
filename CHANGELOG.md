@@ -318,3 +318,26 @@
 - **代码状态**：本次只建立规范文档，尚未完成入口代码重构；当前 `src/App.vue` 默认仍挂载 `CampusPixelMap`，2.5D Three.js 入口仍依赖旧的 `?view=showcase` 逻辑。
 - **验证**：已读取开发分支最新 `src/App.vue`、`CampusPixelMap.vue`、Three.js 引擎及现有产品/空间数据文档；本次没有运行构建，因为未改动运行时代码。
 - **下一步**：将首页入口改为真正的 2.5D 校园探索；明确 2.5D/3D 同场景视图切换；将平面编辑器作为独立入口；移除 `isRpgSample` 同时承担样板与真实校园入口的语义混用。
+
+
+## 2026-11-04 — 第三阶段：拆分置信度与核验状态
+
+- **变更类型**：统一空间数据适配器修复与回归测试。
+- **修改文件**：
+  - `src/editor/campusFeatureCollection.js`
+  - `src/editor/campusFeatureCollection.test.js`
+  - `src/data/campus/campusGeoJSON.test.js`
+  - `docs/architecture/CAMPUS_SPATIAL_ARCHITECTURE.md`
+- **实际完成**：
+  - 编辑器 Feature 正向序列化时，`confidence` 只表示 low / medium / high；`verificationStatus` 只表示 verified / unverified；`qualityStatus` 保留编辑器历史核验状态。
+  - 不再把旧字段 `confidence` 当作 `qualityStatus` 传入，避免 high / medium 被错误解释为核验状态。
+  - FeatureCollection 反向转换时分别恢复置信度、核验状态和编辑器质量状态，不再用 `qualityStatus` 覆盖置信度。
+  - 新增正向/反向适配器回归测试，以及编辑器 FeatureCollection 直接进入 `validateCampusGeoJSON` 的集成质检测试。
+- **验证**：
+  - 已通过代码级检查确认新增断言覆盖 building、road、water 三类对象。
+  - GitHub Actions 将在提交后执行；本记录不提前宣称 CI 通过。
+  - 尚未进行真实浏览器端保存/刷新验收。
+- **未解决事项**：
+  - 仍需核对所有旧文档中 `qualityStatus` 的历史取值，确认没有超出 verified / unverified 的业务状态。
+  - 仍需执行浏览器端保存、回读、首页与编辑器预览一致性验收。
+- **下一步**：等待前后端 CI；通过后继续第三阶段完整 FeatureCollection 合并与持久化验收，不提前进入第四阶段。

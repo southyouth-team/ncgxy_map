@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
+import { createCampusSceneRenderData } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { InputController } from '../controls/InputController.js'
@@ -9,7 +10,7 @@ import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuilding
 import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
-import { fromCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
+import { fromCampusFeatureCollection, toCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
 import { mapEditorPointToCalibratedWorld } from '../../editor/campusMapCalibration.js'
 import { createCampusMaterials, createPixelBuilding, validateBuildingFootprint } from '../world/campus/campusAssetLibrary.js'
 
@@ -362,7 +363,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!scene || !document) return false
     // Prefer the canonical GeoJSON FeatureCollection; legacy arrays are a transitional UI adapter.
     if (document.featureCollection?.type === 'FeatureCollection') {
-      document = { ...document, ...fromCampusFeatureCollection(document.featureCollection) }
+      const canonicalDocument = fromCampusFeatureCollection(document.featureCollection)
+      const sharedRenderData = createCampusSceneRenderData(document.featureCollection)
+      document = { ...document, ...canonicalDocument, ...sharedRenderData.previewDocument }
+    } else {
+      const legacyFeatureCollection = toCampusFeatureCollection(document)
+      const sharedRenderData = createCampusSceneRenderData(legacyFeatureCollection)
+      document = { ...document, ...sharedRenderData.previewDocument }
     }
     if (!Array.isArray(document.buildings) || !Array.isArray(document.roads)) return false
     clearRpgPreview()

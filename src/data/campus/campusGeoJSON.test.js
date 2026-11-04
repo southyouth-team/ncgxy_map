@@ -114,8 +114,8 @@ describe('统一校园空间数据出口', () => {
     const tree = invalid.features.find(feature => feature.properties.objectType === 'tree')
     tree.geometry.type = 'Polygon'
     tree.geometry.coordinates = [[[100, 100], [120, 100], [120, 120], [100, 120], [100, 100]]]
-    const plaza = invalid.features.find(feature => feature.properties.category === 'plaza')
-    plaza.properties.featureType = 'unknown-custom-type'
+    const unknownType = invalid.features.find(feature => feature.properties.featureType === 'boundary')
+    unknownType.properties.featureType = 'unknown-custom-type'
     const report = validateCampusGeoJSON(invalid)
     expect(report.errors.map(error => error.code)).toContain('GEOMETRY_TYPE_MISMATCH')
     expect(report.errors.map(error => error.code)).toContain('UNSUPPORTED_FEATURE_TYPE')

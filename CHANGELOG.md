@@ -1,5 +1,7 @@
 ## 2026-11-04 — 第一阶段：拆分 2.5D/3D 展示模式与相机控制
 
+- **补充修正**：初始化 CameraRig 时直接按 `viewMode` 选择正交/透视相机，并为当前相机创建 OrbitControls；避免以 3D 初始状态加载时内部仍持有正交相机。
+
 - **修改文件**：`src/App.vue`、`src/three/camera/CameraRig.js`、`src/three/engine/createCampusEngine.js`。
 - **实际完成**：
   - 校园探索增加独立的 2.5D / 3D 展示切换：2.5D 使用正交投影，3D 使用透视投影。

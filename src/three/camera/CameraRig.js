@@ -169,15 +169,13 @@ export class CameraRig {
       : this.overviewCamera
 
     if (this.mode === 'overview') {
-      // 正交与透视相机使用不同的缩放机制。按垂直视场高度换算距离，
-      // 避免切换 2.5D/3D 时校园突然放大、缩小或偏离用户当前观察目标。
+      // 正交与透视相机使用不同的缩放机制。按垂直视场高度换算，
+      // 但 2.5D 必须使用独立的固定方位，不能继承 3D 总览最后一次旋转/俯仰。
       let visibleHeight
-      if (previousCamera.isOrthographicCamera) {
-        visibleHeight = (previousCamera.top - previousCamera.bottom) / previousCamera.zoom
-        const perspectiveDistance = visibleHeight / (2 * Math.tan(this.THREE.MathUtils.degToRad(targetCamera.fov) / 2))
-        targetCamera.position.copy(previousTarget).addScaledVector(viewDirection, perspectiveDistance)
-      } else {
-        visibleHeight = 2 * previousDistance * Math.tan(this.THREE.MathUtils.degToRad(previousCamera.fov) / 2)
+      if (viewMode === '2.5d') {
+        visibleHeight = previousCamera.isOrthographicCamera
+          ? (previousCamera.top - previousCamera.bottom) / previousCamera.zoom
+          : 2 * previousDistance * Math.tan(this.THREE.MathUtils.degToRad(previousCamera.fov) / 2)
         this.overviewSpan = visibleHeight
         const halfHeight = visibleHeight / 2
         this.overviewCamera.left = -halfHeight * this.aspect
@@ -185,6 +183,15 @@ export class CameraRig {
         this.overviewCamera.top = halfHeight
         this.overviewCamera.bottom = -halfHeight
         this.resetOverviewZoom()
+        // 2.5D 总览固定为北向上、45° 斜俯视；只继承观察中心，不继承 3D 相机姿态。
+        const fixedDistance = Math.max(145, this.overviewSpan * 1.1)
+        targetCamera.position.set(previousTarget.x, fixedDistance, previousTarget.z + fixedDistance)
+      } else if (previousCamera.isOrthographicCamera) {
+        visibleHeight = (previousCamera.top - previousCamera.bottom) / previousCamera.zoom
+        const perspectiveDistance = visibleHeight / (2 * Math.tan(this.THREE.MathUtils.degToRad(targetCamera.fov) / 2))
+        targetCamera.position.copy(previousTarget).addScaledVector(viewDirection, perspectiveDistance)
+      } else {
+        visibleHeight = 2 * previousDistance * Math.tan(this.THREE.MathUtils.degToRad(previousCamera.fov) / 2)
         targetCamera.position.copy(previousPosition)
       }
       targetCamera.lookAt(previousTarget)

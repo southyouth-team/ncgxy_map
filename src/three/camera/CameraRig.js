@@ -63,8 +63,9 @@ export class CameraRig {
     this.orbit.enabled = this.mode === 'overview'
     // 2.5D 总览是固定方位的地图浏览，只允许平移/缩放；3D 总览保留旋转观察。
     this.orbit.enableRotate = this.viewMode === '3d'
-    this.orbit.mouseButtons.LEFT = this.THREE.MOUSE.PAN
-    this.orbit.mouseButtons.RIGHT = this.viewMode === '3d' ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
+    // 3D 总览遵循常见三维地图操作：左键旋转、右键平移；2.5D 左右键均平移。
+    this.orbit.mouseButtons.LEFT = this.viewMode === '3d' ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
+    this.orbit.mouseButtons.RIGHT = this.THREE.MOUSE.PAN
     if (this.orbit.touches) {
       this.orbit.touches.ONE = this.viewMode === '3d' ? this.THREE.TOUCH.ROTATE : this.THREE.TOUCH.PAN
       this.orbit.touches.TWO = this.THREE.TOUCH.DOLLY_PAN

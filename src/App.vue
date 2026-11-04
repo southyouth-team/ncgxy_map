@@ -508,6 +508,13 @@ onMounted(async () => {
       ...editorCollection,
       deletedFeatureIds: [...new Set([...(editorCollection.deletedFeatureIds || []), ...(planDocument?.deletedFeatureIds || [])].map(String))],
     })
+    let assetManifest = null
+    try {
+      const assetResponse = await fetch(API_BASE + '/assets/visual-assets/manifest')
+      if (assetResponse.ok) assetManifest = await assetResponse.json()
+    } catch (assetError) {
+      console.warn('[CampusVisualAsset] 正式资产清单暂不可用，使用程序化建筑回退', assetError)
+    }
     engine = createCampusEngine(viewport.value, {
       onObjectSelected: (object) => { selectedObject.value = object },
       onIndoorPromptChange: (state) => { indoorPrompt.value = state?.visible ? state : null },
@@ -539,7 +546,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: Boolean(requestedBuildingId), featureCollection: campusFeatureCollection })
+    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: Boolean(requestedBuildingId), featureCollection: campusFeatureCollection, assetManifest, assetBaseUrl: API_BASE })
     await engine.init()
     if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {

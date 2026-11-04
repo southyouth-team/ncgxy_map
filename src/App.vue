@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
       <div class="intro-foot">INTERACTIVE CAMPUS MAP</div>
     </section>
 
-    <nav class="mode-switcher" aria-label="展示模式切换">
+    <nav class="mode-switcher view-mode-switcher" aria-label="展示模式切换">
       <button :class="['mode-button', { active: viewMode === '2.5d' }]" @click="switchViewMode('2.5d')">
         <span class="mode-label">2.5D</span>
         <span class="mode-hint">等距像素视图</span>

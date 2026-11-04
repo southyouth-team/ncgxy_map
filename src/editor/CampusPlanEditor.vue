@@ -48,6 +48,7 @@ async function loadEditorDocument() {
       if (Array.isArray(document.buildings)) buildings.value = document.buildings.map(normalizeBuilding)
       if (Array.isArray(document.areas)) areas.value = document.areas.map((area) => ({ ...area, footprint: area.polygon || area.footprint || [] }))
       if (Array.isArray(document.roads)) roads.value = document.roads
+      if (Array.isArray(document.objects)) objects.value = document.objects.filter(item => item?.geometry?.type === 'Point' && Array.isArray(item.geometry.coordinates))
       if (document.calibration?.controlPoints) calibrationPoints.value = document.calibration.controlPoints
       if (document.referenceImage) {
         referenceImage.value = document.referenceImage
@@ -76,7 +77,7 @@ async function loadAssetPreview(assetId) {
 async function saveEditorDocument() {
   if (!props.campusId || !props.mapId) { persistenceMessage.value = '缺少校园或地图 ID，无法持久化'; return }
   if (persistenceBusy.value || revisionConflict.value) return
-  const document = { ...buildDocument(), mapId: String(props.mapId), objects: [] }
+  const document = { ...buildDocument(), mapId: String(props.mapId) }
   const requestSnapshot = JSON.stringify(buildDocument())
   persistenceBusy.value = true
   persistenceState.value = 'saving'
@@ -115,6 +116,10 @@ const areas = ref(CAMPUS_AREAS.map((item) => ({
   footprint: item.polygon?.map((point) => [...point]) || rectToPolygon(item.rect),
 })))
 const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item.points.map((point) => [...point]) })))
+const objects = ref([])
+const objectKinds = [{ value: 'tree', label: '树木' }, { value: 'streetlight', label: '路灯' }, { value: 'bench', label: '座椅' }, { value: 'sculpture', label: '雕塑' }]
+const objectKind = ref('tree')
+const selectedObject = computed(() => objects.value.find(item => item.id === selected.value.id && selected.value.type === 'object') || null)
 const selected = ref({ type: 'building', id: buildings.value[0]?.id })
 const multiSelection = ref([])
 const boxSelection = ref(null)
@@ -133,7 +138,7 @@ function toggleMultiSelection(type, id, event) {
   selected.value = multiSelection.value.at(-1) || { type: '', id: '' }
   return true
 }
-function featureCollection(type) { return type === 'building' ? buildings.value : type === 'road' ? roads.value : areas.value }
+function featureCollection(type) { return type === 'building' ? buildings.value : type === 'road' ? roads.value : type === 'object' ? objects.value : areas.value }
 function featureGeometry(type, item) {
   return type === 'road' ? item.points.map(point => [...point]) : item.footprint.map(point => [...point])
 }
@@ -216,11 +221,12 @@ function deleteSelectionBatch() {
   const deletable = targets.filter(item => !isLayerLocked(item.type))
   if (!deletable.length) return
   snapshot()
-  const ids = { building: new Set(), road: new Set(), area: new Set() }
+  const ids = { building: new Set(), road: new Set(), area: new Set(), object: new Set() }
   deletable.forEach(item => ids[item.type]?.add(item.id))
   buildings.value = buildings.value.filter(item => !ids.building.has(item.id))
   roads.value = roads.value.filter(item => !ids.road.has(item.id))
   areas.value = areas.value.filter(item => !ids.area.has(item.id))
+  objects.value = objects.value.filter(item => !ids.object.has(item.id))
   selected.value = { type: '', id: '' }
   multiSelection.value = []
 }
@@ -249,6 +255,7 @@ function pasteCopied() {
     clone.id = `copy-${entry.type}-${Date.now()}-${duplicateSequence}`
     if (Array.isArray(clone.footprint)) clone.footprint = clone.footprint.map(([x, y]) => [x + 24, y + 24])
     if (Array.isArray(clone.points)) clone.points = clone.points.map(([x, y]) => [x + 24, y + 24])
+    if (clone.geometry?.type === 'Point') clone.geometry.coordinates = clone.geometry.coordinates.map(value => value + 24)
     if (Array.isArray(clone.rect)) clone.rect = [clone.rect[0] + 24, clone.rect[1] + 24, clone.rect[2] + 24, clone.rect[3] + 24]
     featureCollection(entry.type).push(clone)
     pasted.push({ type: entry.type, id: clone.id })
@@ -726,6 +733,12 @@ function finishBoxSelection() {
 }
 function startBuildingDrag(event, item) { beginFeatureDrag(event, 'building', item) }
 function startAreaDrag(event, area) { beginFeatureDrag(event, 'area', area) }
+function startObjectDrag(event, item) {
+  if (event.button !== 0 || tool.value !== 'select' || isLayerLocked('area')) return
+  event.stopPropagation(); selected.value = { type: 'object', id: item.id }; snapshot()
+  drag.value = { type: 'object', id: item.id, start: point(event), position: [...item.geometry.coordinates] }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
 function startPolygonVertexDrag(event, type, item, index) {
   if (event.button !== 0 || tool.value === 'pan' || spacePressed.value || isLayerLocked(type)) return
   event.stopPropagation()
@@ -772,6 +785,9 @@ function movePointer(event) {
     const dx = p.x - drag.value.start.x, dy = p.y - drag.value.start.y
     item.footprint = movePolygon(drag.value.footprint, dx, dy)
     item.rect = polygonBounds(item.footprint)
+  } else if (drag.value.type === 'object') {
+    const item = objects.value.find(entry => entry.id === drag.value.id)
+    if (item) item.geometry.coordinates = [drag.value.position[0] + p.x - drag.value.start.x, drag.value.position[1] + p.y - drag.value.start.y]
   } else if (drag.value.type === 'area') {
     const area = areas.value.find((entry) => entry.id === drag.value.id)
     if (area) area.footprint = movePolygon(drag.value.footprint, p.x - drag.value.start.x, p.y - drag.value.start.y)
@@ -819,6 +835,13 @@ function addBuilding(event) {
   buildings.value.push({ id, label: newBuilding.value, template: newBuilding.value, rect, footprint: rectToPolygon(rect), floors: null, confidence: 'unverified' })
   selected.value = { type: 'building', id }
   tool.value = 'select'
+}
+function addPointObject(event) {
+  snapshot()
+  const p = event?.clientX != null ? point(event) : { x: 320, y: 250 }
+  const id = `${objectKind.value}-${Date.now()}`
+  objects.value.push({ id, type: objectKind.value, name: objectKinds.find(entry => entry.value === objectKind.value)?.label || '校园设施', geometry: { type: 'Point', coordinates: [p.x, p.y] }, properties: { rotation: 0, scale: 1 }, source: 'manual', qualityStatus: 'unverified' })
+  selected.value = { type: 'object', id }; tool.value = 'select'
 }
 function addArea(event) {
   snapshot()
@@ -894,7 +917,7 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
-  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: [] }
+  return { schemaVersion: 2, coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
 }
 function preview3d() { emit('preview', buildDocument()) }
 function exportDocument() {
@@ -927,6 +950,8 @@ function exportDocument() {
           <button :class="{active:tool==='building'}" @click="tool='building'"><span>▰</span>建筑摆放</button>
           <button :class="{active:tool==='road'}" @click="tool='road'"><span>⌁</span>道路绘制</button>
           <button :class="{active:tool==='area'}" @click="tool='area'"><span>▧</span>区域绘制</button>
+          <button :class="{active:tool==='object'}" @click="tool='object'"><span>♧</span>点对象放置</button>
+          <label>设施类型<select v-model="objectKind"><option v-for="item in objectKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
           <label class="area-kind-select">区域类型<select v-model="areaKind"><option v-for="item in areaKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
         </div>
         <div class="panel-separator"></div>
@@ -979,9 +1004,9 @@ function exportDocument() {
       </aside>
       <main class="map-stage">
         <div class="stage-label"><div><span class="live-dot"></span> CAMPUS / TOP-DOWN VIEW <em>二维编辑视口</em></div><span class="stage-coordinates">{{ Math.round(scale * 100) }}% 缩放 · {{ selectedLabel }}</span></div>
-        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='pan'}" @click="tool='pan'" title="按住并拖动以平移画布">✋ 平移</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button><button :class="{active:tool==='area'}" @click="tool='area'" title="区域工具">▧ 区域</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || !(Array.isArray(clipboardObject) ? clipboardObject.some(entry => !isLayerLocked(entry.type)) : !isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="alignSelection('right')" :disabled="multiSelection.length<2" title="右对齐">右对齐</button><button @click="alignSelection('bottom')" :disabled="multiSelection.length<2" title="底部对齐">底对齐</button><button @click="distributeSelection('horizontal')" :disabled="multiSelection.length<3" title="水平等间距">水平分布</button><button @click="distributeSelection('vertical')" :disabled="multiSelection.length<3" title="垂直等间距">垂直分布</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
+        <div class="canvas-toolbar"><div class="canvas-tool-group"><button :class="{active:tool==='select'}" @click="tool='select'" title="选择工具">↖ 选择</button><button :class="{active:tool==='pan'}" @click="tool='pan'" title="按住并拖动以平移画布">✋ 平移</button><button :class="{active:tool==='building'}" @click="tool='building'" title="建筑工具">▰ 建筑</button><button :class="{active:tool==='road'}" @click="tool='road'" title="道路工具">⌁ 道路</button><button :class="{active:tool==='area'}" @click="tool='area'" title="区域工具">▧ 区域</button><button :class="{active:tool==='object'}" @click="tool='object'" title="点对象工具">♧ 设施</button></div><div class="canvas-tool-group"><span class="selection-count">{{ selectionCount }} 已选</span><button @click="copySelected" :disabled="!selected.id && !multiSelection.length">复制</button><button @click="pasteCopied" :disabled="!clipboardObject || !(Array.isArray(clipboardObject) ? clipboardObject.some(entry => !isLayerLocked(entry.type)) : !isLayerLocked(clipboardObject.type))">粘贴</button><button @click="deleteSelected" :disabled="!selected.id && !multiSelection.length">批量删除</button><button @click="alignSelection('left')" :disabled="multiSelection.length<2" title="左对齐">左对齐</button><button @click="alignSelection('centerX')" :disabled="multiSelection.length<2" title="水平居中">水平居中</button><button @click="alignSelection('top')" :disabled="multiSelection.length<2" title="顶部对齐">顶对齐</button><button @click="alignSelection('centerY')" :disabled="multiSelection.length<2" title="垂直居中">垂直居中</button><button @click="alignSelection('right')" :disabled="multiSelection.length<2" title="右对齐">右对齐</button><button @click="alignSelection('bottom')" :disabled="multiSelection.length<2" title="底部对齐">底对齐</button><button @click="distributeSelection('horizontal')" :disabled="multiSelection.length<3" title="水平等间距">水平分布</button><button @click="distributeSelection('vertical')" :disabled="multiSelection.length<3" title="垂直等间距">垂直分布</button><button @click="undo" :disabled="!history.length">↶</button><button @click="redo" :disabled="!future.length">↷</button><button @click="showGrid=!showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button @click="resetCanvasView">适配画布</button></div></div>
         <div ref="canvasViewport" class="map-scroll" :class="{ 'pan-mode': tool === 'pan' || spacePressed }" @pointerdown="startCanvasPan" @pointermove="moveCanvasPan" @pointerup="endCanvasPan" @pointercancel="endCanvasPan">
-          <svg class="campus-map" :viewBox="canvasViewBox()" @pointerdown="startBoxSelection" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : tool==='area' ? addArea($event) : null">
+          <svg class="campus-map" :viewBox="canvasViewBox()" @pointerdown="startBoxSelection" @click.capture="captureCalibrationPoint" @wheel.prevent="zoomCanvas" @pointermove="movePointer($event)" @pointerup="endPointer()" @pointercancel="endPointer()" @contextmenu="preventCanvasContextMenu" @click="suppressCanvasClick ? null : tool==='building' ? addBuilding($event) : tool==='road' ? addRoad($event) : tool==='area' ? addArea($event) : tool==='object' ? addPointObject($event) : null">
             <defs>
               <pattern id="map-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#4c654d" stroke-opacity=".14" stroke-width=".7"/></pattern>
               <pattern id="grass-pattern" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 6l2 -2 M17 18l2 -2 M10 14l1 -2" stroke="#64894f" stroke-width="1.4" opacity=".48"/><rect x="19" y="4" width="2" height="2" fill="#c1cf83" opacity=".5"/></pattern><pattern id="path-pattern" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M3 4h3 M11 13h4" stroke="#e1c89d" stroke-width="2" opacity=".65"/></pattern>
@@ -991,7 +1016,8 @@ function exportDocument() {
               <polygon :points="area.footprint.map(p=>p.join(',')).join(' ')" :fill="areaColor(area.type)" :stroke="selected.id===area.id || multiSelection.some(entry=>entry.type==='area' && entry.id===area.id) ? '#e6a84c' : '#d7e5d3'" :stroke-width="selected.id===area.id ? 4 : 2" opacity=".72"/>
               <g v-if="selected.type==='area' && selected.id===area.id"><circle v-for="(vertex,index) in area.footprint" :key="index" :cx="vertex[0]" :cy="vertex[1]" r="5" fill="#f5c36b" stroke="#3d513f" stroke-width="1.5" @pointerdown="startPolygonVertexDrag($event,'area',area,index)" @dblclick.stop="removePolygonVertex(index)"/></g>
             </g>
-            <g v-if="showGrid"><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#map-grid)"/></g>
+            <g v-for="item in objects" :key="item.id" class="map-feature" @pointerdown="startObjectDrag($event,item)"><circle :cx="item.geometry.coordinates[0]" :cy="item.geometry.coordinates[1]" :r="selected.id===item.id ? 10 : 7" :fill="item.type==='tree' ? '#4f8050' : item.type==='streetlight' ? '#d5b56b' : item.type==='bench' ? '#9b7955' : '#8c7b9e'" :stroke="selected.id===item.id ? '#e6a84c' : '#f4f1e6'" stroke-width="2"/><text :x="item.geometry.coordinates[0]+10" :y="item.geometry.coordinates[1]+4" font-size="8" fill="#344b3b">{{ item.name }}</text></g>
+             <g v-if="showGrid"><rect :x="canvasRenderBounds.minX" :y="canvasRenderBounds.minY" :width="canvasRenderBounds.width" :height="canvasRenderBounds.height" fill="url(#map-grid)"/></g>
             <path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="#c3a477" stroke="#8f7655" stroke-width="1.5" fill-rule="evenodd" stroke-linejoin="round"/><path v-if="layerStates.roads.visible" :d="polygonPath(roadNetwork)" fill="url(#path-pattern)" stroke="none" fill-rule="evenodd" pointer-events="none"/>
             <g v-if="layerStates.roads.visible" v-for="road in roads" :key="road.id" class="map-feature" @pointerdown="selectRoad($event,road)">
               <path :d="roadPath(road.points)" fill="none" stroke="transparent" :stroke-width="Math.max(road.width || 13, 18)" />
@@ -1049,6 +1075,13 @@ function exportDocument() {
           <label>区域类型</label><select v-model="selectedArea.type"><option v-for="item in areaKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
           <button class="add-button" @click="addPolygonVertex">＋ 添加最长边顶点</button><p class="hint">拖动黄色顶点编辑轮廓；点击顶点删除（至少保留 3 个）。支持顶点吸附。</p>
           <button class="danger-button" @click="!isLayerLocked('area') && (snapshot(), areas = areas.filter(item => item.id !== selectedArea.id), selected = {type:'',id:''})">删除区域</button>
+        </template>
+        <template v-else-if="selectedObject">
+          <label>对象名称</label><input v-model="selectedObject.name">
+          <label>对象类型</label><select v-model="selectedObject.type"><option v-for="item in objectKinds" :key="item.value" :value="item.value">{{ item.label }}</option></select>
+          <label>朝向（度）</label><input type="number" v-model.number="selectedObject.properties.rotation">
+          <label>缩放</label><input type="number" min="0.2" max="5" step="0.1" v-model.number="selectedObject.properties.scale">
+          <button class="danger-button" @click="deleteSelected">删除对象</button>
         </template>
         <template v-else-if="selectedRoad">
           <label>道路宽度</label><input v-model.number="selectedRoad.width" type="range" min="4" max="24">

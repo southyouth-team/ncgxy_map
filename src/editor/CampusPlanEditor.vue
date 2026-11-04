@@ -4,6 +4,7 @@ import { rectToPolygon, movePolygon, rotatePolygon, polygonBounds, normalizeBuil
 import { fitCampusSimilarityTransform } from './campusMapCalibration.js'
 import { createDraftGeometry } from './geometryDraft.js'
 import { toCampusFeatureCollection, fromCampusFeatureCollection } from './campusFeatureCollection.js'
+import { buildCampusGeoJSON } from '../data/campus/campusGeoJSON.js'
 import { CAMPUS_BUILDING_ASSET_CATALOG, CAMPUS_BUILDING_TEMPLATES, validateBuildingFootprint } from '../three/world/campus/campusAssetLibrary.js'
 import {
   CAMPUS_BUILDING_FOOTPRINTS,
@@ -52,10 +53,14 @@ async function loadEditorDocument() {
       const normalized = document.featureCollection?.type === 'FeatureCollection'
         ? fromCampusFeatureCollection(document.featureCollection)
         : document
-      if (Array.isArray(normalized.buildings)) buildings.value = normalized.buildings.map(normalizeBuilding)
-      if (Array.isArray(normalized.areas)) areas.value = normalized.areas.map((area) => ({ ...area, footprint: area.polygon || area.footprint || [] }))
-      if (Array.isArray(normalized.roads)) roads.value = normalized.roads
-      if (Array.isArray(normalized.objects)) objects.value = normalized.objects.filter(item => item?.geometry?.type === 'Point' && Array.isArray(item.geometry.coordinates))
+      const deletedIds = deletedFeatureIds.value
+      if (Array.isArray(normalized.buildings)) buildings.value = mergeEditorLayer(BASE_CAMPUS_BUILDINGS, normalized.buildings.map(normalizeBuilding), deletedIds)
+      if (Array.isArray(normalized.areas)) areas.value = mergeEditorLayer(BASE_CAMPUS_AREAS, normalized.areas.map(area => ({ ...area, footprint: area.polygon || area.footprint || [] })), deletedIds)
+      if (Array.isArray(normalized.roads)) roads.value = mergeEditorLayer(BASE_CAMPUS_ROADS, normalized.roads, deletedIds)
+      if (Array.isArray(normalized.objects)) {
+        const validObjects = normalized.objects.filter(item => item?.geometry?.type === 'Point' && Array.isArray(item.geometry.coordinates))
+        objects.value = mergeEditorLayer(BASE_CAMPUS_OBJECTS, validObjects, deletedIds)
+      }
       if (document.calibration?.controlPoints) calibrationPoints.value = document.calibration.controlPoints
       if (document.referenceImage) {
         referenceImage.value = document.referenceImage
@@ -117,13 +122,35 @@ async function saveEditorDocument() {
     }
   }
 }
-const buildings = ref(CAMPUS_BUILDING_FOOTPRINTS.map((item) => ({ ...normalizeBuilding(item), template: item.template || item.label || '教学楼' })))
-const areas = ref(CAMPUS_AREAS.map((item) => ({
-  ...item,
-  footprint: item.polygon?.map((point) => [...point]) || rectToPolygon(item.rect),
-})))
-const roads = ref(CAMPUS_ROAD_CENTERLINES.map((item) => ({ ...item, points: item.points.map((point) => [...point]) })))
-const objects = ref([])
+const BASE_CAMPUS_FEATURE_COLLECTION = buildCampusGeoJSON()
+const BASE_CAMPUS_FEATURE_IDS = new Set(BASE_CAMPUS_FEATURE_COLLECTION.features.map(feature => String(feature.id)))
+const BASE_CAMPUS_BUILDINGS = CAMPUS_BUILDING_FOOTPRINTS.map(item => ({ ...normalizeBuilding(item), template: item.template || item.label || '教学楼' }))
+const BASE_CAMPUS_AREAS = CAMPUS_AREAS.map(item => ({ ...item, footprint: item.polygon?.map(point => [...point]) || rectToPolygon(item.rect) }))
+const BASE_CAMPUS_ROADS = CAMPUS_ROAD_CENTERLINES.map(item => ({ ...item, points: item.points.map(point => [...point]) }))
+const BASE_CAMPUS_OBJECTS = BASE_CAMPUS_FEATURE_COLLECTION.features
+  .filter(feature => feature.properties?.featureType === 'object' && feature.geometry?.type === 'Point')
+  .map(feature => {
+    const { featureType, name, source, qualityStatus, confidence, objectType, ...properties } = feature.properties
+    return {
+      id: String(feature.id),
+      type: objectType || 'facility',
+      name: name || '校园设施',
+      geometry: { type: 'Point', coordinates: [...feature.geometry.coordinates] },
+      properties,
+      source,
+      qualityStatus: qualityStatus || confidence || 'unverified',
+    }
+  })
+function mergeEditorLayer(baseItems, editedItems, deletedIds) {
+  const byId = new Map(baseItems.map(item => [String(item.id), item]))
+  for (const item of editedItems || []) byId.set(String(item.id), item)
+  const deleted = new Set(deletedIds.map(String))
+  return [...byId.values()].filter(item => !deleted.has(String(item.id)))
+}
+const buildings = ref(BASE_CAMPUS_BUILDINGS.map(item => ({ ...item })))
+const areas = ref(BASE_CAMPUS_AREAS.map(item => ({ ...item })))
+const roads = ref(BASE_CAMPUS_ROADS.map(item => ({ ...item })))
+const objects = ref(BASE_CAMPUS_OBJECTS.map(item => ({ ...item, geometry: { ...item.geometry, coordinates: [...item.geometry.coordinates] }, properties: { ...item.properties } })))
 const objectKinds = [{ value: 'tree', label: '树木' }, { value: 'streetlight', label: '路灯' }, { value: 'bench', label: '座椅' }, { value: 'sculpture', label: '雕塑' }]
 const objectKind = ref('tree')
 const selectedObject = computed(() => objects.value.find(item => item.id === selected.value.id && selected.value.type === 'object') || null)
@@ -229,6 +256,8 @@ function deleteSelectionBatch() {
   if (!deletable.length) return
   snapshot()
   const ids = { building: new Set(), road: new Set(), area: new Set(), object: new Set() }
+  const deletedBaseIds = deletable.map(item => String(item.id)).filter(id => BASE_CAMPUS_FEATURE_IDS.has(id))
+  if (deletedBaseIds.length) deletedFeatureIds.value = [...new Set([...deletedFeatureIds.value, ...deletedBaseIds])]
   deletable.forEach(item => ids[item.type]?.add(item.id))
   buildings.value = buildings.value.filter(item => !ids.building.has(item.id))
   roads.value = roads.value.filter(item => !ids.road.has(item.id))
@@ -961,8 +990,9 @@ function deleteSelected() {
   if (multiSelection.value.length > 1) { deleteSelectionBatch(); return }
   if (!selected.value.id || isLayerLocked(selected.value.type)) return
   snapshot()
-  const selectedFeature = featureCollection(selected.value.type).find(item => item.id === selected.value.id)
-   if (selectedFeature?.source === 'legacy-scene-decoration') deletedFeatureIds.value = [...new Set([...deletedFeatureIds.value, String(selected.value.id)])]
+  if (BASE_CAMPUS_FEATURE_IDS.has(String(selected.value.id))) {
+    deletedFeatureIds.value = [...new Set([...deletedFeatureIds.value, String(selected.value.id)])]
+  }
    if (selected.value.type === 'building') buildings.value = buildings.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'road') roads.value = roads.value.filter(item => item.id !== selected.value.id)
   if (selected.value.type === 'area') areas.value = areas.value.filter(item => item.id !== selected.value.id)
@@ -970,7 +1000,7 @@ function deleteSelected() {
   selected.value = { type: '', id: '' }
 }
 function buildDocument() {
-  const document = { schemaVersion: 3, coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
+  const document = { schemaVersion: 3, deletedFeatureIds: [...deletedFeatureIds.value], coordinateSystem: 'campus-plan-pixel', units: 'pixel', worldUnitsPerCampusUnit: 1, source: 'campusLayout.js', referenceImage: referenceImage.value ? { ...referenceImage.value, opacity: referenceImageOpacity.value } : null, calibration: calibrationTransform.value ? { ...calibrationTransform.value, controlPoints: calibrationPoints.value } : null, workspaceBounds: workspaceBounds.value, areas: areas.value.map(({ polygon, rect, ...area }) => ({ ...area, polygon: area.footprint })), buildings: buildings.value, roads: roads.value, objects: objects.value }
   document.featureCollection = toCampusFeatureCollection(document)
   return document
 }

@@ -202,3 +202,75 @@ export function restoreCampusFeatureSnapshot(snapshot = {}) {
   }
   return fromCampusFeatureCollection(snapshot.featureCollection || {})
 }
+
+
+/**
+ * Immutable FeatureCollection mutation primitives.
+ * All mutations address features by stable Feature.id and never mutate input.
+ */
+function normalizeFeatureCollection(collection = {}) {
+  if (collection.type !== 'FeatureCollection' || !Array.isArray(collection.features)) {
+    throw new Error('无效的校园 FeatureCollection')
+  }
+  return {
+    ...collection,
+    features: collection.features,
+    deletedFeatureIds: [...new Set((collection.deletedFeatureIds || []).map(String))],
+  }
+}
+
+export function upsertCampusFeature(collection, feature) {
+  const current = normalizeFeatureCollection(collection)
+  if (!feature?.id || !feature.geometry?.type) throw new Error('Feature 必须包含稳定 ID 和 geometry')
+  const id = String(feature.id)
+  const next = { ...feature, id }
+  const index = current.features.findIndex(item => String(item.id) === id)
+  const features = [...current.features]
+  if (index < 0) features.push(next)
+  else features[index] = next
+  return {
+    ...current,
+    features,
+    deletedFeatureIds: current.deletedFeatureIds.filter(deletedId => deletedId !== id),
+  }
+}
+
+export function updateCampusFeatureProperties(collection, featureId, patch) {
+  const current = normalizeFeatureCollection(collection)
+  const id = String(featureId)
+  let found = false
+  const features = current.features.map(feature => {
+    if (String(feature.id) !== id) return feature
+    found = true
+    return { ...feature, properties: { ...(feature.properties || {}), ...patch } }
+  })
+  if (!found) throw new Error(`找不到空间要素：${id}`)
+  return { ...current, features }
+}
+
+export function updateCampusFeatureGeometry(collection, featureId, geometry) {
+  const current = normalizeFeatureCollection(collection)
+  if (!geometry?.type || !Array.isArray(geometry.coordinates)) throw new Error('Feature geometry 格式无效')
+  const id = String(featureId)
+  let found = false
+  const features = current.features.map(feature => {
+    if (String(feature.id) !== id) return feature
+    found = true
+    return { ...feature, geometry }
+  })
+  if (!found) throw new Error(`找不到空间要素：${id}`)
+  return { ...current, features }
+}
+
+export function removeCampusFeatures(collection, featureIds, { recordDeleted = false } = {}) {
+  const current = normalizeFeatureCollection(collection)
+  const ids = new Set((featureIds || []).map(String))
+  const removedIds = current.features.filter(feature => ids.has(String(feature.id))).map(feature => String(feature.id))
+  return {
+    ...current,
+    features: current.features.filter(feature => !ids.has(String(feature.id))),
+    deletedFeatureIds: recordDeleted
+      ? [...new Set([...current.deletedFeatureIds, ...removedIds])]
+      : current.deletedFeatureIds,
+  }
+}

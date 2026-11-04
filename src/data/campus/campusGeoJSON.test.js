@@ -57,6 +57,17 @@ describe('统一校园空间数据出口', () => {
 
 
 
+  it('将原场景环境装饰纳入统一 FeatureCollection，避免渲染器硬编码坐标', () => {
+    const collection = buildCampusGeoJSON()
+    const objects = collection.features.filter(feature => feature.properties.featureType === 'object')
+    expect(objects.length).toBeGreaterThan(100)
+    expect(objects.some(feature => feature.properties.objectType === 'tree')).toBe(true)
+    expect(objects.some(feature => feature.properties.objectType === 'flower')).toBe(true)
+    expect(objects.some(feature => feature.properties.objectType === 'bench')).toBe(true)
+    expect(objects.some(feature => feature.properties.objectType === 'streetlight')).toBe(true)
+    expect(objects.every(feature => feature.geometry.type === 'Point' && feature.properties.qualityStatus === 'unverified')).toBe(true)
+  })
+
   it('将编辑器保存的 FeatureCollection 直接归一化为校园渲染图层', () => {
     const edited = toCampusFeatureCollection({
       buildings: [{ id: 'edit-building', label: '新教学楼', footprint: [[10, 10], [30, 10], [30, 25]], floors: 6, confidence: 'medium' }],

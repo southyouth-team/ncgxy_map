@@ -3,6 +3,9 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { CAMPUS_BUILDING_FOOTPRINTS } from '../data/campus/campusLayout.js'
 import { createCampusAssetManifestFromWorkshopRecords } from '../data/campus/campusAssetManifest.js'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
+const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
+
 const STORAGE_KEY = 'ncgxy-campus-asset-workshop:v1'
 const DB_NAME = 'ncgxy-campus-asset-files'
 const DB_STORE = 'files'
@@ -26,6 +29,8 @@ const message = ref('')
 const assets = ref(loadStoredAssets())
 const activeAssetId = ref('')
 const saving = ref(false)
+const generating = ref(false)
+const generationModel = ref('')
 
 function loadStoredAssets() {
   try {
@@ -128,6 +133,52 @@ async function copyPrompt() {
   }
 }
 
+async function generateImage() {
+  if (viewMode.value !== '2.5d' || generating.value) return
+  if (!generatedPrompt.value.trim()) buildPrompt()
+  if (!generatedPrompt.value.trim()) return
+
+  generating.value = true
+  fileError.value = ''
+  message.value = '正在调用图片生成模型，生成过程可能需要几十秒……'
+  try {
+    const response = await fetch(API_BASE + '/assets/ai-image/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Dev-User-Id': DEV_USER_ID,
+      },
+      body: JSON.stringify({ prompt: generatedPrompt.value }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || '图片生成失败：HTTP ' + response.status)
+    if (typeof payload.dataUrl !== 'string' || !payload.dataUrl.startsWith('data:image/')) {
+      throw new Error('图片生成接口未返回有效图片数据')
+    }
+
+    const imageResponse = await fetch(payload.dataUrl)
+    const blob = await imageResponse.blob()
+    if (!blob.size || blob.size > 20 * 1024 * 1024) throw new Error('生成图片为空或超过 20 MB')
+    const extension = payload.mimeType === 'image/jpeg' ? 'jpg' : payload.mimeType === 'image/webp' ? 'webp' : 'png'
+    const fileName = 'ai-' + selectedFeatureId.value + '-' + Date.now() + '.' + extension
+    const file = new File([blob], fileName, { type: payload.mimeType || blob.type || 'image/png' })
+
+    resetPreview()
+    selectedFile.value = file
+    previewUrl.value = URL.createObjectURL(file)
+    sourceType.value = 'ai_generated'
+    generationModel.value = payload.model || 'gpt-image-2'
+    assetName.value = (selectedFeature.value?.name || '校园素材') + ' · AI 生成 2.5D'
+    publicPath.value = ''
+    message.value = '图片生成成功。请先检查轮廓、透明背景和风格，再保存为候选素材。'
+  } catch (error) {
+    fileError.value = error.message || '调用图片生成服务失败'
+    message.value = ''
+  } finally {
+    generating.value = false
+  }
+}
+
 function resetPreview() {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
@@ -191,6 +242,7 @@ async function saveDraft() {
       fileKey,
       publicPath: publicPath.value.trim() || suggestedPath(selectedFile.value),
       prompt: generatedPrompt.value,
+      generationModel: generationModel.value || null,
       createdAt: new Date().toISOString(),
       deployedConfirmed: false,
     }
@@ -336,11 +388,12 @@ onBeforeUnmount(resetPreview)
         <div class="button-row">
           <button class="primary-button" @click="buildPrompt">生成提示词</button>
           <button class="secondary-button" :disabled="!generatedPrompt" @click="copyPrompt">复制提示词</button>
+          <button class="primary-button" :disabled="viewMode !== '2.5d' || generating" @click="generateImage">{{ generating ? 'AI 生成中…' : '直接 AI 生成图片' }}</button>
         </div>
         <label>AI 生成提示词
           <textarea v-model="generatedPrompt" rows="10" placeholder="生成提示词后可在此修改、复制到你使用的 AI 工具"></textarea>
         </label>
-        <p class="hint">提示词会明确素材是视觉占位，不会伪造真实楼栋外观。没有实景照片时，不应将结果标记为真实还原。</p>
+        <p class="hint">2.5D 图片可直接调用已配置的图片生成服务；3D GLB 仍通过人工建模/外部 3D 工具导入。生成结果只是视觉候选，不会自动改变建筑位置或碰撞。</p>
       </section>
 
       <section class="workshop-panel intake-panel">
@@ -403,7 +456,7 @@ onBeforeUnmount(resetPreview)
 
     <footer class="workshop-footer">
       <strong>数据边界</strong>
-      <span>素材工坊只维护视觉资产。建筑位置、footprint、碰撞、walkable 和道路连接仍由校园空间 FeatureCollection 管理。当前版本不提供云端生成 API、服务端文件上传或自动部署。</span>
+      <span>素材工坊只维护视觉资产。建筑位置、footprint、碰撞、walkable 和道路连接仍由校园空间 FeatureCollection 管理。AI 图片由服务端代理调用；生成结果保存到浏览器本地候选库，仍需人工审核并放入项目 public 目录后才能导出正式清单。3D GLB 暂不由图片模型生成。</span>
     </footer>
   </main>
 </template>

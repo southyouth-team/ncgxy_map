@@ -265,8 +265,10 @@ export function validateCampusBuildingModels(models, canonicalBuildingIds = []) 
       if (!geometry.boundingBox) geometry.computeBoundingBox?.()
       const bounds = geometry.boundingBox
       if (bounds && [bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z].every(Number.isFinite)) {
-        const size = bounds.getSize ? bounds.getSize({ x: 0, y: 0, z: 0 }) : null
-        if (size && size.x > 0 && size.y > 0 && size.z > 0) hasValidBounds = true
+        const sizeX = bounds.max.x - bounds.min.x
+        const sizeY = bounds.max.y - bounds.min.y
+        const sizeZ = bounds.max.z - bounds.min.z
+        if (sizeX > 0 && sizeY > 0 && sizeZ > 0) hasValidBounds = true
       }
       const indexCount = geometry.index?.count ?? geometry.attributes?.position?.count ?? 0
       summary.triangleCount += geometry.index ? Math.floor(indexCount / 3) : Math.floor(indexCount / 3)

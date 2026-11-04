@@ -70,12 +70,14 @@ export function validateCampusAssetManifest(manifest, knownFeatureIds = null) {
     }
 
     const fileKeys = new Set();
+    let hasPrimary = false;
     for (const [fileIndex, file] of asset.files.entries()) {
       const filePath = `${path}.files[${fileIndex}]`;
       if (!VIEW_MODES.includes(file?.viewMode)) push('ASSET_FILE_VIEW_INVALID', filePath, '文件 viewMode 必须是 2.5d、3d 或 shared');
       if (!MEDIA_TYPES.includes(file?.mediaType)) push('ASSET_FILE_MEDIA_INVALID', filePath, '文件 mediaType 不受支持');
       if (!FILE_ROLES.includes(file?.role)) push('ASSET_FILE_ROLE_INVALID', filePath, '文件 role 不受支持');
       if (!isSafeAssetPath(file?.url)) push('ASSET_FILE_PATH_INVALID', filePath, '文件路径必须位于受控资产目录，且不能包含路径穿越');
+      if (file?.role === 'primary') hasPrimary = true;
       const key = `${file?.viewMode}:${file?.role}`;
       if (fileKeys.has(key)) push('ASSET_FILE_VARIANT_DUPLICATE', filePath, '同一视角不能重复登记相同 role');
       fileKeys.add(key);
@@ -85,6 +87,13 @@ export function validateCampusAssetManifest(manifest, knownFeatureIds = null) {
       if (file?.mediaType === 'image' && file?.viewMode === '3d' && file?.role === 'primary') {
         warnings.push({ code: 'ASSET_3D_IMAGE_FALLBACK', path: filePath, message: '3D 主素材使用平面图片，需确认是否为预期 billboard/贴花' });
       }
+    }
+    if (asset.status === 'ready' && !hasPrimary) {
+      push('ASSET_READY_WITHOUT_PRIMARY', path, 'ready 资产至少需要一个 primary 视觉文件');
+    }
+    if (asset.sourceType === 'ai_generated'
+      && (!isNonEmptyString(asset.provenance?.provider) || !isNonEmptyString(asset.provenance?.prompt))) {
+      warnings.push({ code: 'ASSET_AI_PROVENANCE_INCOMPLETE', path, message: 'AI 生成资产建议记录 provider 和 prompt，便于追溯与复现' });
     }
   }
 

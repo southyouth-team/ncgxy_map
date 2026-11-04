@@ -225,5 +225,46 @@ describe('统一校园空间数据出口', () => {
     expect(layers.siteAreas).toEqual(CAMPUS_SITE_AREAS)
   })
 
+  it('编辑器 FeatureCollection 的置信度与核验状态可通过统一数据质检', () => {
+    const collection = toCampusFeatureCollection({
+      buildings: [{
+        id: 'quality-check-building',
+        label: '待核验建筑',
+        footprint: [[100, 100], [120, 100], [120, 120], [100, 120]],
+        confidence: 'high',
+        qualityStatus: 'unverified',
+        verificationStatus: 'unverified',
+      }],
+      roads: [{
+        id: 'quality-check-road',
+        name: '已核验道路',
+        points: [[100, 140], [120, 140]],
+        width: 8,
+        confidence: 'medium',
+        qualityStatus: 'verified',
+        verificationStatus: 'verified',
+      }],
+      areas: [{
+        id: 'quality-check-water',
+        name: '待核验水域',
+        type: 'water',
+        footprint: [[140, 100], [160, 100], [160, 120], [140, 120]],
+        confidence: 'low',
+        qualityStatus: 'unverified',
+        verificationStatus: 'unverified',
+      }],
+    })
+
+    const report = validateCampusGeoJSON(collection)
+    expect(report.valid).toBe(true)
+    expect(report.errors).toEqual([])
+    expect(collection.features.map(feature => feature.properties)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ confidence: 'high', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+      expect.objectContaining({ confidence: 'medium', qualityStatus: 'verified', verificationStatus: 'verified' }),
+      expect.objectContaining({ confidence: 'low', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+    ]))
+  })
+
+
 
 })

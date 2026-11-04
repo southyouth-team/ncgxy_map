@@ -70,6 +70,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let outdoorState = null
   let nearOutdoorEntrance = false
   let nearOutdoorBuildingId = null
+  // 建筑入口在场景初始化时索引；玩家未移动时不重复遍历整个校园场景树。
+  let outdoorEntranceObjects = []
+  let lastEntranceCheckPosition = null
   let frameId = 0
   let resizeObserver
   let previousTime = 0
@@ -137,6 +140,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     // 从明确标记为建筑的场景对象提取世界包围盒，避免把道路、树木等误判为墙体。
     campus.updateMatrixWorld(true)
+    outdoorEntranceObjects = []
+    campus.traverse((object) => {
+      if (object.userData?.indoorEntrance) {
+        outdoorEntranceObjects.push({ object, worldPosition: new THREE.Vector3() })
+      }
+    })
+    lastEntranceCheckPosition = null
     const buildingObstacles = []
     const circularObstacles = []
     const buildingWallSets = []
@@ -981,22 +991,30 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
     }
     if (!indoorGroup && cameraRig?.player && !isRpgSample) {
-      let nearest = null
-      campus?.traverse(object => {
-        if (!object.userData?.buildingId || !object.userData?.indoorEntrance) return
-        const entrance = object.userData.indoorEntrance
-        const point = object.localToWorld(new THREE.Vector3(entrance.x, 0, entrance.z))
-        const distance = Math.hypot(cameraRig.player.x - point.x, cameraRig.player.z - point.z)
-        if (distance <= (entrance.radius || 2.25) && (!nearest || distance < nearest.distance)) {
-          nearest = { id: String(object.userData.buildingId), name: object.userData.displayName || object.name, distance }
+      const player = cameraRig.player
+      const movedSinceLastCheck = !lastEntranceCheckPosition
+        || (player.x - lastEntranceCheckPosition.x) ** 2 + (player.z - lastEntranceCheckPosition.z) ** 2 > 0.0004
+      // 入口提示只依赖玩家位置；静止帧跳过距离计算，移动时只检查初始化索引。
+      if (movedSinceLastCheck) {
+        lastEntranceCheckPosition = { x: player.x, z: player.z }
+        let nearest = null
+        for (const entry of outdoorEntranceObjects) {
+          const { object, worldPosition } = entry
+          const entrance = object.userData?.indoorEntrance
+          if (!entrance || !object.userData?.buildingId) continue
+          const point = object.localToWorld(worldPosition.set(entrance.x, 0, entrance.z))
+          const distance = Math.hypot(player.x - point.x, player.z - point.z)
+          if (distance <= (entrance.radius || 2.25) && (!nearest || distance < nearest.distance)) {
+            nearest = { id: String(object.userData.buildingId), name: object.userData.displayName || object.name, distance }
+          }
         }
-      })
-      const nextId = nearest?.id || null
-      if (nextId !== nearOutdoorBuildingId) {
-        nearOutdoorBuildingId = nextId
-        callbacks.onIndoorPromptChange?.(nearest
-          ? { visible: true, text: '按 E 进入' + nearest.name }
-          : { visible: false })
+        const nextId = nearest?.id || null
+        if (nextId !== nearOutdoorBuildingId) {
+          nearOutdoorBuildingId = nextId
+          callbacks.onIndoorPromptChange?.(nearest
+            ? { visible: true, text: '按 E 进入' + nearest.name }
+            : { visible: false })
+        }
       }
     }
 
@@ -1583,6 +1601,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     scene.fog = outdoorState.fog
     nearOutdoorEntrance = false
     nearOutdoorBuildingId = null
+    lastEntranceCheckPosition = null
     callbacks.onIndoorPromptChange?.({ visible: false })
     collisionWorld = outdoorState.collisionWorld
     input.collisionWorld = collisionWorld

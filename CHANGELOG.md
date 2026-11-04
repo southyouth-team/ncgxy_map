@@ -565,3 +565,14 @@
 - 在 reloadEditorDocument() 开始时清除待执行 timer，并将 timer 句柄置空；若保存请求仍在进行则阻止并发重载。
 - 更新空间架构文档第 44 节。
 - 该变更尚待 CI 执行；浏览器端并发冲突恢复仍需实测。
+
+
+## 2026-11-05 — 加强 schema v4 GeoJSON geometry 类型校验
+
+- 服务端 FeatureCollection 校验由通用递归数字检查升级为按 GeoJSON geometry 类型校验。
+- 覆盖 Point、MultiPoint、LineString、MultiLineString、Polygon、MultiPolygon 和 GeometryCollection；集合子 geometry 递归校验并限制深度。
+- 校验 Position 有限坐标、LineString 最少两个点、Polygon LinearRing 至少四个点且首尾闭合；拒绝未知类型和错误嵌套。
+- 扩展 API 集成测试，覆盖错误 MultiPolygon 嵌套、未闭合 Polygon ring、GeometryCollection 内非法坐标和未知 geometry 类型。
+- 修正原 schema v4 测试中的 Polygon 内环样例，使其满足 LinearRing 闭合规则。
+- 更新空间架构文档第 45 节。
+- 最新变更尚未取得 CI 执行结果；需确认现有校园基础数据中的环均满足闭合约束，并完成浏览器端保存回读验收。

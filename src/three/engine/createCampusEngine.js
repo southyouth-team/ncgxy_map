@@ -7,7 +7,6 @@ import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
-import { loadCampusBuildingModels } from '../world/buildings/loadCampusBuildingModels.js'
 import { CAMPUS_AREAS, CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
 import { roadNetworkToMultiPolygon } from '../../editor/campusEditorDocument.js'
 import { fromCampusFeatureCollection, toCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
@@ -84,6 +83,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let activeHorizonGround = null
   let editorPreviewActive = false
   let loadedBuildingModels = []
+  let buildingModelsLoadPromise = null
+  let cameraObstacleRoots = []
+  let disposed = false
   const outdoorBuildingBaselines = new WeakMap()
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
@@ -150,7 +152,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const buildingObstacles = []
     const circularObstacles = []
     const buildingWallSets = []
-    const cameraObstacleRoots = []
+    cameraObstacleRoots = []
     campus.traverse((object) => {
       if (!(object.userData?.buildingId || object.userData?.objectType === 'building')) return
       cameraObstacleRoots.push(object)
@@ -234,30 +236,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     outdoorCollisionWorld = collisionWorld
     cameraRig.setObstructionObjects(cameraObstacleRoots)
-    // GLB 建筑异步加载完成后，动态注册碰撞体；避免首帧碰撞世界漏掉外部模型。
-    if (!isRpgSample) {
-      loadCampusBuildingModels(scene)
-        .then((result) => {
-          loadedBuildingModels = result.models || []
-          for (const model of loadedBuildingModels) {
-            model.visible = !editorPreviewActive
-            model.userData.objectType = 'building'
-            model.updateMatrixWorld(true)
-            const bounds = new THREE.Box3().setFromObject(model)
-            if (!bounds.isEmpty()) outdoorCollisionWorld.addObstacle({
-              minX: bounds.min.x, maxX: bounds.max.x,
-              minZ: bounds.min.z, maxZ: bounds.max.z,
-            })
-          }
-          cameraRig?.setObstructionObjects([...cameraObstacleRoots, ...loadedBuildingModels])
-          callbacks.onAssetsLoaded?.(result)
-        })
-        .catch((error) => callbacks.onAssetError?.(error))
-    }
+    // 3D 建筑模型延迟到用户切换 3D/跟随视角时加载，2.5D 总览不承担 GLB 下载与解析成本。
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
     input.attach()
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)
+    if (cameraRig.viewMode === '3d') void ensureCampusBuildingModelsLoaded()
 
     const hemi = new THREE.HemisphereLight(0xfff2d8, 0x71865e, 2.2)
     scene.add(hemi)
@@ -299,6 +283,45 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
   }
 
+  function shouldShowBuildingModels() {
+    return !editorPreviewActive && !indoorGroup
+      && (cameraRig?.viewMode === '3d' || cameraRig?.mode !== 'overview')
+  }
+
+  async function ensureCampusBuildingModelsLoaded() {
+    if (isRpgSample || loadedBuildingModels.length || !scene || disposed) return
+    if (buildingModelsLoadPromise) return buildingModelsLoadPromise
+    // GLB 模型体积较大；2.5D 总览使用程序化像素场景，不提前下载/解析 3D 建筑资产。
+    buildingModelsLoadPromise = import('../world/buildings/loadCampusBuildingModels.js')
+      .then(({ loadCampusBuildingModels }) => loadCampusBuildingModels(scene))
+      .then((result) => {
+        if (disposed || !scene) {
+          for (const model of result.models || []) disposeObjectGroup(model)
+          return result
+        }
+        loadedBuildingModels = result.models || []
+        for (const model of loadedBuildingModels) {
+          model.visible = shouldShowBuildingModels()
+          model.userData.objectType = 'building'
+          model.updateMatrixWorld(true)
+          const bounds = new THREE.Box3().setFromObject(model)
+          if (!bounds.isEmpty()) outdoorCollisionWorld?.addObstacle({
+            minX: bounds.min.x, maxX: bounds.max.x,
+            minZ: bounds.min.z, maxZ: bounds.max.z,
+          })
+        }
+        cameraRig?.setObstructionObjects([...cameraObstacleRoots, ...loadedBuildingModels])
+        callbacks.onAssetsLoaded?.(result)
+        return result
+      })
+      .catch((error) => {
+        buildingModelsLoadPromise = null
+        callbacks.onAssetError?.(error)
+        return null
+      })
+    return buildingModelsLoadPromise
+  }
+
   function clearRpgPreview() {
     editorPreviewActive = false
     activeHorizonGround = null
@@ -310,7 +333,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 基础校园由 campus 容器和独立加载的 GLB 建筑共同组成。
     // 预览退出时必须恢复两类对象，不能只恢复 campus 容器。
     if (campus) campus.visible = true
-    loadedBuildingModels.forEach((model) => { model.visible = true })
+    loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
     cameraRig?.setObstructionObjects([
       ...(campus ? (() => { const roots = []; campus.traverse(object => { if (object.userData?.buildingId || object.userData?.objectType === 'building') roots.push(object) }); return roots })() : []),
       ...loadedBuildingModels,
@@ -1621,10 +1644,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function setMode(mode) {
     cameraRig?.setMode(mode)
     input?.setMode(mode)
+    if (mode !== 'overview') void ensureCampusBuildingModelsLoaded()
+    loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
 
   function setViewMode(mode) {
     cameraRig?.setViewMode(mode)
+    if (mode === '3d') void ensureCampusBuildingModelsLoaded()
+    loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
 
   function focusCampus() {
@@ -1634,6 +1661,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function dispose() {
+    disposed = true
     cancelAnimationFrame(frameId)
     resizeObserver?.disconnect()
     window.removeEventListener('keydown', onKeyDown)

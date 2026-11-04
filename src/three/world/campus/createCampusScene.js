@@ -329,6 +329,7 @@ export function createCampusScene(THREE, featureCollection = null) {
     const point = mapPixelToWorld(item.position[0], item.position[1])
     let object
     if (item.type === 'tree') object = addPixelTree(THREE, root, point.x, point.z, 1, index, mats)
+    else if (item.type === 'flower') object = addPixelFlowerPatch(THREE, root, point.x, point.z, mats, index % 2 ? 4 : 6)
     else if (['bench', 'seat'].includes(item.type)) object = addPixelBench(THREE, root, point.x, point.z, mats)
     else if (['streetlight', 'lamp'].includes(item.type)) object = addPixelLamp(THREE, root, point.x, point.z, mats)
     else {
@@ -349,39 +350,8 @@ export function createCampusScene(THREE, featureCollection = null) {
     }
   })
 
-  const treePositions = [
-    // 西侧湖岸与西南绿化带
-    [176,82,0.9],[205,52,0.82],[244,75,0.88],[286,105,0.82],[285,145,0.9],
-    [285,180,0.82],[292,210,0.9],[286,250,0.82],[282,290,0.9],[285,340,0.82],
-    [175,300,0.88],[190,330,0.82],[220,355,0.9],[245,390,0.82],[275,425,0.9],
-    // 中央湖区外围景观树
-    [445,118,0.82],[470,92,0.9],[520,82,0.82],[575,92,0.9],[620,125,0.82],
-    [650,170,0.9],[660,225,0.82],[645,285,0.9],[610,330,0.82],[565,355,0.9],
-    [510,360,0.82],[465,335,0.9],[435,290,0.82],[420,235,0.9],[425,180,0.82],
-    // 东侧与南部绿化
-    [650,155,0.9],[700,155,0.82],[755,160,0.9],[800,165,0.82],
-    [810,300,0.9],[790,330,0.82],[760,335,0.9],[720,330,0.82],
-    [500,445,0.9],[550,440,0.82],[610,440,0.9],[670,440,0.82],[730,440,0.9],
-    [785,430,0.82],[330,160,0.9],[300,185,0.82],[300,310,0.9],[320,340,0.82],
-    [380,340,0.9],[400,365,0.82],[365,430,0.9],[320,440,0.82],
-  ]
-  treePositions.forEach(([px, py, scale], index) => {
-    const point = mapPixelToWorld(px, py)
-    addPixelTree(THREE, root, point.x, point.z, scale, index, mats)
-  })
-  const flowerPositions = [[295,160],[310,190],[300,270],[300,370],[350,155],[405,160],[445,350],[470,365],[525,365],[585,350],[640,330],[655,160],[690,160],[745,165],[800,165],[810,330],[770,340],[725,340],[520,445],[600,445],[680,445],[745,445],[240,435],[190,420]]
-  flowerPositions.forEach(([px, py], index) => {
-    const point = mapPixelToWorld(px, py)
-    addPixelFlowerPatch(THREE, root, point.x, point.z, mats, index % 2 ? 4 : 6)
-  })
-  ;[[300,175],[420,350],[185,330],[545,365],[650,345],[740,340],[250,420],[690,445]].forEach(([px, py]) => {
-    const point = mapPixelToWorld(px, py)
-    addPixelBench(THREE, root, point.x, point.z, mats)
-  })
-  ;[[295,175],[405,165],[445,350],[640,345],[700,335],[785,315],[520,445],[610,445],[730,435],[185,330],[245,415],[800,175]].forEach(([px, py]) => {
-    const point = mapPixelToWorld(px, py)
-    addPixelLamp(THREE, root, point.x, point.z, mats)
-  })
+  // 环境资产全部由统一 FeatureCollection 驱动；不再在渲染器内维护独立坐标清单。
+
 
   const canvas = document.createElement('canvas')
   canvas.width = 32

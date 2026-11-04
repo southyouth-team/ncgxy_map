@@ -457,3 +457,11 @@
 - 迁移期间仍通过 `fromCampusFeatureCollection` 派生 SVG 编辑器兼容视图；规范集合保留未知 Feature 类型，避免较旧编辑器加载/保存时静默丢弃未来对象类型。
 - 新增覆盖 ID 覆盖、tombstone 删除、未知 Feature 保留和输入不可变的合并测试。
 - 当前基础集合来自编辑器已有校园基础数组；目录类 POI/门区等未纳入该编辑器集合的内容仍由首页校园数据目录处理。
+
+
+## 2026-11-04 — 撤销/重做保留未知规范 Feature
+
+- 修复历史恢复路径：此前 `restoreCampusFeatureSnapshot` 只返回 legacy 兼容数组，编辑器再从数组重建 FeatureCollection，会丢弃旧编辑器无法识别的 Feature 类型。
+- 恢复结果现在同时返回兼容投影和原始规范 FeatureCollection；编辑器撤销/重做直接恢复规范集合。
+- 新增测试覆盖：支持的树木对象正常投影，未知设施 Feature、扩展属性和 tombstone 在历史恢复后完整保留。
+- 该修复与服务端加载的未知 Feature 保留规则一致；尚未完成浏览器端 undo/redo 与自动保存回读验收。

@@ -76,6 +76,11 @@ describe('统一校园空间数据出口', () => {
       objects: [{ id: 'edit-tree', type: 'tree', name: '香樟树', geometry: { type: 'Point', coordinates: [70, 80] }, properties: { rotation: 45, scale: 1.4 } }],
     })
     const layers = getCampusSpatialLayers(edited)
+    const qualityReport = validateCampusGeoJSON(edited)
+    expect(qualityReport.valid).toBe(true)
+    expect(qualityReport.errorCount).toBe(0)
+    expect(edited.features.every(feature => ['low', 'medium', 'high'].includes(feature.properties.confidence))).toBe(true)
+    expect(edited.features.every(feature => ['verified', 'unverified'].includes(feature.properties.verificationStatus))).toBe(true)
     expect(layers.buildings[0]).toMatchObject({ id: 'edit-building', label: '新教学楼', floors: 6 })
     expect(layers.roads[0]).toMatchObject({ id: 'edit-road', name: '新支路', width: 9 })
     expect(layers.areas[0]).toMatchObject({ id: 'edit-water', name: '景观水池', type: 'water' })

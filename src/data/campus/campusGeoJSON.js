@@ -277,6 +277,9 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
         rect: category === 'sports' && polygon.length
           ? [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
           : null,
+        properties: { ...feature.properties },
+        source: feature.properties.source,
+        qualityStatus: feature.properties.qualityStatus,
       }
     })
 
@@ -288,6 +291,10 @@ export function getCampusSpatialLayers(collection = buildCampusGeoJSON()) {
       confidence: confidenceOf(feature),
       points: feature.geometry.coordinates,
       width: Number(feature.properties.width) > 0 ? Number(feature.properties.width) : 12,
+      properties: { ...feature.properties },
+      source: feature.properties.source,
+      qualityStatus: feature.properties.qualityStatus,
+      properties: { ...feature.properties },
     }))
 
   const buildings = features

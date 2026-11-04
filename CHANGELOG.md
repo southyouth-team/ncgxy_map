@@ -1,3 +1,12 @@
+## 2026-11-05 — 扩展 Three.js 场景与 GLB 资产自动审计
+
+- 程序化校园场景树审计已覆盖建筑、道路、可渲染区域和点设施；非渲染用 building-cluster 辅助分组不计入可视对象缺失。
+- 新增 `validateCampusBuildingModels`，检查异步 GLB 的建筑 ID 是否缺失/重复/不属于规范建筑数据，模型是否包含 Mesh、geometry、material 和有效三维包围尺寸。
+- GLB 审计统计模型数、Mesh 数和三角面数；加载失败仍通过既有错误结果单独统计，不把“没有 GLB”误判为程序化建筑缺失（程序化建筑继续作为视觉 fallback）。
+- 引擎在 GLB 加载完成后通过 `onAssetAudit` 回调提供报告；异常时输出 `[CampusAssetAudit]` 警告，调试模式下输出完整统计。
+- 自动化测试覆盖有效模型、未知/重复 ID、空模型和缺失 Mesh 资源。
+- 此检查不做 GLB 与 Feature footprint 的空间偏差或高度语义比较；当前统计三角面数是 CPU 侧几何指标，不等于 GPU 实际渲染性能。
+
 ## 2026-11-05 — Three.js 场景装配覆盖审计
 
 - 场景构建时为建筑、道路分段、水域/场地区域网格和点设施写入稳定 Feature ID 与分类元数据。

@@ -1,3 +1,15 @@
+## 2026-11-04 — 空间数据：统一 FeatureCollection 渲染图层适配
+
+- **修改文件**：`src/data/campus/campusGeoJSON.js`、`src/data/campus/campusGeoJSON.test.js`、`docs/architecture/CAMPUS_SPATIAL_ARCHITECTURE.md`。
+- **实际完成**：
+  - `getCampusSpatialLayers(collection)` 可直接接收编辑器保存的 GeoJSON FeatureCollection，不再只识别基础数据的 `area + category` 格式。
+  - 统一归一化建筑 Polygon、道路 LineString、绿地/水域/运动场/广场/停车场 Polygon，以及树木/路灯/座椅/雕塑等 Point。
+  - 保留道路宽度、建筑楼层/高度/模板、区域内环、点对象朝向/缩放、稳定 ID 和来源/质量状态。
+  - 置信度字段兼容基础数据 `confidence` 与编辑器 `qualityStatus`。
+  - 增加编辑器 FeatureCollection -> 渲染图层的转换测试。
+- **验证边界**：自动化测试已补充；本提交前端 CI 尚在执行。此提交建立了渲染适配层，但首页启动尚未完全改为注入编辑器 FeatureCollection，2.5D/3D 所有路径仍需后续统一和验收。
+- **下一步**：将编辑器 FeatureCollection 作为首页场景启动数据源，避免静态底图与编辑器预览叠加两份空间对象；随后把同一 FeatureCollection 接入独立的 2.5D/3D 渲染适配器。
+
 ## 2026-11-04 — 空间数据：建立统一 GeoJSON FeatureCollection 交换层
 
 - **修改文件**：`src/editor/campusFeatureCollection.js`、`src/editor/campusFeatureCollection.test.js`、`src/editor/CampusPlanEditor.vue`、`src/three/engine/createCampusEngine.js`、`docs/architecture/CAMPUS_SPATIAL_ARCHITECTURE.md`。

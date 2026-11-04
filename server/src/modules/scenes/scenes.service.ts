@@ -150,9 +150,9 @@ export class ScenesService {
       if (current.length) {
         id = String(current[0].id);
         await manager.query(
-          `UPDATE campus_plan_document SET schema_version=2,document=$1::jsonb,
+          `UPDATE campus_plan_document SET schema_version=$1,document=$2::jsonb,
            revision=$2,updated_by=$3,updated_at=now() WHERE id=$4`,
-          [JSON.stringify(nextDocument),nextRevision,userId,id],
+          [Number(document.schemaVersion),JSON.stringify(nextDocument),nextRevision,userId,id],
         );
       } else {
         const inserted = await manager.query(
@@ -163,12 +163,16 @@ export class ScenesService {
         );
         id = String(inserted[0].id);
       }
-      return { id, campusId, mapId, schemaVersion: 2, revision: nextRevision, document: nextDocument };
+      return { id, campusId, mapId, schemaVersion: Number(document.schemaVersion), revision: nextRevision, document: nextDocument };
     });
   }
 
   private validatePlanDocument(document: Record<string, unknown>, mapId: string) {
-    if (Number(document.schemaVersion) !== 2) throw new BadRequestException('仅支持 schemaVersion 2 的二维平面编辑文档');
+    const schemaVersion = Number(document.schemaVersion);
+    // 保留旧版 schema v2/v3 读取与保存兼容，同时接受当前编辑器 v4 FeatureCollection 文档。
+    if (!Number.isInteger(schemaVersion) || schemaVersion < 2 || schemaVersion > 4) {
+      throw new BadRequestException('二维平面编辑文档 schemaVersion 仅支持 2 至 4');
+    }
     if (String(document.mapId) !== mapId) throw new BadRequestException('平面编辑文档 mapId 与请求地图不一致');
     if (document.coordinateSystem !== 'campus-plan-pixel') throw new BadRequestException('平面编辑文档坐标系无效');
     const collections = ['buildings', 'areas', 'roads', 'objects'];
@@ -177,6 +181,54 @@ export class ScenesService {
       if (value !== undefined && !Array.isArray(value)) throw new BadRequestException(`${key} 必须是数组`);
       if (Array.isArray(value) && value.length > 20000) throw new BadRequestException(`${key} 数量超限`);
     }
+
+    const featureCollection = document.featureCollection as Record<string, unknown> | undefined;
+    if (schemaVersion >= 4 && (!featureCollection || featureCollection.type !== 'FeatureCollection')) {
+      throw new BadRequestException('schemaVersion 4 必须包含规范 FeatureCollection');
+    }
+    if (featureCollection) {
+      if (featureCollection.type !== 'FeatureCollection' || !Array.isArray(featureCollection.features)) {
+        throw new BadRequestException('校园 FeatureCollection 结构无效');
+      }
+      if (featureCollection.features.length > 20000) throw new BadRequestException('FeatureCollection 要素数量超限');
+      const ids = new Set<string>();
+      for (const rawFeature of featureCollection.features as Array<Record<string, unknown>>) {
+        if (!rawFeature || rawFeature.type !== 'Feature' || rawFeature.id == null ||
+            String(rawFeature.id).trim() === '' || typeof rawFeature.geometry !== 'object' || rawFeature.geometry === null) {
+          throw new BadRequestException('Feature 必须包含 type、稳定 id 和 geometry');
+        }
+        const id = String(rawFeature.id);
+        if (ids.has(id)) throw new BadRequestException(`Feature ID 重复：${id}`);
+        ids.add(id);
+        const geometry = rawFeature.geometry as Record<string, unknown>;
+        if (typeof geometry.type !== 'string' || geometry.type.trim() === '') {
+          throw new BadRequestException(`Feature geometry 类型无效：${id}`);
+        }
+        const hasCoordinates = Array.isArray(geometry.coordinates);
+        const hasGeometries = Array.isArray(geometry.geometries);
+        if (!hasCoordinates && !hasGeometries) throw new BadRequestException(`Feature geometry 坐标无效：${id}`);
+        const validateCoordinates = (value: unknown): boolean => {
+          if (!Array.isArray(value)) return false;
+          if (value.length >= 2 && value.slice(0, 2).every(item => typeof item === 'number')) {
+            return value.every(item => typeof item === 'number' && Number.isFinite(item));
+          }
+          return value.length > 0 && value.every(item => Array.isArray(item) && validateCoordinates(item));
+        };
+        if (hasCoordinates && !validateCoordinates(geometry.coordinates)) {
+          throw new BadRequestException(`Feature geometry 坐标包含无效值：${id}`);
+        }
+        if (rawFeature.properties !== undefined &&
+            (typeof rawFeature.properties !== 'object' || rawFeature.properties === null || Array.isArray(rawFeature.properties))) {
+          throw new BadRequestException(`Feature properties 必须是对象：${id}`);
+        }
+      }
+      const deletedFeatureIds = featureCollection.deletedFeatureIds;
+      if (deletedFeatureIds !== undefined &&
+          (!Array.isArray(deletedFeatureIds) || deletedFeatureIds.some(id => typeof id !== 'string' || !id.trim()))) {
+        throw new BadRequestException('FeatureCollection deletedFeatureIds 必须是非空字符串数组');
+      }
+    }
+
     const calibration = document.calibration as Record<string, unknown> | null;
     if (calibration && (!Number.isFinite(Number(calibration.a)) || !Number.isFinite(Number(calibration.b)) ||
       !Number.isFinite(Number(calibration.tx)) || !Number.isFinite(Number(calibration.ty)))) {
@@ -185,6 +237,9 @@ export class ScenesService {
     const referenceImage = document.referenceImage as Record<string, unknown> | null;
     if (referenceImage && (typeof referenceImage.assetId !== 'string' || referenceImage.assetId.trim().length === 0 || referenceImage.assetId.length > 128)) {
       throw new BadRequestException('持久化底图必须引用有效的地图资源 ID');
+    }
+    if (Buffer.byteLength(JSON.stringify(document), 'utf8') > 15 * 1024 * 1024) {
+      throw new BadRequestException('二维平面编辑文档不能超过 15 MB');
     }
   }
 

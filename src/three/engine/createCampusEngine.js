@@ -147,6 +147,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE, options.featureCollection || null)
     // 碰撞与渲染必须读取同一份规范化空间数据；不能让已移动/删除的旧湖泊继续留在碰撞层。
     const spatialLayers = isRpgSample ? null : createCampusSceneRenderData(options.featureCollection || undefined).layers
+    // 基础空间图层已为校园建筑注册精确墙段/footprint 碰撞；GLB 仅替换视觉模型，
+    // 不得再用 GLB 世界 AABB 叠加粗碰撞，否则不规则建筑外侧空地也会被封住。
+    const canonicalBuildingIds = new Set((spatialLayers?.buildings || []).map(building => String(building.id)))
     scene.add(campus)
     cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
@@ -352,11 +355,16 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           model.visible = shouldShowBuildingModels()
           model.userData.objectType = 'building'
           model.updateMatrixWorld(true)
-          const bounds = new THREE.Box3().setFromObject(model)
-          if (!bounds.isEmpty()) outdoorCollisionWorld?.addObstacle({
-            minX: bounds.min.x, maxX: bounds.max.x,
-            minZ: bounds.min.z, maxZ: bounds.max.z,
-          })
+          // 已存在规范 Feature footprint 的建筑继续使用初始化时注册的墙段碰撞。
+          // GLB 的世界 AABB 会填满凹角/斜边外侧空地，因此不能重复注册。
+          // 仅对空间数据中没有 footprint 的独立模型保留 AABB 兜底。
+          if (!canonicalBuildingIds.has(String(model.userData.buildingId)) && model.userData.walkable !== true) {
+            const bounds = new THREE.Box3().setFromObject(model)
+            if (!bounds.isEmpty()) outdoorCollisionWorld?.addObstacle({
+              minX: bounds.min.x, maxX: bounds.max.x,
+              minZ: bounds.min.z, maxZ: bounds.max.z,
+            })
+          }
         }
         cameraRig?.setObstructionObjects([...cameraObstacleRoots, ...loadedBuildingModels])
         invalidateShadowMap()

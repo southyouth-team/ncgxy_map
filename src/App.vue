@@ -483,7 +483,7 @@ onMounted(async () => {
       ? planDocument.featureCollection
       : toCampusFeatureCollection(planDocument || {})
     // 边界与出入口由校园基础数据维护；可编辑对象以编辑器 FeatureCollection 为准。
-    const structuralFeatures = buildCampusGeoJSON().features.filter(feature => ['boundary', 'gate'].includes(feature.properties.featureType))
+    const structuralFeatures = buildCampusGeoJSON().features.filter(feature => ['boundary', 'gate', 'object'].includes(feature.properties.featureType))
     const featureById = new Map(structuralFeatures.map(feature => [String(feature.id), feature]))
     for (const feature of editorCollection.features || []) featureById.set(String(feature.id), feature)
     const campusFeatureCollection = { type: 'FeatureCollection', features: [...featureById.values()] }

@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, extname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 
 export interface UploadedAsset {
   originalname: string;
@@ -23,9 +23,11 @@ const IMAGE_TYPES: Record<string, { mime: string; extension: string; signature: 
 @Injectable()
 export class AssetsService {
   private readonly storageDir: string;
+  private readonly visualManifestPath: string;
 
   constructor(private readonly dataSource: DataSource, config: ConfigService) {
     this.storageDir = resolve(config.get<string>('ASSET_STORAGE_DIR', './uploads'));
+    this.visualManifestPath = resolve(this.storageDir, 'campus-visual-assets', 'manifest.json');
   }
 
   async findAll(userId: string, campusId: string, mapId: string) {
@@ -97,8 +99,7 @@ export class AssetsService {
   }
 
 
-  private readonly visualManifestPath = resolve(this.storageDir, 'campus-visual-assets', 'manifest.json');
-  private visualManifestQueue: Promise<unknown> = Promise.resolve();
+    private visualManifestQueue: Promise<unknown> = Promise.resolve();
 
   async uploadVisualAsset(userId: string, file: UploadedAsset, metadata: Record<string, unknown>) {
     if (!userId) throw new BadRequestException('缺少上传用户身份');

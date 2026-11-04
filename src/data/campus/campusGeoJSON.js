@@ -230,9 +230,21 @@ export function mergeCampusSceneFeatureCollections(baseCollection = buildCampusG
   }
   const deletedFeatureIds = [...new Set((editorCollection?.deletedFeatureIds || []).map(String))]
   const deleted = new Set(deletedFeatureIds)
+  const baseMetadata = baseCollection?.metadata || {}
+  const editorMetadata = editorCollection?.metadata || {}
+  const metadata = {
+    ...baseMetadata,
+    ...editorMetadata,
+  }
+  if (baseMetadata.catalogue || editorMetadata.catalogue) {
+    metadata.catalogue = {
+      ...(baseMetadata.catalogue || {}),
+      ...(editorMetadata.catalogue || {}),
+    }
+  }
   return {
     type: 'FeatureCollection',
-    metadata: baseCollection?.metadata || {},
+    metadata,
     features: [...featureById.values()].filter(feature => !deleted.has(String(feature.id))),
     deletedFeatureIds,
   }

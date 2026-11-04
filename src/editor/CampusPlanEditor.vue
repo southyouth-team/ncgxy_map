@@ -80,6 +80,12 @@ async function loadEditorDocument() {
   }
 }
 async function reloadEditorDocument() {
+  // 冲突恢复必须先取消尚未触发的自动保存，避免旧本地快照抢在服务端重载完成前再次提交。
+  if (autoSaveTimer) {
+    window.clearTimeout(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  if (persistenceBusy.value) return
   documentLoaded.value = false
   revisionConflict.value = false
   await loadEditorDocument()

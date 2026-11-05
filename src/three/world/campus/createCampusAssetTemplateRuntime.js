@@ -10,6 +10,11 @@ import {
   createPixelBuilding,
 } from './campusAssetLibrary.js';
 
+// 模板 ID 使用稳定机器标识；展示名称中的空白统一转换为连字符。
+function toTemplateId(value) {
+  return String(value || '').trim().replace(/\s+/g, '-');
+}
+
 export function createCampusAssetTemplateRuntime(THREE) {
   const templates = createThreeAssetTemplateRuntime(THREE);
   const generators = createSceneAssetGeneratorRegistry(THREE);

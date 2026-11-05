@@ -371,7 +371,7 @@ export function validateBuildingFootprint(points = []) {
  * 根据立面净长度计算窗户中心位置。
  * 以窗框实际宽度控制最小间距，密度只影响数量，不允许窗户互相穿插。
  */
-export function getFacadeWindowPositions(edgeLength, windowWidth, density = 1, reservedCenter = null, reservedHalfWidth = 0) {
+export function getFacadeWindowPositions(edgeLength, windowWidth, density = 1, reservedCenter = null, reservedHalfWidth = 0, requestedCount = null) {
   const length = Number(edgeLength)
   const width = Number(windowWidth)
   const factor = Number(density)
@@ -382,7 +382,8 @@ export function getFacadeWindowPositions(edgeLength, windowWidth, density = 1, r
   const physicalCapacity = Math.max(0, Math.floor((usableLength + 0.12) / (width + 0.32)))
   if (!physicalCapacity) return []
   const safeDensity = Number.isFinite(factor) ? Math.max(0.1, Math.min(3, factor)) : 1
-  const count = Math.min(12, physicalCapacity, Math.max(1, Math.round(physicalCapacity * safeDensity)))
+  const requested = Number(requestedCount)
+  const count = Math.min(12, physicalCapacity, Number.isFinite(requested) && requested > 0 ? Math.max(1, Math.round(requested)) : Math.max(1, Math.round(physicalCapacity * safeDensity)))
   const positions = Array.from({ length: count }, (_, index) => (
     margin + usableLength * (index + 0.5) / count
   ))
@@ -433,7 +434,7 @@ export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
 export function createPixelBuilding(THREE, options = {}) {
   const {
     footprint, width = 8, depth = 5, height,
-    materials, wallMaterial, template = '教学楼', facadeStyle = 'modern', hasBalconies = false, balconyFloors = [], columnCount = 0, roofColor = 'roofRed', facadeSections = 1, hasArcade = false, podiumFloors = 0,
+    materials, wallMaterial, template = '教学楼', facadeStyle = 'modern', hasBalconies = false, balconyFloors = [], columnCount = 0, roofColor = 'roofRed', facadeSections = 1, hasArcade = false, podiumFloors = 0, windowColumns = null,
     label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null, floors, height: customHeight, roofStyle: customRoofStyle, roofRise: customRoofRise, windowDensity: customWindowDensity, windowWidth: customWindowWidth, windowHeight: customWindowHeight, doorWidth: customDoorWidth,
   } = options
   const basePreset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
@@ -692,6 +693,7 @@ export function createPixelBuilding(THREE, options = {}) {
       preset.windowDensity,
       index === entranceEdge.index ? edgeLength / 2 : null,
       reservedHalfWidth,
+      windowColumns,
     )
     if (!windowPositions.length) return
     // shape 坐标的 Y 对应世界 -Z；根据多边形绕序计算外法线。

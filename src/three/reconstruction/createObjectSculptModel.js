@@ -286,6 +286,8 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
     throw new TypeError('枚举参数值无效：' + parameterId);
   }
   const spec = JSON.parse(JSON.stringify(baseline));
+  const currentParameter = spec.parameterSchema.find(item => item.id === parameterId);
+  currentParameter.value = value;
   const findNode = id => spec.componentTree.find(node => node.id === id);
   for (const target of parameter.targets) {
     const node = findNode(target.nodeId);
@@ -302,9 +304,13 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
     const current = read();
     const resolved = mode === 'multiply' ? Number(current) * Number(value) : mode === 'add' ? Number(current) + Number(value) : value;
     if (target.property.startsWith('material.')) {
+      const previousMaterial = spec.materials[node.material] || DEFAULT_MATERIAL;
+      const uniqueKey = 'parameter-' + node.id;
+      spec.materials[uniqueKey] = { ...previousMaterial };
+      node.material = uniqueKey;
       const field = target.property.split('.')[1];
-      if (field === 'color') spec.materials[node.material].color = resolved;
-      else spec.materials[node.material][field] = Math.max(0, Math.min(field === 'opacity' ? 1 : 1, Number(resolved)));
+      if (field === 'color') spec.materials[uniqueKey].color = resolved;
+      else spec.materials[uniqueKey][field] = Math.max(field === 'opacity' ? 0.05 : 0, Math.min(1, Number(resolved)));
     } else if (target.property.startsWith('transform.position.') || target.property.startsWith('transform.scale.')) {
       const [, vector, axis] = target.property.split('.');
       const index = 'xyz'.indexOf(axis);

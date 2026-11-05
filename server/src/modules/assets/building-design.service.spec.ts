@@ -438,7 +438,7 @@ describe('BuildingDesignService', () => {
     }];
     const generators = [{
       id: 'floor-repeat', type: 'repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count',
-      axis: 'y', spacing: 3.2, maxCount: 8,
+      axis: 'y', spacing: 3.2, defaultCount: 3, maxCount: 8, followers: [{ nodeId: 'roof', axis: 'y', offset: 0 }],
     }];
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

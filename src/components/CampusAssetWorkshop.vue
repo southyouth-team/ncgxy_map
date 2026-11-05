@@ -30,6 +30,8 @@ const assets = ref(loadStoredAssets())
 const activeAssetId = ref('')
 const saving = ref(false)
 const generating = ref(false)
+const analyzingDesign = ref(false)
+const buildingDesign = ref(null)
 const generationModel = ref('')
 
 function loadStoredAssets() {
@@ -104,10 +106,10 @@ function buildPrompt() {
   const feature = selectedFeature.value
   if (!feature) return
   const shape = viewMode.value === '2.5d'
-    ? '2.5D isometric game asset, fixed three-quarter elevated camera, show front facade and roof simultaneously'
-    : 'complete stylized 3D game-ready architectural asset, all sides modeled, consistent real-world scale, clean topology'
+    ? 'isometric architectural reference image, fixed three-quarter elevated camera, show front facade, side facade and roof simultaneously; make floors, windows, doors and roof geometry clearly readable for visual analysis'
+    : 'complete stylized 3D game-ready architectural asset, all sides modeled, consistent scene scale, clean topology'
   const format = viewMode.value === '2.5d'
-    ? 'single isolated building render, transparent background, PNG or WebP with alpha channel'
+    ? 'single isolated building reference render, transparent background, PNG or WebP with alpha channel; this image is a visual reference for code-generated 3D geometry and is also used by the 2.5D view'
     : 'single isolated 3D building model, exportable as GLB/glTF, PBR materials, origin at footprint center, ground level at Y=0'
   generatedPrompt.value = [
     'Create one original stylized low-poly campus architecture asset for a university exploration game.',
@@ -120,7 +122,8 @@ function buildPrompt() {
     'Do not invent school logos or claim to reproduce a real building. This is a visual placeholder pending reference-photo verification.',
     extraPrompt.value.trim() ? 'Additional requirements: ' + extraPrompt.value.trim() : '',
   ].filter(Boolean).join('\n\n')
-  message.value = '提示词已生成，可直接调用图片模型生成 2.5D 候选，也可以复制到外部 AI 工具。'
+  buildingDesign.value = null
+  message.value = '提示词已生成。图片用于建筑外观参考和 2.5D 展示；识别参数后由 Three.js 代码生成可旋转 3D 几何。'
 }
 
 async function copyPrompt() {
@@ -176,6 +179,46 @@ async function generateImage() {
     message.value = ''
   } finally {
     generating.value = false
+  }
+}
+
+
+async function analyzeBuildingReference() {
+  if (analyzingDesign.value) return
+  try {
+    let blob = selectedFile.value
+    if (!blob && previewUrl.value) {
+      const response = await fetch(previewUrl.value)
+      if (!response.ok) throw new Error('无法读取当前参考图')
+      blob = await response.blob()
+    }
+    if (!blob || !String(blob.type || '').startsWith('image/')) {
+      throw new Error('请先生成或选择一张建筑参考图片')
+    }
+    if (blob.size > 20 * 1024 * 1024) throw new Error('参考图片不能超过 20 MB')
+    const imageDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(new Error('读取参考图片失败'))
+      reader.readAsDataURL(blob)
+    })
+    analyzingDesign.value = true
+    fileError.value = ''
+    message.value = '正在调用 deepseek-flash 分析建筑立面、楼层、屋顶和窗户参数……'
+    const response = await fetch(API_BASE + '/assets/ai-image/analyze-building', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({ imageDataUrl }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || '建筑结构识别失败：HTTP ' + response.status)
+    if (!payload.design || payload.design.schemaVersion !== 1) throw new Error('识别接口未返回有效建筑结构参数')
+    buildingDesign.value = payload.design
+    message.value = '结构参数已提取。请核对楼层、屋顶和立面特征，再保存候选并审核入库。'
+  } catch (error) {
+    fileError.value = error.message || '建筑结构识别失败'
+  } finally {
+    analyzingDesign.value = false
   }
 }
 
@@ -244,6 +287,7 @@ async function saveDraft() {
       publicPath: publicPath.value.trim() || suggestedPath(selectedFile.value),
       prompt: generatedPrompt.value,
       generationModel: generationModel.value || null,
+      buildingDesign: buildingDesign.value ? structuredClone(buildingDesign.value) : null,
       createdAt: new Date().toISOString(),
       deployedConfirmed: false,
     }
@@ -262,6 +306,7 @@ async function saveDraft() {
 
 async function selectAsset(asset) {
   activeAssetId.value = asset.assetId
+  buildingDesign.value = asset.buildingDesign || null
   resetPreview()
   try {
     const blob = await readFile(asset.fileKey)
@@ -319,6 +364,7 @@ async function approveAsset(asset) {
     form.append('name', asset.name)
     form.append('generationModel', asset.generationModel || '')
     form.append('prompt', asset.prompt || '')
+    if (asset.buildingDesign) form.append('buildingDesign', JSON.stringify(asset.buildingDesign))
     const response = await fetch(API_BASE + '/assets/visual-assets', {
       method: 'POST',
       headers: { 'X-Dev-User-Id': DEV_USER_ID },
@@ -375,6 +421,7 @@ watch([selectedFeatureId, viewMode, extraPrompt], () => {
   generatedPrompt.value = ''
 })
 watch([selectedFeatureId, viewMode], () => {
+  buildingDesign.value = null
   resetPreview()
   generationModel.value = ''
   publicPath.value = ''
@@ -431,12 +478,18 @@ onBeforeUnmount(resetPreview)
         <div class="button-row">
           <button class="primary-button" @click="buildPrompt">生成提示词</button>
           <button class="secondary-button" :disabled="!generatedPrompt" @click="copyPrompt">复制提示词</button>
-          <button class="primary-button" :disabled="viewMode !== '2.5d' || generating" @click="generateImage">{{ generating ? 'AI 生成中…' : '直接 AI 生成图片' }}</button>
+          <button class="primary-button" :disabled="viewMode !== '2.5d' || generating" @click="generateImage">{{ generating ? 'AI 生成中…' : '生成建筑参考图' }}</button>
+          <button class="secondary-button" :disabled="viewMode !== '2.5d' || analyzingDesign || (!selectedFile && !previewUrl)" @click="analyzeBuildingReference">{{ analyzingDesign ? '结构识别中…' : '识别参考图并生成3D参数' }}</button>
         </div>
         <label>AI 生成提示词
           <textarea v-model="generatedPrompt" rows="10" placeholder="生成提示词后可在此修改、复制到你使用的 AI 工具"></textarea>
         </label>
-        <p class="hint">2.5D 图片可直接调用已配置的图片生成服务；3D GLB 仍通过人工建模/外部 3D 工具导入。生成结果只是视觉候选，不会自动改变建筑位置或碰撞。</p>
+        <p class="hint">AI 图片是建筑外观参考图，同时可用于 2.5D 展示。识图模型提取楼层、屋顶、窗户、门和墙面配色参数；3D 模式由 Three.js 参数化几何生成器直接构建实体，不要求先制作 GLB。识别结果是视觉估算，不是实测数据。</p>
+        <div v-if="buildingDesign" class="design-result">
+          <strong>3D 结构参数已提取 · 置信度 {{ Math.round(buildingDesign.confidence * 100) }}%</strong>
+          <span>{{ buildingDesign.template }} · {{ buildingDesign.floors }} 层 · {{ buildingDesign.roofStyle }} 屋顶 · {{ buildingDesign.wallPalette }}</span>
+          <small>高度使用场景视觉单位估算，不代表真实建筑高度。{{ (buildingDesign.limitations || []).join('；') }}</small>
+        </div>
       </section>
 
       <section class="workshop-panel intake-panel">
@@ -495,7 +548,7 @@ onBeforeUnmount(resetPreview)
 
     <footer class="workshop-footer">
       <strong>数据边界</strong>
-      <span>素材工坊只维护视觉资产。建筑位置、footprint、碰撞、walkable 和道路连接仍由校园空间 FeatureCollection 管理。AI 图片由服务端代理调用；候选文件暂存于浏览器；审核通过后自动写入服务端持久化目录和正式资产清单。3D GLB 暂不由图片模型生成。</span>
+      <span>AI 图片作为建筑外观参考，也用于 2.5D 展示；deepseek-flash 从参考图提取参数，Three.js 代码据此生成 3D 墙体、楼层、屋顶、窗户和门。建筑位置、footprint、碰撞、walkable 仍由校园空间 FeatureCollection 管理。人工 GLB 导入继续作为可选兼容路径。识别参数属于视觉估算，不是测绘事实。</span>
     </footer>
   </main>
 </template>
@@ -524,7 +577,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .upload-zone input{max-width:100%;font-size:10px}.upload-zone strong{font-size:12px;color:#405c47}.upload-zone span{font-size:10px;color:#87958a}
 .asset-preview{display:grid;place-items:center;min-height:150px;max-height:280px;overflow:hidden;border:1px solid #e3e9e1;border-radius:8px;background:linear-gradient(45deg,#f1f4ef 25%,transparent 25%),linear-gradient(-45deg,#f1f4ef 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f1f4ef 75%),linear-gradient(-45deg,transparent 75%,#f1f4ef 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}
 .asset-preview img,.review-preview img{display:block;max-width:100%;max-height:260px;object-fit:contain}
-.model-placeholder{padding:32px;text-align:center;color:#708075;font-size:12px}.model-placeholder small{font-size:10px}
+.model-placeholder{padding:32px;text-align:center;color:#708075;font-size:12px}.model-placeholder small{font-size:10px}.design-result{display:flex;flex-direction:column;gap:6px;margin:12px 0;padding:12px;border:1px solid #dce6d9;border-radius:7px;background:#f5f9f3;color:#45604b;font-size:11px}.design-result small{color:#829087;line-height:1.6}
 .error-text{color:#b44e43;font-size:11px}
 .library-panel{max-width:1440px;margin:0 auto}
 .asset-table{display:flex;flex-direction:column;gap:6px}

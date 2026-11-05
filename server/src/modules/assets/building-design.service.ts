@@ -17,6 +17,7 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
   if (!Array.isArray(input) || input.length > 30) throw new ServiceUnavailableException('generators 必须是最多 30 项的数组');
   const ids = new Set<string>();
   const nodeIds = new Set(componentTree.map(node => node.id));
+  const byId = new Map(componentTree.map(node => [node.id, node]));
   let estimatedExpandedCount = componentTree.length;
   const claimedTemplateNodeIds = new Set<string>();
   const normalized = input.map((raw: any) => {
@@ -24,38 +25,57 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     const id = typeof raw.id === 'string' ? raw.id : '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('结构生成器 ID 无效或重复：' + id);
     ids.add(id);
-    if (raw.type !== 'repeat' || !nodeIds.has(raw.templateRootId)) throw new ServiceUnavailableException('结构生成器模板节点无效：' + id);
-    if (!['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构生成器排列轴无效：' + id);
-    const spacing = Number(raw.spacing), maxCount = Number(raw.maxCount), defaultCount = Number(raw.defaultCount);
-    if (!Number.isFinite(spacing) || Math.abs(spacing) > 100 || !Number.isInteger(maxCount) || maxCount < 1 || maxCount > 100
-      || !Number.isInteger(defaultCount) || defaultCount < 1 || defaultCount > maxCount) {
-      throw new ServiceUnavailableException('结构生成器间距、默认数量或最大数量无效：' + id);
-    }
-    if (raw.followers !== undefined && (!Array.isArray(raw.followers) || raw.followers.length > 30)) throw new ServiceUnavailableException('结构生成器 followers 无效：' + id);
-    const followers = (raw.followers || []).map((follower: any) => {
-      if (!nodeIds.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis)
-        || !Number.isFinite(Number(follower.offset ?? 0))) throw new ServiceUnavailableException('结构生成器跟随规则无效：' + id);
-      return { nodeId: follower.nodeId, axis: follower.axis, offset: Number(follower.offset ?? 0) };
-    });
-    const countParameterId = typeof raw.countParameterId === 'string' ? raw.countParameterId : '';
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(countParameterId)) throw new ServiceUnavailableException('结构生成器数量参数 ID 无效：' + id);
+    if (!['repeat','grid'].includes(raw.type) || !nodeIds.has(raw.templateRootId)) throw new ServiceUnavailableException('结构生成器类型或模板节点无效：' + id);
     const descendants = componentTree.filter(node => {
       let parent = node.id;
       while (parent) {
         if (parent === raw.templateRootId) return true;
-        parent = componentTree.find(item => item.id === parent)?.parent;
+        parent = byId.get(parent)?.parent;
       }
       return false;
     });
     if (!descendants.length) throw new ServiceUnavailableException('结构生成器模板子树为空：' + id);
-    if (followers.some((follower: any) => descendants.some((node: any) => node.id === follower.nodeId))) throw new ServiceUnavailableException('结构生成器跟随节点不能位于重复原型子树内：' + id);
     for (const node of descendants) {
       if (claimedTemplateNodeIds.has(node.id)) throw new ServiceUnavailableException('暂不支持嵌套或重叠的结构生成器模板：' + id);
       claimedTemplateNodeIds.add(node.id);
     }
-    estimatedExpandedCount += descendants.length * (maxCount - 1);
-    if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('结构生成器最大展开数量超过 300：' + id);
-    return { id, type: 'repeat', templateRootId: raw.templateRootId, countParameterId, axis: raw.axis, spacing, defaultCount, maxCount, followers };
+    const countParameterId = (value: unknown) => {
+      const parameterId = typeof value === 'string' ? value : '';
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(parameterId)) throw new ServiceUnavailableException('结构生成器数量参数 ID 无效：' + id);
+      return parameterId;
+    };
+    if (raw.type === 'repeat') {
+      if (!['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构生成器排列轴无效：' + id);
+      const spacing = Number(raw.spacing), maxCount = Number(raw.maxCount), defaultCount = Number(raw.defaultCount);
+      if (!Number.isFinite(spacing) || Math.abs(spacing) > 100 || !Number.isInteger(maxCount) || maxCount < 1 || maxCount > 100
+        || !Number.isInteger(defaultCount) || defaultCount < 1 || defaultCount > maxCount) throw new ServiceUnavailableException('结构生成器间距或数量无效：' + id);
+      if (raw.followers !== undefined && (!Array.isArray(raw.followers) || raw.followers.length > 30)) throw new ServiceUnavailableException('结构生成器 followers 无效：' + id);
+      const followers = (raw.followers || []).map((follower: any) => {
+        if (!nodeIds.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis)
+          || !Number.isFinite(Number(follower.offset ?? 0)) || descendants.some(node => node.id === follower.nodeId)) {
+          throw new ServiceUnavailableException('结构生成器跟随规则无效：' + id);
+        }
+        return { nodeId: follower.nodeId, axis: follower.axis, offset: Number(follower.offset ?? 0) };
+      });
+      const maximumInstances = maxCount;
+      estimatedExpandedCount += descendants.length * (maximumInstances - 1);
+      if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('结构生成器最大展开数量超过 300：' + id);
+      return { id, type: 'repeat', templateRootId: raw.templateRootId, countParameterId: countParameterId(raw.countParameterId), axis: raw.axis, spacing, defaultCount, maxCount, followers };
+    }
+    const rowParameterId = countParameterId(raw.rowParameterId);
+    const columnParameterId = countParameterId(raw.columnParameterId);
+    const spacingX = Number(raw.spacingX), spacingZ = Number(raw.spacingZ);
+    const defaultRows = Number(raw.defaultRows), defaultColumns = Number(raw.defaultColumns);
+    const maxRows = Number(raw.maxRows), maxColumns = Number(raw.maxColumns);
+    if (![spacingX,spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
+      || !Number.isInteger(defaultRows) || !Number.isInteger(defaultColumns) || !Number.isInteger(maxRows) || !Number.isInteger(maxColumns)
+      || defaultRows < 1 || defaultColumns < 1 || maxRows < defaultRows || maxColumns < defaultColumns
+      || maxRows > 100 || maxColumns > 100 || maxRows * maxColumns * descendants.length > 300) {
+      throw new ServiceUnavailableException('网格生成器行列、间距或最大展开数量无效：' + id);
+    }
+    estimatedExpandedCount += descendants.length * (maxRows * maxColumns - 1);
+    if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('网格生成器最大展开数量超过 300：' + id);
+    return { id, type: 'grid', templateRootId: raw.templateRootId, rowParameterId, columnParameterId, spacingX, spacingZ, defaultRows, defaultColumns, maxRows, maxColumns };
   });
   return normalized;
 }

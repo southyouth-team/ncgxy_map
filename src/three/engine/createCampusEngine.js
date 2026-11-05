@@ -750,7 +750,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const localShape = new THREE.Shape(worldPoints.map(point => new THREE.Vector2(point.x - centerX, -(point.z - centerZ))))
       const publishedTemplate = options.buildingTemplates?.find(entry => entry.templateId === building.modelTemplateId && entry.status === 'ready') || null
       const design = publishedTemplate?.modelType === 'procedural' ? publishedTemplate.buildingDesign || {} : {}
-      const height = Math.max(2.2, Number(design.height ?? building.height ?? building.floors * 0.45 ?? 3.4))
+      const height = Math.max(2.2, Number(design.height ?? building.height ?? (building.floors ? building.floors * 0.45 : 3.4)))
       const group = createPixelBuilding(THREE, {
         footprint: localShape, width, depth, height,
         floors: design.floors ?? building.floors,

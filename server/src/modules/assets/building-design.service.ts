@@ -292,6 +292,14 @@ export class BuildingDesignService {
       vegetation: [], structure: ['hasRailing','hasRoof'], facility: ['hasBackrest','hasArmrest'], decoration: [], sports: ['rimVisible'],
     };
     for (const key of booleanFields[category]) geometry[key] = boolValue(parsed[key]);
+    const canonicalForms: Record<string, Record<string, string>> = {
+      vegetation: { tree: 'tree', '乔木': 'tree', '香樟树': 'tree', '树木': 'tree', '大树': 'tree', shrub: 'shrub', '灌木': 'shrub', '绿篱': 'shrub', '灌木丛': 'shrub', flower: 'flower', '花卉': 'flower', '花坛': 'flower', '花丛': 'flower' },
+      structure: { bridge: 'bridge', '拱桥': 'bridge', '桥梁': 'bridge', '人行桥': 'bridge', '廊架': 'pergola', pergola: 'pergola', '亭子': 'pavilion', pavilion: 'pavilion' },
+      facility: { bench: 'bench', '长椅': 'bench', '座椅': 'bench', lamp: 'lamp', '路灯': 'lamp', '庭院灯': 'lamp', bin: 'bin', '垃圾桶': 'bin', sign: 'sign', '指示牌': 'sign', '公告栏': 'sign' },
+      decoration: { rock: 'rock', '景观石': 'rock', '假山': 'rock', flowerbed: 'flowerbed', '花坛': 'flowerbed' },
+      sports: { 'basketball-hoop': 'basketball-hoop', '篮球架': 'basketball-hoop', '篮球框': 'basketball-hoop' },
+    };
+    geometry.form = canonicalForms[category][objectType];
     const design = {
       schemaVersion: 1, source: 'ai-vision-estimate', category, objectType, visualStyle, geometry,
       confidence: bounded(parsed.confidence, 0.35, 0, 1),

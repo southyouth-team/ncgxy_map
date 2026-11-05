@@ -317,7 +317,15 @@ function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps
     area += profile[index].x * next.y - next.x * profile[index].y;
   }
   if (area < 0) profile.reverse();
-  const triangles = THREE.ShapeUtils.triangulateShape(profile, []);
+  const triangles = THREE.ShapeUtils.triangulateShape(profile, []).map(([a, b, c]) => {
+    const abX = profile[b].x - profile[a].x;
+    const abY = profile[b].y - profile[a].y;
+    const acX = profile[c].x - profile[a].x;
+    const acY = profile[c].y - profile[a].y;
+    // Earcut triangle winding is normalized independently; never assume all
+    // returned triangles share the same orientation.
+    return abX * acY - abY * acX >= 0 ? [a, b, c] : [a, c, b];
+  });
   if (!triangles.length) throw new RangeError(label + ' 无法三角化截面轮廓');
   const positions = [];
   const indices = [];

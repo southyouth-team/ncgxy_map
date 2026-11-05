@@ -1359,6 +1359,11 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       }
 
       applyObjectSculptParameter(THREE, model, fixture.dimensionParameter, fixture.nextDimension);
+      if (fixture.name === 'furniture') {
+        const resizedLegs = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
+        expect([...new Set(resizedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b)
+          .toEqual([-1.89, 0, 1.89]);
+      }
       const node = model.userData.componentGroups.get(fixture.dimensionNode);
       const mesh = node.getObjectByName(fixture.dimensionNode + ':mesh');
       expect(mesh.geometry.parameters[fixture.dimension]).toBeCloseTo(fixture.nextDimension);

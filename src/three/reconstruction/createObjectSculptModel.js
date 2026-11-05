@@ -845,6 +845,10 @@ export function validateObjectSculptSpec(spec) {
         || !parameterIsValid(generator.columnParameterId, generator.maxColumns)) throw new TypeError('网格生成器排列规则或行列参数无效：' + generator.id);
       generatorParameterIds.add(generator.rowParameterId);
       generatorParameterIds.add(generator.columnParameterId);
+      for (const parameterId of [generator.spacingXParameterId, generator.spacingZParameterId].filter(Boolean)) {
+        const parameter = (spec.parameterSchema || []).find(item => item.id === parameterId);
+        if (!parameter || parameter.type !== 'number') throw new TypeError('网格动态间距必须绑定数值参数：' + generator.id);
+      }
     }
     const descendants = spec.componentTree.filter(node => {
       let parent = node.id;

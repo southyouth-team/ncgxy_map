@@ -1142,8 +1142,9 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
       }
     }
   }
-  const renderSpec = expandObjectSculptSpec(spec);
-  const rebuilt = createObjectSculptModel(THREE, renderSpec, { source: 'object-sculpt-parameter' });
+  // createObjectSculptModel owns expansion and validation. Passing an already-expanded
+  // spec here would discard the declarative constraints before their boundary checks run.
+  const rebuilt = createObjectSculptModel(THREE, spec, { source: 'object-sculpt-parameter' });
   for (const child of [...root.children]) {
     root.remove(child);
     child.traverse?.(item => {

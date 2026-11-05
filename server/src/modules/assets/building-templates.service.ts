@@ -42,7 +42,15 @@ export class BuildingTemplatesService {
     if (!['ai_generated','manual_model','procedural','external'].includes(String(input.sourceType))) throw new BadRequestException('模板来源无效');
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
     if (input.modelType === 'procedural' && (!design || typeof design !== 'object')) throw new BadRequestException('程序化模板缺少结构参数');
-    if (input.modelType === 'procedural') {\n      const validToken = category === 'building'\n        ? this.buildingDesign.consumeDesignToken(input.designToken, design)\n        : this.buildingDesign.consumeSceneDesignToken(input.designToken, category, objectType, visualStyle, design);\n      if (!validToken) throw new BadRequestException('程序化模板必须使用当前图片、分类、对象类型、视觉风格绑定的有效结构参数；请重新确认图片并识别');\n      if (category !== 'building' && (design as any).category !== category) throw new BadRequestException('场景结构参数分类与模板分类不一致');\n      if (category !== 'building' && (design as any).objectType !== objectType) throw new BadRequestException('场景结构参数对象类型与模板对象类型不一致');\n      if (category !== 'building' && (design as any).visualStyle !== visualStyle) throw new BadRequestException('场景结构参数视觉风格与模板视觉风格不一致');\n    }
+    if (input.modelType === 'procedural') {
+      const validToken = category === 'building'
+        ? this.buildingDesign.consumeDesignToken(input.designToken, design)
+        : this.buildingDesign.consumeSceneDesignToken(input.designToken, category, objectType, visualStyle, design);
+      if (!validToken) throw new BadRequestException('程序化模板必须使用当前图片、分类、对象类型、视觉风格绑定的有效结构参数；请重新确认图片并识别');
+      if (category !== 'building' && (design as any).category !== category) throw new BadRequestException('场景结构参数分类与模板分类不一致');
+      if (category !== 'building' && (design as any).objectType !== objectType) throw new BadRequestException('场景结构参数对象类型与模板对象类型不一致');
+      if (category !== 'building' && (design as any).visualStyle !== visualStyle) throw new BadRequestException('场景结构参数视觉风格与模板视觉风格不一致');
+    }
     const now = new Date().toISOString();
     const item = { templateId: 'astpl-' + randomUUID(), version: 1, name, category, objectType: objectType || null, visualStyle: visualStyle || null, sourceType: input.sourceType, modelType: input.modelType, status: 'review', design: design || null, prompt: String(input.prompt || '').slice(0,12000), generationModel: input.generationModel || null, referenceImage: null, modelFile: null, createdAt: now, updatedAt: now };
     await this.enqueue(async () => { const m = await this.readManifest(); m.templates.unshift(item); await this.writeManifest(m); });

@@ -1108,6 +1108,7 @@ function applyPublishedBuildingTemplate(templateId) {
       facadeStyle: design.facadeStyle || 'modern', hasBalconies: design.hasBalconies === true,
       balconyFloors: design.balconyFloors || [], columnCount: design.columnCount || 0,
       roofColor: design.roofColor || 'roofRed', entrancePosition: design.entrancePosition || 'front',
+      hasArcade: design.hasArcade === true, podiumFloors: design.podiumFloors || 0,
       massing: design.massing || 'rectangular', facadeSections: design.facadeSections || 1,
     })
   }

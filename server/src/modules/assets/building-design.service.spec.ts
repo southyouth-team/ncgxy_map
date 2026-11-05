@@ -323,4 +323,60 @@ describe('BuildingDesignService', () => {
   });
 
 
+  it('lets AI infer an open-ended object category and declare asset-specific linked parameters', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({ VISION_API_KEY: 'open-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1' } as Record<string, string>)[key],
+    } as never);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        category: 'interior', objectType: 'classroom', targetName: 'storybook-classroom',
+        materials: { wall: { color: '#e7d2a5', roughness: 0.8, metalness: 0, opacity: 1 } },
+        componentTree: [{ id: 'room', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 4, depth: 7 }, transform: { position: [0,2,0] } }],
+        parameterSchema: [{ id: 'room-height', label: '教室高度', type: 'number', value: 4, min: 3, max: 8, step: 0.1, unit: 'm', targets: [{ nodeId: 'room', property: 'dimensions.height', mode: 'set' }] }],
+      }) } }] }),
+    }) as never;
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const result = await service.reconstructObjectReference('auto', '', 'storybook', imageDataUrl, approval.approvalToken);
+    expect(result.design.objectSculptSpec).toMatchObject({
+      category: 'interior', objectType: 'classroom',
+      parameterSchema: [{ id: 'room-height', value: 4, targets: [{ nodeId: 'room', property: 'dimensions.height', mode: 'set' }] }],
+    });
+    const systemPrompt = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).messages[0].content;
+    expect(systemPrompt).toContain('不要依赖固定物体类别清单');
+  });
+
+  it('applies AI local edits only to the selected component subtree', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({ VISION_API_KEY: 'local-edit-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1' } as Record<string, string>)[key],
+    } as never);
+    const current = {
+      schemaVersion: '2.0', targetName: 'building', category: 'building', objectType: 'building', visualStyle: 'stylized',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 }, glass: { color: '#77aabb', roughness: 0.2, metalness: 0, opacity: 1 } },
+      componentTree: [
+        { id: 'body', name: '主体', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 8, depth: 6 }, transform: { position: [0,4,0], rotation: [0,0,0], scale: [1,1,1] } },
+        { id: 'window', name: '窗户', parent: 'body', primitive: 'box', material: 'glass', dimensions: { width: 1, height: 1.5, depth: 0.1 }, transform: { position: [0,1,3], rotation: [0,0,0], scale: [1,1,1] } },
+      ],
+      parameterSchema: [],
+    };
+    const updated = structuredClone(current);
+    updated.componentTree[1].primitive = 'arch';
+    updated.componentTree[1].geometryDescriptor = { inset: 0.12 };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ objectSculptSpec: updated }) } }] }),
+    }) as never;
+    const result = await service.modifyObjectDesign(current, ['window'], '把选中的窗户改成拱形');
+    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'window').primitive).toBe('arch');
+    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'body')).toEqual(current.componentTree[0]);
+    const illegal = structuredClone(updated);
+    illegal.componentTree[0].dimensions.width = 10;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ objectSculptSpec: illegal }) } }] }),
+    }) as never;
+    await expect(service.modifyObjectDesign(current, ['window'], '改变窗户')).rejects.toThrow('修改了未选中的组件');
+  });
+
 });

@@ -176,6 +176,31 @@ export const CAMPUS_BUILDING_TEMPLATES = Object.freeze({
  * 二维编辑器与 Three.js 共用的建筑资产目录。
  * template 是唯一建筑类型标识；尺寸仅用于编辑器预览，不代表测绘尺寸。
  */
+/** 根据 AI 识别的主体轮廓生成模板预览占地；不覆盖地图实例自己的真实 footprint。 */
+export function createBuildingFootprintFromDesign(THREE, width = 8, depth = 6, design = {}) {
+  const w = Math.max(3, Number(width) || 8), d = Math.max(3, Number(depth) || 6);
+  const x = w / 2, z = d / 2;
+  const shapes = {
+    rectangular: [[-x,-z],[x,-z],[x,z],[-x,z]],
+    'L-shaped': [[-x,-z],[x,-z],[x,0],[0,0],[0,z],[-x,z]],
+    'U-shaped': [[-x,-z],[x,-z],[x,z],[x*0.45,z],[x*0.45,-z*0.35],[-x*0.45,-z*0.35],[-x*0.45,z],[-x,z]],
+    'T-shaped': [[-x,-z],[x,-z],[x,-z*0.15],[x*0.32,-z*0.15],[x*0.32,z],[-x*0.32,z],[-x*0.32,-z*0.15],[-x,-z*0.15]],
+    'H-shaped': [[-x,-z],[-x*0.35,-z],[-x*0.35,-z*0.3],[x*0.35,-z*0.3],[x*0.35,-z],[x,-z],[x,z],[x*0.35,z],[x*0.35,z*0.3],[-x*0.35,z*0.3],[-x*0.35,z],[-x,z]],
+    courtyard: [[-x,-z],[x,-z],[x,z],[-x,z]],
+  };
+  const points = shapes[design.massing] || shapes.rectangular;
+  const shape = new THREE.Shape();
+  points.forEach(([px,pz], index) => index ? shape.lineTo(px,pz) : shape.moveTo(px,pz));
+  shape.closePath();
+  if (design.massing === 'courtyard') {
+    const hole = new THREE.Path();
+    hole.moveTo(-x*0.38,-z*0.38); hole.lineTo(-x*0.38,z*0.38);
+    hole.lineTo(x*0.38,z*0.38); hole.lineTo(x*0.38,-z*0.38); hole.closePath();
+    shape.holes.push(hole);
+  }
+  return shape;
+}
+
 export const CAMPUS_BUILDING_ASSET_CATALOG = Object.freeze(
   Object.entries(CAMPUS_BUILDING_TEMPLATES).map(([template, preset]) => Object.freeze({
     id: `building-${template}`,
@@ -404,7 +429,7 @@ export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
 export function createPixelBuilding(THREE, options = {}) {
   const {
     footprint, width = 8, depth = 5, height,
-    materials, wallMaterial, template = '教学楼',
+    materials, wallMaterial, template = '教学楼', facadeStyle = 'modern', hasBalconies = false, balconyFloors = [], columnCount = 0,
     label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null, floors, height: customHeight, roofStyle: customRoofStyle, roofRise: customRoofRise, windowDensity: customWindowDensity, windowWidth: customWindowWidth, windowHeight: customWindowHeight, doorWidth: customDoorWidth,
   } = options
   const basePreset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
@@ -689,9 +714,37 @@ export function createPixelBuilding(THREE, options = {}) {
         frame.userData.floor = floorIndex + 1
         glass.userData.floor = floorIndex + 1
         group.add(frame, glass)
+        if (hasBalconies && floorIndex > 0 && (!Array.isArray(balconyFloors) || !balconyFloors.length || balconyFloors.includes(floorIndex + 1))) {
+          const balcony = new THREE.Mesh(new THREE.BoxGeometry(windowWidth + 0.62, 0.12, 0.72), materials.stoneLight || materials.windowTrim)
+          balcony.position.set(centerX + normalX * 0.34, centerY - windowHeight * 0.58, centerZ + normalZ * 0.34)
+          balcony.rotation.y = angle
+          balcony.userData.objectType = 'building-balcony'
+          balcony.userData.floor = floorIndex + 1
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(windowWidth + 0.62, 0.48, 0.055), materials.windowTrim)
+          rail.position.set(centerX + normalX * 0.66, centerY - windowHeight * 0.34, centerZ + normalZ * 0.66)
+          rail.rotation.y = angle
+          rail.userData.objectType = 'building-balcony-rail'
+          group.add(balcony, rail)
+        }
       })
     })
   })
+  // 立面柱廊按识图结果生成，优先布置在入口立面，不改变建筑 footprint。
+  if (Number(columnCount) > 0 && wallEntrance?.length > 1) {
+    const count = Math.min(20, Math.max(1, Math.floor(Number(columnCount))));
+    const normalX = wallArea >= 0 ? wallEntrance.dy / wallEntrance.length : -wallEntrance.dy / wallEntrance.length;
+    const normalZ = wallArea >= 0 ? wallEntrance.dx / wallEntrance.length : -wallEntrance.dx / wallEntrance.length;
+    for (let index = 0; index < count; index += 1) {
+      const t = (index + 0.5) / count;
+      const px = wallEntrance.point.x + wallEntrance.dx * t + normalX * 0.2;
+      const pz = -(wallEntrance.point.y + wallEntrance.dy * t) + normalZ * 0.2;
+      const column = new THREE.Mesh(new THREE.BoxGeometry(0.22, buildingHeight * 0.88, 0.22), facadeStyle === 'classical' ? (materials.stoneLight || materials.windowTrim) : (materials.windowTrim || facadeMaterial));
+      column.position.set(px, buildingHeight * 0.44, pz);
+      column.userData.objectType = 'building-column';
+      group.add(column);
+    }
+  }
+
   // 檐口沿 footprint 每条边生成，收口建筑墙顶，避免矩形檐口越界。
   edges.forEach((edge) => {
     if (edge.length < 0.2) return

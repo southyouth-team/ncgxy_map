@@ -351,7 +351,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     };
     const model = createObjectSculptModel(THREE, spec);
     expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(14);
-    expect(model.userData.componentGroups.get('outer-wall').userData.componentSpec.dimensions.width).toBeCloseTo(20);
+    expect(model.userData.componentGroups.get('outer-wall').getObjectByName('outer-wall:mesh').geometry.parameters.width).toBeCloseTo(20);
     applyObjectSculptParameter(THREE, model, 'columns', 2);
     expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(7);
     expect(model.userData.componentGroups.get('outer-wall').userData.componentSpec.dimensions.width).toBeCloseTo(13);

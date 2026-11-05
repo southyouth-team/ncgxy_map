@@ -227,3 +227,40 @@ export function createCampusAssetManifestFromWorkshopRecords(records, knownFeatu
     skipped,
   };
 }
+
+
+/**
+ * Resolve AI-extracted facade parameters for the same spatial Feature.
+ * The values affect only generated visual geometry; footprint and collision remain spatial data.
+ */
+export function resolveCampusBuildingDesign(manifest, featureId) {
+  const binding = (manifest?.bindings || []).find(item => String(item?.featureId) === String(featureId));
+  if (!binding) return null;
+  const asset = (manifest?.assets || []).find(item => item?.assetId === binding.assetId);
+  const design = asset?.status === 'ready' ? asset.buildingDesign : null;
+  if (!design || design.schemaVersion !== 1) return null;
+  const roofs = ['flat', 'pitched', 'span', 'glass'];
+  const templates = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
+  const walls = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
+  const number = (value, fallback, min, max) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+  };
+  return {
+    source: 'ai-vision-estimate',
+    template: templates.includes(design.template) ? design.template : '教学楼',
+    floors: Math.round(number(design.floors, 3, 1, 30)),
+    height: number(design.height, 3.75, 1, 80),
+    roofStyle: roofs.includes(design.roofStyle) ? design.roofStyle : 'flat',
+    roofRise: number(design.roofRise, 0.6, 0, 3),
+    windowDensity: number(design.windowDensity, 1, 0.1, 3),
+    windowWidth: number(design.windowWidth, 0.48, 0.28, 2),
+    windowHeight: number(design.windowHeight, 0.62, 0.2, 2),
+    doorWidth: number(design.doorWidth, 0.9, 0.5, 3),
+    wallPalette: walls.includes(design.wallPalette) ? design.wallPalette : 'wallCream',
+    confidence: number(design.confidence, 0.35, 0, 1),
+    heightBasis: 'estimated-scene-units-not-surveyed',
+    evidence: Array.isArray(design.evidence) ? design.evidence.filter(item => typeof item === 'string').slice(0, 6) : [],
+    limitations: Array.isArray(design.limitations) ? design.limitations.filter(item => typeof item === 'string').slice(0, 6) : [],
+  };
+}

@@ -270,32 +270,10 @@ export class AssetsService {
     let estimatedExpandedCount = spec.componentTree.length;
     for (const generator of generators) {
       if (!generator || typeof generator !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.id || '')
-        || generatorIds.has(generator.id) || generator.type !== 'repeat' || !byId.has(generator.templateRootId)
-        || !['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100
-        || !Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100
-        || !Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount
-        || (generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30))) {
+        || generatorIds.has(generator.id) || !['repeat','grid'].includes(generator.type) || !byId.has(generator.templateRootId)) {
         throw new BadRequestException('资产结构生成器定义无效');
       }
       generatorIds.add(generator.id);
-      for (const follower of generator.followers || []) {
-        if (!byId.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis) || !Number.isFinite(Number(follower.offset ?? 0))) {
-          throw new BadRequestException('资产结构生成器跟随规则无效：' + generator.id);
-        }
-      }
-      const parameter = (spec.parameterSchema || []).find((item: any) => item.id === generator.countParameterId);
-      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
-        || parameter.min < 1 || parameter.max > generator.maxCount || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) {
-        throw new BadRequestException('资产结构生成器缺少有效的整数数量参数：' + generator.id);
-      }
-      const subtreeCount = spec.componentTree.filter((node: any) => {
-        let current = node.id;
-        while (current) {
-          if (current === generator.templateRootId) return true;
-          current = byId.get(current)?.parent;
-        }
-        return false;
-      }).length;
       const subtree = spec.componentTree.filter((node: any) => {
         let current = node.id;
         while (current) {
@@ -304,13 +282,50 @@ export class AssetsService {
         }
         return false;
       });
-      if (!subtreeCount) throw new BadRequestException('资产结构生成器模板子树为空：' + generator.id);
-      if ((generator.followers || []).some((follower: any) => subtree.some((node: any) => node.id === follower.nodeId))) throw new BadRequestException('资产结构生成器跟随节点不能位于重复原型子树内：' + generator.id);
+      if (!subtree.length) throw new BadRequestException('资产结构生成器模板子树为空：' + generator.id);
       for (const node of subtree) {
         if (claimedTemplateNodeIds.has(node.id)) throw new BadRequestException('暂不支持嵌套或重叠的资产结构生成器：' + generator.id);
         claimedTemplateNodeIds.add(node.id);
       }
-      estimatedExpandedCount += subtreeCount * (generator.maxCount - 1);
+      let maximumInstances = 0;
+      if (generator.type === 'repeat') {
+        if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100
+          || !Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100
+          || !Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount
+          || (generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30))) {
+          throw new BadRequestException('资产 repeat 生成器定义无效：' + generator.id);
+        }
+        for (const follower of generator.followers || []) {
+          if (!byId.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis) || !Number.isFinite(Number(follower.offset ?? 0))
+            || subtree.some((node: any) => node.id === follower.nodeId)) throw new BadRequestException('资产结构生成器跟随规则无效：' + generator.id);
+        }
+        const parameter = (spec.parameterSchema || []).find((item: any) => item.id === generator.countParameterId);
+        if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+          || parameter.min < 1 || parameter.max > generator.maxCount || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) {
+          throw new BadRequestException('资产结构生成器缺少有效的整数数量参数：' + generator.id);
+        }
+        maximumInstances = generator.maxCount;
+      } else {
+        if (![generator.spacingX,generator.spacingZ].every((value: unknown) => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 100)
+          || !Number.isInteger(generator.maxRows) || !Number.isInteger(generator.maxColumns)
+          || !Number.isInteger(generator.defaultRows) || !Number.isInteger(generator.defaultColumns)
+          || generator.defaultRows < 1 || generator.defaultColumns < 1 || generator.maxRows < generator.defaultRows
+          || generator.maxColumns < generator.defaultColumns || generator.maxRows > 100 || generator.maxColumns > 100) {
+          throw new BadRequestException('资产 grid 生成器行列或间距无效：' + generator.id);
+        }
+        for (const [parameterId, maxValue, defaultValue] of [
+          [generator.rowParameterId, generator.maxRows, generator.defaultRows],
+          [generator.columnParameterId, generator.maxColumns, generator.defaultColumns],
+        ]) {
+          const parameter = (spec.parameterSchema || []).find((item: any) => item.id === parameterId);
+          if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+            || parameter.min < 1 || parameter.max > maxValue || defaultValue < parameter.min || defaultValue > parameter.max) {
+            throw new BadRequestException('资产 grid 生成器缺少有效的行列参数：' + generator.id);
+          }
+        }
+        maximumInstances = generator.maxRows * generator.maxColumns;
+      }
+      estimatedExpandedCount += subtree.length * (maximumInstances - 1);
       if (estimatedExpandedCount > 300) throw new BadRequestException('资产结构生成器最大展开数量超过 300：' + generator.id);
     }
 

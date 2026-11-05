@@ -43,6 +43,26 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(meshes.every(mesh => mesh.geometry && mesh.material)).toBe(true);
   });
 
+
+  it('exposes stable component IDs and gives each mesh an independently editable material', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { shared: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'left', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'right', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 }, transform: { position: [2, 0, 0] } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const left = model.getObjectByName('left:mesh');
+    const right = model.getObjectByName('right:mesh');
+    expect(left.userData.componentId).toBe('left');
+    expect(right.userData.componentId).toBe('right');
+    expect(left.material).not.toBe(right.material);
+    left.material.color.set('#ff0000');
+    expect(right.material.color.getHexString()).toBe('cccccc');
+  });
+
   it('builds dedicated arch openings and wedge roof geometry', () => {
     const spec = {
       schemaVersion: '2.0',

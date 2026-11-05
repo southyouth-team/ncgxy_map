@@ -18,7 +18,8 @@ const categories = computed(() => [...new Set(templates.value.map(x => x.categor
 const visibleTemplates = computed(() => templates.value.filter(x => selectedCategory.value === 'all' || x.category === selectedCategory.value))
 const selectedTemplate = computed(() => templates.value.find(x => x.id === selectedId.value))
 const selectedInstance = computed(() => instances.value.find(x => x.id === selectedInstanceId.value))
-const selectedSpec = computed(() => objects.get(selectedInstanceId.value)?.userData?.objectSculptSpec || null)
+const editorRevision = ref(0)
+const selectedSpec = computed(() => { editorRevision.value; return objects.get(selectedInstanceId.value)?.userData?.objectSculptSpec || null })
 const selectedComponent = computed(() => selectedSpec.value?.componentTree?.find(node => node.id === selectedComponentId.value) || null)
 const componentTree = computed(() => {
   const nodes = selectedSpec.value?.componentTree || []
@@ -199,6 +200,7 @@ function updateSelectedComponentColor(color) {
   if (!spec.materials) spec.materials = {}
   if (!spec.materials[key]) spec.materials[key] = { color: '#b8b8b8', roughness: 0.82, metalness: 0 }
   spec.materials[key].color = color
+  editorRevision.value += 1
   const group = getComponentGroup(selectedInstanceId.value, node.id)
   group?.traverse(child => { if (child.isMesh) child.material.color.set(color) })
 }
@@ -208,6 +210,7 @@ function toggleSelectedComponentVisibility() {
   node.hidden = node.hidden !== true
   const group = getComponentGroup(selectedInstanceId.value, node.id)
   if (group) group.visible = node.hidden !== true
+  editorRevision.value += 1
 }
 let pointerDownPosition = null
 function onViewportPointerDown(event) { pointerDownPosition = { x: event.clientX, y: event.clientY } }
@@ -235,6 +238,7 @@ function updateSelectedComponentTransform(axis, value) {
   const index = axis === 'x' ? 0 : axis === 'y' ? 1 : 2
   node.transform.position[index] = numeric
   group.position.set(...node.transform.position)
+  editorRevision.value += 1
 }
 function addTemplate() {
   try {

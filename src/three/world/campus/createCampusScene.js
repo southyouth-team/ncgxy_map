@@ -344,7 +344,7 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
     group.userData.modelTemplateId = buildingTemplate?.templateId || null
     group.userData.referenceAssetId = visualAssets.manifest?.bindings?.find(binding => String(binding.featureId) === String(item.id))?.assetId || null
     if (buildingTemplate?.modelType === 'glb' && buildingTemplate.modelFile?.url && visualAssets.assetBaseUrl) {
-      const modelUrl = visualAssets.assetBaseUrl.replace(/\\/+$/, '') + buildingTemplate.modelFile.url
+      const modelUrl = new URL(buildingTemplate.modelFile.url, visualAssets.assetBaseUrl).toString()
       new GLTFLoader().load(modelUrl, gltf => {
         const model = gltf.scene
         const modelBounds = new THREE.Box3().setFromObject(model)

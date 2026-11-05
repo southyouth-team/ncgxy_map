@@ -365,6 +365,26 @@ function createGeometry(THREE, node) {
       const tube = boundedNumber(descriptor.tube, Math.min(width, depth) * 0.12, 0.01, radius * 0.45, node.id + '.tube');
       return new THREE.TorusGeometry(radius - tube, tube, Math.min(16, segments), segments);
     }
+    case 'lathe': {
+      const profile = descriptor.profile;
+      if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32) {
+        throw new RangeError(node.id + '.geometryDescriptor.profile 必须包含 2 到 32 个旋转截面点');
+      }
+      const points = profile.map((point, index) => {
+        if (!Array.isArray(point) || point.length !== 2
+          || !Number.isFinite(Number(point[0])) || Number(point[0]) < 0 || Number(point[0]) > 0.5
+          || !Number.isFinite(Number(point[1])) || Number(point[1]) < -0.5 || Number(point[1]) > 0.5) {
+          throw new TypeError(node.id + '.geometryDescriptor.profile[' + index + '] 必须是 [0,0.5] 半径与 [-0.5,0.5] 高度');
+        }
+        return new THREE.Vector2(Number(point[0]) * width, Number(point[1]) * height);
+      });
+      if (points.every((point, index) => index === 0 || point.distanceTo(points[index - 1]) < 0.0001)) {
+        throw new RangeError(node.id + '.geometryDescriptor.profile 不能是重复点');
+      }
+      const geometry = new THREE.LatheGeometry(points, segments);
+      geometry.scale(1, 1, depth / width);
+      return geometry;
+    }
     default:
       throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
   }
@@ -730,7 +750,7 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
           : mode === 'visible-through' ? Number(parameterValue) > threshold
             : !Boolean(parameterValue);
       } else if (target.property === 'geometry.primitive') {
-        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
+        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
         node.primitive = resolved;
       } else if (target.property === 'geometryDescriptor.inset' || target.property === 'geometryDescriptor.tube' || target.property === 'geometryDescriptor.radius') {
         node.geometryDescriptor = node.geometryDescriptor || {};

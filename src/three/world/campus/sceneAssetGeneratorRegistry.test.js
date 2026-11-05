@@ -5,7 +5,7 @@ import { createSceneAssetGeneratorRegistry, SCENE_ASSET_GENERATOR_CATALOG } from
 describe('scene asset generator registry', () => {
   const registry = createSceneAssetGeneratorRegistry(THREE);
 
-  it('registers reusable generators across the first five supported scene categories', () => {
+  it('registers reusable generators across all eight implemented scene categories', () => {
     expect(registry.supports('vegetation', '香樟树')).toBe(true);
     expect(registry.supports('structure', '拱桥')).toBe(true);
     expect(registry.supports('facility', '长椅')).toBe(true);

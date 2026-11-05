@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-const MAX_REFERENCE_BYTES = 20 * 1024 * 1024;
+const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
 const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
 const ROOFS = ['flat', 'pitched', 'span', 'glass'];
 const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
@@ -20,7 +20,7 @@ export class BuildingDesignService {
     if (!match) throw new BadRequestException('参考图必须是 Base64 PNG、JPG 或 WebP');
     const image = Buffer.from(match[2], 'base64');
     if (image.length < 16 || image.length > MAX_REFERENCE_BYTES) {
-      throw new BadRequestException('参考图为空或超过 20 MB');
+      throw new BadRequestException('参考图为空或超过 10 MB（避免 Base64 请求体超过服务端 JSON 限额）');
     }
     const validSignature = image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
       || (image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff)

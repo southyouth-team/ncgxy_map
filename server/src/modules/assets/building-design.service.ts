@@ -7,6 +7,20 @@ const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教�
 const ROOFS = ['flat', 'pitched', 'span', 'glass'];
 const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
 const PARAMETER_TARGETS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible']);
+
+function assertStableSweepPath(path: number[][], label: string, ErrorType: new (message?: string) => Error) {
+  const maxTurnRadians = Math.PI * (150 / 180);
+  for (let index = 1; index < path.length - 1; index += 1) {
+    const incoming = [path[index][0] - path[index - 1][0], path[index][1] - path[index - 1][1], path[index][2] - path[index - 1][2]];
+    const outgoing = [path[index + 1][0] - path[index][0], path[index + 1][1] - path[index][1], path[index + 1][2] - path[index][2]];
+    const incomingLength = Math.hypot(...incoming);
+    const outgoingLength = Math.hypot(...outgoing);
+    const dot = incoming.reduce((sum, value, axis) => sum + value * outgoing[axis], 0);
+    const turnRadians = Math.acos(Math.max(-1, Math.min(1, dot / (incomingLength * outgoingLength))));
+    if (turnRadians > maxTurnRadians) throw new ErrorType(label + ' 存在超过 150° 的急转弯，可能导致扫掠截面翻转或自相交');
+  }
+}
+
 function assertSimpleAssetProfile(points: number[][], label: string, ErrorType: new (message?: string) => Error) {
   const cross = (a: number[], b: number[], c: number[]) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
   const onSegment = (a: number[], b: number[], p: number[]) => Math.abs(cross(a, b, p)) < 0.000001
@@ -502,6 +516,7 @@ export class BuildingDesignService {
             && Math.hypot(point[0] - path[index - 1][0], point[1] - path[index - 1][1], point[2] - path[index - 1][2]) < 0.0001)) {
             throw new ServiceUnavailableException('sweep path 不能包含重复或零长度路径段');
           }
+          assertStableSweepPath(path, 'sweep path', ServiceUnavailableException);
           if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24
             || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
               || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {

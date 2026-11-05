@@ -1026,16 +1026,17 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(position('leaf')).toBeCloseTo(5.5);
 
     applyObjectSculptParameter(THREE, model, 'middle-scale', 2);
-    expect(position('leaf')).toBeCloseTo(6.5);
+    expect(position('middle')).toBeCloseTo(5);
+    expect(position('leaf')).toBeCloseTo(7.5);
 
     // JSON 序列化/反序列化后，依赖关系仍保留；再次调整从持久化状态重算。
     const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
     const reloaded = createObjectSculptModel(THREE, persisted);
     expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(4);
-    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(6.5);
+    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(7.5);
     applyObjectSculptParameter(THREE, reloaded, 'base-width', 2);
     expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(2);
-    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(4.5);
+    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(5.5);
   });
 
   it('rejects cutout boundary-breaking parameter edits without mutating the last valid scene', () => {

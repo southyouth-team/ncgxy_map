@@ -14,4 +14,14 @@ export class ImageGenerationController {
   generate(@Body('prompt') prompt: string) {
     return this.service.generate(prompt);
   }
+
+  @Post('generate-object')
+  @ApiOperation({ summary: '根据提示词直接生成受控 Three.js ObjectSculptSpec' })
+  generateObject(
+    @Body('prompt') prompt: string,
+    @Body('objectType') objectType: string,
+    @Body('visualStyle') visualStyle: string,
+  ) {
+    return this.service.generateObjectFromPrompt(prompt, objectType, visualStyle);
+  }
 }

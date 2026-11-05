@@ -97,8 +97,32 @@ describe('BuildingDesignService', () => {
     const service = new BuildingDesignService({ get: (key: string) => ({ VISION_API_KEY: 'secret', VISION_MODEL: 'vision-test' } as Record<string, string>)[key] } as never);
     const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
     const approval = service.approveReference(imageDataUrl);
-    await expect(service.analyzeSceneReference('water', '湖泊', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('尚未接入视觉识别 schema');
+    await expect(service.analyzeSceneReference('indoor', '教室', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('尚未接入视觉识别 schema');
     await expect(service.analyzeSceneReference('vegetation', '篮球架', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('对象类型与场景类别不匹配');
+  });
+
+
+  it('analyzes spatial water parameters without claiming measured depth', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'scene-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        form: 'lake', waterColor: 'turquoise', shoreWidth: 0.8, depthEstimate: 4.5,
+        hasRipples: true, bankStyle: 'stone', confidence: 0.72,
+      }) } }] }),
+    }) as never;
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const result = await service.analyzeSceneReference('water', '湖泊', 'anime-painted', imageDataUrl, approval.approvalToken);
+    expect(result.design.geometry).toMatchObject({
+      form: 'lake', waterColor: 'turquoise', shoreWidth: 0.8, depthEstimate: 4.5,
+      hasRipples: true, bankStyle: 'stone',
+    });
+    expect(result.design.limitations).toContain('视觉模型未提供可核验的水深测量；depthEstimate 仅为视觉参数估计');
   });
 
 });

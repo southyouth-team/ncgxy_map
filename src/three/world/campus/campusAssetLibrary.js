@@ -49,6 +49,10 @@ export function createCampusMaterials(THREE) {
     wallPeach: material('#d8a77d'),
     wallMint: material('#b8c99a'),
     roof: material('#ffffff', { map: roofTexture }),
+    roofRed: material('#a85f4e'),
+    roofGray: material('#70777b'),
+    roofGreen: material('#647b59'),
+    roofBlue: material('#536f91'),
     roofDark: material('#784b43'),
     wood: material('#ffffff', { map: woodTexture }),
     window: material('#8bc3c5', { roughness: 0.3, metalness: 0.05 }),
@@ -429,7 +433,7 @@ export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
 export function createPixelBuilding(THREE, options = {}) {
   const {
     footprint, width = 8, depth = 5, height,
-    materials, wallMaterial, template = '教学楼', facadeStyle = 'modern', hasBalconies = false, balconyFloors = [], columnCount = 0,
+    materials, wallMaterial, template = '教学楼', facadeStyle = 'modern', hasBalconies = false, balconyFloors = [], columnCount = 0, roofColor = 'roofRed',
     label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null, floors, height: customHeight, roofStyle: customRoofStyle, roofRise: customRoofRise, windowDensity: customWindowDensity, windowWidth: customWindowWidth, windowHeight: customWindowHeight, doorWidth: customDoorWidth,
   } = options
   const basePreset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
@@ -574,7 +578,7 @@ export function createPixelBuilding(THREE, options = {}) {
   const roofGeometry = new THREE.BufferGeometry()
   roofGeometry.setAttribute('position', new THREE.Float32BufferAttribute(roofPositions, 3))
   roofGeometry.computeVertexNormals()
-  const roofMaterial = actualRoofStyle === 'glass' ? materials.window : materials.roof
+  const roofMaterial = actualRoofStyle === 'glass' ? materials.window : (materials[roofColor] || materials.roof)
   const roof = new THREE.Mesh(roofGeometry, roofMaterial)
   roof.castShadow = true
   roof.receiveShadow = true

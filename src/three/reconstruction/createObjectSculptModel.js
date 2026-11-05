@@ -50,7 +50,7 @@ function expandObjectSculptSpec(spec) {
         } else {
           clone.parent = idMap.get(source.parent);
         }
-        if (index > 0) clone.generatorInstance = { generatorId: generator.id, index };
+        if (index > 0) clone.generatorInstance = { generatorId: generator.id, index, sourceNodeId: source.id };
         expanded.push(clone);
       }
     }
@@ -322,6 +322,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     const group = new THREE.Group();
     group.name = String(node.name || node.id).slice(0, 120);
     group.userData.componentId = node.id;
+    group.userData.componentSourceId = node.generatorInstance?.sourceNodeId || node.id;
     group.userData.componentRole = String(node.role || 'component').slice(0, 80);
     group.userData.componentHidden = node.hidden === true;
     group.userData.componentLocked = node.locked === true;
@@ -331,6 +332,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
       const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
       mesh.name = node.id + ':mesh';
       mesh.userData.componentId = node.id;
+      mesh.userData.componentSourceId = node.generatorInstance?.sourceNodeId || node.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);

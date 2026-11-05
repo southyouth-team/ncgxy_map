@@ -361,6 +361,66 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException('提示词模型生成未配置视觉模型，请检查 VISION_API_KEY、VISION_MODEL 和 VISION_API_BASE_URL');
     }
 
+    // 参考图采用两阶段视觉链路：先独立提取可见结构证据，再将分析结果交给结构生成阶段。
+    // 这样可避免模型一边猜测图片结构、一边直接编写几何协议，导致比例和部件关系漂移。
+    let visualAnalysis = '';
+    if (imageDataUrl) {
+      let analysisResponse: Response;
+      try {
+        analysisResponse = await fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(180000),
+          body: JSON.stringify({
+            model,
+            temperature: 0.1,
+            response_format: { type: 'json_object' },
+            messages: [
+              {
+                role: 'system',
+                content: [
+                  '你是计算机视觉结构分析器。只分析图像中可见的物体，不生成 3D 几何、不补造看不见的结构。',
+                  '输出 JSON：subject、silhouette、aspectRatio、verticalSections、components、spatialRelations、supports、groundContact、uncertainties。',
+                  'aspectRatio 为主体可见宽高比估计；verticalSections 从下到上描述各段高度占比和宽度变化；components 描述可见部件及其相对位置/尺寸；spatialRelations 明确悬空、环绕、穿插、间隔、接触和连接关系；supports 说明可见支撑路径；groundContact 只描述图片中实际接地的部位。',
+                  '允许且必须如实记录图片中的悬空、架空、镂空、环绕、观景舱等设计，不得把悬空直接判为错误。区分“视觉上分离”与“结构上无支撑”，无法确认时写入 uncertainties。',
+                  '所有比例均为基于单张图的估计值，标记 confidence；不得伪造精确尺寸。只返回 JSON。',
+                ].join('\\n'),
+              },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: '请分析参考图片中主体的轮廓、分段比例、部件尺寸与空间/支撑关系。对象提示：' + objectType + '；用户补充：' + (prompt || '无') },
+                  { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
+                ],
+              },
+            ],
+          }),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error('参考图片视觉分析连接失败：' + message);
+        throw new ServiceUnavailableException('参考图片视觉分析失败，请检查视觉模型服务连接');
+      }
+      if (!analysisResponse.ok) {
+        const detail = (await analysisResponse.text()).slice(0, 1000);
+        this.logger.warn('参考图片视觉分析 API HTTP ' + analysisResponse.status + '：' + detail);
+        throw new ServiceUnavailableException('参考图片视觉分析失败（HTTP ' + analysisResponse.status + '）');
+      }
+      const analysisPayload = await analysisResponse.json() as any;
+      const analysisRaw = analysisPayload?.choices?.[0]?.message?.content;
+      let analysisObject: any;
+      try { analysisObject = typeof analysisRaw === 'string' ? JSON.parse(analysisRaw) : null; } catch {
+        throw new ServiceUnavailableException('视觉模型未返回有效的参考图片结构分析 JSON');
+      }
+      if (!analysisObject || typeof analysisObject !== 'object' || Array.isArray(analysisObject)
+        || !analysisObject.silhouette || !Array.isArray(analysisObject.components)
+        || !Array.isArray(analysisObject.spatialRelations)) {
+        throw new ServiceUnavailableException('参考图片视觉分析结果缺少轮廓、组件或空间关系信息');
+      }
+      visualAnalysis = JSON.stringify(analysisObject).slice(0, 16000);
+      this.logger.log('参考图片视觉分析完成：' + model + '，识别组件 ' + analysisObject.components.length + ' 项');
+    }
+
     let response: Response;
     try {
       response = await fetch(baseUrl + '/chat/completions', {
@@ -387,10 +447,11 @@ export class ImageGenerationService {
                 'constraints 可选用于部件联动，支持引擎已实现的 follow、span、attach、adjacency、cutout；仅在能准确表达几何依赖时使用，引用必须指向真实节点或生成器。',
                 '单个资产的装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表该对象的核心主体（例如建筑主体、树干/主枝、车身、人体躯干、家具主框架或机械机架）；其余组件必须通过 parent 连接到该根节点，形成一棵连通树。不要把单个资产拆成互不关联的多个根对象。',
                 '所有子组件 position 必须是相对直接 parent 的局部坐标。先确定对象整体中心、尺度和局部坐标系，再按类别安排部件：建筑的屋顶/塔楼/门窗连接主体；树木的枝干连接树干、树冠叶簇连接枝条；车辆的车轮连接车轴/底盘、车门连接车身；人物的头部和四肢连接躯干/关节；家具的面板、桌腿、靠背连接主框架；机械的轴、齿轮、外壳连接机架或传动组件。',
-                '几何接合规则按部件功能判断，而不是要求所有 Mesh 表面都互相贴合：承重、安装、插接部件必须接触、嵌入或通过连接件连接；叶片、毛发、装饰、辐条等允许自然间距，但必须有合理的父级归属和空间分布。禁止无理由漂浮、散落或远离主体的零件。',
+                '空间关系与连接规则必须以参考图片为准，而不是一律要求部件贴合：允许图片中真实存在的悬空、架空、镂空、环绕、分离式观景舱、细长支撑和装饰间隙；这些结构必须保留其在图片中的高度、间距、相对位置及真实支撑/连接方式。只有与参考图不符的漂浮、断开、错位或无依据散落才属于结构错误。没有参考图片时，再根据物体功能判断合理连接关系。承重、安装、插接部件应接触、嵌入或通过连接件连接；装饰、叶片、毛发和辐条允许自然间距。',
                 'parent 只定义层级，不会自动吸附几何体。必须根据 Mesh 的 dimensions、连接点和局部坐标计算 position；不要把所有子组件堆在原点，也不要将子组件误用世界坐标。',
                 '坐标约定：Y 轴向上，根节点位于对象整体中心附近，rotation 使用弧度；地面接触类对象底部约为 Y=0，悬空/飞行类对象按其自身中心定位。整体尺寸建议在 2-20 个场景单位。',
                 '材质颜色必须贴合提示词和对象类别，不允许全部白色或灰色。禁止重复 ID、缺失父节点、循环层级和未知 primitive。',
+                '参考图片结构分析（必须优先遵循；不确定项不得臆造）：' + (visualAnalysis || '无参考图片分析') ,
                 '目标对象类型：' + objectType + '；视觉风格：' + visualStyle + '；用户要求：' + prompt,
               ].join('\\n'),
             },
@@ -398,7 +459,7 @@ export class ImageGenerationService {
               role: 'user',
               content: imageDataUrl
                 ? [
-                    { type: 'text', text: '请以参考图片为首要几何依据，重建图片中的主体。不要臆造与图片不符的轮廓、塔身比例、顶部结构或底座。先识别主体边界、宽高比、分段轮廓、支撑结构和接地位置，再输出 ObjectSculptSpec。用户补充要求：' + (prompt || '无') + '。图片中的主体必须作为一个完整对象，所有部件按真实连接关系组织；不得出现无理由悬空部件。只返回 JSON。' },
+                    { type: 'text', text: '请依据上面的视觉分析和参考图片生成 ObjectSculptSpec。分析中记录的轮廓、宽高比、分段宽度变化、组件相对位置、悬空/间隔/支撑关系必须落实到几何和局部坐标。允许并保留图片中真实存在的悬空、架空、镂空、环绕和观景舱结构；不得为了消除悬空而擅自移动、贴合或删除部件。只修正与图片不符的漂浮、断开和错位。用户补充要求：' + (prompt || '无') + '。只返回 JSON。' },
                     { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
                   ]
                 : '请直接构建可转换为真实 Three.js Mesh 的独立物体结构，优先保证外轮廓、部件层级、比例和材质。只返回 JSON。',

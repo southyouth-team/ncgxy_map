@@ -7,6 +7,35 @@ const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教�
 const ROOFS = ['flat', 'pitched', 'span', 'glass'];
 const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
 const PARAMETER_TARGETS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible']);
+function assertSimpleAssetProfile(points: number[][], label: string, ErrorType: new (message?: string) => Error) {
+  const cross = (a: number[], b: number[], c: number[]) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const onSegment = (a: number[], b: number[], p: number[]) => Math.abs(cross(a, b, p)) < 0.000001
+    && p[0] >= Math.min(a[0], b[0]) - 0.000001 && p[0] <= Math.max(a[0], b[0]) + 0.000001
+    && p[1] >= Math.min(a[1], b[1]) - 0.000001 && p[1] <= Math.max(a[1], b[1]) + 0.000001;
+  let area = 0;
+  for (let i = 0; i < points.length; i += 1) {
+    const next = points[(i + 1) % points.length];
+    if (Math.hypot(points[i][0] - next[0], points[i][1] - next[1]) < 0.0001) throw new ErrorType(label + ' 存在重复或零长度边');
+    area += points[i][0] * next[1] - next[0] * points[i][1];
+  }
+  if (Math.abs(area) < 0.0001) throw new ErrorType(label + ' 轮廓面积不能为零');
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    for (let j = i + 1; j < points.length; j += 1) {
+      if (j === i || j === (i + 1) % points.length || i === (j + 1) % points.length) continue;
+      const d = points[j], e = points[(j + 1) % points.length];
+      const abC = cross(a, b, d), abD = cross(a, b, e), cdA = cross(d, e, a), cdB = cross(d, e, b);
+      const proper = ((abC > 0 && abD < 0) || (abC < 0 && abD > 0))
+        && ((cdA > 0 && cdB < 0) || (cdA < 0 && cdB > 0));
+      const touching = (Math.abs(abC) < 0.000001 && onSegment(a, b, d))
+        || (Math.abs(abD) < 0.000001 && onSegment(a, b, e))
+        || (Math.abs(cdA) < 0.000001 && onSegment(d, e, a))
+        || (Math.abs(cdB) < 0.000001 && onSegment(d, e, b));
+      if (proper || touching) throw new ErrorType(label + ' 存在自相交边');
+    }
+  }
+}
+
 function stableSerialize(value: any): string {
   if (Array.isArray(value)) return '[' + value.map(stableSerialize).join(',') + ']';
   if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableSerialize(value[key])).join(',') + '}';
@@ -447,6 +476,7 @@ export class BuildingDesignService {
               || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
             throw new ServiceUnavailableException('tube 路径必须包含 2 到 32 个 [-0.5,0.5] 范围内的三维坐标点');
           }
+          assertSimpleAssetProfile(profile, 'sweep profile', ServiceUnavailableException);
           geometryDescriptor.path = path.map((point: number[]) => [...point]);
         }
         if (kind === 'mesh' && primitive === 'lathe') {
@@ -495,6 +525,7 @@ export class BuildingDesignService {
               || section.height <= previousHeight + 0.0001) {
               throw new ServiceUnavailableException('loft sections 必须按高度严格递增，并保持相同数量的有效二维轮廓点（截面 ' + sectionIndex + '）');
             }
+            assertSimpleAssetProfile(section.points, 'loft section ' + sectionIndex, ServiceUnavailableException);
             previousHeight = section.height;
             return { height: section.height, points: section.points.map((point: number[]) => [...point]) };
           });

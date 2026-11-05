@@ -395,20 +395,27 @@ function validateGeneratedGeometry(geometry, label) {
   const readIndex = offset => index ? index.getX(offset) : offset;
   for (let triangle = 0; triangle < triangleCount; triangle += 1) {
     const ia = readIndex(triangle * 3), ib = readIndex(triangle * 3 + 1), ic = readIndex(triangle * 3 + 2);
-    if (ia >= position.count || ib >= position.count || ic >= position.count) {
-      throw new RangeError(label + ' 包含越界三角形索引');
+    if (![ia, ib, ic].every(value => Number.isInteger(value) && value >= 0 && value < position.count)) {
+      throw new RangeError(label + ' 包含无效或越界三角形索引');
     }
-    const abx = position.getX(ib) - position.getX(ia);
-    const aby = position.getY(ib) - position.getY(ia);
-    const abz = position.getZ(ib) - position.getZ(ia);
-    const acx = position.getX(ic) - position.getX(ia);
-    const acy = position.getY(ic) - position.getY(ia);
-    const acz = position.getZ(ic) - position.getZ(ia);
+    const ax = position.getX(ia), ay = position.getY(ia), az = position.getZ(ia);
+    const bx = position.getX(ib), by = position.getY(ib), bz = position.getZ(ib);
+    const cx = position.getX(ic), cy = position.getY(ic), cz = position.getZ(ic);
+    const abx = bx - ax, aby = by - ay, abz = bz - az;
+    const acx = cx - ax, acy = cy - ay, acz = cz - az;
+    const bcx = cx - bx, bcy = cy - by, bcz = cz - bz;
     const nx = aby * acz - abz * acy;
     const ny = abz * acx - abx * acz;
     const nz = abx * acy - aby * acx;
-    if (nx * nx + ny * ny + nz * nz < 1e-12) {
-      throw new RangeError(label + ' 包含退化三角形');
+    const areaVectorSquared = nx * nx + ny * ny + nz * nz;
+    const maxEdgeSquared = Math.max(
+      abx * abx + aby * aby + abz * abz,
+      acx * acx + acy * acy + acz * acz,
+      bcx * bcx + bcy * bcy + bcz * bcz,
+    );
+    // Relative degeneracy test: stable across tiny and large model dimensions.
+    if (maxEdgeSquared < 1e-24 || areaVectorSquared <= maxEdgeSquared * maxEdgeSquared * 1e-12) {
+      throw new RangeError(label + ' 包含退化或近似退化三角形');
     }
   }
   return geometry;

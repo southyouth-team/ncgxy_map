@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
@@ -11,18 +11,37 @@ const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
 export class BuildingDesignService {
   private readonly logger = new Logger(BuildingDesignService.name);
 
-  private readonly approvedReferences = new Map<string, { digest: string; expiresAt: number }>();
-  private readonly approvedDesigns = new Map<string, { digest: string; expiresAt: number }>();
+  private tokenSecret() {
+    const secret = this.config.get<string>('ASSET_TOKEN_SECRET') || this.config.get<string>('VISION_API_KEY');
+    if (!secret) throw new ServiceUnavailableException('缺少 ASSET_TOKEN_SECRET 或 VISION_API_KEY，无法安全签发建筑模板凭证');
+    return secret;
+  }
 
-  /** 校验结构参数确实来自已确认图片的服务端识别结果。 */
+  private signToken(kind: 'reference' | 'design', digest: string) {
+    const payload = Buffer.from(JSON.stringify({ kind, digest, expiresAt: Date.now() + 15 * 60 * 1000, nonce: randomUUID() })).toString('base64url');
+    const signature = createHmac('sha256', this.tokenSecret()).update(payload).digest('base64url');
+    return payload + '.' + signature;
+  }
+
+  private verifyToken(tokenInput: unknown, kind: 'reference' | 'design', digest: string) {
+    if (typeof tokenInput !== 'string') return false;
+    const [payload, suppliedSignature, extra] = tokenInput.split('.');
+    if (!payload || !suppliedSignature || extra) return false;
+    const expected = createHmac('sha256', this.tokenSecret()).update(payload).digest();
+    let supplied: Buffer;
+    try { supplied = Buffer.from(suppliedSignature, 'base64url'); } catch { return false; }
+    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return false;
+    try {
+      const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      return data.kind === kind && data.digest === digest && Number(data.expiresAt) > Date.now();
+    } catch { return false; }
+  }
+
+  /** 结构参数签名与参数摘要绑定；多 API 实例可用相同密钥独立验证。 */
   consumeDesignToken(tokenInput: unknown, designInput: unknown) {
-    if (typeof tokenInput !== 'string' || !tokenInput || !designInput || typeof designInput !== 'object') return false;
-    const approval = this.approvedDesigns.get(tokenInput);
-    if (!approval || approval.expiresAt < Date.now()) { this.approvedDesigns.delete(tokenInput); return false; }
+    if (!designInput || typeof designInput !== 'object') return false;
     const digest = createHash('sha256').update(JSON.stringify(designInput)).digest('hex');
-    if (digest !== approval.digest) return false;
-    this.approvedDesigns.delete(tokenInput);
-    return true;
+    try { return this.verifyToken(tokenInput, 'design', digest); } catch { return false; }
   }
 
   constructor(private readonly config: ConfigService) {}
@@ -31,8 +50,7 @@ export class BuildingDesignService {
   approveReference(imageDataUrlInput: unknown) {
     const image = this.parseReferenceImage(imageDataUrlInput);
     const digest = createHash('sha256').update(image).digest('hex');
-    const approvalToken = randomUUID();
-    this.approvedReferences.set(approvalToken, { digest, expiresAt: Date.now() + 15 * 60 * 1000 });
+    const approvalToken = this.signToken('reference', digest);
     return { approvalToken, expiresInSeconds: 900, imageSha256: digest };
   }
 
@@ -55,11 +73,11 @@ export class BuildingDesignService {
     if (typeof approvalTokenInput !== 'string' || !approvalTokenInput) {
       throw new BadRequestException('请先确认建筑参考图片，再执行 3D 结构识别');
     }
-    const approved = this.approvedReferences.get(approvalTokenInput);
-    this.approvedReferences.delete(approvalTokenInput);
     const digest = createHash('sha256').update(image).digest('hex');
-    if (!approved || approved.expiresAt < Date.now() || approved.digest !== digest) {
-      throw new BadRequestException('图片确认凭证无效、已过期或与当前预览图片不一致，请重新确认');
+    let referenceApproved = false;
+    try { referenceApproved = this.verifyToken(approvalTokenInput, 'reference', digest); } catch { referenceApproved = false; }
+    if (!referenceApproved) {
+      throw new BadRequestException('图片确认凭证无效、已过期或与当前预览图片不一致，请重新确认图片预览');
     }
 
     const apiKey = this.config.get<string>('VISION_API_KEY');
@@ -158,9 +176,8 @@ export class BuildingDesignService {
       limitations: Array.isArray(parsed?.limitations) ? parsed.limitations.filter((item: unknown) => typeof item === 'string').slice(0, 8).map((item: string) => item.slice(0, 180)) : [],
       reviewed: false,
     };
-    const designToken = randomUUID();
     const designDigest = createHash('sha256').update(JSON.stringify(design)).digest('hex');
-    this.approvedDesigns.set(designToken, { digest: designDigest, expiresAt: Date.now() + 15 * 60 * 1000 });
+    const designToken = this.signToken('design', designDigest);
     return { provider: baseUrl, model, design, designToken, designTokenExpiresInSeconds: 900 };
   }
 }

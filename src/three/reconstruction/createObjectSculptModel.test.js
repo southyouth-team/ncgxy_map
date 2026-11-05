@@ -340,7 +340,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'vase').dimensions.height).toBe(4.5);
   });
 
-  it('builds a continuous sweep mesh from a 3D path and a 2D cross-section', () => {
+  it('builds a continuous parallel-transport sweep mesh from a 3D path and a 2D cross-section', () => {
     const spec = {
       schemaVersion: '2.0',
       materials: { metal: { color: '#777777', roughness: 0.35, metalness: 0.7 } },
@@ -356,8 +356,10 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     };
     const model = createObjectSculptModel(THREE, spec);
     const mesh = model.userData.componentGroups.get('curved-duct').getObjectByName('curved-duct:mesh');
-    expect(mesh.geometry.type).toBe('ExtrudeGeometry');
+    expect(mesh.geometry.type).toBe('BufferGeometry');
     expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(100);
+    expect(mesh.geometry.getIndex().count).toBeGreaterThan(100);
+    expect(mesh.geometry.boundingSphere).not.toBeNull();
     expect(mesh.geometry.getAttribute('normal').count).toBe(mesh.geometry.getAttribute('position').count);
   });
 

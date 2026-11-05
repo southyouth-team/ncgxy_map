@@ -89,7 +89,7 @@
 ### 当前生成闭环
 
 1. 素材工坊根据所选校园 Feature 和视角构建提示词，用户可编辑。
-2. 2.5D 模式调用服务端图片生成接口，生成结果返回 Base64 data URL 并在页面预览。
+2. 素材工坊调用服务端图片生成接口，生成结果返回 Base64 data URL 并在工坊预览；参考图不会直接显示在校园地图中。
 3. 用户检查风格、透明背景、轮廓和细节后，将文件保存为本地候选；文件进入 IndexedDB，元数据进入 localStorage。
 4. 用户点击“审核通过并自动入库”，素材自动上传到服务端持久化目录，服务端登记正式 manifest。
 
@@ -109,7 +109,7 @@
 - 同一空间 Feature 的 2.5D/3D 文件合并到稳定 `assetId`，同视角再次审核通过时替换该视角主文件引用；历史文件不会被自动删除，避免并发页面仍引用时产生断链。
 - `GET /api/v1/assets/visual-assets/manifest` 提供正式清单；`GET /api/v1/assets/visual-assets/:fileId/content` 提供素材文件。读取接口用于场景加载，不要求浏览器附加开发身份头。
 - `ASSET_STORAGE_DIR` 必须挂载到持久化磁盘卷，并纳入备份策略；容器重建但未挂载持久卷会导致素材丢失。当前实现是单实例文件清单写入队列，不适用于多副本共享同一存储目录的并发写入；多副本部署应迁移到对象存储或数据库事务/分布式锁。
-- 首页启动时读取服务端 manifest；2.5D 模式按建筑 Feature ID 加载审核通过的参考图 Sprite，图片加载失败时保留程序化建筑。切换到 3D 时隐藏图片并显示由建筑结构参数生成的实体几何；旧 `buildings.json` GLB 仍可作为外部模型兼容轨道。空间位置、footprint、碰撞和 walkable 不变。
+- 首页启动时读取服务端 manifest；2.5D 与 3D 始终显示同一套由 `createPixelBuilding` 生成的真实 3D Mesh；相机投影、观察角度和交互方式按视角模式切换。AI 参考图只保存在资产库中，用于识别、审核和追溯，不加载为场景 Sprite；旧 `buildings.json` GLB 仍可作为外部模型兼容轨道。空间位置、footprint、碰撞和 walkable 不变。
 
 
 ### 部署与权限限制
@@ -121,10 +121,10 @@
 ### 2.5D 图片与 3D 模型的显示边界
 
 - `gpt-image-2` 生成的是 2D 建筑参考图，不直接生成 3D 几何。参考图由 `VISION_MODEL`（当前配置 `deepseek-flash`）提取楼层、屋顶、窗户、门、墙面配色等结构参数。
-- Three.js 参数化生成器依据结构参数创建墙体、楼层窗户、入口、屋顶等真实 Mesh。3D 模式展示该实体几何，2.5D 模式使用对应参考图 Sprite；两种表现绑定同一空间 Feature ID。
+- Three.js 参数化生成器依据结构参数创建墙体、楼层窗户、入口、屋顶等真实 Mesh。2.5D 与 3D 均展示该实体几何；2.5D 使用固定斜俯视正交相机，3D 使用可旋转透视相机。两种视角绑定同一空间 Feature ID。
 - 结构参数只控制视觉几何，不覆盖建筑 footprint、位置、碰撞、walkable 或真实测绘尺寸。识别结果带置信度、证据和限制说明；高度以场景视觉单位估算并明确标记为非实测值。
 - GLB 仍是人工建模/外部工具导入的可选高精度替代方案，不是 AI 图片生成后的必经步骤。
-- Sprite 参与场景树后，第三人称遮挡检测的 Raycaster 必须设置当前 Camera；检测前更新 camera world matrix，避免 Sprite.raycast 读取空 camera.matrixWorld。
+- 建筑参考图不加入校园场景树，避免把二维参考素材误用为建筑实体；场景中其他独立标注 Sprite 仍按各自用途使用。
 
 
 ## 第四阶段：AI 建筑参考图驱动参数化 3D 生成
@@ -135,7 +135,7 @@
 2. 用户点击“识别参考图并生成3D参数”，服务端将图片发送给 `VISION_MODEL`（沿用现有 `VISION_API_KEY`、`VISION_API_BASE_URL` 和 `VISION_MODEL` 配置，不改变图片生成模型配置）。
 3. 识图接口返回受限 JSON：建筑模板、楼层数、屋顶类型/坡度、窗户密度/尺寸、门宽、墙面色板、置信度、可见证据和识别限制。
 4. 参数随 2.5D 参考图一起保存到候选记录；审核入库时，服务端将参数写入同一 Feature 绑定的视觉资产 manifest。
-5. `createCampusScene` 读取已审核资产的 `buildingDesign`，将参数传给现有 `createPixelBuilding` 生成器。3D 模式显示真实墙体、屋顶、门窗 Mesh；2.5D 模式显示参考图 Sprite。
+5. `createCampusScene` 读取已审核资产的 `buildingDesign`，将参数传给现有 `createPixelBuilding` 生成器。2.5D 与 3D 都显示真实墙体、屋顶、门窗 Mesh；模式切换只调整相机投影和交互规则。参考图不作为地图显示素材。
 
 ### 数据和精度边界
 

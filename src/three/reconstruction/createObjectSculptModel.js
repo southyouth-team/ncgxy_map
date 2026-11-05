@@ -199,8 +199,9 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     group.userData.componentId = node.id;
     group.userData.componentRole = String(node.role || 'component').slice(0, 80);
     const geometry = createGeometry(THREE, node);
-    const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
+    const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material).clone());
     mesh.name = node.id + ':mesh';
+    mesh.userData.componentId = node.id;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);

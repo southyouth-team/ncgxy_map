@@ -64,6 +64,7 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     }
     const rowParameterId = countParameterId(raw.rowParameterId);
     const columnParameterId = countParameterId(raw.columnParameterId);
+    if (rowParameterId === columnParameterId) throw new ServiceUnavailableException('网格生成器行列参数不能相同：' + id);
     const spacingX = Number(raw.spacingX), spacingZ = Number(raw.spacingZ);
     const defaultRows = Number(raw.defaultRows), defaultColumns = Number(raw.defaultColumns);
     const maxRows = Number(raw.maxRows), maxColumns = Number(raw.maxColumns);

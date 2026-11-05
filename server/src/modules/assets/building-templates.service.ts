@@ -39,7 +39,6 @@ export class BuildingTemplatesService {
     if (!name) throw new BadRequestException('模板名称不能为空');
     if (!['ai_generated','manual_model','procedural','external'].includes(String(input.sourceType))) throw new BadRequestException('模板来源无效');
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
-    if (!['building', 'facility', 'decoration', 'vegetation'].includes(String(input.category || 'building'))) throw new BadRequestException('模板分类无效');
     if (input.modelType === 'procedural' && (!design || typeof design !== 'object')) throw new BadRequestException('程序化模板缺少结构参数');
     if (input.modelType === 'procedural' && !this.buildingDesign.consumeDesignToken(input.designToken, design)) throw new BadRequestException('程序化模板必须使用已确认图片生成的有效结构参数；请重新确认图片并识别');
     const now = new Date().toISOString();

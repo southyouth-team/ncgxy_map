@@ -377,4 +377,52 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => validateObjectSculptSpec(spec)).toThrow('结构约束引用无效');
   });
 
+  it('attaches sibling meshes by face anchors and records adjacency metadata', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc' } },
+      componentTree: [
+        { id: 'building', kind: 'group', name: '建筑主体' },
+        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
+          dimensions: { width: 4, height: 3, depth: 0.3 }, transform: { position: [0, 0, 0] } },
+        { id: 'door', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
+          dimensions: { width: 1, height: 2, depth: 0.2 }, transform: { position: [9, 0, 0] } },
+        { id: 'corridor', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
+          dimensions: { width: 3, height: 2.5, depth: 2 } },
+      ],
+      constraints: [
+        { id: 'door-to-wall', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'door',
+          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
+        { id: 'door-to-corridor', type: 'adjacency', sourceNodeId: 'door', targetNodeId: 'corridor', relation: 'connects' },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    expect(model.userData.componentGroups.get('door').position.x).toBeCloseTo(2.5);
+    expect(model.userData.componentGroups.get('door').userData.componentRelations).toContainEqual({
+      id: 'door-to-wall', type: 'attach', nodeId: 'wall', axis: 'x',
+    });
+    expect(model.userData.componentGroups.get('corridor').userData.componentRelations).toContainEqual({
+      id: 'door-to-corridor', type: 'adjacency', relation: 'connects', nodeId: 'door',
+    });
+    expect(model.userData.componentGroups.get('door').userData.componentRelations).toContainEqual({
+      id: 'door-to-corridor', type: 'adjacency', relation: 'connects', nodeId: 'corridor',
+    });
+  });
+
+  it('rejects attach relations across different parent groups', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'left', kind: 'group', parent: 'root' },
+        { id: 'right', kind: 'group', parent: 'root' },
+        { id: 'a', parent: 'left', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'b', parent: 'right', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+      constraints: [{ id: 'invalid-attach', type: 'attach', sourceNodeId: 'a', targetNodeId: 'b',
+        axis: 'x', sourceSide: 1, targetSide: -1 }],
+    };
+    expect(() => validateObjectSculptSpec(spec)).toThrow('attach 必须连接同一父级下的 Mesh 面');
+  });
+
 });

@@ -25,11 +25,37 @@ const categoryLabel = value => labels[value] || value
 const authHeaders = () => ({ 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID })
 
 function resize() {
-  if (!renderer || !viewport.value) return
+  if (!renderer || !viewport.value || !camera) return
   const w = Math.max(1, viewport.value.clientWidth), h = Math.max(1, viewport.value.clientHeight)
   renderer.setSize(w, h, false)
   camera.aspect = w / h
   camera.updateProjectionMatrix()
+}
+
+/**
+ * 使用地面包围球和相机视场角计算取景距离，确保完整沙盒进入视口。
+ * 透视相机仍保留真实 3D 观察角度，不通过 CSS 或平面背景伪造地面。
+ */
+function fitSandboxGround() {
+  if (!camera || !controls) return
+  const groundWidth = 180
+  const groundDepth = 140
+  const radius = Math.sqrt(groundWidth * groundWidth + groundDepth * groundDepth) / 2
+  const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov / 2)
+  const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(camera.aspect, 0.1))
+  const limitingHalfFov = Math.max(0.05, Math.min(verticalHalfFov, horizontalHalfFov))
+  const distance = (radius / Math.sin(limitingHalfFov)) * 1.2
+  const direction = new THREE.Vector3(1, 0.85, 1).normalize()
+
+  controls.target.set(0, 0, 0)
+  camera.position.copy(controls.target).addScaledVector(direction, distance)
+  camera.near = 0.1
+  camera.far = Math.max(3000, distance * 10)
+  camera.updateProjectionMatrix()
+  camera.lookAt(controls.target)
+  controls.minDistance = 12
+  controls.maxDistance = Math.max(2500, distance * 5)
+  controls.update()
 }
 
 function readFileAsDataUrl(file) {
@@ -144,7 +170,7 @@ function focusInstance(id) {
   if (object) { controls.target.copy(object.position); controls.update() }
 }
 function clearScene() { [...objects.keys()].forEach(removeInstance); status.value = '场景已清空' }
-function resetCamera() { camera.position.set(30, 28, 34); controls.target.set(0, 0, 0); controls.update() }
+function resetCamera() { fitSandboxGround() }
 
 let runtime
 onMounted(() => {
@@ -162,7 +188,7 @@ onMounted(() => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace; viewport.value.replaceChildren(renderer.domElement)
     controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0); controls.update()
-    observer = new ResizeObserver(resize); observer.observe(viewport.value); resize()
+    observer = new ResizeObserver(resize); observer.observe(viewport.value); resize(); fitSandboxGround()
     const render = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(render) }; render()
     status.value = '沙盒已就绪；可输入提示词或上传图片生成独立模型'
   } catch (e) { error.value = e?.message || '初始化失败'; status.value = '初始化失败' }

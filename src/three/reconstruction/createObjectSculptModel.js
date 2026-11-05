@@ -303,6 +303,64 @@ function createGeometry(THREE, node) {
     });
   }
 
+  if (String(node.primitive || '').toLowerCase() === 'loft') {
+    const sections = descriptor.sections;
+    if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) {
+      throw new RangeError(node.id + '.geometryDescriptor.sections 必须包含 2 到 12 个截面');
+    }
+    let profileCount = null;
+    const normalizedSections = sections.map((section, sectionIndex) => {
+      if (!section || typeof section !== 'object' || !Number.isFinite(Number(section.height))
+        || Number(section.height) < -0.5 || Number(section.height) > 0.5
+        || !Array.isArray(section.points) || section.points.length < 3 || section.points.length > 24) {
+        throw new TypeError(node.id + '.geometryDescriptor.sections[' + sectionIndex + '] 格式无效');
+      }
+      if (profileCount === null) profileCount = section.points.length;
+      if (section.points.length !== profileCount) {
+        throw new RangeError(node.id + '.geometryDescriptor.sections 必须具有相同数量的轮廓点');
+      }
+      const points = section.points.map((point, pointIndex) => {
+        if (!Array.isArray(point) || point.length !== 2
+          || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {
+          throw new TypeError(node.id + '.geometryDescriptor.sections[' + sectionIndex + '].points[' + pointIndex + '] 坐标无效');
+        }
+        return new THREE.Vector2(Number(point[0]) * width, Number(point[1]) * depth);
+      });
+      return { height: Number(section.height) * height, points };
+    });
+    for (let index = 1; index < normalizedSections.length; index += 1) {
+      if (normalizedSections[index].height <= normalizedSections[index - 1].height + 0.0001) {
+        throw new RangeError(node.id + '.geometryDescriptor.sections 的 height 必须严格递增');
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    const positions = [];
+    const indices = [];
+    const ringSize = profileCount;
+    normalizedSections.forEach(section => {
+      section.points.forEach(point => positions.push(point.x, section.height, point.y));
+    });
+    for (let sectionIndex = 0; sectionIndex < normalizedSections.length - 1; sectionIndex += 1) {
+      const lower = sectionIndex * ringSize;
+      const upper = (sectionIndex + 1) * ringSize;
+      for (let pointIndex = 0; pointIndex < ringSize; pointIndex += 1) {
+        const next = (pointIndex + 1) % ringSize;
+        const a = lower + pointIndex, b = lower + next, c = upper + pointIndex, d = upper + next;
+        indices.push(a, c, b, b, c, d);
+      }
+    }
+    const capTriangles = THREE.ShapeUtils.triangulateShape(normalizedSections[0].points, []);
+    capTriangles.forEach(triangle => indices.push(triangle[2], triangle[1], triangle[0]));
+    const topOffset = (normalizedSections.length - 1) * ringSize;
+    capTriangles.forEach(triangle => indices.push(topOffset + triangle[0], topOffset + triangle[1], topOffset + triangle[2]));
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+
   switch (String(node.primitive || 'box').toLowerCase()) {
     case 'polygon': {
       const points = descriptor.points;

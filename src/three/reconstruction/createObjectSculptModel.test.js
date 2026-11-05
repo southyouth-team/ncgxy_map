@@ -613,6 +613,39 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => createObjectSculptModel(THREE, spec)).toThrow('必须具有相同数量的轮廓点');
   });
 
+  it('keeps sweep side normals aligned along a non-planar parallel-transport path', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'spatial-sweep', primitive: 'sweep', material: 'default',
+        dimensions: { width: 3, height: 3, depth: 3 },
+        geometryDescriptor: {
+          path: [[-0.45, -0.35, -0.35], [-0.15, 0.2, -0.1], [0.15, -0.15, 0.2], [0.45, 0.35, 0.4]],
+          profile: [[-0.12, -0.1], [0.12, -0.1], [0.12, 0.1], [-0.12, 0.1]],
+          steps: 24,
+        },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.userData.componentGroups.get('spatial-sweep').getObjectByName('spatial-sweep:mesh');
+    const position = mesh.geometry.getAttribute('position');
+    const normals = mesh.geometry.getAttribute('normal');
+    const index = mesh.geometry.getIndex();
+    const sideIndexCount = 24 * 4 * 6;
+
+    for (let offset = 0; offset < sideIndexCount; offset += 3) {
+      const ids = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];
+      const a = new THREE.Vector3().fromBufferAttribute(position, ids[0]);
+      const b = new THREE.Vector3().fromBufferAttribute(position, ids[1]);
+      const c = new THREE.Vector3().fromBufferAttribute(position, ids[2]);
+      const faceNormal = b.sub(a).cross(c.sub(a)).normalize();
+      ids.forEach(id => {
+        const vertexNormal = new THREE.Vector3().fromBufferAttribute(normals, id);
+        expect(faceNormal.dot(vertexNormal)).toBeGreaterThan(0.25);
+      });
+    }
+  });
+
   it('rejects sweep profiles with invalid normalized cross-section coordinates', () => {
     const spec = {
       schemaVersion: '2.0',

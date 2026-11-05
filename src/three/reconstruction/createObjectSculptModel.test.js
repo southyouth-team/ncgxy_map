@@ -73,6 +73,12 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => createObjectSculptModel(THREE, oversized)).toThrow('超出允许范围');
   });
 
+  it('falls back safely when a material entry is null or malformed', () => {
+    const spec = castleSpec();
+    spec.materials.stone = null;
+    expect(() => createObjectSculptModel(THREE, spec)).not.toThrow();
+  });
+
   it('enforces component count and hierarchy depth budgets', () => {
     const tooMany = castleSpec();
     tooMany.componentTree = Array.from({ length: 301 }, (_, index) => ({

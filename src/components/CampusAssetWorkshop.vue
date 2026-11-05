@@ -1,5 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as THREE from 'three'
+import { CAMPUS_BUILDING_TEMPLATES, createPixelBuilding } from '../three/world/campus/campusAssetLibrary.js'
 import { CAMPUS_BUILDING_FOOTPRINTS } from '../data/campus/campusLayout.js'
 import { createCampusAssetManifestFromWorkshopRecords } from '../data/campus/campusAssetManifest.js'
 
@@ -33,6 +35,67 @@ const generating = ref(false)
 const analyzingDesign = ref(false)
 const buildingDesign = ref(null)
 const generationModel = ref('')
+const preview25d = ref(null)
+const preview3d = ref(null)
+const previewRenderers = []
+
+function renderBuildingPreview(container, mode) {
+  if (!container) return null
+  const width = Math.max(260, container.clientWidth || 320)
+  const height = Math.max(190, container.clientHeight || 230)
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
+  renderer.setSize(width, height)
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  container.replaceChildren(renderer.domElement)
+  const scene = new THREE.Scene()
+  scene.background = new THREE.Color('#edf2eb')
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa58e, 2.1))
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.2)
+  keyLight.position.set(10, 18, 12)
+  keyLight.castShadow = true
+  scene.add(keyLight)
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 24), new THREE.MeshStandardMaterial({ color: '#cbd5c3', roughness: 1 }))
+  floor.rotation.x = -Math.PI / 2
+  floor.position.y = -0.08
+  floor.receiveShadow = true
+  scene.add(floor)
+  const palette = { wallCream: '#e7d8b8', wallPeach: '#d9a58b', wallMint: '#b7c9ad', wall: '#d9d0bc', roof: '#8e5945', roofDark: '#684638', window: '#86aeb0', windowTrim: '#f1e5ca', door: '#795640' }
+  const materials = Object.fromEntries(Object.entries(palette).map(([name, color]) => [name, new THREE.MeshStandardMaterial({ color, roughness: name === 'window' ? 0.3 : 0.86, metalness: name === 'window' ? 0.12 : 0 })]))
+  const template = buildingDesign.value?.template || '教学楼'
+  const preset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
+  const design = buildingDesign.value || preset
+  const building = createPixelBuilding(THREE, {
+    width: 8, depth: 6, height: design.height || preset.height, template, materials,
+    floors: design.floors ?? preset.floors, roofStyle: design.roofStyle || preset.roofStyle,
+    roofRise: design.roofRise ?? preset.roofRise, windowDensity: design.windowDensity ?? preset.windowDensity,
+    windowWidth: design.windowWidth ?? preset.windowWidth, windowHeight: design.windowHeight ?? preset.windowHeight,
+    doorWidth: design.doorWidth ?? preset.doorWidth,
+    wallMaterial: materials[design.wallPalette] || materials[preset.wall] || materials.wallCream,
+  })
+  scene.add(building)
+  const aspect = width / height
+  const camera = mode === '2.5d'
+    ? new THREE.OrthographicCamera(-10 * aspect, 10 * aspect, 10, -10, 0.1, 100)
+    : new THREE.PerspectiveCamera(38, aspect, 0.1, 100)
+  camera.position.set(12, mode === '2.5d' ? 17 : 10, 15)
+  camera.lookAt(0, 2.2, 0)
+  renderer.render(scene, camera)
+  return { renderer, scene, materials }
+}
+function disposeBuildingPreviews() {
+  previewRenderers.splice(0).forEach(entry => {
+    entry.renderer.dispose()
+    Object.values(entry.materials).forEach(material => material.dispose())
+    entry.scene.traverse(node => { if (node.geometry) node.geometry.dispose() })
+  })
+}
+function refreshBuildingPreviews() {
+  disposeBuildingPreviews()
+  if (preview25d.value) { const entry = renderBuildingPreview(preview25d.value, '2.5d'); if (entry) previewRenderers.push(entry) }
+  if (preview3d.value) { const entry = renderBuildingPreview(preview3d.value, '3d'); if (entry) previewRenderers.push(entry) }
+}
 
 function loadStoredAssets() {
   try {
@@ -429,7 +492,9 @@ watch([selectedFeatureId, viewMode], () => {
   publicPath.value = ''
   fileError.value = ''
 })
-onBeforeUnmount(resetPreview)
+onMounted(() => nextTick(refreshBuildingPreviews))
+watch([buildingDesign, selectedFeatureId], () => nextTick(refreshBuildingPreviews), { deep: true })
+onBeforeUnmount(() => { resetPreview(); disposeBuildingPreviews() })
 </script>
 
 <template>
@@ -494,8 +559,16 @@ onBeforeUnmount(resetPreview)
         </div>
       </section>
 
+      <section class="workshop-panel preview-panel">
+        <div class="panel-heading"><span>02 / 双视角实时建模预览</span><small>同一套 Three.js Mesh · 仅相机不同</small></div>
+        <div class="dual-preview-grid">
+          <div class="preview-card"><strong>2.5D · 固定斜俯视</strong><div ref="preview25d" class="three-preview"></div><small>正交投影，保留墙体厚度、屋顶、门窗与阴影</small></div>
+          <div class="preview-card"><strong>3D · 透视观察</strong><div ref="preview3d" class="three-preview"></div><small>透视投影，展示同一建筑实体的空间结构</small></div>
+        </div>
+        <p class="hint">识别参数更新后，两侧预览同步重建。参考图片仅用于结构识别和人工审核，不作为任一视角的最终显示素材。</p>
+      </section>
       <section class="workshop-panel intake-panel">
-        <div class="panel-heading"><span>02 / 素材收集</span><small>{{ viewMode === '2.5d' ? 'PNG / WebP 图片' : 'GLB 模型' }}</small></div>
+        <div class="panel-heading"><span>03 / 素材收集</span><small>{{ viewMode === '2.5d' ? 'PNG / WebP 图片' : 'GLB 模型' }}</small></div>
         <label>素材名称
           <input v-model="assetName" placeholder="例如：西侧组团 01 · AI 视觉稿" />
         </label>
@@ -517,7 +590,7 @@ onBeforeUnmount(resetPreview)
     </div>
 
     <section class="workshop-panel library-panel">
-      <div class="panel-heading"><span>03 / 候选审核</span><small>审核通过后自动上传并登记服务器资产清单</small></div>
+      <div class="panel-heading"><span>04 / 候选审核</span><small>审核通过后自动上传并登记服务器资产清单</small></div>
       <div v-if="!assets.length" class="empty-state">还没有候选素材。先生成提示词，再上传第一份 AI 素材。</div>
       <div v-else class="asset-table">
         <button v-for="asset in assets" :key="asset.assetId" :class="['asset-row', { active: activeAssetId === asset.assetId }]" @click="selectAsset(asset)">
@@ -563,7 +636,7 @@ onBeforeUnmount(resetPreview)
 .workshop-header p{margin:0;color:#718076;font-size:13px}
 .workshop-summary{display:flex;align-items:center;gap:26px;max-width:1440px;margin:0 auto 20px;padding:16px 20px;border:1px solid #d9e1d7;background:#fff;border-radius:10px}
 .workshop-summary div{display:flex;flex-direction:column;gap:3px}.workshop-summary strong{font-size:22px}.workshop-summary span,.workshop-summary p{font-size:11px;color:#829087}.workshop-summary p{margin-left:auto}
-.workshop-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:18px;max-width:1440px;margin:0 auto 18px}
+.dual-preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.preview-card{min-width:0;padding:12px;border:1px solid #e1e8df;border-radius:8px;background:#f9fbf8}.preview-card>strong{display:block;margin-bottom:8px}.three-preview{height:240px;overflow:hidden;border-radius:6px;background:#edf2eb}.three-preview canvas{display:block;width:100%;height:100%}.preview-card>small{display:block;margin-top:8px;color:#65736a}.workshop-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:18px;max-width:1440px;margin:0 auto 18px}
 .workshop-panel{padding:22px;border:1px solid #d9e1d7;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(37,53,45,.035)}
 .panel-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:20px;font-size:12px;font-weight:800;letter-spacing:.7px}.panel-heading small{font-size:10px;font-weight:500;color:#8a978d}
 .workshop-panel label{display:flex;flex-direction:column;gap:7px;margin:13px 0;font-size:11px;font-weight:700;color:#526257}
@@ -590,6 +663,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .review-preview{display:grid;place-items:center;min-height:160px;overflow:hidden;border-radius:6px;background:#edf2eb}.review-fields label{margin-top:0}.confirm-row{display:flex!important;flex-direction:row!important;align-items:center;gap:8px!important;font-weight:500!important}.confirm-row input{margin:0}
 .export-row{display:flex;align-items:center;gap:14px;margin-top:18px}.export-row span,.status-message{font-size:10px;color:#7f8d82;line-height:1.6}.status-message{margin-top:10px;color:#456a4c}
 .workshop-footer{display:flex;gap:16px;max-width:1440px;margin:18px auto 0;padding:14px 2px;border-top:1px solid #d8e1d6;color:#7a887d;font-size:10px;line-height:1.7}.workshop-footer strong{flex:none;color:#4e6353}
-@media(max-width:900px){.workshop-grid{grid-template-columns:1fr}.workshop-summary{flex-wrap:wrap}.workshop-summary p{width:100%;margin:0}.review-panel{grid-template-columns:1fr}}
+@media(max-width:900px){.dual-preview-grid{grid-template-columns:1fr}.workshop-grid{grid-template-columns:1fr}.workshop-summary{flex-wrap:wrap}.workshop-summary p{width:100%;margin:0}.review-panel{grid-template-columns:1fr}}
 @media(max-width:600px){.asset-workshop{padding:20px 12px 32px}.workshop-header{align-items:flex-start}.workshop-header .secondary-button{white-space:nowrap;padding:8px}.workshop-panel{padding:16px}.field-row{grid-template-columns:1fr}.workshop-summary{gap:14px;padding:13px}.workshop-summary div{min-width:70px}.export-row{align-items:flex-start;flex-direction:column}}
 </style>

@@ -263,6 +263,46 @@ function createGeometry(THREE, node) {
     return new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, descriptor.closed === true);
   }
 
+  if (String(node.primitive || '').toLowerCase() === 'sweep') {
+    const path = descriptor.path;
+    const profile = descriptor.profile;
+    if (!Array.isArray(path) || path.length < 2 || path.length > 32) {
+      throw new RangeError(node.id + '.geometryDescriptor.path 必须包含 2 到 32 个路径点');
+    }
+    const pathPoints = path.map((point, index) => {
+      if (!Array.isArray(point) || point.length !== 3
+        || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {
+        throw new TypeError(node.id + '.geometryDescriptor.path[' + index + '] 必须是 [-0.5,0.5] 范围内的三维坐标');
+      }
+      return new THREE.Vector3(Number(point[0]) * width, Number(point[1]) * height, Number(point[2]) * depth);
+    });
+    if (pathPoints.every((point, index) => index === 0 || point.distanceTo(pathPoints[index - 1]) < 0.0001)) {
+      throw new RangeError(node.id + '.geometryDescriptor.path 不能全部重合');
+    }
+    if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24) {
+      throw new RangeError(node.id + '.geometryDescriptor.profile 必须包含 3 到 24 个截面轮廓点');
+    }
+    const profilePoints = profile.map((point, index) => {
+      if (!Array.isArray(point) || point.length !== 2
+        || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {
+        throw new TypeError(node.id + '.geometryDescriptor.profile[' + index + '] 必须是 [-0.5,0.5] 范围内的二维坐标');
+      }
+      return [Number(point[0]) * width, Number(point[1]) * height];
+    });
+    const shape = new THREE.Shape();
+    shape.moveTo(profilePoints[0][0], profilePoints[0][1]);
+    for (const point of profilePoints.slice(1)) shape.lineTo(point[0], point[1]);
+    shape.closePath();
+    const curve = new THREE.CatmullRomCurve3(pathPoints, descriptor.closed === true, 'centripetal');
+    const steps = Math.round(boundedNumber(descriptor.steps, 32, 3, 128, node.id + '.geometryDescriptor.steps'));
+    return new THREE.ExtrudeGeometry(shape, {
+      steps,
+      bevelEnabled: false,
+      extrudePath: curve,
+      curveSegments: segments,
+    });
+  }
+
   switch (String(node.primitive || 'box').toLowerCase()) {
     case 'polygon': {
       const points = descriptor.points;

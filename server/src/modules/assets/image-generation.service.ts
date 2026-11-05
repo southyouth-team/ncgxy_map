@@ -346,7 +346,7 @@ export class ImageGenerationService {
     const promptText = typeof promptInput === 'string' ? promptInput.trim() : '';
     const imageDataUrl = typeof imageDataUrlInput === 'string' ? imageDataUrlInput : '';
     if (!promptText && !imageDataUrl) throw new BadRequestException('Three.js 模型生成需要提示词或参考图片');
-    if (imageDataUrl && (!/^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl) || Buffer.byteLength(imageDataUrl, 'utf8') > 14 * 1024 * 1024)) {
+    if (imageDataUrl && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl) || Buffer.byteLength(imageDataUrl, 'utf8') > 14 * 1024 * 1024)) {
       throw new BadRequestException('参考图片格式无效或超过 10 MB');
     }
     const prompt = (promptText || '请严格依据参考图片重建该物体。') .slice(0, 40000);

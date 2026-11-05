@@ -269,7 +269,7 @@ function createRoadGenerator(THREE, input, materials) {
     const nz = dx / length * roadWidth / 2;
     const base = positions.length / 3;
     positions.push(x1 + nx, 0, z1 + nz, x1 - nx, 0, z1 - nz, x2 + nx, 0, z2 + nz, x2 - nx, 0, z2 - nz);
-    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+    indices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
   }
   if (!positions.length) throw new Error('道路模板至少需要两个不同的中心线坐标点');
   const roadGeometry = new THREE.BufferGeometry();
@@ -293,7 +293,7 @@ function createRoadGenerator(THREE, input, materials) {
         const near = roadWidth / 2, far = near + sidewalkWidth, base = edgePositions.length / 3;
         edgePositions.push(x1 + nx * near, curbHeight, z1 + nz * near, x1 + nx * far, curbHeight, z1 + nz * far,
           x2 + nx * near, curbHeight, z2 + nz * near, x2 + nx * far, curbHeight, z2 + nz * far);
-        edgeIndices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+        edgeIndices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
       }
       const edgeGeometry = new THREE.BufferGeometry();
       edgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));

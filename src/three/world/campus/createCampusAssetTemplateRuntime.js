@@ -35,7 +35,7 @@ export function createCampusAssetTemplateRuntime(THREE) {
   const buildingMaterials = createCampusMaterials(THREE);
   for (const definition of CAMPUS_BUILDING_ASSET_CATALOG) {
     templates.register({
-      id: 'building:' + definition.id,
+      id: toTemplateId('building:' + definition.id),
       version: 1,
       category: 'building',
       objectType: definition.template,

@@ -69,27 +69,27 @@ async function generateModel() {
   generating.value = true; error.value = ''; generationLog.value = ''; status.value = '正在请求 AI 生成模型…'
   const startedAt = performance.now()
   try {
-    let sourceImage = imageDataUrl.value
-    // 纯提示词入口复用项目现有图片生成服务，再交给视觉模型转成结构化 3D 组件树。
-    if (!sourceImage) {
-      status.value = '提示词模式：正在生成参考图…'
-      const generatedImage = await requestJson('/assets/ai-image/generate', { prompt: prompt.value.trim() })
-      sourceImage = generatedImage.dataUrl
-      if (!sourceImage) throw new Error('图片生成接口没有返回 dataUrl')
-      referencePreview.value = sourceImage
-      generationLog.value = '参考图生成模型：' + (generatedImage.model || '未返回') + '\n'
+    let result
+    if (imageDataUrl.value) {
+      status.value = '图片模式：正在确认参考图并调用视觉模型重建…'
+      const approved = await requestJson('/assets/ai-image/approve-reference', { imageDataUrl: imageDataUrl.value })
+      result = await requestJson('/assets/ai-image/reconstruct-object', {
+        category: 'building',
+        objectType: objectType.value.trim() || '独立 3D 物体',
+        visualStyle: 'anime-painted',
+        imageDataUrl: imageDataUrl.value,
+        approvalToken: approved.approvalToken,
+        prompt: prompt.value.trim(),
+      })
+    } else {
+      status.value = '提示词模式：正在直接生成 Three.js 结构描述…'
+      result = await requestJson('/assets/ai-image/generate-object', {
+        objectType: objectType.value.trim() || '独立 3D 物体',
+        visualStyle: 'anime-painted',
+        prompt: prompt.value.trim(),
+      })
     }
-    status.value = '正在确认参考图并调用视觉模型重建 Three.js 组件…'
-    const approved = await requestJson('/assets/ai-image/approve-reference', { imageDataUrl: sourceImage })
-    const result = await requestJson('/assets/ai-image/reconstruct-object', {
-      category: 'building',
-      objectType: objectType.value.trim() || '独立 3D 物体',
-      visualStyle: 'anime-painted',
-      imageDataUrl: sourceImage,
-      approvalToken: approved.approvalToken,
-      prompt: prompt.value.trim(),
-    })
-    const spec = result?.design?.objectSculptSpec
+    const spec = result?.design?.objectSculptSpec || result?.objectSculptSpec
     if (!spec) throw new Error('AI 返回结果缺少 ObjectSculptSpec')
     const model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
     const id = 'ai-instance-' + (++serial)
@@ -104,7 +104,7 @@ async function generateModel() {
     selectedInstanceId.value = id
     controls.target.copy(model.position); controls.update()
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
-    generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n模型来源：AI 结构化组件树 → Three.js Mesh'
+    generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI ObjectSculptSpec → Three.js Mesh'
     status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
   } catch (e) {
     error.value = e?.message || 'AI 模型生成失败'
@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
         <label>参考图片（可选）</label><input type="file" accept="image/png,image/jpeg,image/webp" @change="onImageChange">
         <img v-if="referencePreview" class="reference" :src="referencePreview" alt="模型参考图">
         <button class="generate" :disabled="generating" @click="generateModel">{{ generating ? 'AI 正在生成…' : '生成 Three.js 模型并加入沙盒' }}</button>
-        <p class="hint">提示词模式会先调用现有图片生成服务，再由视觉模型生成结构化组件树；图片模式直接根据上传图片重建。当前运行时将组件树转换为真实 Three.js Mesh，不执行 AI 任意 JavaScript。</p>
+        <p class="hint">提示词模式直接调用视觉模型生成 ObjectSculptSpec；图片模式根据上传图片生成 ObjectSculptSpec。当前运行时将 AI 返回的结构化组件树转换为真实 Three.js Mesh，不执行 AI 任意 JavaScript。</p>
         <div v-if="generationLog" class="log">{{ generationLog }}</div>
         <div v-if="error" class="error">{{ error }}</div>
         <h3 class="subheading">预置模板对照 <span>{{ visibleTemplates.length }} 项</span></h3>

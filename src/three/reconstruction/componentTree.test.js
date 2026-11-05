@@ -18,7 +18,7 @@ describe('component tree operations', () => {
     expect(result.components[2].parent).toBe('copy-2')
     expect(result.components[0].transform.position[0]).toBeCloseTo(0.6)
     expect(result.components[1].transform.position).toEqual([-1, 1, 0])
-    expect(result.tree.map(node => node.id)).toEqual(['root-a', 'child-a', 'grandchild-a', 'root-b', 'copy-1', 'copy-2', 'copy-3'])
+    expect(result.tree.map(node => node.id)).toEqual(['root-a', 'child-a', 'grandchild-a', 'copy-1', 'copy-2', 'copy-3', 'root-b'])
     expect(source).toHaveLength(4)
   })
 
@@ -32,6 +32,6 @@ describe('component tree operations', () => {
 
   it('rejects unknown roots and duplicate generated ids', () => {
     expect(() => duplicateComponentSubtree([], 'missing', makeId)).toThrow('找不到')
-    expect(() => duplicateComponentSubtree([{ id: 'root', parent: null }], 'root', () => 'same')).toThrow('重复')
+    expect(() => duplicateComponentSubtree([{ id: 'root', parent: null }, { id: 'child', parent: 'root' }], 'root', () => 'same')).toThrow('重复')
   })
 })

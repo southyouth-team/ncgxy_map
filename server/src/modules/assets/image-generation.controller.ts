@@ -26,6 +26,17 @@ export class ImageGenerationController {
     return this.service.repairObjectFromValidation(objectSculptSpec, validationError, objectType, visualStyle);
   }
 
+
+  @Post('modify-object')
+  @ApiOperation({ summary: '根据选中部件或整体模型范围执行 AI 微调' })
+  modifyObject(
+    @Body('objectSculptSpec') objectSculptSpec: unknown,
+    @Body('selectedNodeIds') selectedNodeIds: unknown,
+    @Body('instruction') instruction: string,
+  ) {
+    return this.service.modifyObjectFromInstruction(objectSculptSpec, selectedNodeIds, instruction);
+  }
+
   @Post('reconstruct-object')
   @ApiOperation({ summary: '根据真实参考图片与补充提示词重建 ObjectSculptSpec' })
   reconstructObject(

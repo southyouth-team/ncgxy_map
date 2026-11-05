@@ -154,8 +154,9 @@ export class BuildingDesignService {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.componentTree)) {
       throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 格式无效');
     }
-    if (parsed.componentTree.length < 1 || parsed.componentTree.length > 100) {
-      throw new ServiceUnavailableException('ObjectSculptSpec 组件数量必须在 1 到 100 之间');
+    const minimumComponents = category === 'building' && /城堡|castle/i.test(objectType) ? 12 : category === 'building' ? 6 : 1;
+    if (parsed.componentTree.length < minimumComponents || parsed.componentTree.length > 100) {
+      throw new ServiceUnavailableException('ObjectSculptSpec 组件数量必须在 ' + minimumComponents + ' 到 100 之间；禁止用单一整体 Mesh 代替结构重建');
     }
     const materialsInput = parsed.materials && typeof parsed.materials === 'object' && !Array.isArray(parsed.materials) ? parsed.materials : {};
     const materials: Record<string, any> = {};

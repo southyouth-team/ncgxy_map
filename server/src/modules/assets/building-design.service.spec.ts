@@ -284,10 +284,9 @@ describe('BuildingDesignService', () => {
     edited.materials.wall.color = '#aa8866';
 
     const reviewed = service.reviewObjectDesign(identified.design, identified.designToken, edited);
-    expect(reviewed.design).toMatchObject({
-      reviewed: true,
-      objectSculptSpec: { componentTree: [{ dimensions: { width: 9.5 } }], materials: { wall: { color: '#aa8866' } } },
-    });
+    expect(reviewed.design.reviewed).toBe(true);
+    expect(reviewed.design.objectSculptSpec.componentTree[0].dimensions.width).toBe(9.5);
+    expect(reviewed.design.objectSculptSpec.materials.wall.color).toBe('#aa8866');
     expect(service.consumeDesignToken(reviewed.designToken, reviewed.design)).toBe(true);
     expect(service.consumeDesignToken(identified.designToken, reviewed.design)).toBe(false);
     expect(service.consumeDesignToken(reviewed.designToken, identified.design)).toBe(false);

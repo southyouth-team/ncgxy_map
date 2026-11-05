@@ -1,3 +1,12 @@
+# 2026-11-05 — AI 建筑参考图驱动参数化 3D 生成
+
+- 调整素材工坊定位：AI 图片是建筑外观参考图，并可用于 2.5D 表现；不再将图片理解为 3D 模型本身。
+- 新增 `POST /api/v1/assets/ai-image/analyze-building`，沿用 `VISION_MODEL` 对参考图提取建筑模板、楼层、屋顶、窗户、门、墙面色板、置信度、证据和识别限制。
+- 识别参数随参考图审核入库，写入同一 Feature 绑定的视觉资产 manifest；参数高度明确标记为场景视觉单位估算，不是实测高度。
+- 校园 3D 建筑继续由 `createPixelBuilding` 参数化生成器构建真实 Three.js Mesh；读取审核通过的 AI 结构参数生成立面、屋顶和门窗。2.5D 使用参考图 Sprite，两个视角共享 Feature ID。
+- 建筑空间位置、footprint、碰撞、walkable 不变；人工 GLB 导入保留为可选兼容路径。
+- 新增建筑参考图识别服务单测、参数清单解析单测和服务端参数持久化单测。
+
 ## 2026-11-05 — 素材工坊接入服务端 AI 图片生成
 
 - 新增受身份校验保护的 `POST /api/v1/assets/ai-image/generate`，由服务端调用 OpenAI 兼容的 `/images/generations` 接口，前端不接触 API Key。

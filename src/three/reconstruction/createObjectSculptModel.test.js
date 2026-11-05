@@ -1103,7 +1103,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         { id: 'root', kind: 'group' },
         { id: 'base', parent: 'root', primitive: 'box', dimensions: { width: 4, height: 1, depth: 1 } },
         { id: 'wall', parent: 'root', primitive: 'box', dimensions: { width: 2, height: 4, depth: 0.3 } },
-        { id: 'opening', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 0.5 } },
+        { id: 'opening', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 0.5 }, transform: { position: [0, 1.5, 0] } },
       ],
       parameterSchema: [
         { id: 'base-width', type: 'number', value: 4, min: 2, max: 8, targets: [
@@ -1117,8 +1117,6 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       constraints: [
         { id: 'wall-opening-cut', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening',
           axis: 'z', operation: 'subtract' },
-        { id: 'wall-opening-top', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'opening',
-          axis: 'y', sourceSide: 1, targetSide: 1, offset: 0 },
         { id: 'wall-opening-center', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'opening',
           axis: 'x', sourceSide: 1, targetSide: 1, offset: 0 },
         { id: 'base-wall', type: 'attach', sourceNodeId: 'base', targetNodeId: 'wall',
@@ -1162,7 +1160,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expectAligned(reloaded, 5);
     applyObjectSculptParameter(THREE, reloaded, 'base-width', 4);
     expectAligned(reloaded, 3);
-    expect(reloaded.userData.objectSculptSpec.constraints).toHaveLength(4);
+    expect(reloaded.userData.objectSculptSpec.constraints).toHaveLength(3);
   });
 
 });

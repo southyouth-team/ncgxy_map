@@ -34,4 +34,17 @@ export class BuildingDesignController {
     return this.service.analyzeSceneReference(category, objectType, visualStyle, imageDataUrl, approvalToken, prompt);
   }
 
+  @Post('review-scene')
+  @ApiOperation({ summary: '审核并编辑通用场景结构参数，签发最终模板发布凭证' })
+  reviewScene(
+    @Body('category') category: string,
+    @Body('objectType') objectType: string,
+    @Body('visualStyle') visualStyle: string,
+    @Body('design') design: Record<string, unknown>,
+    @Body('designToken') designToken: string,
+    @Body('geometry') geometry: Record<string, unknown>,
+  ) {
+    return this.service.reviewSceneDesign(category, objectType, visualStyle, design, designToken, geometry);
+  }
+
 }

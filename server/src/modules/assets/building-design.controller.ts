@@ -38,6 +38,15 @@ export class BuildingDesignController {
     return this.service.reviewObjectDesign(design, designToken, objectSculptSpec);
   }
 
+  @Post('add-object-parameters')
+  @ApiOperation({ summary: '通过自然语言为当前结构化模型动态新增可调参数' })
+  addObjectParameters(
+    @Body('objectSculptSpec') objectSculptSpec: Record<string, unknown>,
+    @Body('instruction') instruction: string,
+  ) {
+    return this.service.addObjectParameters(objectSculptSpec, instruction);
+  }
+
   @Post('modify-object')
   @ApiOperation({ summary: '对选中组件执行受约束的 AI 局部修改' })
   modifyObject(

@@ -66,7 +66,7 @@ export function createThreeAssetTemplateRuntime(THREE) {
     const position = vector(transform.position, [0, 0, 0], 'position', -100000, 100000);
     const rotation = vector(transform.rotation, [0, 0, 0], 'rotation', -Math.PI * 200, Math.PI * 200);
     const scale = vector(transform.scale, [1, 1, 1], 'scale', 0.001, 100, false);
-    object.name = String(options.name || definition.name).slice(0, 120);
+    if (options.name || definition.name) object.name = String(options.name || definition.name).slice(0, 120);
     object.position.set(...position);
     object.rotation.set(...rotation);
     object.scale.set(...scale);

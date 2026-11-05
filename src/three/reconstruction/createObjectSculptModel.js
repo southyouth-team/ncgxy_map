@@ -178,12 +178,10 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   const root = new THREE.Group();
   root.name = String(spec.targetName || spec.name || 'reconstructed-object').slice(0, 120);
   const groups = new Map();
-  const materials = new Map();
   const materialSpecs = spec.materials && typeof spec.materials === 'object' ? spec.materials : {};
   const resolveMaterial = key => {
     const materialKey = typeof key === 'string' ? key : 'default';
-    if (!materials.has(materialKey)) materials.set(materialKey, normalizeMaterial(THREE, Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL));
-    return materials.get(materialKey);
+    return normalizeMaterial(THREE, Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL);
   };
   const ordered = [...spec.componentTree].sort((a, b) => {
     const depth = node => {
@@ -199,7 +197,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     group.userData.componentId = node.id;
     group.userData.componentRole = String(node.role || 'component').slice(0, 80);
     const geometry = createGeometry(THREE, node);
-    const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material).clone());
+    const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
     mesh.name = node.id + ':mesh';
     mesh.userData.componentId = node.id;
     mesh.castShadow = true;

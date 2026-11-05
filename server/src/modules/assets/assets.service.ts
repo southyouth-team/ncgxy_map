@@ -240,7 +240,7 @@ export class AssetsService {
       if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id) || ids.has(node.id)) throw new BadRequestException('资产组件 ID 无效或重复');
       ids.add(node.id);
     }
-    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus']);
+    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube']);
     const byId = new Map<string, any>(spec.componentTree.map((node: any) => [node.id, node] as [string, any]));
     for (const node of spec.componentTree) {
       if (node.parent && !ids.has(node.parent)) throw new BadRequestException('资产组件父节点不存在：' + node.id);
@@ -250,6 +250,23 @@ export class AssetsService {
         if (!primitives.has(String(node.primitive || '').toLowerCase())) throw new BadRequestException('资产组件几何类型无效：' + node.id);
         if (!node.dimensions || ['width','height','depth'].some(key => !Number.isFinite(Number(node.dimensions[key])) || Number(node.dimensions[key]) < 0.02 || Number(node.dimensions[key]) > 100)) throw new BadRequestException('资产组件尺寸无效：' + node.id);
         if (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(spec.materials, node.material)) throw new BadRequestException('资产组件材质引用无效：' + node.id);
+        if (String(node.primitive).toLowerCase() === 'tube') {
+          const path = node.geometryDescriptor?.path;
+          if (!Array.isArray(path) || path.length < 2 || path.length > 32
+            || path.some((point: any) => !Array.isArray(point) || point.length !== 3
+              || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {
+            throw new BadRequestException('资产 tube 路径必须包含 2 到 32 个有效三维归一化坐标点：' + node.id);
+          }
+          const radius = Number(node.geometryDescriptor?.radius ?? 0.08);
+          const tubularSegments = Number(node.geometryDescriptor?.tubularSegments ?? 32);
+          const radialSegments = Number(node.geometryDescriptor?.radialSegments ?? 8);
+          if (!Number.isFinite(radius) || radius < 0.01 || radius > 10
+            || !Number.isInteger(tubularSegments) || tubularSegments < 3 || tubularSegments > 128
+            || !Number.isInteger(radialSegments) || radialSegments < 3 || radialSegments > 24
+            || (node.geometryDescriptor?.closed !== undefined && typeof node.geometryDescriptor.closed !== 'boolean')) {
+            throw new BadRequestException('资产 tube 几何参数无效：' + node.id);
+          }
+        }
       }
       const visited = new Set([node.id]);
       let parent = node.parent;

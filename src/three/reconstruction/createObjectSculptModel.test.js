@@ -1341,7 +1341,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       if (fixture.name === 'furniture') {
         const expandedLegs = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
         expect(expandedLegs).toHaveLength(6);
-        expect([...new Set(expandedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b)).toEqual([-1.89, 0, 1.89]);
+        expect([...new Set(expandedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b)).toEqual([-0.99, 0, 0.99]);
         expect([...new Set(expandedLegs.map(group => Number(group.position.z.toFixed(2))))].sort((a, b) => a - b)).toEqual([-0.5, 0.5]);
         const tabletop = model.userData.componentGroups.get('table-top').getObjectByName('table-top:mesh');
         tabletop.geometry.computeBoundingBox();

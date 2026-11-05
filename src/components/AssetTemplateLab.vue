@@ -38,23 +38,44 @@ function resize() {
  */
 function fitSandboxGround() {
   if (!camera || !controls) return
-  const groundWidth = 180
-  const groundDepth = 140
-  const radius = Math.sqrt(groundWidth * groundWidth + groundDepth * groundDepth) / 2
-  const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov / 2)
-  const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(camera.aspect, 0.1))
-  const limitingHalfFov = Math.max(0.05, Math.min(verticalHalfFov, horizontalHalfFov))
-  const distance = (radius / Math.sin(limitingHalfFov)) * 1.2
-  const direction = new THREE.Vector3(1, 0.85, 1).normalize()
+
+  const halfWidth = 90
+  const halfDepth = 70
+  const corners = [
+    new THREE.Vector3(-halfWidth, -0.08, -halfDepth),
+    new THREE.Vector3(halfWidth, -0.08, -halfDepth),
+    new THREE.Vector3(-halfWidth, -0.08, halfDepth),
+    new THREE.Vector3(halfWidth, -0.08, halfDepth),
+  ]
+  const direction = new THREE.Vector3(1, 1.15, 1).normalize()
 
   controls.target.set(0, 0, 0)
-  camera.position.copy(controls.target).addScaledVector(direction, distance)
   camera.near = 0.1
-  camera.far = Math.max(3000, distance * 10)
+  camera.far = 3000
   camera.updateProjectionMatrix()
+
+  // 逐个检查地面四角的实际投影范围，避免包围球算法把镜头推得过远。
+  let distance = 150
+  let fits = false
+  for (let i = 0; i < 40; i += 1) {
+    camera.position.copy(controls.target).addScaledVector(direction, distance)
+    camera.lookAt(controls.target)
+    camera.updateMatrixWorld()
+    const viewProjection = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    fits = corners.every(corner => {
+      const projected = corner.clone().applyMatrix4(viewProjection)
+      return Math.abs(projected.x) <= 0.84 && Math.abs(projected.y) <= 0.84 && projected.z >= -1 && projected.z <= 1
+    })
+    if (fits) break
+    distance *= 1.06
+  }
+
+  // 额外留出约 16% 的视觉边距，地面仍占据主要视口。
+  camera.position.copy(controls.target).addScaledVector(direction, distance * 1.16)
   camera.lookAt(controls.target)
+  camera.updateMatrixWorld()
   controls.minDistance = 12
-  controls.maxDistance = Math.max(2500, distance * 5)
+  controls.maxDistance = 1200
   controls.update()
 }
 
@@ -180,9 +201,9 @@ onMounted(() => {
     selectedId.value = templates.value.find(x => x.category === 'building')?.id || templates.value[0]?.id || ''
     scene = runtime.createSandboxScene()
     scene.background = new THREE.Color('#dfe8e0')
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshStandardMaterial({ color: '#9eae8d', roughness: 1 }))
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshStandardMaterial({ color: '#83b86f', roughness: 1 }))
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.08; ground.receiveShadow = true; ground.name = 'sandbox-ground'; scene.add(ground)
-    const grid = new THREE.GridHelper(180, 36, '#71836e', '#c2cdbb'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
+    const grid = new THREE.GridHelper(180, 36, '#557b4d', '#a9c99e'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
     camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500); camera.position.set(30, 28, 34)
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap

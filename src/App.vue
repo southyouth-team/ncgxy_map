@@ -3,7 +3,7 @@ import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 
 import { createCampusEngine } from './three/engine/createCampusEngine.js'
 const CampusPlanEditor = defineAsyncComponent(() => import('./editor/CampusPlanEditor.vue'))
 const IndoorFloorPlanEditor = defineAsyncComponent(() => import('./components/IndoorFloorPlanEditor.vue'))
-const CampusAssetWorkshop = defineAsyncComponent(() => import('./components/CampusAssetWorkshop.vue'))
+const BuildingTemplateWorkshop = defineAsyncComponent(() => import('./components/BuildingTemplateWorkshop.vue'))
 const isAssetWorkshopRoute = window.location.pathname.replace(/\/+$/, '') === '/asset-workshop'
 const BuildingFootprintEditor = defineAsyncComponent(() => import('./components/BuildingFootprintEditor.vue'))
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
@@ -565,7 +565,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <CampusAssetWorkshop v-if="isAssetWorkshopRoute" />
+  <BuildingTemplateWorkshop v-if="isAssetWorkshopRoute" />
   <main v-else ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isCampusExplorer } ]">
     <div ref="viewport" class="scene-viewport" :style="{ display: showEditor && editorViewMode === '2d' ? 'none' : 'block' }"></div>
     <CampusPlanEditor v-if="showEditor && editorViewMode === '2d'" :campus-id="sceneDocument?.campusId" :map-id="sceneDocument?.mapId" :api-base="API_BASE" :dev-user-id="DEV_USER_ID" @preview="switchEditorView('3d', $event)" @close="closeEditor" />

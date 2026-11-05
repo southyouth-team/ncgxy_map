@@ -179,11 +179,8 @@ async function generateModel() {
     const index = instances.value.length
     model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
     model.scale.setScalar(scale.value)
-    // Normalize the complete generated asset to the ground plane (Y=0) before adding it to the scene.
-    model.updateMatrixWorld(true)
-    const modelBounds = new THREE.Box3().setFromObject(model)
-    if (Number.isFinite(modelBounds.min.y)) model.position.y -= modelBounds.min.y
-    model.updateMatrixWorld(true)
+    // 不在 Runtime 层强制整体接地：悬空、架空或飞行资产应保留生成结构中的真实高度。
+    // 地面接触与内部支撑关系由视觉分析和 ObjectSculptSpec 决定，不能通过移动整个根节点掩盖结构偏差。
     model.userData.assetInstanceId = id
     model.userData.assetTemplate = { id: 'ai-generated:' + id, version: 1, category: spec.category || 'other', objectType: spec.objectType || objectType.value }
     scene.add(model)

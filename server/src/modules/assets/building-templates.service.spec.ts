@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BuildingDesignService } from './building-design.service';
@@ -72,7 +73,7 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
 
   it('creates and publishes a signed procedural template for a supported non-building category', async () => {
     const design = {
-      schemaVersion: 1, source: 'ai-vision-estimate', category: 'vegetation',
+      schemaVersion: 1, source: 'ai-vision-estimate', category: 'vegetation', referenceImageSha256: createHash('sha256').update(Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0,1,2,3,4])).digest('hex'),
       objectType: '香樟树', visualStyle: 'low-poly', geometry: { form: 'tree', crownLayers: 3 },
       confidence: 0.8, evidence: [], limitations: [], reviewed: false,
     };
@@ -87,6 +88,32 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
     });
     const published = await service.approve(item.templateId);
     expect(published).toMatchObject({ status: 'ready', category: 'vegetation', modelType: 'procedural' });
+  });
+
+  it('rejects a reference image that differs from the image digest signed by recognition', async () => {
+    const design = {
+      schemaVersion: 1, source: 'ai-vision-estimate', category: 'vegetation',
+      objectType: '香樟树', visualStyle: 'low-poly',
+      referenceImageSha256: createHash('sha256').update(Buffer.from('approved-image')).digest('hex'),
+      geometry: { form: 'tree', crownLayers: 3 },
+      confidence: 0.8, evidence: [], limitations: [], reviewed: false,
+    };
+    const item = await service.create({
+      name: '签名图片绑定测试', category: 'vegetation', objectType: '香樟树', visualStyle: 'low-poly',
+      sourceType: 'ai_generated', modelType: 'procedural', design, designToken: 'signed-scene-token',
+    });
+    const replacement = Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0,1,2,3,4]);
+    await expect(service.uploadFile(item.templateId, 'reference', {
+      buffer: replacement, size: replacement.length, originalname: 'different.png',
+    })).rejects.toThrow('参考图片与签发结构参数时使用的图片不一致');
+  });
+
+  it('rejects spatial procedural categories until their geometry-aware publishing contract exists', async () => {
+    await expect(service.create({
+      name: '湖泊空间模板', category: 'water', objectType: '湖泊', visualStyle: 'stylized',
+      sourceType: 'ai_generated', modelType: 'procedural',
+      design: { schemaVersion: 1 }, designToken: 'not-issued',
+    })).rejects.toThrow('该场景类别尚未接入参数化生成与识别 schema');
   });
 
   it('rejects a scene design whose embedded category, object type or style differs from template metadata', async () => {

@@ -2,6 +2,31 @@ import { BadRequestException, Injectable, Logger, ServiceUnavailableException } 
 import { ConfigService } from '@nestjs/config';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const PARAMETER_BINDINGS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','visibility.visible']);
+function validateGeneratedParameterSchema(input: unknown, componentTree: any[]) {
+  if (input == null) return [];
+  if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('视觉模型返回的 parameterSchema 无效或超出 100 项');
+  const ids = new Set<string>(), nodes = new Set(componentTree.map(node => node.id));
+  for (const item of input) {
+    if (!item || typeof item !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(item.id || '') || ids.has(item.id)) throw new ServiceUnavailableException('AI 参数 ID 无效或重复');
+    ids.add(item.id);
+    if (!['number','color','boolean','select'].includes(item.type)) throw new ServiceUnavailableException('AI 参数类型无效：' + item.id);
+    if (item.type === 'number' && (!Number.isFinite(item.value) || !Number.isFinite(item.min) || !Number.isFinite(item.max) || item.min > item.max || item.value < item.min || item.value > item.max)) throw new ServiceUnavailableException('AI 数值参数范围无效：' + item.id);
+    if (item.type === 'color' && (typeof item.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(item.value))) throw new ServiceUnavailableException('AI 颜色参数无效：' + item.id);
+    if (item.type === 'boolean' && typeof item.value !== 'boolean') throw new ServiceUnavailableException('AI 布尔参数无效：' + item.id);
+    if (item.type === 'select' && (!Array.isArray(item.options) || !item.options.some((option: any) => option?.value === item.value))) throw new ServiceUnavailableException('AI 枚举参数无效：' + item.id);
+    if (!Array.isArray(item.targets) || !item.targets.length || item.targets.length > 100) throw new ServiceUnavailableException('AI 参数目标无效：' + item.id);
+    for (const target of item.targets) {
+      if (!nodes.has(target?.nodeId) || !PARAMETER_BINDINGS.has(target?.property)) throw new ServiceUnavailableException('AI 参数目标引用无效：' + item.id);
+      const mode = target.mode || 'set';
+      if (!['set','multiply','add','visible-from','visible-through'].includes(mode)) throw new ServiceUnavailableException('AI 参数目标运算无效：' + item.id);
+      if (['visible-from','visible-through'].includes(mode) && (target.property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) throw new ServiceUnavailableException('AI 参数可见性阈值无效：' + item.id);
+      if (target.property === 'geometry.primitive' && item.type !== 'select') throw new ServiceUnavailableException('几何类型参数必须是枚举：' + item.id);
+      if (target.property.startsWith('material.') && mode !== 'set') throw new ServiceUnavailableException('材质参数只允许 set：' + item.id);
+    }
+  }
+  return input;
+}
 
 @Injectable()
 export class ImageGenerationService {
@@ -216,10 +241,7 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('组件未连接到主体根节点：' + String(node.id || 'unknown'));
       }
     }
-    if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) {
-      throw new ServiceUnavailableException('视觉模型返回的 parameterSchema 无效或超出 100 项');
-    }
-    spec.parameterSchema = spec.parameterSchema || [];
+    spec.parameterSchema = validateGeneratedParameterSchema(spec.parameterSchema, spec.componentTree);
     return { provider: baseUrl, model, objectType, visualStyle, objectSculptSpec: spec };
   }
 

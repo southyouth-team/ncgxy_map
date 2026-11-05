@@ -286,7 +286,7 @@ export class BuildingDesignService {
       water: { shoreWidth: [0.35, 0.1, 4], depthEstimate: [1, 0.1, 20] },
       terrain: { relief: [2, 0, 10], slope: [0.25, 0, 1], layerCount: [3, 1, 8], rockiness: [0.2, 0, 1] },
     };
-    const decimalFields = new Set(['trunkRatio', 'branchSpread', 'spanRatio', 'curbHeight', 'slope', 'rockiness']);
+    const decimalFields = new Set(['trunkRatio', 'branchSpread', 'spanRatio', 'curbHeight', 'slope', 'rockiness', 'roadWidth', 'sidewalkWidth', 'shoreWidth', 'depthEstimate', 'relief']);
     for (const [key, [fallback, min, max]] of Object.entries(numberFields[category])) {
       const value = bounded(parsed[key], fallback, min, max);
       geometry[key] = decimalFields.has(key) ? value : Math.round(value);

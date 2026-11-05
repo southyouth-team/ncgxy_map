@@ -84,10 +84,12 @@ export class BuildingDesignService {
               role: 'system',
               content: [
                 '你是建筑视觉分析助手。根据单张建筑参考图，提取可用于参数化低多边形建筑生成器的外观参数。',
-                '只返回 JSON，不要 Markdown。字段：template（必须从以下枚举选择：' + TEMPLATES.join('、') + '）；floors（1-30 整数）；roofStyle（flat/pitched/span/glass）；roofRise（0-3 的场景视觉单位）；windowDensity（0.1-3）；windowWidth（0.28-2）；windowHeight（0.2-2）；doorWidth（0.5-3）；wallPalette（wallCream/wallPeach/wallMint/wall）；confidence（0-1）；evidence（字符串数组，最多 6 条）；limitations（字符串数组，最多 6 条）。',
+                '只返回 JSON，不要 Markdown。字段：template（必须从以下枚举选择：' + TEMPLATES.join('、') + '）；floors（1-30 整数）；roofStyle（flat/pitched/span/glass）；roofRise（0-3 场景单位）；massing（rectangular/L-shaped/U-shaped/T-shaped/H-shaped/courtyard）；facadeStyle（modern/classical/industrial/glass/brick）；facadeSections（1-8）；windowRows（1-30）；windowColumns（1-24）；windowDensity（0.1-3）；windowWidth（0.28-2）；windowHeight（0.2-2）；hasBalconies（布尔值）；balconyFloors（楼层数字数组）；columnCount（0-20）；hasArcade（布尔值）；entrancePosition（front/left/right/rear）；podiumFloors（0-5）；roofColor（roofRed/roofGray/roofGreen/roofBlue）；doorWidth（0.5-3）；wallPalette（wallCream/wallPeach/wallMint/wall）；confidence（0-1）；evidence（字符串数组，最多 8 条）；limitations（字符串数组，最多 8 条）。'
                 '不要输出建筑真实长宽、真实高度、地理位置或测绘结论。单张图无法确认的结构按保守值估计，并降低 confidence。',
                 'roofStyle: 平屋顶选 flat，双坡屋顶选 pitched，跨度大/体育馆式屋顶选 span，玻璃顶选 glass。',
-                'windowDensity 表示每段立面相对窗户密度，常规教学楼约 1，密集宿舍楼约 1.4，稀疏公共建筑约 0.5。',
+                'windowDensity 表示窗户密度；windowRows/windowColumns 描述可见立面的行列节奏。请按图片实际可见结构判断，不要统一套用教学楼。',
+                'massing 必须根据建筑主体轮廓选择；facadeStyle、facadeSections、阳台、柱廊、入口位置和屋顶颜色必须反映图片可见特征。无法确认时选保守值并写入 limitations。',
+                '请优先识别立面结构：主楼体与侧翼、裙房/基座、重复窗格、阳台、柱廊、檐口、屋顶体量；不要只给建筑分类。',
               ].join('\n'),
             },
             {
@@ -133,6 +135,18 @@ export class BuildingDesignService {
       height: Math.min(80, Math.max(1, floors * 1.25)),
       heightBasis: 'estimated-scene-units-not-surveyed',
       roofStyle: ROOFS.includes(parsed?.roofStyle) ? parsed.roofStyle : 'flat',
+      massing: ['rectangular','L-shaped','U-shaped','T-shaped','H-shaped','courtyard'].includes(parsed?.massing) ? parsed.massing : 'rectangular',
+      facadeStyle: ['modern','classical','industrial','glass','brick'].includes(parsed?.facadeStyle) ? parsed.facadeStyle : 'modern',
+      facadeSections: Math.round(number(parsed?.facadeSections, 3, 1, 8)),
+      windowRows: Math.round(number(parsed?.windowRows, floors, 1, 30)),
+      windowColumns: Math.round(number(parsed?.windowColumns, 6, 1, 24)),
+      hasBalconies: parsed?.hasBalconies === true,
+      balconyFloors: Array.isArray(parsed?.balconyFloors) ? parsed.balconyFloors.map((v: unknown) => Math.round(number(v, 1, 1, floors))).filter((v: number) => v <= floors).slice(0, 12) : [],
+      columnCount: Math.round(number(parsed?.columnCount, 0, 0, 20)),
+      hasArcade: parsed?.hasArcade === true,
+      entrancePosition: ['front','left','right','rear'].includes(parsed?.entrancePosition) ? parsed.entrancePosition : 'front',
+      podiumFloors: Math.round(number(parsed?.podiumFloors, 0, 0, 5)),
+      roofColor: ['roofRed','roofGray','roofGreen','roofBlue'].includes(parsed?.roofColor) ? parsed.roofColor : 'roofRed',
       roofRise: number(parsed?.roofRise, 0.6, 0, 3),
       windowDensity: number(parsed?.windowDensity, 1, 0.1, 3),
       windowWidth: number(parsed?.windowWidth, 0.48, 0.28, 2),
@@ -141,7 +155,7 @@ export class BuildingDesignService {
       wallPalette: WALLS.includes(parsed?.wallPalette) ? parsed.wallPalette : 'wallCream',
       confidence: number(parsed?.confidence, 0.35, 0, 1),
       evidence: Array.isArray(parsed?.evidence) ? parsed.evidence.filter((item: unknown) => typeof item === 'string').slice(0, 6).map((item: string) => item.slice(0, 180)) : [],
-      limitations: Array.isArray(parsed?.limitations) ? parsed.limitations.filter((item: unknown) => typeof item === 'string').slice(0, 6).map((item: string) => item.slice(0, 180)) : [],
+      limitations: Array.isArray(parsed?.limitations) ? parsed.limitations.filter((item: unknown) => typeof item === 'string').slice(0, 8).map((item: string) => item.slice(0, 180)) : [],
       reviewed: false,
     };
     const designToken = randomUUID();

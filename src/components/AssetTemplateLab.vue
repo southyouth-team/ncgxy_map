@@ -313,12 +313,13 @@ async function addParametersFromConversation() {
       instruction: parameterInstruction.value.trim(),
     })
     root.userData.objectSculptSpec = result.objectSculptSpec
-    if (root.userData.parameterBaseSpec) root.userData.parameterBaseSpec.parameterSchema = JSON.parse(JSON.stringify(result.objectSculptSpec.parameterSchema || []))
+    root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(result.objectSculptSpec))
     editorRevision.value += 1
     parameterInstruction.value = ''
     const added = (result.addedParameters || []).map(item => item.label).join('、')
     const unsupported = (result.unsupported || []).join('；')
-    status.value = added ? '已新增模型参数：' + added : '参数设计完成，未新增参数'
+    const generators = (result.addedGenerators || []).map(item => item.id).join('、')
+    status.value = added ? '已新增模板参数：' + added + (generators ? '；结构生成规则：' + generators : '') : '参数设计完成，未新增参数'
     if (unsupported) error.value = '当前结构暂不支持：' + unsupported
   } catch (e) {
     error.value = e?.message || 'AI 参数设计失败'
@@ -477,9 +478,9 @@ onBeforeUnmount(() => {
         </section>
         <section v-if="selectedSpec" class="ai-local-editor">
           <label>对话式新增参数 · 描述希望以后可调整的属性</label>
-          <textarea v-model="parameterInstruction" rows="3" placeholder="例如：给这个大门增加长度、宽度和高度三个参数；或者让现有楼层组件支持楼层数调整"></textarea>
+          <textarea v-model="parameterInstruction" rows="3" placeholder="例如：给这个大门增加长度、宽度和高度变量；给教学楼增加楼层数变量，默认 3 层、最高 8 层"></textarea>
           <button class="generate" :disabled="parameterizing || !parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing ? 'AI 正在设计参数…' : '根据对话新增参数' }}</button>
-          <p class="hint">AI 会检查当前结构，只能为真实存在的组件创建参数绑定；当前没有对应重复组件时，会明确提示结构缺口，不会伪造动态生成能力。</p>
+          <p class="hint">AI 在模板阶段声明参数和安全的 repeat 结构规则；保存后，正式场景可直接调节变量，不需要再次调用 AI。若当前模型缺少可重复的楼层/房间原型，会明确提示结构缺口。</p>
         </section>
         <section v-if="selectedSpec" class="asset-actions">
           <button class="secondary" @click="saveSelectedAsset">保存完整资产</button>

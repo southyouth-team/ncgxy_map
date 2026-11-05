@@ -54,7 +54,7 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
       modelType: 'procedural',
       design: { schemaVersion: 1 },
       designToken: 'not-a-building-token',
-    })).rejects.toThrow('当前仅建筑类别接入参数化生成器');
+    })).rejects.toThrow('该场景类别尚未接入参数化生成与识别 schema');
 
     expect(buildingDesign.consumeDesignToken).not.toHaveBeenCalled();
   });

@@ -24,8 +24,10 @@ const componentTree = computed(() => {
   const nodes = selectedSpec.value?.componentTree || []
   const byParent = new Map()
   nodes.forEach(node => { const key = node.parent || ''; if (!byParent.has(key)) byParent.set(key, []); byParent.get(key).push(node) })
-  const build = (parent, depth = 0) => (byParent.get(parent) || []).map(node => ({ ...node, depth, children: build(node.id, depth + 1) }))
-  return build('')
+  const rows = []
+  const visit = (parent, depth = 0) => (byParent.get(parent) || []).forEach(node => { rows.push({ ...node, depth }); visit(node.id, depth + 1) })
+  visit('')
+  return rows
 })
 const selectedComponentColor = computed(() => selectedComponent.value?.material && selectedSpec.value?.materials?.[selectedComponent.value.material]?.color || '#b8b8b8')
 const selectedComponentVisible = computed(() => selectedComponent.value?.hidden !== true)
@@ -207,6 +209,22 @@ function toggleSelectedComponentVisibility() {
   const group = getComponentGroup(selectedInstanceId.value, node.id)
   if (group) group.visible = node.hidden !== true
 }
+let pointerDownPosition = null
+function onViewportPointerDown(event) { pointerDownPosition = { x: event.clientX, y: event.clientY } }
+function onViewportPointerUp(event) {
+  if (!pointerDownPosition || Math.hypot(event.clientX - pointerDownPosition.x, event.clientY - pointerDownPosition.y) > 4 || !renderer || !camera) return
+  const rect = renderer.domElement.getBoundingClientRect()
+  const pointer = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+  const raycaster = new THREE.Raycaster()
+  raycaster.setFromCamera(pointer, camera)
+  const hits = raycaster.intersectObjects([...objects.values()], true)
+  const hit = hits.find(item => item.object.userData?.componentId)
+  if (!hit) return
+  const componentId = hit.object.userData.componentId
+  for (const [instanceId, root] of objects) {
+    if (root.userData?.componentGroups?.has(componentId)) { selectedInstanceId.value = instanceId; selectedComponentId.value = componentId; break }
+  }
+}
 function updateSelectedComponentTransform(axis, value) {
   const node = selectedComponent.value
   const group = getComponentGroup(selectedInstanceId.value, node?.id)
@@ -268,6 +286,8 @@ onMounted(() => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace; viewport.value.replaceChildren(renderer.domElement)
     controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0); controls.update()
+    renderer.domElement.addEventListener('pointerdown', onViewportPointerDown)
+    renderer.domElement.addEventListener('pointerup', onViewportPointerUp)
     observer = new ResizeObserver(resize); observer.observe(viewport.value); resize(); fitSandboxGround()
     const render = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(render) }; render()
     status.value = '沙盒已就绪；可输入提示词或上传图片生成独立模型'
@@ -275,7 +295,10 @@ onMounted(() => {
 })
 watch(scale, value => { const object = objects.get(selectedInstanceId.value); if (object) object.scale.setScalar(value) })
 onBeforeUnmount(() => {
-  cancelAnimationFrame(frame); observer?.disconnect(); controls?.dispose()
+  cancelAnimationFrame(frame); observer?.disconnect()
+  renderer?.domElement?.removeEventListener('pointerdown', onViewportPointerDown)
+  renderer?.domElement?.removeEventListener('pointerup', onViewportPointerUp)
+  controls?.dispose()
   scene?.traverse(o => { o.geometry?.dispose?.(); if (Array.isArray(o.material)) o.material.forEach(m => m.dispose?.()); else o.material?.dispose?.() })
   renderer?.dispose()
 })
@@ -308,17 +331,10 @@ onBeforeUnmount(() => {
         <section v-if="selectedSpec" class="component-editor">
           <h3>模型结构 <span>{{ selectedSpec.componentTree.length }} 个部件</span></h3>
           <div class="component-tree">
-            <template v-for="node in componentTree" :key="node.id">
-              <button class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8 + node.depth * 15)+'px'}" @click="selectComponent(node.id)">
-                <span>{{ node.name || node.id }}</span><small>{{ node.role || node.primitive || '组件' }}</small>
-              </button>
-              <template v-for="child in node.children" :key="child.id">
-                <button class="component-node" :class="{active:selectedComponentId===child.id}" :style="{paddingLeft:(23 + child.depth * 15)+'px'}" @click="selectComponent(child.id)"><span>{{ child.name || child.id }}</span><small>{{ child.role || child.primitive || '组件' }}</small></button>
-                <button v-for="leaf in child.children" :key="leaf.id" class="component-node" :class="{active:selectedComponentId===leaf.id}" :style="{paddingLeft:(38 + leaf.depth * 15)+'px'}" @click="selectComponent(leaf.id)"><span>{{ leaf.name || leaf.id }}</span><small>{{ leaf.role || leaf.primitive || '组件' }}</small></button>
-              </template>
-            </template>
-          </div>
-          <div v-if="selectedComponent" class="component-properties">
+            <button v-for="node in componentTree" :key="node.id" class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8 + node.depth * 15)+'px'}" @click="selectComponent(node.id)">
+              <span>{{ node.name || node.id }}</span><small>{{ node.role || node.primitive || '组件' }}</small>
+            </button>
+       <div v-if="selectedComponent" class="component-properties">
             <b>{{ selectedComponent.name || selectedComponent.id }}</b>
             <label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)">
             <label>局部位置 X / Y / Z</label>

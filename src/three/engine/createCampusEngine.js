@@ -513,6 +513,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function setBuildingTemplates(templates) {
+    options.buildingTemplates = Array.isArray(templates) ? templates.filter(item => item?.status === 'ready') : []
+  }
+
   function previewCampusPlan(document) {
     if (!scene || !document) return false
     // Prefer the canonical GeoJSON FeatureCollection; legacy arrays are a transitional UI adapter.
@@ -1893,5 +1897,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, resetView, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, resetView, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

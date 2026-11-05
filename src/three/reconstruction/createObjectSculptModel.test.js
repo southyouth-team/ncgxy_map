@@ -340,6 +340,42 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'vase').dimensions.height).toBe(4.5);
   });
 
+  it('builds a continuous sweep mesh from a 3D path and a 2D cross-section', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { metal: { color: '#777777', roughness: 0.35, metalness: 0.7 } },
+      componentTree: [{
+        id: 'curved-duct', primitive: 'sweep', material: 'metal',
+        dimensions: { width: 4, height: 3, depth: 2 },
+        geometryDescriptor: {
+          path: [[-0.5, -0.3, 0], [-0.2, 0, 0], [0.2, 0.2, 0.1], [0.5, 0.3, 0.2]],
+          profile: [[-0.08, -0.06], [0.08, -0.06], [0.08, 0.06], [-0.08, 0.06]],
+          steps: 40,
+        },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.userData.componentGroups.get('curved-duct').getObjectByName('curved-duct:mesh');
+    expect(mesh.geometry.type).toBe('ExtrudeGeometry');
+    expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(100);
+    expect(mesh.geometry.getAttribute('normal').count).toBe(mesh.geometry.getAttribute('position').count);
+  });
+
+  it('rejects sweep profiles with invalid normalized cross-section coordinates', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'duct', primitive: 'sweep', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          path: [[-0.5, 0, 0], [0.5, 0, 0]],
+          profile: [[-0.5, -0.5], [0.8, -0.5], [0, 0.5]],
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('必须是 [-0.5,0.5] 范围内的二维坐标');
+  });
+
   it('rejects lathe profiles outside normalized radius and height bounds', () => {
     const spec = {
       schemaVersion: '2.0',

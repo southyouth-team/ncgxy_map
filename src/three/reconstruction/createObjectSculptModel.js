@@ -121,7 +121,9 @@ function expandObjectSculptSpec(spec) {
     if ((constraint.type === 'follow' || constraint.type === 'span') && (!metric || !target)) {
       throw new TypeError('结构约束引用了不存在的生成器或组件：' + constraint.id);
     }
-    const key = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis || constraint.sourceNodeId);
+    const key = constraint.type === 'cutout'
+      ? constraint.targetNodeId + ':cutout:' + constraint.cutterNodeId
+      : constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis || constraint.sourceNodeId);
     if (constrainedNodes.has(key)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
     constrainedNodes.add(key);
     if (constraint.type === 'cutout') {

@@ -782,6 +782,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           const fitted = new THREE.Box3().setFromObject(model)
           const center = fitted.getCenter(new THREE.Vector3())
           model.position.set(-center.x, -fitted.min.y, -center.z)
+          group.traverse(node => { if (node !== group && node.geometry) node.geometry.dispose() })
           group.clear()
           group.add(model)
         }, undefined, error => console.warn('[CampusEditorPreview] GLB 模板加载失败，保留程序化回退：', publishedTemplate.templateId, error))

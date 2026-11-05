@@ -74,3 +74,13 @@
 - 待真实验收：外部视觉模型是否能从目标城堡图稳定输出高质量 12+ 组件；模型轮廓与参考图相似度；浏览器 2.5D/3D 视觉检查；保存/重载后是否保持同一组件树。
 - 暂不实现：AI 生成 TypeScript 执行。当前 JSON 组件树已能生成基础 Mesh，只有在 primitive 表达能力不足时才评估隔离容器代码生成。
 - 本阶段不更改校园空间 Feature、footprint、位置、碰撞、walkable 或地图双视角语义。
+
+
+## 受控轮廓几何扩展（2026-11-05）
+
+当前 ObjectSculptSpec runtime 在基础 primitive 外新增两种专用轮廓：
+
+- `arch`：通过 Shape 外轮廓和 Path 内孔生成拱形开口实体，`dimensions.width/height/depth` 控制外轮廓与厚度，`geometryDescriptor.inset` 控制拱圈厚度。
+- `wedge`：通过三角形截面和 ExtrudeGeometry 生成楔形棱柱，可表达山墙、三角屋顶剖面等。
+
+两种几何仍经过服务端 primitive 白名单与数值边界校验，运行时不执行任何模型生成代码。它们提升了建筑轮廓表达能力，但不能推断参考图背面或被遮挡结构，也尚未提供任意轮廓点/布尔开洞建模。

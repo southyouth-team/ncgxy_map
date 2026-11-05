@@ -805,3 +805,14 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - 同一空间 Feature 的不同视角变体会归并为稳定 `campus-<featureId>` assetId，并生成唯一 Feature binding。一个视角不能同时有多个 primary；冲突由 manifest validator 拦截。
 - AI 提示词只生成风格与格式约束，不代表真实建筑识别。当前平面图建筑 ID 和 footprint 仍是低置信度近似空间对象；缺少实景照片/测绘资料时，素材必须标记为视觉占位稿。
 - 本阶段不接云端生成服务、不做服务端上传/权限管理、不自动部署素材，也不修改正式校园渲染和碰撞。后续再评估供应商 API 接入和资产服务器。
+
+
+## 30. AI 建筑参考图驱动代码生成 3D（2026-11-05）
+
+- `gpt-image-2` 只负责生成建筑外观参考图；`VISION_MODEL`（当前配置 `deepseek-flash`）通过 `/assets/ai-image/analyze-building` 提取参数化外观结构，不把图片误当成 3D 模型。
+- 识别参数包括建筑模板、楼层数、场景视觉高度、屋顶类型/坡度、窗户密度与尺寸、门宽、墙面色板、置信度、证据和识别限制。
+- 素材工坊在用户审核后将 `buildingDesign` 与 2.5D 参考图一起入库到同一 Feature 资产记录。运行时通过 `resolveCampusBuildingDesign` 读取已审核参数，并交给 `createPixelBuilding` 生成墙体、屋顶、窗户和入口 Mesh。
+- 2.5D 模式显示参考图 Sprite；3D 模式隐藏参考图并显示参数化 3D 几何。两种视角使用同一个 Feature ID 和空间 footprint。
+- 参数仅用于视觉生成。`heightBasis=estimated-scene-units-not-surveyed` 明确表示高度为场景单位估算，不是真实建筑高度；位置、footprint、碰撞、walkable 和校园测绘数据不由 AI 修改。
+- 人工 GLB 继续作为可选的高精度替代轨道。旧章节中“3D 必须导入 GLB”的描述已由本流程替代。
+- 端到端真实识图仍需在本地后端环境使用已配置的 `VISION_MODEL` 联调；GitHub CI 单测不代表第三方视觉服务可用，也不代表最终建筑外观已通过浏览器验收。

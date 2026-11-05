@@ -196,7 +196,7 @@ export class BuildingDesignService {
       const transform = input.transform && typeof input.transform === 'object' ? input.transform : {};
       const scale = vector(transform.scale, [1, 1, 1]).map((value: number) => Math.abs(value) < 0.001 ? 1 : Math.max(-20, Math.min(20, value)));
       const material = typeof input.material === 'string' && materials[input.material] ? input.material : Object.keys(materials)[0];
-      const geometryDescriptor: Record<string, number> = {};
+      const geometryDescriptor: Record<string, number | number[][]> = {};
       if (input.geometryDescriptor && typeof input.geometryDescriptor === 'object') {
         if (input.geometryDescriptor.segments !== undefined) geometryDescriptor.segments = Math.round(number(input.geometryDescriptor.segments, 16, 3, 48));
         if (input.geometryDescriptor.tube !== undefined) geometryDescriptor.tube = number(input.geometryDescriptor.tube, 0.1, 0.01, 10);

@@ -24,7 +24,8 @@ describe('component tree operations', () => {
 
   it('preserves the original external parent of a copied subtree root', () => {
     const source = [{ id: 'parent', parent: null }, { id: 'child', parent: 'parent' }, { id: 'leaf', parent: 'child' }]
-    const result = duplicateComponentSubtree(source, 'child', () => 'new-' + Math.random())
+    let index = 0
+    const result = duplicateComponentSubtree(source, 'child', () => 'external-copy-' + (++index))
     expect(result.components[0].parent).toBe('parent')
     expect(result.components[1].parent).toBe(result.rootId)
   })

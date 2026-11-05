@@ -26,9 +26,18 @@ export function createThreeAssetTemplateRuntime(THREE) {
   const definitions = new Map();
 
   function register(definition, options = {}) {
-    if (!definition || typeof definition !== 'object' || !TEMPLATE_ID.test(String(definition.id || '')) ||
-      typeof definition.factory !== 'function' || !Number.isInteger(definition.version) || definition.version < 1) {
-      throw new TypeError('资产模板定义无效：需要合法 id、正整数 version 和 factory');
+    if (!definition || typeof definition !== 'object') {
+      throw new TypeError('资产模板定义无效：definition 必须是对象');
+    }
+    const id = String(definition.id || '');
+    if (!TEMPLATE_ID.test(id)) {
+      throw new TypeError('资产模板定义无效：id 不合法（必须以字母或数字开头，长度不超过 120，且只能包含字母、数字、中文、: . _ / -），收到：' + JSON.stringify(id));
+    }
+    if (!Number.isInteger(definition.version) || definition.version < 1) {
+      throw new TypeError('资产模板定义无效：version 必须是正整数，收到：' + String(definition.version));
+    }
+    if (typeof definition.factory !== 'function') {
+      throw new TypeError('资产模板定义无效：factory 必须是函数，收到：' + typeof definition.factory);
     }
     if (definitions.has(definition.id) && options.replace !== true) {
       throw new Error('资产模板重复注册：' + definition.id);

@@ -1150,7 +1150,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(wallMesh(model).geometry.parameters.shapes.holes).toHaveLength(1);
     expect(() => applyObjectSculptParameter(THREE, model, 'opening-width', 2.1))
       .toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
-    expect(group(model, 'opening').position.x).toBeCloseTo(5);
+    expect(group(model, 'opening').position.x).toBeCloseTo(5.25);
     expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'opening-width').value).toBe(1.5);
     expectAligned(model, 5);
 

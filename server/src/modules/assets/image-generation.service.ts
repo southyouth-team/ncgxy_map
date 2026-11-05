@@ -15,7 +15,7 @@ function validateGeneratedGeometryDescriptors(componentTree: any[]) {
       if (!Array.isArray(descriptor.path) || descriptor.path.length < 2 || descriptor.path.length > 32 || !descriptor.path.every((v: any) => point(v, 3))) fail('path', '必须包含 2-32 个合法三维点');
       if (primitive === 'sweep' && (!Array.isArray(descriptor.profile) || descriptor.profile.length < 3 || descriptor.profile.length > 24 || !descriptor.profile.every((v: any) => point(v, 2)))) fail('profile', '必须包含 3-24 个合法二维点');
     } else if (primitive === 'lathe') {
-      if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 2 || descriptor.profile.length > 32 || !descriptor.profile.every((v: any) => point(v, 2, 0, 0.5))) fail('profile', '必须包含 2-32 个合法旋转截面点');
+      if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 2 || descriptor.profile.length > 32 || !descriptor.profile.every((v: any) => Array.isArray(v) && v.length === 2 && Number.isFinite(Number(v[0])) && Number(v[0]) >= 0 && Number(v[0]) <= 0.5 && Number.isFinite(Number(v[1])) && Number(v[1]) >= -0.5 && Number(v[1]) <= 0.5)) fail('profile', '必须包含 2-32 个合法旋转截面点');
     } else if (primitive === 'loft') {
       const sections = descriptor.sections;
       if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) fail('sections', '必须包含 2-12 个截面');

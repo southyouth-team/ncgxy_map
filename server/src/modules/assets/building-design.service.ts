@@ -277,8 +277,10 @@ export class BuildingDesignService {
       decoration: { rockCount: [3, 1, 8], flowerCount: [12, 0, 40], layerCount: [2, 1, 5], ornamentLevel: [1, 0, 3] },
       sports: { braceCount: [2, 0, 6] },
     };
+    const decimalFields = new Set(['trunkRatio', 'branchSpread', 'spanRatio']);
     for (const [key, [fallback, min, max]] of Object.entries(numberFields[category])) {
-      geometry[key] = Math.round(bounded(parsed[key], fallback, min, max));
+      const value = bounded(parsed[key], fallback, min, max);
+      geometry[key] = decimalFields.has(key) ? value : Math.round(value);
     }
     const enumFields: Record<string, Record<string, [string[], string]>> = {
       vegetation: { form: [['tree','shrub','flower'], 'tree'], canopyShape: [['round','conical','layered','irregular'], 'round'], leafPalette: [['green','darkGreen','yellowGreen','red','autumn'], 'green'] },

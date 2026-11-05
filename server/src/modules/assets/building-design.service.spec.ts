@@ -379,4 +379,60 @@ describe('BuildingDesignService', () => {
     await expect(service.modifyObjectDesign(current, ['window'], '改变窗户')).rejects.toThrow('修改了未选中的组件');
   });
 
+  it('adds conversationally requested parameters only when they bind to existing model components', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'parameter-secret',
+        VISION_MODEL: 'vision-test',
+        VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const current = {
+      schemaVersion: '2.0', targetName: 'gate', category: 'architecture', objectType: '大门', visualStyle: 'stylized',
+      materials: { stone: { color: '#c9b18a', roughness: 0.85, metalness: 0, opacity: 1 } },
+      componentTree: [
+        { id: 'gate', name: '门体', primitive: 'box', material: 'stone', dimensions: { width: 4, height: 5, depth: 1 }, transform: { position: [0,2.5,0], rotation: [0,0,0], scale: [1,1,1] } },
+      ],
+      parameterSchema: [],
+    };
+    const parameterSchema = [
+      { id: 'gate-length', label: '门体长度', type: 'number', value: 4, min: 2, max: 12, step: 0.5, unit: 'm', targets: [{ nodeId: 'gate', property: 'dimensions.width', mode: 'set' }] },
+      { id: 'gate-width', label: '门体宽度', type: 'number', value: 1, min: 0.5, max: 4, step: 0.1, unit: 'm', targets: [{ nodeId: 'gate', property: 'dimensions.depth', mode: 'set' }] },
+      { id: 'gate-height', label: '门体高度', type: 'number', value: 5, min: 2, max: 12, step: 0.5, unit: 'm', targets: [{ nodeId: 'gate', property: 'dimensions.height', mode: 'set' }] },
+    ];
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema }) } }] }),
+    });
+    global.fetch = fetchMock as never;
+    const result = await service.addObjectParameters(current, '给大门增加长度、宽度和高度三个参数');
+    expect(result.addedParameters).toHaveLength(3);
+    expect(result.objectSculptSpec.parameterSchema.map((item: any) => item.id)).toEqual(['gate-length', 'gate-width', 'gate-height']);
+    expect(service.reviewObjectDesign).toBeDefined();
+    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(systemPrompt).toContain('不得伪造目标');
+    expect(systemPrompt).toContain('禁止返回 JavaScript/TypeScript');
+  });
+
+  it('rejects conversational parameters that target components outside the current model', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'parameter-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const current = {
+      schemaVersion: '2.0', targetName: 'gate', category: 'architecture', objectType: '大门', visualStyle: 'stylized',
+      materials: { stone: { color: '#c9b18a', roughness: 0.85, metalness: 0, opacity: 1 } },
+      componentTree: [{ id: 'gate', name: '门体', primitive: 'box', material: 'stone', dimensions: { width: 4, height: 5, depth: 1 }, transform: { position: [0,2.5,0], rotation: [0,0,0], scale: [1,1,1] } }],
+      parameterSchema: [],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema: [
+        { id: 'room-count', label: '房间数', type: 'number', value: 12, min: 1, max: 100, targets: [{ nodeId: 'missing-room', property: 'visibility.visible', mode: 'visible-from', threshold: 1 }] },
+      ] }) } }] }),
+    }) as never;
+    await expect(service.addObjectParameters(current, '增加房间数')).rejects.toThrow('参数目标无效');
+  });
+
 });

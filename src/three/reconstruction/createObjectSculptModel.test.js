@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createObjectSculptModel, validateObjectSculptSpec } from './createObjectSculptModel.js';
+import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptParameter } from './createObjectSculptModel.js';
 
 function castleSpec() {
   return {
@@ -163,4 +163,38 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }));
     expect(() => validateObjectSculptSpec(tooDeep)).toThrow('组件层级超过');
   });
+  it('applies AI-declared parameters to linked components without cumulative drift', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'body', primitive: 'box', material: 'wall', dimensions: { width: 4, height: 2, depth: 3 } },
+        { id: 'window-a', parent: 'body', primitive: 'box', material: 'wall', dimensions: { width: 1, height: 1, depth: 0.1 }, transform: { position: [-1, 0, 1.5] } },
+        { id: 'window-b', parent: 'body', primitive: 'box', material: 'wall', dimensions: { width: 1, height: 1, depth: 0.1 }, transform: { position: [1, 0, 1.5] } },
+      ],
+      parameterSchema: [{
+        id: 'window-height', label: '窗户高度', type: 'number', value: 1, min: 0.5, max: 2, step: 0.1, unit: 'm',
+        targets: [
+          { nodeId: 'window-a', property: 'dimensions.height', mode: 'set' },
+          { nodeId: 'window-b', property: 'dimensions.height', mode: 'set' },
+        ],
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    applyObjectSculptParameter(THREE, model, 'window-height', 1.6);
+    expect(model.userData.objectSculptSpec.componentTree.filter(node => node.id.startsWith('window')).map(node => node.dimensions.height)).toEqual([1.6, 1.6]);
+    applyObjectSculptParameter(THREE, model, 'window-height', 1.2);
+    expect(model.userData.objectSculptSpec.componentTree.filter(node => node.id.startsWith('window')).map(node => node.dimensions.height)).toEqual([1.2, 1.2]);
+    expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(1.2);
+  });
+
+  it('rejects AI parameter targets outside the renderer allowlist', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{ id: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } }],
+      parameterSchema: [{ id: 'unsafe', type: 'number', value: 1, min: 0, max: 2, targets: [{ nodeId: 'root', property: 'constructor.prototype', mode: 'set' }] }],
+    };
+    expect(() => validateObjectSculptSpec(spec)).toThrow('参数目标属性不受支持');
+  });
+
 });

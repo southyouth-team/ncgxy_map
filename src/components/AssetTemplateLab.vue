@@ -18,6 +18,19 @@ const categories = computed(() => [...new Set(templates.value.map(x => x.categor
 const visibleTemplates = computed(() => templates.value.filter(x => selectedCategory.value === 'all' || x.category === selectedCategory.value))
 const selectedTemplate = computed(() => templates.value.find(x => x.id === selectedId.value))
 const selectedInstance = computed(() => instances.value.find(x => x.id === selectedInstanceId.value))
+const selectedSpec = computed(() => objects.get(selectedInstanceId.value)?.userData?.objectSculptSpec || null)
+const selectedComponent = computed(() => selectedSpec.value?.componentTree?.find(node => node.id === selectedComponentId.value) || null)
+const componentTree = computed(() => {
+  const nodes = selectedSpec.value?.componentTree || []
+  const byParent = new Map()
+  nodes.forEach(node => { const key = node.parent || ''; if (!byParent.has(key)) byParent.set(key, []); byParent.get(key).push(node) })
+  const build = (parent, depth = 0) => (byParent.get(parent) || []).map(node => ({ ...node, depth, children: build(node.id, depth + 1) }))
+  return build('')
+})
+const selectedComponentColor = computed(() => selectedComponent.value?.material && selectedSpec.value?.materials?.[selectedComponent.value.material]?.color || '#b8b8b8')
+const selectedComponentVisible = computed(() => selectedComponent.value?.hidden !== true)
+const selectedComponentTransform = computed(() => selectedComponent.value?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
+const selectedComponentId = ref('')
 const labels = {building:'建筑',vegetation:'植被',structure:'构筑物',facility:'设施',decoration:'装饰',sports:'运动设施',road:'道路',water:'水域',terrain:'地形'}
 let renderer, scene, camera, controls, observer, frame, serial = 0
 const objects = new Map()
@@ -153,6 +166,7 @@ async function generateModel() {
     instances.value.push({ id, name: spec.targetName || objectType.value || 'AI 生成模型', templateId: 'AI ObjectSculptSpec', category: 'building', source: 'AI' })
     // 新增模型只更新选择状态，不自动平移相机目标；保持沙盒全局取景不变。
     selectedInstanceId.value = id
+    selectedComponentId.value = spec.componentTree?.[0]?.id || ''
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
     generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI ObjectSculptSpec → Three.js Mesh'
     status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
@@ -160,6 +174,49 @@ async function generateModel() {
     error.value = e?.message || 'AI 模型生成失败'
     status.value = '生成失败'
   } finally { generating.value = false }
+}
+function getComponentGroup(instanceId, componentId) {
+  return objects.get(instanceId)?.userData?.componentGroups?.get(componentId) || null
+}
+function selectComponent(componentId) {
+  if (!selectedSpec.value?.componentTree?.some(node => node.id === componentId)) return
+  selectedComponentId.value = componentId
+  const group = getComponentGroup(selectedInstanceId.value, componentId)
+  if (group) {
+    group.traverse(child => {
+      if (child.isMesh) child.userData.editorSelected = true
+    })
+  }
+}
+function updateSelectedComponentColor(color) {
+  const node = selectedComponent.value
+  if (!node || !/^#[0-9a-f]{6}$/i.test(color)) return
+  const spec = objects.get(selectedInstanceId.value)?.userData?.objectSculptSpec
+  if (!spec) return
+  const key = typeof node.material === 'string' ? node.material : 'default'
+  if (!spec.materials) spec.materials = {}
+  if (!spec.materials[key]) spec.materials[key] = { color: '#b8b8b8', roughness: 0.82, metalness: 0 }
+  spec.materials[key].color = color
+  const group = getComponentGroup(selectedInstanceId.value, node.id)
+  group?.traverse(child => { if (child.isMesh) child.material.color.set(color) })
+}
+function toggleSelectedComponentVisibility() {
+  const node = selectedComponent.value
+  if (!node) return
+  node.hidden = node.hidden !== true
+  const group = getComponentGroup(selectedInstanceId.value, node.id)
+  if (group) group.visible = node.hidden !== true
+}
+function updateSelectedComponentTransform(axis, value) {
+  const node = selectedComponent.value
+  const group = getComponentGroup(selectedInstanceId.value, node?.id)
+  if (!node || !group || !['x','y','z'].includes(axis)) return
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || Math.abs(numeric) > 100) return
+  if (!node.transform) node.transform = { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }
+  const index = axis === 'x' ? 0 : axis === 'y' ? 1 : 2
+  node.transform.position[index] = numeric
+  group.position.set(...node.transform.position)
 }
 function addTemplate() {
   try {
@@ -187,6 +244,8 @@ function removeInstance(id) {
 }
 function focusInstance(id) {
   selectedInstanceId.value = id
+  const spec = objects.get(id)?.userData?.objectSculptSpec
+  selectedComponentId.value = spec?.componentTree?.[0]?.id || ''
   const object = objects.get(id)
   if (object) { controls.target.copy(object.position); controls.update() }
 }
@@ -246,6 +305,27 @@ onBeforeUnmount(() => {
         <h3>沙盒实例 <span>{{ instances.length }} 个</span></h3>
         <label>选中实例缩放 {{ scale.toFixed(1) }}×</label><input v-model.number="scale" type="range" min="0.3" max="2.5" step="0.1">
         <div class="instances"><div v-for="item in instances" :key="item.id" :class="{active:selectedInstanceId===item.id}"><button class="instance" @click="focusInstance(item.id)"><b>{{ item.name }}</b><small>{{ item.source || '预置模板' }} · {{ item.id }}</small></button><button class="remove" @click="removeInstance(item.id)">×</button></div><p v-if="!instances.length">尚未生成或添加模型。</p></div>
+        <section v-if="selectedSpec" class="component-editor">
+          <h3>模型结构 <span>{{ selectedSpec.componentTree.length }} 个部件</span></h3>
+          <div class="component-tree">
+            <template v-for="node in componentTree" :key="node.id">
+              <button class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8 + node.depth * 15)+'px'}" @click="selectComponent(node.id)">
+                <span>{{ node.name || node.id }}</span><small>{{ node.role || node.primitive || '组件' }}</small>
+              </button>
+              <template v-for="child in node.children" :key="child.id">
+                <button class="component-node" :class="{active:selectedComponentId===child.id}" :style="{paddingLeft:(23 + child.depth * 15)+'px'}" @click="selectComponent(child.id)"><span>{{ child.name || child.id }}</span><small>{{ child.role || child.primitive || '组件' }}</small></button>
+                <button v-for="leaf in child.children" :key="leaf.id" class="component-node" :class="{active:selectedComponentId===leaf.id}" :style="{paddingLeft:(38 + leaf.depth * 15)+'px'}" @click="selectComponent(leaf.id)"><span>{{ leaf.name || leaf.id }}</span><small>{{ leaf.role || leaf.primitive || '组件' }}</small></button>
+              </template>
+            </template>
+          </div>
+          <div v-if="selectedComponent" class="component-properties">
+            <b>{{ selectedComponent.name || selectedComponent.id }}</b>
+            <label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)">
+            <label>局部位置 X / Y / Z</label>
+            <div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div>
+            <button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible ? '隐藏此部件' : '显示此部件' }}</button>
+          </div>
+        </section>
         <p class="hint">AI 生成对象与预置模板共用同一个 Scene。每个模型作为独立 THREE.Group 管理，可单独聚焦、缩放和删除。</p>
       </aside>
     </section>
@@ -254,5 +334,5 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:330px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel input:not([type=file]),.panel textarea,.panel select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #dce4dc;border-radius:7px;font:inherit;font-size:12px}.panel input[type=file]{font-size:11px;max-width:100%}.reference{display:block;max-width:100%;max-height:170px;object-fit:contain;margin-top:10px;border-radius:7px;background:#f3f5f2}.generate,.secondary{margin-top:12px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.generate:disabled{opacity:.55;cursor:wait}.secondary{background:#fff;color:#3d7950;border:1px solid #b9cdbb}.hint{font-size:10px;color:#7d8b80;line-height:1.65}.log{white-space:pre-wrap;background:#f3f7f2;border-radius:7px;padding:10px;margin-top:10px;font-size:10px;color:#53675a;line-height:1.6}.error{margin-top:10px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}.subheading{margin-top:22px!important;padding-top:14px;border-top:1px solid #e8ede8}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small{font-size:10px;color:#89968b}.viewport-panel{position:relative;height:clamp(580px,calc(100vh - 190px),900px);min-height:580px;background:#dfe8e0} .viewport{position:absolute;inset:0;background:#b9c8bb}.viewport :deep(canvas){display:block;width:100%;height:100%;touch-action:none}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.status{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px}.inspector input{accent-color:#4f855e}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1100px){.layout{grid-template-columns:290px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:220px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:180px}.viewport-panel{min-height:450px}footer{text-align:left}}
+.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:330px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel input:not([type=file]),.panel textarea,.panel select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #dce4dc;border-radius:7px;font:inherit;font-size:12px}.panel input[type=file]{font-size:11px;max-width:100%}.reference{display:block;max-width:100%;max-height:170px;object-fit:contain;margin-top:10px;border-radius:7px;background:#f3f5f2}.generate,.secondary{margin-top:12px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.generate:disabled{opacity:.55;cursor:wait}.secondary{background:#fff;color:#3d7950;border:1px solid #b9cdbb}.hint{font-size:10px;color:#7d8b80;line-height:1.65}.log{white-space:pre-wrap;background:#f3f7f2;border-radius:7px;padding:10px;margin-top:10px;font-size:10px;color:#53675a;line-height:1.6}.error{margin-top:10px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}.subheading{margin-top:22px!important;padding-top:14px;border-top:1px solid #e8ede8}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small{font-size:10px;color:#89968b}.viewport-panel{position:relative;height:clamp(580px,calc(100vh - 190px),900px);min-height:580px;background:#dfe8e0} .viewport{position:absolute;inset:0;background:#b9c8bb}.viewport :deep(canvas){display:block;width:100%;height:100%;touch-action:none}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.status{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px}.inspector input{accent-color:#4f855e}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}.component-editor{margin-top:18px;padding-top:14px;border-top:1px solid #e8ede8}.component-editor h3{margin-bottom:8px}.component-tree{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:3px}.component-node{display:flex;justify-content:space-between;gap:6px;align-items:center;text-align:left;border:1px solid transparent;border-radius:5px;background:#f7f9f7;padding:7px 8px;color:#34453a;cursor:pointer;min-width:0}.component-node.active{background:#eaf4eb;border-color:#a9c8ae}.component-node span{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.component-node small{font-size:9px;color:#8a978c;white-space:nowrap}.component-properties{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #edf0ed}.component-properties>b{font-size:12px}.component-properties label{margin:4px 0 0}.component-properties input[type=color]{width:100%;height:32px;border:1px solid #dce4dc;border-radius:6px;padding:2px}.axis-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.axis-inputs input{min-width:0}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1100px){.layout{grid-template-columns:290px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:220px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:180px}.viewport-panel{min-height:450px}footer{text-align:left}}
 </style>

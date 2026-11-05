@@ -43,6 +43,24 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(meshes.every(mesh => mesh.geometry && mesh.material)).toBe(true);
   });
 
+  it('builds dedicated arch openings and wedge roof geometry', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { stone: { color: '#d8c39a' } },
+      componentTree: [
+        { id: 'arch', primitive: 'arch', material: 'stone', dimensions: { width: 3, height: 4, depth: 0.5 }, geometryDescriptor: { inset: 0.35 } },
+        { id: 'gable', primitive: 'wedge', material: 'stone', dimensions: { width: 5, height: 2, depth: 3 } },
+      ],
+    };
+    const result = createObjectSculptModel(THREE, spec);
+    const arch = result.getObjectByName('arch:mesh');
+    const wedge = result.getObjectByName('gable:mesh');
+    expect(arch.geometry.type).toBe('ExtrudeGeometry');
+    expect(arch.geometry.parameters.shapes.holes).toHaveLength(1);
+    expect(wedge.geometry.type).toBe('ExtrudeGeometry');
+    expect(wedge.geometry.boundingBox).toBeTruthy();
+  });
+
   it('accepts an upstream-style component tree independent of renderer objects', () => {
     const result = validateObjectSculptSpec(castleSpec());
     expect(result.componentCount).toBe(8);

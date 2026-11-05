@@ -121,7 +121,7 @@ function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
     }
     const parameterId = (value: unknown): string => {
       if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value)) {
-        throw new ServiceUnavailableException('AI 结构生成器数量参数 ID 无效或重复：' + id);
+        throw new ServiceUnavailableException('AI 结构生成器数量参数引用 ID 无效：' + id);
       }
       // Generator parameter IDs are references to shared business parameters.
       // Uniqueness belongs to parameterSchema and to row/column pairs within one grid, not across generators.
@@ -405,6 +405,15 @@ export class ImageGenerationService {
       || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
       throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 结构无效');
     }
+    // IDs are identities within their own namespaces. Validate component identities
+    // before building Maps; otherwise duplicate keys silently overwrite earlier nodes.
+    const componentIds = new Set<string>();
+    for (const node of spec.componentTree) {
+      if (!node || typeof node !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id || '') || componentIds.has(node.id)) {
+        throw new ServiceUnavailableException('组件 ID 无效或重复：' + String(node?.id || 'unknown'));
+      }
+      componentIds.add(node.id);
+    }
     const roots = spec.componentTree.filter((node: any) => !node?.parent);
     if (roots.length !== 1) {
       throw new ServiceUnavailableException('ObjectSculptSpec 必须只有一个主体根节点；检测到 ' + roots.length + ' 个根节点，组件没有组成完整对象');
@@ -442,6 +451,33 @@ export class ImageGenerationService {
     spec.generators = generatorValidation.generators;
     spec.parameterSchema = validateGeneratedParameterSchema(spec.parameterSchema, spec.componentTree, generatorValidation.parameterIds);
     validateGeneratorParameterBindings(spec.generators, spec.parameterSchema);
+
+    // Validate constraint identities and references at the generation boundary too.
+    // The browser Runtime repeats these checks before materialization; this catches
+    // malformed AI output here instead of returning a spec that can only fail later.
+    if (spec.constraints !== undefined && (!Array.isArray(spec.constraints) || spec.constraints.length > 60)) {
+      throw new ServiceUnavailableException('AI constraints 必须是最多 60 项的数组');
+    }
+    const constraintIds = new Set<string>();
+    const generatorIds = new Set((spec.generators || []).map((item: any) => item.id));
+    for (const constraint of spec.constraints || []) {
+      if (!constraint || typeof constraint !== 'object'
+        || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
+        || constraintIds.has(constraint.id)) {
+        throw new ServiceUnavailableException('AI 结构约束 ID 无效或重复');
+      }
+      constraintIds.add(constraint.id);
+      const componentRef = (id: unknown) => typeof id === 'string' && componentIds.has(id);
+      if ((constraint.type === 'follow' || constraint.type === 'span')
+        ? (!generatorIds.has(constraint.sourceGeneratorId) || !componentRef(constraint.targetNodeId))
+        : constraint.type === 'cutout'
+          ? (!componentRef(constraint.targetNodeId) || !componentRef(constraint.cutterNodeId))
+          : ['attach', 'adjacency'].includes(constraint.type)
+            ? (!componentRef(constraint.sourceNodeId) || !componentRef(constraint.targetNodeId))
+            : true) {
+        throw new ServiceUnavailableException('AI 结构约束引用无效：' + constraint.id);
+      }
+    }
     return { provider: baseUrl, model, objectType, visualStyle, objectSculptSpec: spec };
   }
 

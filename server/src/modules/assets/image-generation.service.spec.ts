@@ -190,6 +190,24 @@ describe('ImageGenerationService', () => {
       .rejects.toThrow('默认值一致的有效整数数量参数');
   });
 
+  it('rejects duplicate component identity IDs before they can overwrite Map entries', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const duplicated = {
+      schemaVersion: '2.0',
+      materials: { stone: { color: '#c9b58d' } },
+      componentTree: [
+        { id: 'body', primitive: 'box', dimensions: { width: 2, height: 2, depth: 2 } },
+        { id: 'body', parent: 'body', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(duplicated) } }] }),
+    }) as never;
+    await expect(service.generateObjectFromPrompt('一个物体', '物体', 'stylized'))
+      .rejects.toThrow('组件 ID 无效或重复：body');
+  });
+
   it('rejects prompt-generated models with disconnected component roots', async () => {
     const service = createService({
       VISION_API_KEY: 'vision-key',

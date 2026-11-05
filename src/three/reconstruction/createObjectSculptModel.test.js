@@ -1379,4 +1379,35 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('allows independent generators to share one parameter identity and expands both templates', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'left-template', kind: 'group', parent: 'root' },
+        { id: 'left-part', parent: 'left-template', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'right-template', kind: 'group', parent: 'root' },
+        { id: 'right-part', parent: 'right-template', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+      parameterSchema: [
+        { id: 'shared-repeat-count', type: 'number', value: 3, min: 1, max: 4, targets: [] },
+      ],
+      generators: [
+        { id: 'left-repeat', type: 'repeat', templateRootId: 'left-template', countParameterId: 'shared-repeat-count',
+          axis: 'x', spacing: 1, defaultCount: 3, maxCount: 4 },
+        { id: 'right-repeat', type: 'repeat', templateRootId: 'right-template', countParameterId: 'shared-repeat-count',
+          axis: 'x', spacing: 1, defaultCount: 3, maxCount: 4 },
+      ],
+    };
+
+    const model = createObjectSculptModel(THREE, spec);
+    const leftInstances = [...model.userData.componentGroups.values()]
+      .filter(group => group.userData.componentSourceId === 'left-template');
+    const rightInstances = [...model.userData.componentGroups.values()]
+      .filter(group => group.userData.componentSourceId === 'right-template');
+    expect(leftInstances).toHaveLength(3);
+    expect(rightInstances).toHaveLength(3);
+    expect(model.userData.componentGroups.size).toBe(7);
+  });
+
 });

@@ -43,6 +43,9 @@ describe('BuildingDesignService', () => {
       heightBasis: 'estimated-scene-units-not-surveyed',
       roofStyle: 'flat', wallPalette: 'wallPeach', reviewed: false,
     });
+    expect(result.designToken).toBeTruthy();
+    expect(service.consumeDesignToken(result.designToken, result.design)).toBe(true);
+    expect(service.consumeDesignToken(result.designToken, result.design)).toBe(false);
   });
 
 

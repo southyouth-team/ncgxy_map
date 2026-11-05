@@ -61,6 +61,23 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(wedge.geometry.getAttribute('position').count).toBeGreaterThan(0);
   });
 
+  it('extrudes bounded custom polygon outlines into real geometry', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'gable-outline', primitive: 'polygon', dimensions: { width: 4, height: 3, depth: 0.6 },
+        geometryDescriptor: { points: [[-0.5, -0.5], [0.5, -0.5], [0.32, 0.15], [0, 0.5], [-0.32, 0.15]] },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.getObjectByName('gable-outline:mesh');
+    expect(mesh.geometry.type).toBe('ExtrudeGeometry');
+    expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(0);
+    const invalid = structuredClone(spec);
+    invalid.componentTree[0].geometryDescriptor.points[0][0] = 4;
+    expect(() => createObjectSculptModel(THREE, invalid)).toThrow('二维坐标');
+  });
+
   it('accepts an upstream-style component tree independent of renderer objects', () => {
     const result = validateObjectSculptSpec(castleSpec());
     expect(result.componentCount).toBe(8);

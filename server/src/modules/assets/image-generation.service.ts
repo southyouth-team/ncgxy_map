@@ -150,6 +150,10 @@ function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
     const spacingX = Number(raw.spacingX), spacingZ = Number(raw.spacingZ);
     const spacingXParameterId = raw.spacingXParameterId == null ? undefined : raw.spacingXParameterId;
     const spacingZParameterId = raw.spacingZParameterId == null ? undefined : raw.spacingZParameterId;
+    // Dynamic spacing parameters are generator controls too; they may intentionally
+    // have no component targets, just like repeat counts and grid dimensions.
+    if (spacingXParameterId) parameterIds.add(spacingXParameterId);
+    if (spacingZParameterId) parameterIds.add(spacingZParameterId);
     const spacingXScale = Number(raw.spacingXScale), spacingZScale = Number(raw.spacingZScale);
     const defaultRows = Number(raw.defaultRows), defaultColumns = Number(raw.defaultColumns);
     const maxRows = Number(raw.maxRows), maxColumns = Number(raw.maxColumns);

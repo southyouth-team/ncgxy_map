@@ -1410,4 +1410,31 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.size).toBe(13);
   });
 
+  it('accepts generator-only grid spacing parameters without component targets', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'window-template', kind: 'group', parent: 'root' },
+        { id: 'window', parent: 'window-template', primitive: 'box', dimensions: { width: 1, height: 1, depth: 0.2 } },
+      ],
+      parameterSchema: [
+        { id: 'rows', type: 'number', value: 2, min: 1, max: 3, targets: [] },
+        { id: 'columns', type: 'number', value: 2, min: 1, max: 3, targets: [] },
+        { id: 'spacing', type: 'number', value: 1.5, min: 0.5, max: 2, targets: [] },
+      ],
+      generators: [{
+        id: 'window-grid', type: 'grid', templateRootId: 'window-template',
+        rowParameterId: 'rows', columnParameterId: 'columns',
+        spacingX: 1, spacingZ: 1, spacingXParameterId: 'spacing', spacingXScale: 1,
+        defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3,
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const instances = [...model.userData.componentGroups.values()]
+      .filter(group => group.userData.componentSourceId === 'window-template');
+    expect(instances).toHaveLength(4);
+    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'spacing').generatorControl).toBe(true);
+  });
+
 });

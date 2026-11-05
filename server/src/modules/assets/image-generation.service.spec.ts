@@ -208,6 +208,40 @@ describe('ImageGenerationService', () => {
       .rejects.toThrow('组件 ID 无效或重复：body');
   });
 
+  it('accepts a grid spacing parameter as a generator-only control', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      materials: { stone: { color: '#999999' } },
+      componentTree: [
+        { id: 'building', kind: 'group' },
+        { id: 'window-grid', kind: 'group', parent: 'building' },
+        { id: 'window', parent: 'window-grid', primitive: 'box', dimensions: { width: 0.4, height: 0.5, depth: 0.1 }, material: 'stone' },
+      ],
+      parameterSchema: [
+        { id: 'rows', type: 'number', value: 2, min: 1, max: 3, targets: [] },
+        { id: 'columns', type: 'number', value: 2, min: 1, max: 3, targets: [] },
+        { id: 'window-spacing', type: 'number', value: 0.8, min: 0.4, max: 1.2, targets: [] },
+      ],
+      generators: [{
+        id: 'window-grid-generator', type: 'grid', templateRootId: 'window-grid',
+        rowParameterId: 'rows', columnParameterId: 'columns',
+        spacingX: 0.8, spacingZ: 0.8, spacingXParameterId: 'window-spacing', spacingXScale: 1,
+        defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3,
+      }],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(objectSculptSpec) } }] }),
+    }) as never;
+
+    const result = await service.generateObjectFromPrompt('带窗户阵列的建筑', '建筑', 'stylized');
+    expect(result.objectSculptSpec.parameterSchema.find((item: any) => item.id === 'window-spacing')).toMatchObject({
+      generatorControl: undefined,
+      targets: [],
+    });
+  });
+
   it('rejects prompt-generated models with disconnected component roots', async () => {
     const service = createService({
       VISION_API_KEY: 'vision-key',

@@ -26,6 +26,7 @@ function expandObjectSculptSpec(spec) {
       generatorParameterIds.add(generator.rowParameterId);
       generatorParameterIds.add(generator.columnParameterId);
       for (const parameterId of [generator.spacingXParameterId, generator.spacingZParameterId].filter(Boolean)) {
+        generatorParameterIds.add(parameterId);
         const parameter = (spec.parameterSchema || []).find(item => item.id === parameterId);
         if (!parameter || parameter.type !== 'number') throw new TypeError('网格动态间距必须绑定数值参数：' + generator.id);
       }
@@ -846,6 +847,7 @@ export function validateObjectSculptSpec(spec) {
       generatorParameterIds.add(generator.rowParameterId);
       generatorParameterIds.add(generator.columnParameterId);
       for (const parameterId of [generator.spacingXParameterId, generator.spacingZParameterId].filter(Boolean)) {
+        generatorParameterIds.add(parameterId);
         const parameter = (spec.parameterSchema || []).find(item => item.id === parameterId);
         if (!parameter || parameter.type !== 'number') throw new TypeError('网格动态间距必须绑定数值参数：' + generator.id);
       }

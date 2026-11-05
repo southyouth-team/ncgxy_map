@@ -276,7 +276,9 @@ function createRoadGenerator(THREE, input, materials) {
   roadGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   roadGeometry.setIndex(indices);
   roadGeometry.computeVertexNormals();
-  createMesh(THREE, roadGeometry, materials.primary, 'road-surface', group, [0, 0.025, 0]);
+  const roadColors = { asphalt: '#454a4d', concrete: '#a8aaa4', stone: '#81796c', pavers: '#9b927e' };
+  const roadMaterial = new THREE.MeshStandardMaterial({ color: roadColors[design.surfaceType] || materials.primary.color, roughness: 0.94 });
+  createMesh(THREE, roadGeometry, roadMaterial, 'road-surface', group, [0, 0.025, 0]);
   const curbHeight = Math.max(0.02, Math.min(0.5, Number(design.curbHeight) || 0.12));
   const sidewalkWidth = Math.max(0, Math.min(8, Number(design.sidewalkWidth) || 0));
   if (sidewalkWidth > 0) {
@@ -339,7 +341,8 @@ function createWaterGenerator(THREE, input, materials) {
   const waterMaterial = new THREE.MeshStandardMaterial({ color: waterColor, roughness: 0.24, metalness: 0.06, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
   createMesh(THREE, waterGeometry, waterMaterial, 'water-surface', group, [0, 0.08, 0]);
   const shoreWidth = Math.max(0.1, Math.min(4, Number(design.shoreWidth) || 0.35));
-  const shoreMaterial = materials.accent;
+  const bankColors = { natural: '#8f9c72', stone: '#9b9588', concrete: '#a8aaa4', grass: '#71965c' };
+  const shoreMaterial = new THREE.LineBasicMaterial({ color: bankColors[design.bankStyle] || materials.accent.color });
   const shorePoints = outer.map(([x, z]) => new THREE.Vector3(x, 0.045, z));
   shorePoints.push(shorePoints[0].clone());
   const shoreGeometry = new THREE.BufferGeometry().setFromPoints(shorePoints);
@@ -382,7 +385,20 @@ function createTerrainGenerator(THREE, input, materials) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  createMesh(THREE, geometry, materials.leaf, 'terrain-surface', group);
+  const groundColors = { grass: '#6c965c', soil: '#987b58', rock: '#777b7a', sand: '#c5b17c', concrete: '#a7aaa7' };
+  const groundMaterial = new THREE.MeshStandardMaterial({ color: groundColors[design.groundType] || groundColors.grass, roughness: 0.96, flatShading: true, side: THREE.DoubleSide });
+  createMesh(THREE, geometry, groundMaterial, 'terrain-surface', group);
+  const rockiness = Math.max(0, Math.min(1, Number(design.rockiness) || 0));
+  if (design.hasRockOutcrops === true || rockiness > 0.5) {
+    const count = Math.max(1, Math.round(rockiness * 8));
+    for (let index = 0; index < count; index += 1) {
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(Math.max(0.2, Math.min(width, depth) * 0.035), 0), materials.dark);
+      rock.name = 'terrain-rock-outcrop';
+      rock.position.set((Math.sin(index * 2.4) * 0.38) * width, relief * 0.18, (Math.cos(index * 1.7) * 0.38) * depth);
+      rock.castShadow = true;
+      group.add(rock);
+    }
+  }
   return group;
 }
 

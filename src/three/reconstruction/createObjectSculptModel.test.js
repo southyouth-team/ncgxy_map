@@ -391,10 +391,11 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         const c = new THREE.Vector3().fromBufferAttribute(position, ids[2]);
         return b.sub(a).cross(c.sub(a)).normalize();
       };
+      // Two start-cap triangles (3 indices each), then two end-cap triangles.
       expect(faceNormal(sideIndexCount).x).toBeLessThan(-0.99);
-      expect(faceNormal(sideIndexCount + 6).x).toBeLessThan(-0.99);
-      expect(faceNormal(sideIndexCount + 12).x).toBeGreaterThan(0.99);
-      expect(faceNormal(sideIndexCount + 18).x).toBeGreaterThan(0.99);
+      expect(faceNormal(sideIndexCount + 3).x).toBeLessThan(-0.99);
+      expect(faceNormal(sideIndexCount + 6).x).toBeGreaterThan(0.99);
+      expect(faceNormal(sideIndexCount + 9).x).toBeGreaterThan(0.99);
       for (let offset = sideIndexCount; offset < index.count; offset += 3) {
         const ids = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];
         expect(new Set(ids).size).toBe(3);

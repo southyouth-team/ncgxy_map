@@ -231,17 +231,18 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     };
     const model = createObjectSculptModel(THREE, spec);
     expect(model.userData.componentGroups.size).toBe(8);
-    expect(model.userData.componentGroups.has('floor-repeat-2-floor-prototype')).toBe(true);
+    expect([...model.userData.componentGroups.keys()].some(id => id.startsWith('generated-'))).toBe(true);
     applyObjectSculptParameter(THREE, model, 'floor-count', 5);
     expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(5);
     expect(model.userData.objectSculptSpec.generators).toHaveLength(1);
     expect(model.userData.componentGroups.size).toBe(12);
-    expect(model.userData.componentGroups.get('floor-repeat-4-floor-prototype').position.y).toBeCloseTo(12.8);
+    const fifthFloor = [...model.userData.componentGroups.values()].find(group => group.userData.componentSourceId === 'floor-prototype' && Math.abs(group.position.y - 12.8) < 0.001);
+    expect(fifthFloor).toBeDefined();
     expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(17.4);
     applyObjectSculptParameter(THREE, model, 'floor-count', 2);
     expect(model.userData.componentGroups.size).toBe(6);
     expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(7.8);
-    expect(model.userData.componentGroups.has('floor-repeat-2-floor-prototype')).toBe(false);
+    expect([...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-'))).toHaveLength(1);
   });
 
 

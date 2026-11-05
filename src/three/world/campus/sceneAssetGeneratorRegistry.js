@@ -281,11 +281,23 @@ function createRoadGenerator(THREE, input, materials) {
   const sidewalkWidth = Math.max(0, Math.min(8, Number(design.sidewalkWidth) || 0));
   if (sidewalkWidth > 0) {
     for (const side of [-1, 1]) {
-      const edge = new THREE.Mesh(new THREE.BoxGeometry(roadWidth + sidewalkWidth * 2, curbHeight, sidewalkWidth), materials.secondary);
-      edge.name = 'road-sidewalk';
-      edge.position.set(0, curbHeight / 2, side * (roadWidth / 2 + sidewalkWidth / 2));
-      edge.receiveShadow = true;
-      group.add(edge);
+      const edgePositions = [];
+      const edgeIndices = [];
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const [x1, z1] = points[index], [x2, z2] = points[index + 1];
+        const dx = x2 - x1, dz = z2 - z1, length = Math.hypot(dx, dz);
+        if (length < 0.001) continue;
+        const nx = -dz / length * side, nz = dx / length * side;
+        const near = roadWidth / 2, far = near + sidewalkWidth, base = edgePositions.length / 3;
+        edgePositions.push(x1 + nx * near, curbHeight, z1 + nz * near, x1 + nx * far, curbHeight, z1 + nz * far,
+          x2 + nx * near, curbHeight, z2 + nz * near, x2 + nx * far, curbHeight, z2 + nz * far);
+        edgeIndices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+      }
+      const edgeGeometry = new THREE.BufferGeometry();
+      edgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+      edgeGeometry.setIndex(edgeIndices);
+      edgeGeometry.computeVertexNormals();
+      createMesh(THREE, edgeGeometry, materials.secondary, 'road-sidewalk', group);
     }
   }
   if (design.markingType && design.markingType !== 'none') {

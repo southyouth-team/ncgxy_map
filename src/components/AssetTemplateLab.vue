@@ -567,9 +567,9 @@ onBeforeUnmount(() => {
           </section>
           <section v-if="selectedSpec" class="component-editor">
             <h3>可调参数 <span>{{ selectedParameters.length }} 项</span></h3>
-            <div v-if="selectedParameters.length" class="asset-parameters">
+            <div class="asset-parameters">
               <div v-for="parameter in selectedParameters" :key="parameter.id" class="parameter-row"><label>{{ parameter.label }}</label><input v-if="parameter.type==='number'" type="range" :min="parameter.min" :max="parameter.max" :step="parameter.step||0.1" :value="parameter.value" @input="updateAssetParameter(parameter.id,Number($event.target.value))"><div v-if="parameter.type==='number'" class="parameter-value">{{ parameter.value }} {{ parameter.unit||'' }}</div><input v-else-if="parameter.type==='color'" type="color" :value="parameter.value" @input="updateAssetParameter(parameter.id,$event.target.value)"><input v-else-if="parameter.type==='boolean'" type="checkbox" :checked="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.checked)"><select v-else-if="parameter.type==='select'" :value="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.value)"><option v-for="option in parameter.options" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-              <p v-else class="empty-hint">当前模型还没有可调参数，可先通过上方 AI 对话生成。</p>
+              <p v-if="!selectedParameters.length" class="empty-hint">当前模型还没有可调参数，可先通过上方 AI 对话生成。</p>
             </div>
             <div v-if="selectedComponent" class="component-properties"><b>{{ selectedComponent.name||selectedComponent.id }}</b><template v-if="(selectedComponent.kind||'mesh')==='mesh'"><label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)"></template><small v-else>逻辑分组节点：变换和显隐作用于整个子树。</small><label>局部位置 X / Y / Z</label><div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div><button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible?'隐藏此部件':'显示此部件' }}</button>
             </div>

@@ -421,7 +421,10 @@ export class BuildingDesignService {
         parent = byId.get(parent)?.parent;
       }
     }
-    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, materials);
+    const generators = normalizeObjectGenerators(parsed.generators, componentTree);
+    const generatorParameterIds = new Set(generators.flatMap((generator: any) => generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId]));
+    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, materials, generatorParameterIds);
+    const constraints = normalizeObjectConstraints(parsed.constraints, generators, componentTree);
     const objectSculptSpec = {
       schemaVersion: '2.0',
       targetName: String(parsed.targetName || objectType || 'AI 生成资产').slice(0, 120),
@@ -431,6 +434,8 @@ export class BuildingDesignService {
       materials,
       componentTree,
       parameterSchema,
+      generators,
+      constraints,
     };
     const design = {
       schemaVersion: 1,

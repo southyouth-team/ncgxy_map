@@ -13,6 +13,6 @@ import { BuildingTemplatesService } from './building-templates.service';
 
 @Module({
   controllers: [AssetsController, ImageGenerationController, VisualAssetsController, BuildingDesignController, BuildingTemplatesController],
-  providers: [AssetsService, RecognitionService, ImageGenerationService, BuildingDesignService, DevIdentityGuard],
+  providers: [AssetsService, RecognitionService, ImageGenerationService, BuildingDesignService, BuildingTemplatesService, DevIdentityGuard],
 })
 export class AssetsModule {}

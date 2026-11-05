@@ -359,7 +359,12 @@ export class AssetsService {
         throw new BadRequestException('资产 span 约束目标属性无效：' + constraint.id);
       }
       if (constraint.type === 'follow' && constraint.property !== undefined) throw new BadRequestException('资产 follow 约束不能声明 property：' + constraint.id);
+      const sourceGenerator = generators.find((item: any) => item.id === constraint.sourceGeneratorId);
+      const expectedAxis = ({ 'dimensions.width': 'x', 'dimensions.height': 'y', 'dimensions.depth': 'z' } as Record<string, string>)[constraint.property];
       if (!['rows','columns','repeat'].includes(constraint.measure || 'repeat')
+        || (sourceGenerator?.type === 'grid' && !['rows','columns'].includes(constraint.measure))
+        || (sourceGenerator?.type === 'repeat' && constraint.measure !== 'repeat')
+        || (constraint.type === 'span' && expectedAxis !== constraint.axis)
         || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
         || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
         throw new BadRequestException('资产结构约束计算规则无效：' + constraint.id);

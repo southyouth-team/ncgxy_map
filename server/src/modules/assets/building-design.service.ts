@@ -781,6 +781,92 @@ export class BuildingDesignService {
         if (Math.abs(area) < 0.0001) throw new BadRequestException(id + '.polygon 轮廓面积不能为零');
         geometryDescriptor.points = points.map((point: number[]) => [...point]);
       }
+      if (kind === 'mesh' && descriptor.closed !== undefined) {
+        if (typeof descriptor.closed !== 'boolean') throw new BadRequestException(id + '.closed 必须是布尔值');
+        geometryDescriptor.closed = descriptor.closed;
+      }
+      if (kind === 'mesh' && primitive === 'tube') {
+        const path = descriptor.path;
+        if (!Array.isArray(path) || path.length < 2 || path.length > 32
+          || path.some((point: any) => !Array.isArray(point) || point.length !== 3
+            || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
+          throw new BadRequestException(id + '.tube 路径必须包含 2 到 32 个 [-0.5,0.5] 范围内的三维坐标点');
+        }
+        geometryDescriptor.path = path.map((point: number[]) => [...point]);
+      }
+      if (kind === 'mesh' && primitive === 'lathe') {
+        const profile = descriptor.profile;
+        if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32
+          || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
+            || typeof point[0] !== 'number' || !Number.isFinite(point[0]) || point[0] < 0 || point[0] > 0.5
+            || typeof point[1] !== 'number' || !Number.isFinite(point[1]) || point[1] < -0.5 || point[1] > 0.5)
+          || profile.every((point: number[], index: number) => index === 0
+            || (Math.abs(point[0] - profile[index - 1][0]) < 0.0001 && Math.abs(point[1] - profile[index - 1][1]) < 0.0001))) {
+          throw new BadRequestException(id + '.lathe profile 必须包含 2 到 32 个有效的 [半径,高度] 归一化截面点');
+        }
+        geometryDescriptor.profile = profile.map((point: number[]) => [...point]);
+      }
+      if (kind === 'mesh' && primitive === 'sweep') {
+        if (descriptor.closed === true) throw new BadRequestException(id + '.sweep 暂不支持闭合路径');
+        const path = descriptor.path;
+        const profile = descriptor.profile;
+        if (!Array.isArray(path) || path.length < 2 || path.length > 32
+          || path.some((point: any) => !Array.isArray(point) || point.length !== 3
+            || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
+          throw new BadRequestException(id + '.sweep path 必须包含 2 到 32 个 [-0.5,0.5] 范围内的三维点');
+        }
+        if (path.some((point: number[], index: number) => index > 0
+          && Math.hypot(point[0] - path[index - 1][0], point[1] - path[index - 1][1], point[2] - path[index - 1][2]) < 0.0001)) {
+          throw new BadRequestException(id + '.sweep path 不能包含重复或零长度路径段');
+        }
+        assertStableSweepPath(path, id + '.sweep path', BadRequestException);
+        if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24
+          || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
+            || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
+          throw new BadRequestException(id + '.sweep profile 必须包含 3 到 24 个有效二维轮廓点');
+        }
+        assertSimpleAssetProfile(profile, id + '.sweep profile', BadRequestException);
+        geometryDescriptor.path = path.map((point: number[]) => [...point]);
+        geometryDescriptor.profile = profile.map((point: number[]) => [...point]);
+        if (descriptor.steps !== undefined) {
+          if (typeof descriptor.steps !== 'number' || !Number.isInteger(descriptor.steps) || descriptor.steps < 3 || descriptor.steps > 128) {
+            throw new BadRequestException(id + '.sweep steps 超出范围');
+          }
+          geometryDescriptor.steps = descriptor.steps;
+        }
+      }
+      if (kind === 'mesh' && primitive === 'loft') {
+        const sections = descriptor.sections;
+        if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) {
+          throw new BadRequestException(id + '.loft sections 必须包含 2 到 12 个截面');
+        }
+        const pointCount = Array.isArray(sections[0]?.points) ? sections[0].points.length : 0;
+        if (pointCount < 3 || pointCount > 24) throw new BadRequestException(id + '.loft 每个截面必须包含 3 到 24 个轮廓点');
+        let previousHeight = -Infinity;
+        let contourOrientation = 0;
+        geometryDescriptor.sections = sections.map((section: any, sectionIndex: number) => {
+          if (!section || typeof section !== 'object' || typeof section.height !== 'number'
+            || !Number.isFinite(section.height) || section.height < -0.5 || section.height > 0.5
+            || !Array.isArray(section.points) || section.points.length !== pointCount
+            || section.points.some((point: any) => !Array.isArray(point) || point.length !== 2
+              || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))
+            || section.height <= previousHeight + 0.0001) {
+            throw new BadRequestException(id + '.loft 截面高度必须严格递增且轮廓点数量一致（截面 ' + sectionIndex + '）');
+          }
+          assertSimpleAssetProfile(section.points, id + '.loft section ' + sectionIndex, BadRequestException);
+          const signedArea = section.points.reduce((sum: number, point: number[], pointIndex: number) => {
+            const next = section.points[(pointIndex + 1) % section.points.length];
+            return sum + point[0] * next[1] - next[0] * point[1];
+          }, 0);
+          const orientation = Math.sign(signedArea);
+          if (contourOrientation && orientation !== contourOrientation) {
+            throw new BadRequestException(id + '.loft 各截面必须保持一致的轮廓绕序');
+          }
+          contourOrientation = orientation;
+          previousHeight = section.height;
+          return { height: section.height, points: section.points.map((point: number[]) => [...point]) };
+        });
+      }
       return {
         id, kind, name: String(node.name || id).slice(0,120), role: String(node.role || 'component').slice(0,80),
         hidden: node.hidden === true, locked: node.locked === true,

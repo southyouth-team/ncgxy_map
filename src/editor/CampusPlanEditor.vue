@@ -1105,6 +1105,10 @@ function applyPublishedBuildingTemplate(templateId) {
       windowDensity: design.windowDensity ?? item.windowDensity, windowWidth: design.windowWidth ?? item.windowWidth,
       windowHeight: design.windowHeight ?? item.windowHeight, doorWidth: design.doorWidth ?? item.doorWidth,
       wall: design.wallPalette || item.wall,
+      facadeStyle: design.facadeStyle || 'modern', hasBalconies: design.hasBalconies === true,
+      balconyFloors: design.balconyFloors || [], columnCount: design.columnCount || 0,
+      roofColor: design.roofColor || 'roofRed', entrancePosition: design.entrancePosition || 'front',
+      massing: design.massing || 'rectangular', facadeSections: design.facadeSections || 1,
     })
   }
   commitFeatureCollectionMutation(collection => updateCampusFeatureProperties(collection, item.id, patch))

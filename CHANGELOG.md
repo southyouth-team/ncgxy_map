@@ -1,3 +1,11 @@
+## 2026-11-05 — ObjectSculptSpec 轮廓几何扩展
+
+- Three.js 受控适配器新增 `arch` 拱形开口几何：通过带内孔的 Shape + ExtrudeGeometry 构造真实拱门/拱窗轮廓，支持独立深度与 `geometryDescriptor.inset`。
+- 新增 `wedge` 三角棱柱几何，用于山墙、尖顶剖面和三角屋顶部件，避免全部使用圆锥或长方体近似。
+- 视觉模型 schema 提示词和服务端 primitive 白名单同步扩展；新增 arch inset 数值归一化边界。仍只接受声明式几何参数，不执行模型生成代码。
+- 新增运行时测试，验证拱门内孔和楔形屋顶均生成真实 ExtrudeGeometry。
+- 该扩展改善轮廓表达能力，但不等同于完整轮廓描摹或单图精确重建；复杂曲线/任意多边形仍需后续引入受限轮廓点 schema。
+
 ## 2026-11-05 — 视觉模型驱动 ObjectSculptSpec 城堡重建链路
 
 - 新增 `POST /assets/ai-image/reconstruct-object`，要求先通过 `approve-reference` 确认图片；请求绑定 category、objectType、visualStyle、图片摘要凭证和用户补充提示词。

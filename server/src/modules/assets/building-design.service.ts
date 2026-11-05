@@ -349,13 +349,13 @@ export class BuildingDesignService {
                 '只返回 ObjectSculptSpec JSON，不要输出 JavaScript、TypeScript、Markdown 或解释。',
                 '根对象字段：schemaVersion 固定为字符串 2.0，targetName，category（你判断的开放式分类标签），objectType（你判断的具体物体名称），visualStyle，materials，componentTree，parameterSchema，confidence，evidence，limitations。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
-                'componentTree 是有意义的结构节点数组。节点字段：id（稳定唯一英文 ID）、kind（group 或 mesh，默认 mesh）、name、role、parent（唯一根节点省略，其余节点填写直接父节点 ID）、transform（position/rotation/scale）。group 是纯逻辑分组，不带 primitive/dimensions/material，可包含子节点；mesh 必须声明 primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus/tube）、dimensions（width/height/depth）、material、geometryDescriptor（可选）。',
+                'componentTree 是有意义的结构节点数组。节点字段：id（稳定唯一英文 ID）、kind（group 或 mesh，默认 mesh）、name、role、parent（唯一根节点省略，其余节点填写直接父节点 ID）、transform（position/rotation/scale）。group 是纯逻辑分组，不带 primitive/dimensions/material，可包含子节点；mesh 必须声明 primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus/tube/lathe）、dimensions（width/height/depth）、material、geometryDescriptor（可选）。',
                 '根据对象本身的真实组成自主决定组件数量和层级；不要求固定层数或固定部件数量。简单对象可以只有一个 Mesh；复杂对象必须拆分为可独立编辑的部件。',
                 '整个资产必须只有一个根节点，其他节点通过 parent 形成连通树。子节点 position 是相对直接 parent 的局部坐标。parent 只定义层级，不会自动吸附几何体，必须根据尺寸和连接关系计算位置。',
                 'parameterSchema 用于声明真正有意义的可编辑参数，而不是穷举通用参数。每项格式：id、label、type(number/color/boolean/select)、value；number 另含 min/max/step/unit；select 另含 options([{label,value}])；targets 为数组，每项含 nodeId、property、mode。property 只允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube/radius、visibility.visible。mode 允许 set/multiply/add；visibility.visible 还允许 visible-from/visible-through 并提供 threshold；材质只允许 set。',
                 '只声明对当前资产有实际意义的参数。例如重复楼层、树冠层、车轮、窗户、叶片等结构的尺寸/颜色/比例；一个参数可绑定多个节点实现联动。不要凭空声明没有可控目标的参数。',
                 '参数目标必须引用真实存在的 nodeId。数值参数给出合理 min/max/current value；颜色参数使用 #RRGGBB；枚举参数提供有限 options。不要输出表达式、函数、脚本或任意属性路径。',
-                '材质颜色必须匹配参考图，不得全部白色/灰色。tube 几何必须声明 geometryDescriptor.path，格式为 2 到 32 个三维点，每个点是相对 dimensions 的归一化坐标 [x,y,z]，每个分量范围 [-0.5,0.5]；可声明 radius（0.01 到 10）、tubularSegments（3 到 128）、radialSegments（3 到 24）、closed（布尔值）。使用 tube 表达管道、弯曲线缆、扶手、枝干等沿路径延伸的圆截面物体，不要用一串互不连接的圆柱替代连续路径。几何部件应合理接合，避免无理由漂浮。只推断图中可见结构，遮挡/背面不确定性写入 limitations。',
+                '材质颜色必须匹配参考图，不得全部白色/灰色。lathe 旋转体必须声明 geometryDescriptor.profile，格式为 2 到 32 个 [radius,height] 点，radius 范围 [0,0.5]、height 范围 [-0.5,0.5]，按截面轮廓顺序排列；用于杯子、瓶子、碗、花盆、柱头等绕 Y 轴旋转对称的形体。tube 几何必须声明 geometryDescriptor.path，格式为 2 到 32 个三维点，每个点是相对 dimensions 的归一化坐标 [x,y,z]，每个分量范围 [-0.5,0.5]；可声明 radius（0.01 到 10）、tubularSegments（3 到 128）、radialSegments（3 到 24）、closed（布尔值）。使用 tube 表达管道、弯曲线缆、扶手、枝干等沿路径延伸的圆截面物体，不要用一串互不连接的圆柱替代连续路径。几何部件应合理接合，避免无理由漂浮。只推断图中可见结构，遮挡/背面不确定性写入 limitations。',
                 '分类提示：' + (categoryHint || '未指定，请自行判断') + '；对象名称提示：' + (objectType || '未指定，请自行判断') + '；视觉风格提示：' + visualStyle + '；补充要求：' + (userPrompt || '忠实还原参考图的主要轮廓、结构和色彩。'),
               ].join('\\n'),
             },
@@ -415,7 +415,7 @@ export class BuildingDesignService {
       ids.add(id);
       const kind = input.kind === 'group' ? 'group' : 'mesh';
       const primitive = String(input.primitive || '').toLowerCase();
-      if (kind === 'mesh' && !['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
+      if (kind === 'mesh' && !['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
       const number = (value: unknown, fallback: number, min: number, max: number) => {
         const n = Number(value);
         if (!Number.isFinite(n)) return fallback;
@@ -448,6 +448,18 @@ export class BuildingDesignService {
             throw new ServiceUnavailableException('tube 路径必须包含 2 到 32 个 [-0.5,0.5] 范围内的三维坐标点');
           }
           geometryDescriptor.path = path.map((point: number[]) => [...point]);
+        }
+        if (kind === 'mesh' && primitive === 'lathe') {
+          const profile = input.geometryDescriptor.profile;
+          if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32
+            || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
+              || typeof point[0] !== 'number' || !Number.isFinite(point[0]) || point[0] < 0 || point[0] > 0.5
+              || typeof point[1] !== 'number' || !Number.isFinite(point[1]) || point[1] < -0.5 || point[1] > 0.5)
+            || profile.every((point: number[], index: number) => index === 0
+              || (Math.abs(point[0] - profile[index - 1][0]) < 0.0001 && Math.abs(point[1] - profile[index - 1][1]) < 0.0001))) {
+            throw new ServiceUnavailableException('lathe profile 必须包含 2 到 32 个有效的 [半径,高度] 归一化截面点');
+          }
+          geometryDescriptor.profile = profile.map((point: number[]) => [...point]);
         }
         if (kind === 'mesh' && primitive === 'polygon') {
           const points = input.geometryDescriptor.points;

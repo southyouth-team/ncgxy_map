@@ -272,6 +272,144 @@ export class BuildingDesignService {
     return { provider: baseUrl, model, category, objectType, visualStyle, design, designToken, designTokenExpiresInSeconds: 900 };
   }
 
+
+  /**
+   * 审核编辑后的 ObjectSculptSpec。原始 AI 凭证必须有效且未过期；
+   * 服务端重新规范化整个组件树并签发绑定最终设计的新凭证。
+   */
+  reviewObjectDesign(originalDesignInput: unknown, originalTokenInput: unknown, objectSculptSpecInput: unknown) {
+    const original = originalDesignInput as Record<string, any> | undefined;
+    if (!original || typeof original !== 'object' || Array.isArray(original)
+      || original.category !== 'building' || original.source !== 'ai-vision-object-sculpt'
+      || original.reviewed === true || !this.consumeDesignToken(originalTokenInput, original)) {
+      throw new BadRequestException('原始建筑设计凭证无效、已审核或已过期，请重新识别');
+    }
+    const input = objectSculptSpecInput as Record<string, any> | undefined;
+    if (!input || typeof input !== 'object' || Array.isArray(input)
+      || input.schemaVersion !== '2.0' || !Array.isArray(input.componentTree)
+      || input.componentTree.length < 1 || input.componentTree.length > 100) {
+      throw new BadRequestException('ObjectSculptSpec 格式无效或组件数量超出范围');
+    }
+    const materialInput = input.materials;
+    if (!materialInput || typeof materialInput !== 'object' || Array.isArray(materialInput)
+      || Object.keys(materialInput).length < 1 || Object.keys(materialInput).length > 40) {
+      throw new BadRequestException('材质表必须包含 1 到 40 项');
+    }
+    const materials: Record<string, any> = {};
+    for (const [key, value] of Object.entries(materialInput)) {
+      const item = value as Record<string, any>;
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/.test(key) || !item || typeof item !== 'object' || Array.isArray(item)
+        || typeof item.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(item.color)) {
+        throw new BadRequestException('材质 ID 或颜色格式无效：' + key);
+      }
+      const bounded = (v: unknown, min: number, max: number, field: string) => {
+        if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) throw new BadRequestException('材质 ' + key + '.' + field + ' 超出允许范围');
+        return v;
+      };
+      materials[key] = {
+        color: item.color,
+        roughness: bounded(item.roughness, 0, 1, 'roughness'),
+        metalness: bounded(item.metalness, 0, 1, 'metalness'),
+        opacity: bounded(item.opacity, 0.05, 1, 'opacity'),
+      };
+    }
+    const ids = new Set<string>();
+    const primitives = ['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'];
+    const vector = (value: unknown, fallback: number[], field: string, min: number, max: number) => {
+      if (value === undefined || value === null) return [...fallback];
+      if (!Array.isArray(value) || value.length !== 3 || value.some(v => typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max)) {
+        throw new BadRequestException(field + ' 必须是范围内的三个有限数值');
+      }
+      return [...value];
+    };
+    const componentTree = input.componentTree.map((node: any, index: number) => {
+      if (!node || typeof node !== 'object' || Array.isArray(node)) throw new BadRequestException('组件节点格式无效：' + index);
+      const id = typeof node.id === 'string' ? node.id : '';
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new BadRequestException('组件 ID 无效或重复：' + id);
+      ids.add(id);
+      const primitive = String(node.primitive || '').toLowerCase();
+      if (!primitives.includes(primitive)) throw new BadRequestException('组件几何类型不受支持：' + primitive);
+      const dimensions = node.dimensions;
+      if (!dimensions || typeof dimensions !== 'object') throw new BadRequestException('组件尺寸缺失：' + id);
+      const dimension = (key: string) => {
+        const value = dimensions[key];
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.02 || value > 100) throw new BadRequestException(id + '.' + key + ' 超出允许范围');
+        return value;
+      };
+      const transform = node.transform && typeof node.transform === 'object' ? node.transform : {};
+      const scale = vector(transform.scale, [1,1,1], id + '.scale', -20, 20);
+      if (scale.some(value => Math.abs(value) < 0.001)) throw new BadRequestException(id + '.scale 不能为零');
+      if (typeof node.material !== 'string' || !materials[node.material]) throw new BadRequestException(id + '.material 不存在');
+      const geometryDescriptor: Record<string, any> = {};
+      const descriptor = node.geometryDescriptor && typeof node.geometryDescriptor === 'object' ? node.geometryDescriptor : {};
+      if (descriptor.segments !== undefined) {
+        if (typeof descriptor.segments !== 'number' || !Number.isInteger(descriptor.segments) || descriptor.segments < 3 || descriptor.segments > 48) throw new BadRequestException(id + '.segments 超出范围');
+        geometryDescriptor.segments = descriptor.segments;
+      }
+      if (descriptor.tube !== undefined) {
+        if (typeof descriptor.tube !== 'number' || !Number.isFinite(descriptor.tube) || descriptor.tube < 0.01 || descriptor.tube > 10) throw new BadRequestException(id + '.tube 超出范围');
+        geometryDescriptor.tube = descriptor.tube;
+      }
+      if (descriptor.inset !== undefined) {
+        if (typeof descriptor.inset !== 'number' || !Number.isFinite(descriptor.inset) || descriptor.inset < 0.02 || descriptor.inset > 20) throw new BadRequestException(id + '.inset 超出范围');
+        geometryDescriptor.inset = descriptor.inset;
+      }
+      if (primitive === 'polygon') {
+        const points = descriptor.points;
+        if (!Array.isArray(points) || points.length < 3 || points.length > 32
+          || points.some((point: any) => !Array.isArray(point) || point.length !== 2
+            || point.some((v: unknown) => typeof v !== 'number' || !Number.isFinite(v) || v < -0.5 || v > 0.5))) {
+          throw new BadRequestException(id + '.polygon 轮廓必须包含 3 到 32 个 [-0.5,0.5] 二维点');
+        }
+        const area = points.reduce((sum: number, point: number[], pointIndex: number) => {
+          const next = points[(pointIndex + 1) % points.length];
+          return sum + point[0] * next[1] - next[0] * point[1];
+        }, 0) / 2;
+        if (Math.abs(area) < 0.0001) throw new BadRequestException(id + '.polygon 轮廓面积不能为零');
+        geometryDescriptor.points = points.map((point: number[]) => [...point]);
+      }
+      return {
+        id, name: String(node.name || id).slice(0,120), role: String(node.role || 'component').slice(0,80),
+        ...(typeof node.parent === 'string' && node.parent ? { parent: node.parent } : {}),
+        primitive,
+        dimensions: { width: dimension('width'), height: dimension('height'), depth: dimension('depth') },
+        transform: {
+          position: vector(transform.position, [0,0,0], id + '.position', -100, 100),
+          rotation: vector(transform.rotation, [0,0,0], id + '.rotation', -100, 100),
+          scale,
+        },
+        material: node.material,
+        ...(Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),
+      };
+    });
+    const byId = new Map(componentTree.map(node => [node.id, node]));
+    for (const node of componentTree) {
+      if (node.parent && !byId.has(node.parent)) throw new BadRequestException('组件父节点不存在：' + node.id);
+      const visited = new Set([node.id]);
+      let parent = node.parent;
+      let depth = 1;
+      while (parent) {
+        if (visited.has(parent)) throw new BadRequestException('组件树存在循环引用：' + node.id);
+        visited.add(parent);
+        if (++depth > 16) throw new BadRequestException('组件树层级超过 16 层');
+        parent = byId.get(parent)?.parent;
+      }
+    }
+    const design = {
+      ...original,
+      objectSculptSpec: {
+        schemaVersion: '2.0',
+        targetName: String(input.targetName || original.objectType).slice(0,120),
+        materials,
+        componentTree,
+      },
+      reviewed: true,
+      reviewedAt: new Date().toISOString(),
+    };
+    const designToken = this.signToken('design', createHash('sha256').update(JSON.stringify(design)).digest('hex'));
+    return { design, designToken, designTokenExpiresInSeconds: 900 };
+  }
+
   async analyzeReference(imageDataUrlInput: unknown, approvalTokenInput: unknown, promptInput?: unknown) {
     const image = this.parseReferenceImage(imageDataUrlInput);
     const promptContext = typeof promptInput === 'string' ? promptInput.trim().slice(0, 4000) : '';

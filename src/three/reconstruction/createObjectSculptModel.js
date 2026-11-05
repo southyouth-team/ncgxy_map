@@ -397,9 +397,13 @@ export function validateObjectSculptSpec(spec) {
     if (!['follow','span'].includes(constraint.type) || !generatorIds.has(constraint.sourceGeneratorId)
       || !nodes.has(constraint.targetNodeId) || generatorTemplateNodeIds.has(constraint.targetNodeId)
       || !['x','y','z'].includes(constraint.axis)) throw new TypeError('结构约束引用无效：' + constraint.id);
+    const sourceGenerator = (spec.generators || []).find(item => item.id === constraint.sourceGeneratorId);
+    const expectedAxis = { 'dimensions.width': 'x', 'dimensions.height': 'y', 'dimensions.depth': 'z' }[constraint.property];
     if (!['rows','columns','repeat'].includes(constraint.measure || 'repeat')
+      || (sourceGenerator?.type === 'grid' && !['rows','columns'].includes(constraint.measure))
+      || (sourceGenerator?.type === 'repeat' && constraint.measure !== 'repeat')
       || (constraint.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(constraint.property)
-        || nodes.get(constraint.targetNodeId).kind === 'group'))
+        || expectedAxis !== constraint.axis || nodes.get(constraint.targetNodeId).kind === 'group'))
       || (constraint.type === 'follow' && constraint.property !== undefined)
       || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
       || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {

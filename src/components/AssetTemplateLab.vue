@@ -236,6 +236,7 @@ function updateAssetParameter(parameterId, value) {
   try {
     applyObjectSculptParameter(THREE, root, parameterId, value)
     editorRevision.value += 1
+    if (selectedComponentId.value) selectComponent(selectedComponentId.value)
     error.value = ''
   } catch (e) { error.value = e?.message || '参数更新失败' }
 }
@@ -475,7 +476,7 @@ onBeforeUnmount(() => {
             <h4>AI 声明的资产参数 <small>{{ selectedParameters.length }} 项</small></h4>
             <div v-for="parameter in selectedParameters" :key="parameter.id" class="parameter-row">
               <label>{{ parameter.label }}</label>
-              <input v-if="parameter.type==='number'" type="range" :min="parameter.min" :max="parameter.max" :step="parameter.step || 0.1" :value="parameter.value" @input="updateAssetParameter(parameter.id,Number($event.target.value))">
+              <input v-if="parameter.type==='number'" type="range" :min="parameter.min" :max="parameter.max" :step="parameter.step || 0.1" :value="parameter.value" @change="updateAssetParameter(parameter.id,Number($event.target.value))">
               <div v-if="parameter.type==='number'" class="parameter-value">{{ parameter.value }} {{ parameter.unit || '' }}</div>
               <input v-else-if="parameter.type==='color'" type="color" :value="parameter.value" @input="updateAssetParameter(parameter.id,$event.target.value)">
               <input v-else-if="parameter.type==='boolean'" type="checkbox" :checked="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.checked)">

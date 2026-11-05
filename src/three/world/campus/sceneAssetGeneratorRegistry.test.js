@@ -11,7 +11,10 @@ describe('scene asset generator registry', () => {
     expect(registry.supports('facility', '长椅')).toBe(true);
     expect(registry.supports('decoration', '景观石')).toBe(true);
     expect(registry.supports('sports', '篮球架')).toBe(true);
-    expect(SCENE_ASSET_GENERATOR_CATALOG).toHaveLength(5);
+    expect(registry.supports('road', '校园道路')).toBe(true);
+    expect(registry.supports('water', '湖泊')).toBe(true);
+    expect(registry.supports('terrain', '山坡')).toBe(true);
+    expect(SCENE_ASSET_GENERATOR_CATALOG).toHaveLength(8);
   });
 
   it('generates a real multi-mesh tree and records template metadata', () => {
@@ -93,6 +96,35 @@ describe('scene asset generator registry', () => {
     const seats = [];
     bench.traverse(object => { if (object.name.startsWith('bench-seat-')) seats.push(object); });
     expect(seats).toHaveLength(4);
+  });
+
+
+  it('generates spatial road ribbons, polygon water with holes, and terrain grids', () => {
+    const road = registry.generate({
+      category: 'road', objectType: '校园道路',
+      design: { geometry: { roadWidth: 5, sidewalkWidth: 1.5, markingType: 'centerline' } },
+      spatialGeometry: { coordinates: [[-5, 0], [0, 2], [5, 0]] },
+    });
+    expect(road.getObjectByName('road-surface')?.geometry.attributes.position.count).toBeGreaterThan(0);
+    expect(road.getObjectByName('road-sidewalk')).toBeTruthy();
+    expect(road.getObjectByName('road-marking')).toBeTruthy();
+
+    const water = registry.generate({
+      category: 'water', objectType: '湖泊',
+      spatialGeometry: {
+        outer: [[-5,-4],[5,-4],[5,4],[-5,4]],
+        holes: [[[-1,-1],[1,-1],[1,1],[-1,1]]],
+      },
+    });
+    expect(water.getObjectByName('water-surface')?.geometry).toBeTruthy();
+    expect(water.getObjectByName('water-shoreline')).toBeTruthy();
+
+    const terrain = registry.generate({
+      category: 'terrain', objectType: '山坡',
+      design: { geometry: { relief: 3, slope: 0.4 } },
+      spatialGeometry: { gridSize: 8 },
+    });
+    expect(terrain.getObjectByName('terrain-surface')?.geometry.attributes.position.count).toBe(81);
   });
 
 });

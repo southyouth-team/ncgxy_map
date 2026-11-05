@@ -145,6 +145,13 @@ export function validateObjectSculptSpec(spec) {
     if (ids.has(node.id)) throw new TypeError('组件 id 重复：' + node.id);
     ids.add(node.id);
     nodes.set(node.id, node);
+    const kind = node.kind || 'mesh';
+    if (!['group', 'mesh'].includes(kind)) throw new TypeError('组件 kind 无效：' + node.id);
+    if (kind === 'mesh') {
+      if (typeof node.primitive !== 'string' || !node.primitive) throw new TypeError('Mesh 组件缺少 primitive：' + node.id);
+      if (!node.dimensions || typeof node.dimensions !== 'object') throw new TypeError('Mesh 组件缺少 dimensions：' + node.id);
+      if (typeof node.material !== 'string') throw new TypeError('Mesh 组件缺少 material：' + node.id);
+    }
     finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
     finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
     finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
@@ -188,6 +195,7 @@ export function validateObjectSculptSpec(spec) {
     if (!Array.isArray(parameter.targets) || parameter.targets.length > 100) throw new TypeError('参数目标无效：' + parameter.id);
     for (const target of parameter.targets) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
+      if (nodes.get(target.nodeId).kind === 'group' && target.property.startsWith('material.')) throw new TypeError('Group 节点不能直接绑定材质参数：' + target.nodeId);
       if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','visibility.visible'].includes(target.property)) {
         throw new TypeError('参数目标属性不受支持：' + target.property);
       }
@@ -234,13 +242,16 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     group.userData.componentHidden = node.hidden === true;
     group.userData.componentLocked = node.locked === true;
     group.visible = node.hidden !== true;
-    const geometry = createGeometry(THREE, node);
-    const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
-    mesh.name = node.id + ':mesh';
-    mesh.userData.componentId = node.id;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
+    if ((node.kind || 'mesh') === 'mesh') {
+      const geometry = createGeometry(THREE, node);
+      const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
+      mesh.name = node.id + ':mesh';
+      mesh.userData.componentId = node.id;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    group.userData.componentKind = node.kind || 'mesh';
     const [px, py, pz] = finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
     const [rx, ry, rz] = finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
     const [sx, sy, sz] = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');

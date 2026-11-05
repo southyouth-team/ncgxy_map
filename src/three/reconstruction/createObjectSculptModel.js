@@ -56,7 +56,7 @@ function expandObjectSculptSpec(spec) {
     }
   }
   if (expanded.length > MAX_COMPONENTS) throw new RangeError('动态生成后的组件数量超过 ' + MAX_COMPONENTS);
-  return { ...spec, componentTree: expanded, generators: [] };
+  return { ...spec, componentTree: expanded, generators: [], parameterSchema: (spec.parameterSchema || []).map(parameter => generatorParameterIds.has(parameter.id) ? { ...parameter, generatorControl: true } : parameter) };
 }
 
 const MAX_HIERARCHY_DEPTH = 16;
@@ -274,7 +274,7 @@ export function validateObjectSculptSpec(spec) {
     } else if (parameter.type === 'select' && (!Array.isArray(parameter.options) || !parameter.options.some(option => option.value === parameter.value))) {
       throw new TypeError('枚举参数无效：' + parameter.id);
     }
-    if (!Array.isArray(parameter.targets) || parameter.targets.length > 100 || (parameter.targets.length < 1 && !generatorParameterIds.has(parameter.id))) throw new TypeError('参数目标无效：' + parameter.id);
+    if (!Array.isArray(parameter.targets) || parameter.targets.length > 100 || (parameter.targets.length < 1 && !generatorParameterIds.has(parameter.id) && parameter.generatorControl !== true)) throw new TypeError('参数目标无效：' + parameter.id);
     for (const target of parameter.targets) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
       if (nodes.get(target.nodeId).kind === 'group' && !target.property.startsWith('transform.') && target.property !== 'visibility.visible') throw new TypeError('Group 节点仅支持变换和显隐参数：' + target.nodeId);

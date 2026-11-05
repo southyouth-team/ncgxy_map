@@ -317,34 +317,46 @@ function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps
   const ringSize = profile.length;
   centers.forEach((center, ringIndex) => {
     const frame = frames[ringIndex];
-    profile.forEach(point => {
-      const vertex = center.clone()
-        .addScaledVector(frame.normal, point.x)
-        .addScaledVector(frame.binormal, point.y);
-      positions.push(vertex.x, vertex.y, vertex.z);
-    });
+    for (let edge = 0; edge < ringSize; edge += 1) {
+      for (const point of [profile[edge], profile[(edge + 1) % ringSize]]) {
+        const vertex = center.clone()
+          .addScaledVector(frame.normal, point.x)
+          .addScaledVector(frame.binormal, point.y);
+        positions.push(vertex.x, vertex.y, vertex.z);
+      }
+    }
   });
   for (let ring = 0; ring < centers.length - 1; ring += 1) {
     for (let edge = 0; edge < ringSize; edge += 1) {
-      const next = (edge + 1) % ringSize;
-      const a = ring * ringSize + edge;
-      const b = ring * ringSize + next;
-      const c = (ring + 1) * ringSize + edge;
-      const d = (ring + 1) * ringSize + next;
+      const a = ring * ringSize * 2 + edge * 2;
+      const b = a + 1;
+      const c = (ring + 1) * ringSize * 2 + edge * 2;
+      const d = c + 1;
       indices.push(a, b, c, b, d, c);
     }
   }
+
   let area = 0;
   for (let index = 0; index < profile.length; index += 1) {
     const next = profile[(index + 1) % profile.length];
     area += profile[index].x * next.y - next.x * profile[index].y;
   }
-  const startOffset = 0;
-  const endOffset = (centers.length - 1) * ringSize;
-  triangles.forEach(([a, b, d]) => {
-    const ordered = area >= 0 ? [a, b, d] : [a, d, b];
-    indices.push(ordered[0] + startOffset, ordered[2] + startOffset, ordered[1] + startOffset);
-    indices.push(ordered[0] + endOffset, ordered[1] + endOffset, ordered[2] + endOffset);
+  const capBase = positions.length / 3;
+  triangles.forEach(([a, b, c]) => {
+    const ordered = area >= 0 ? [a, b, c] : [a, c, b];
+    const startTriangle = [ordered[0], ordered[2], ordered[1]];
+    const endTriangle = ordered;
+    for (const [ringIndex, triangle] of [[0, startTriangle], [centers.length - 1, endTriangle]]) {
+      const frame = frames[ringIndex];
+      for (const pointIndex of triangle) {
+        const point = profile[pointIndex];
+        const vertex = centers[ringIndex].clone()
+          .addScaledVector(frame.normal, point.x)
+          .addScaledVector(frame.binormal, point.y);
+        positions.push(vertex.x, vertex.y, vertex.z);
+        indices.push(indices.length ? positions.length / 3 - 1 : capBase);
+      }
+    }
   });
 
   const geometry = new THREE.BufferGeometry();

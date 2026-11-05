@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CAMPUS_BUILDING_TEMPLATES, createPixelBuilding } from '../three/world/campus/campusAssetLibrary.js'
 import { CAMPUS_BUILDING_FOOTPRINTS } from '../data/campus/campusLayout.js'
 import { createCampusAssetManifestFromWorkshopRecords } from '../data/campus/campusAssetManifest.js'
@@ -81,11 +82,26 @@ function renderBuildingPreview(container, mode) {
     : new THREE.PerspectiveCamera(38, aspect, 0.1, 100)
   camera.position.set(12, mode === '2.5d' ? 17 : 10, 15)
   camera.lookAt(0, 2.2, 0)
-  renderer.render(scene, camera)
-  return { renderer, scene, materials }
+  const controls = new OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.dampingFactor = 0.08
+  controls.enablePan = false
+  controls.enableRotate = true
+  controls.enableZoom = true
+  controls.minDistance = 7
+  controls.maxDistance = 42
+  controls.minZoom = 0.55
+  controls.maxZoom = 2.4
+  controls.target.set(0, 2.2, 0)
+  controls.update()
+  const render = () => renderer.render(scene, camera)
+  controls.addEventListener('change', render)
+  render()
+  return { renderer, scene, materials, controls, render }
 }
 function disposeBuildingPreviews() {
   previewRenderers.splice(0).forEach(entry => {
+    entry.controls.dispose()
     entry.renderer.dispose()
     Object.values(entry.materials).forEach(material => material.dispose())
     entry.scene.traverse(node => { if (node.geometry) node.geometry.dispose() })
@@ -560,10 +576,10 @@ onBeforeUnmount(() => { resetPreview(); disposeBuildingPreviews() })
       </section>
 
       <section class="workshop-panel preview-panel">
-        <div class="panel-heading"><span>02 / 双视角实时建模预览</span><small>同一套 Three.js Mesh · 仅相机不同</small></div>
+        <div class="panel-heading"><span>02 / 双视角实时建模预览</span><small>同一套 Three.js Mesh · 可交互检查</small></div>
         <div class="dual-preview-grid">
-          <div class="preview-card"><strong>2.5D · 固定斜俯视</strong><div ref="preview25d" class="three-preview"></div><small>正交投影，保留墙体厚度、屋顶、门窗与阴影</small></div>
-          <div class="preview-card"><strong>3D · 透视观察</strong><div ref="preview3d" class="three-preview"></div><small>透视投影，展示同一建筑实体的空间结构</small></div>
+          <div class="preview-card"><strong>2.5D · 固定斜俯视</strong><div ref="preview25d" class="three-preview"></div><small>正交投影 · 拖动旋转检查背面 · 滚轮缩放</small></div>
+          <div class="preview-card"><strong>3D · 透视观察</strong><div ref="preview3d" class="three-preview"></div><small>透视投影 · 拖动旋转检查背面 · 滚轮缩放</small></div>
         </div>
         <p class="hint">识别参数更新后，两侧预览同步重建。参考图片仅用于结构识别和人工审核，不作为任一视角的最终显示素材。</p>
       </section>

@@ -188,7 +188,7 @@ describe('BuildingDesignService', () => {
     const approval = service.approveReference(imageDataUrl);
     const result = await service.reconstructObjectReference('building', '城堡', 'anime-painted', imageDataUrl, approval.approvalToken, '保留双塔和红色尖顶');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content.join(' ')).toContain('城堡');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content).toContain('城堡');
     expect(result.design.objectSculptSpec.componentTree).toHaveLength(12);
     expect(result.design.objectSculptSpec.componentTree.find((node: any) => node.id === 'west-roof').parent).toBe('west-tower');
     expect(result.design.objectSculptSpec.materials.roof.color).toBe('#b84b3d');

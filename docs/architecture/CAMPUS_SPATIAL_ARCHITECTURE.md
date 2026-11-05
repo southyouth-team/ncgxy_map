@@ -1003,3 +1003,13 @@ API 新增 `/assets/scene-templates` 路径，同时保留 `/assets/building-tem
 - 该实现是上游 img2threejs ObjectSculptSpec 的受控子集，不代表完整 schema 兼容；目前没有执行模型生成的 TypeScript，也没有声称 AI 视觉模型已输出组件树。
 - 下一阶段需新增图像识别结构化输出、城堡专用部件清单、分阶段视觉校正和容器隔离的可选代码生成。Node `vm` 不视为安全沙箱；AI 代码不得在 API 主进程中直接执行。
 - 参考与验收方案：`docs/IMG2THREEJS_RECONSTRUCTION_POC.md`。校园 Feature 的位置、footprint、碰撞、walkable 仍是空间数据唯一事实来源。
+
+
+## 41. 视觉模型驱动 ObjectSculptSpec 重建（2026-11-05）
+
+- 新增 `POST /assets/ai-image/reconstruct-object`：必须携带已确认图片的短时凭证，校验 category/objectType/visualStyle 后调用现有 VISION 模型配置。
+- 输出结构化 JSON ObjectSculptSpec 子集，包含材质表、组件树、parent、primitive、dimensions、transform、geometryDescriptor、confidence、evidence 和 limitations。服务端执行组件 ID/primitive/材质/尺寸/变换/父节点/循环引用校验，不执行 AI 生成的 JavaScript/TypeScript。
+- building 城堡类型要求至少 12 个组件；工坊将组件树转成真实 Three.js Mesh，展示组件清单，并在 2.5D 正交与 3D 透视两个视口共享同一模型。
+- 重建设计绑定参考图片 SHA-256，模板上传参考图和发布时再次校验，确保存档图与识别输入一致；历史建筑设计无摘要字段时保持原有兼容。
+- 新增视觉重建服务测试，覆盖有效城堡组件树签名、材质和层级，以及缺失父节点/循环引用拒绝。
+- 当前是代码级链路完成；外部视觉模型实际输出质量、浏览器画面相似度、保存/重载一致性仍需真实图片验收，CI 不替代视觉验收。

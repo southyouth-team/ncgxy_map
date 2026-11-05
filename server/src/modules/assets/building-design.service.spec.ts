@@ -268,12 +268,12 @@ describe('BuildingDesignService', () => {
       json: async () => ({ choices: [{ message: { content: JSON.stringify({
         targetName: 'test-building',
         materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
-        componentTree: [{
-          id: 'main', name: '主体', role: 'main', primitive: 'box',
+        componentTree: Array.from({ length: 6 }, (_, index) => ({
+          id: 'part-' + index, name: '主体部件 ' + index, role: 'main', primitive: 'box',
           dimensions: { width: 8, height: 6, depth: 7 },
-          transform: { position: [0, 3, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          transform: { position: [index, 3, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
           material: 'wall',
-        }],
+        })),
       }) } }] }),
     }) as never;
     const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');

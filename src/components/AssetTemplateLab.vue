@@ -157,6 +157,7 @@ async function generateModel() {
     let spec
     let model
     const isReferenceImage = Boolean(imageDataUrl.value)
+    generationStage.value = 1
     if (isReferenceImage) {
       status.value = '图片模式：正在确认参考图并调用视觉模型重建…'
       result = await requestJson('/assets/ai-image/reconstruct-object', {

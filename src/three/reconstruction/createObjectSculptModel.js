@@ -880,7 +880,9 @@ export function validateObjectSculptSpec(spec) {
         throw new TypeError('adjacency relation 无效：' + constraint.id);
       }
     }
-    const targetKey = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis || constraint.sourceNodeId);
+    const targetKey = constraint.type === 'cutout'
+      ? constraint.targetNodeId + ':cutout:' + constraint.cutterNodeId
+      : constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis || constraint.sourceNodeId);
     if (managedConstraintTargets.has(targetKey)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
     managedConstraintTargets.add(targetKey);
   }

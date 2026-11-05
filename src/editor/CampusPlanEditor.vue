@@ -1065,13 +1065,21 @@ function applyBuildingTemplate(template) {
   const preset = CAMPUS_BUILDING_ASSET_CATALOG.find(entry => entry.template === template)
   if (!item || !preset) return
   snapshot()
-  const patch = { template: preset.template, height: preset.height, floors: preset.floors, windowDensity: preset.windowDensity, windowWidth: preset.windowWidth, windowHeight: preset.windowHeight, doorWidth: preset.doorWidth, roofRise: preset.roofRise, roofStyle: preset.roofStyle, wall: preset.wall }
+  const patch = { modelTemplateId: null, modelTemplateName: null, template: preset.template, height: preset.height, floors: preset.floors, windowDensity: preset.windowDensity, windowWidth: preset.windowWidth, windowHeight: preset.windowHeight, doorWidth: preset.doorWidth, roofRise: preset.roofRise, roofStyle: preset.roofStyle, wall: preset.wall }
   commitFeatureCollectionMutation(collection => updateCampusFeatureProperties(collection, item.id, patch))
 }
 function applyPublishedBuildingTemplate(templateId) {
   const item = selectedBuilding.value
+  if (!item) return
+  if (!templateId) {
+    const preset = CAMPUS_BUILDING_TEMPLATES[item.template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
+    snapshot()
+    const patch = { modelTemplateId: null, modelTemplateName: null, template: item.template, height: preset.height, floors: preset.floors, roofStyle: preset.roofStyle, roofRise: preset.roofRise, windowDensity: preset.windowDensity, windowWidth: preset.windowWidth, windowHeight: preset.windowHeight, doorWidth: preset.doorWidth, wall: preset.wall }
+    commitFeatureCollectionMutation(collection => updateCampusFeatureProperties(collection, item.id, patch))
+    return
+  }
   const template = publishedBuildingTemplates.value.find(entry => entry.templateId === templateId && entry.status === 'ready')
-  if (!item || !template) return
+  if (!template) return
   snapshot()
   const design = template.buildingDesign || {}
   const patch = { modelTemplateId: template.templateId, modelTemplateName: template.name, template: design.template || item.template }

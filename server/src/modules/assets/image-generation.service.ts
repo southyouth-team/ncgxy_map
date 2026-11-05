@@ -155,7 +155,7 @@ export class ImageGenerationService {
                 '你是专业的 Three.js 独立物体建模工程师。根据用户提示词输出 ObjectSculptSpec JSON，不要输出 JavaScript、Markdown 或解释。',
                 '根对象字段：schemaVersion 固定为字符串 2.0，targetName，materials，componentTree。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
-                'componentTree 必须包含 12-40 个有意义的独立组件。节点字段：id（唯一英文 ID）、name、role、parent、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。',
+                'componentTree 必须包含 12-40 个有意义的独立组件。节点字段：id（唯一英文 ID）、name、role、parent（唯一主体根节点省略，其余组件必填）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。',
                 '装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表主体承重结构；其余全部组件必须通过 parent 连接到该根节点，形成一棵连通树。禁止多个根节点、漂浮零件或分散陈列。',
                 '所有子组件 position 必须是相对直接 parent 的局部坐标。先定义主体中心和尺寸，再把屋顶、塔楼、塔尖、门窗、装饰等放在实际连接位置。屋顶底部贴合墙顶、塔尖底部贴合塔身顶部、门窗贴合外立面；相邻结构应接触、嵌入或合理搭接，不能留出明显空气间隙。',
                 'parent 只定义层级，不会自动吸附几何体。必须根据每个 Mesh 的 dimensions 计算局部 position，确保组件实际接合，不能仅仅把组件挂在同一父节点下。',

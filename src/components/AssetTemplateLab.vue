@@ -36,7 +36,7 @@ const componentTree = computed(() => {
 })
 const selectedComponentColor = computed(() => selectedComponent.value?.material && selectedSpec.value?.materials?.[selectedComponent.value.material]?.color || '#b8b8b8')
 const selectedComponentVisible = computed(() => selectedComponent.value?.hidden !== true)
-const selectedComponentTransform = computed(() => selectedComponent.value?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
+const selectedComponentTransform = computed(() => ({ position: selectedComponent.value?.transform?.position || [0,0,0], rotation: selectedComponent.value?.transform?.rotation || [0,0,0], scale: selectedComponent.value?.transform?.scale || [1,1,1] }))
 const selectedComponentId = ref('')
 const labels = {building:'建筑',vegetation:'植被',structure:'构筑物',facility:'设施',decoration:'装饰',sports:'运动设施',road:'道路',water:'水域',terrain:'地形'}
 let renderer, scene, camera, controls, observer, frame, serial = 0

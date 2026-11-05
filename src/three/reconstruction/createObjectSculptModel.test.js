@@ -239,6 +239,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const fifthFloor = [...model.userData.componentGroups.values()].find(group => group.userData.componentSourceId === 'floor-prototype' && Math.abs(group.position.y - 12.8) < 0.001);
     expect(fifthFloor).toBeDefined();
     expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(17.4);
+    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
+    expect(reloaded.userData.componentGroups.size).toBe(12);
+    expect(reloaded.userData.componentGroups.get('roof').position.y).toBeCloseTo(17.4);
     applyObjectSculptParameter(THREE, model, 'floor-count', 2);
     expect(model.userData.componentGroups.size).toBe(6);
     expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(7.8);

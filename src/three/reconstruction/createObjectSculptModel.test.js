@@ -363,6 +363,62 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(mesh.geometry.getAttribute('normal').count).toBe(mesh.geometry.getAttribute('position').count);
   });
 
+  it('keeps sweep cap triangles correctly indexed and consistently oriented for either profile winding', () => {
+    const build = profile => createObjectSculptModel(THREE, {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'straight-sweep', primitive: 'sweep', material: 'default',
+        dimensions: { width: 4, height: 2, depth: 2 },
+        geometryDescriptor: {
+          path: [[-0.5, 0, 0], [0.5, 0, 0]],
+          profile,
+          steps: 8,
+        },
+      }],
+    }).userData.componentGroups.get('straight-sweep').getObjectByName('straight-sweep:mesh').geometry;
+    const ccw = [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]];
+    const geometries = [build(ccw), build([...ccw].reverse())];
+    for (const geometry of geometries) {
+      const index = geometry.getIndex();
+      const position = geometry.getAttribute('position');
+      const sideIndexCount = 8 * 4 * 6;
+      expect(index.count % 3).toBe(0);
+      expect(index.count - sideIndexCount).toBe(12);
+      const faceNormal = offset => {
+        const ids = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];
+        const a = new THREE.Vector3().fromBufferAttribute(position, ids[0]);
+        const b = new THREE.Vector3().fromBufferAttribute(position, ids[1]);
+        const c = new THREE.Vector3().fromBufferAttribute(position, ids[2]);
+        return b.sub(a).cross(c.sub(a)).normalize();
+      };
+      expect(faceNormal(sideIndexCount).x).toBeLessThan(-0.99);
+      expect(faceNormal(sideIndexCount + 6).x).toBeLessThan(-0.99);
+      expect(faceNormal(sideIndexCount + 12).x).toBeGreaterThan(0.99);
+      expect(faceNormal(sideIndexCount + 18).x).toBeGreaterThan(0.99);
+      for (let offset = sideIndexCount; offset < index.count; offset += 3) {
+        const ids = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];
+        expect(new Set(ids).size).toBe(3);
+      }
+      geometry.dispose();
+    }
+  });
+
+  it('rejects closed sweep paths until seam frame correction is implemented', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'closed-sweep', primitive: 'sweep', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          path: [[-0.4, 0, 0], [0, 0.4, 0], [0.4, 0, 0], [0, -0.4, 0]],
+          profile: [[-0.1, -0.1], [0.1, -0.1], [0.1, 0.1], [-0.1, 0.1]],
+          closed: true,
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('暂不支持闭合扫掠路径');
+  });
+
   it('builds a loft mesh between ordered cross-sections and closes both ends', () => {
     const spec = {
       schemaVersion: '2.0',

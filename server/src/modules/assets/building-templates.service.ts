@@ -3,13 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { BuildingDesignService } from './building-design.service';
 
 @Injectable()
 export class BuildingTemplatesService {
   private readonly root: string;
   private readonly manifestPath: string;
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(config: ConfigService) {
+  constructor(config: ConfigService, private readonly buildingDesign: BuildingDesignService) {
     this.root = resolve(config.get<string>('ASSET_STORAGE_DIR', './uploads'), 'campus-building-templates');
     this.manifestPath = resolve(this.root, 'manifest.json');
   }
@@ -26,6 +27,7 @@ export class BuildingTemplatesService {
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
     const design = input.buildingDesign as Record<string, unknown> | undefined;
     if (input.modelType === 'procedural' && (!design || typeof design !== 'object')) throw new BadRequestException('程序化模板缺少结构参数');
+    if (input.modelType === 'procedural' && !this.buildingDesign.consumeDesignToken(input.designToken, design)) throw new BadRequestException('程序化模板必须使用已确认图片生成的有效结构参数；请重新确认图片并识别');
     const now = new Date().toISOString();
     const item = { templateId: 'bldtpl-' + randomUUID(), name, category: String(input.category || 'building'), sourceType: input.sourceType, modelType: input.modelType, status: 'review', buildingDesign: design || null, prompt: String(input.prompt || '').slice(0,12000), generationModel: input.generationModel || null, referenceImage: null, modelFile: null, createdAt: now, updatedAt: now };
     await this.enqueue(async () => { const m = await this.readManifest(); m.templates.unshift(item); await this.writeManifest(m); });

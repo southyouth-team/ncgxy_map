@@ -270,12 +270,19 @@ export class AssetsService {
       if (!generator || typeof generator !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.id || '')
         || generatorIds.has(generator.id) || generator.type !== 'repeat' || !byId.has(generator.templateRootId)
         || !['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100
-        || !Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100) {
+        || !Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100
+        || !Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount
+        || (generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30))) {
         throw new BadRequestException('资产结构生成器定义无效');
       }
       generatorIds.add(generator.id);
+      for (const follower of generator.followers || []) {
+        if (!byId.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis) || !Number.isFinite(Number(follower.offset ?? 0))) {
+          throw new BadRequestException('资产结构生成器跟随规则无效：' + generator.id);
+        }
+      }
       const parameter = (spec.parameterSchema || []).find((item: any) => item.id === generator.countParameterId);
-      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+      if (!parameter || parameter.type !== 'number' || parameter.value !== generator.defaultCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
         || parameter.min < 1 || parameter.max > generator.maxCount) {
         throw new BadRequestException('资产结构生成器缺少有效的整数数量参数：' + generator.id);
       }

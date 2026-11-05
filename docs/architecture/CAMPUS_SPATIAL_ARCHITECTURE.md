@@ -927,3 +927,13 @@ API 新增 `/assets/scene-templates` 路径，同时保留 `/assets/building-tem
 新增 `src/three/world/campus/sceneAssetGeneratorRegistry.js`，通过 `createSceneAssetGeneratorRegistry(THREE)` 建立按 `category + objectType` 精确匹配的生成器目录。当前首批接入植被（乔木、灌木、花卉）、构筑物（桥梁、廊架、亭子）、公共设施（长椅、路灯、垃圾桶、指示牌）、景观装饰（景观石、假山、花坛）和运动设施（篮球架）。生成器输出真实 Three.js Mesh/Group，不使用参考图片充当 Sprite 或贴图，并为根节点写入 `userData.sceneAsset` 元数据。
 
 当前生成器目录是明确的能力白名单；未注册的对象类型会抛出错误，不允许静默回退到建筑几何。该文件暂不接管建筑原有 `createPixelBuilding` 生产链。道路、水体、地形没有注册为静态物体生成器，因为它们属于空间型资产，必须结合路线中心线、Feature 多边形/holes、高程网格等空间数据生成。下一阶段应把生成器接入工坊预览和模板发布链路，并逐步为道路、水体、地形建立独立的空间生成契约。
+
+
+## 36. 通用场景生成器接入工坊实时预览（2026-11-05）
+
+- `BuildingTemplateWorkshop.vue` 引入 `createSceneAssetGeneratorRegistry(THREE)`，使用 `category + objectType` 精确判断预览能力；不支持的组合不创建模型，也不回退到建筑几何。
+- 首批植被、构筑物、公共设施、景观装饰和运动设施生成器已接入本地实时预览。分类切换会给出对应默认对象类型；对象类型、视觉风格和宽/高/深参数变化时刷新预览。
+- 两个视口消费同一类 Three.js 生成结果，2.5D 使用正交相机，3D 使用透视相机；用户可旋转检查模型。GLB 仍走 GLTFLoader 独立加载路径。
+- 当前预览生成器没有把 AI 参考图当作最终贴图或 Sprite。首批非建筑几何来自确定性参数化规则；尚未接入非建筑视觉识别 schema，因此不能宣称图片已驱动这些类别的结构生成。
+- 服务端当前仍只允许建筑类别通过已有设计参数签名发布程序化模板。工坊明确阻止非建筑类别以 procedural 来源发布，避免本地预览能力越权成为正式模板。非建筑暂可通过 GLB 路径发布。
+- 道路、水体、地形及室内/交通工具/角色/动态效果尚未获得完整生成器实现；空间型资产必须先定义路线、多边形/holes、高程或室内布局等输入契约。

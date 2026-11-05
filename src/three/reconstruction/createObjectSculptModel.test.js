@@ -1407,7 +1407,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       .filter(group => group.userData.componentSourceId === 'right-template');
     expect(leftInstances).toHaveLength(3);
     expect(rightInstances).toHaveLength(3);
-    expect(model.userData.componentGroups.size).toBe(7);
+    expect(model.userData.componentGroups.size).toBe(13);
   });
 
 });

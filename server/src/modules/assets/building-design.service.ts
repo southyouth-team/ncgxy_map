@@ -12,7 +12,38 @@ function stableSerialize(value: any): string {
   if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableSerialize(value[key])).join(',') + '}';
   return JSON.stringify(value);
 }
-function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>) {
+function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
+  if (input == null) return [];
+  if (!Array.isArray(input) || input.length > 30) throw new ServiceUnavailableException('generators 必须是最多 30 项的数组');
+  const ids = new Set<string>();
+  const nodeIds = new Set(componentTree.map(node => node.id));
+  return input.map((raw: any) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ServiceUnavailableException('结构生成器定义无效');
+    const id = typeof raw.id === 'string' ? raw.id : '';
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('结构生成器 ID 无效或重复：' + id);
+    ids.add(id);
+    if (raw.type !== 'repeat' || !nodeIds.has(raw.templateRootId)) throw new ServiceUnavailableException('结构生成器模板节点无效：' + id);
+    if (raw.parentId != null && !nodeIds.has(raw.parentId)) throw new ServiceUnavailableException('结构生成器父节点无效：' + id);
+    if (!['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构生成器排列轴无效：' + id);
+    const spacing = Number(raw.spacing), maxCount = Number(raw.maxCount);
+    if (!Number.isFinite(spacing) || Math.abs(spacing) > 100 || !Number.isInteger(maxCount) || maxCount < 1 || maxCount > 100) {
+      throw new ServiceUnavailableException('结构生成器间距或最大数量无效：' + id);
+    }
+    const countParameterId = typeof raw.countParameterId === 'string' ? raw.countParameterId : '';
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(countParameterId)) throw new ServiceUnavailableException('结构生成器数量参数 ID 无效：' + id);
+    const descendants = componentTree.filter(node => {
+      let parent = node.id;
+      while (parent) {
+        if (parent === raw.templateRootId) return true;
+        parent = componentTree.find(item => item.id === parent)?.parent;
+      }
+      return false;
+    });
+    if (!descendants.length || descendants.length * maxCount > 300) throw new ServiceUnavailableException('结构生成器展开后超过组件数量限制：' + id);
+    return { id, type: 'repeat', templateRootId: raw.templateRootId, ...(raw.parentId == null ? {} : { parentId: raw.parentId }), countParameterId, axis: raw.axis, spacing, maxCount };
+  });
+}
+function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>, generatorParameterIds = new Set<string>()) {
   if (input == null) return [];
   if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('parameterSchema 必须是最多 100 项的数组');
   const ids = new Set<string>();
@@ -46,7 +77,7 @@ function normalizeObjectParameterSchema(input: unknown, componentTree: any[], ma
         return { label: String(item.label || item.value).slice(0, 100), value: item.value };
       });
     }
-    if (!Array.isArray(raw.targets) || raw.targets.length < 1 || raw.targets.length > 100) throw new ServiceUnavailableException('参数目标不能为空或超出数量限制：' + id);
+    if (!Array.isArray(raw.targets) || raw.targets.length > 100 || (raw.targets.length < 1 && !generatorParameterIds.has(id))) throw new ServiceUnavailableException('参数目标不能为空或超出数量限制：' + id);
     parameter.targets = raw.targets.map((target: any) => {
       const node = componentTree.find(item => item.id === target?.nodeId);
       if (!nodeIds.has(target?.nodeId) || !PARAMETER_TARGETS.has(target?.property)) throw new ServiceUnavailableException('参数目标无效：' + id);
@@ -469,7 +500,15 @@ export class BuildingDesignService {
     }
     const rootNodes = componentTree.filter((node: any) => !node.parent);
     if (rootNodes.length !== 1) throw new BadRequestException('资产组件必须连接到唯一主体根节点，不能拆成多个独立物体');
-    const parameterSchema = normalizeObjectParameterSchema(input.parameterSchema ?? original.objectSculptSpec?.parameterSchema, componentTree, materials);
+    const generators = normalizeObjectGenerators(input.generators ?? original.objectSculptSpec?.generators, componentTree);
+    const generatorParameterIds = new Set(generators.map((generator: any) => generator.countParameterId));
+    const parameterSchema = normalizeObjectParameterSchema(input.parameterSchema ?? original.objectSculptSpec?.parameterSchema, componentTree, materials, generatorParameterIds);
+    for (const generator of generators) {
+      const parameter = parameterSchema.find((item: any) => item.id === generator.countParameterId);
+      if (!parameter || parameter.type !== 'number' || parameter.min < 1 || parameter.max > generator.maxCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)) {
+        throw new BadRequestException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
+      }
+    }
     const design = {
       ...original,
       objectSculptSpec: {
@@ -481,6 +520,7 @@ export class BuildingDesignService {
         materials,
         componentTree,
         parameterSchema,
+        generators,
       },
       reviewed: true,
       reviewedAt: new Date().toISOString(),
@@ -604,12 +644,14 @@ export class BuildingDesignService {
           messages: [
             { role: 'system', content: [
               '你是参数化 3D 模型的参数设计器。根据用户要求和当前 ObjectSculptSpec，为现有模型设计可编辑参数。',
-              '只返回 JSON：{ "parameterSchema": [...] }。parameterSchema 必须是完整数组，包含原有参数并追加新参数；原有参数必须逐字段保持不变。',
-              '每个参数包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options。',
+              '只返回 JSON：{ "parameterSchema": [...], "generators": [...], "unsupported": [...] }。parameterSchema 和 generators 必须返回完整定义，原有定义必须逐字段保持不变。',
+              '普通参数包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options。',
               'targets 只能引用当前 componentTree 中真实存在的 nodeId。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。',
-              'mode 仅允许 set/multiply/add/visible-from/visible-through。visible-from/visible-through 只能用于 visibility.visible，必须提供 threshold。材质只允许 set。不得输出表达式、函数、脚本或任意属性路径。',
-              '参数必须真正对应现有节点。如果用户要求控制楼层数、房间数等结构数量，只有当前结构中存在足够的对应节点时，才能用 visibility.visible + visible-from/visible-through 将数量映射到节点显隐；如果当前没有可控制的重复节点，不得伪造目标，也不得声称已实现动态生成，应返回 { "parameterSchema": [...], "unsupported": ["说明缺少哪些结构节点"] }。',
-              '不要通过把整个模型整体缩放来冒充房间数或楼层数控制。整体尺寸参数应合理联动相关部件，不能只绑定一个无关节点。',
+              '结构数量参数可以 targets=[]，但必须同时创建一个 generators 项并绑定 countParameterId。禁止把楼层数只映射到预生成节点显隐。',
+              'generators 只支持安全声明式 repeat：{id,type:"repeat",templateRootId,countParameterId,axis:"x"|"y"|"z",spacing,maxCount}。templateRootId 必须是当前 componentTree 中代表一个完整可重复单元的现有节点；其子树会作为原型复制。第一份保留原节点 ID，后续实例由运行时派生稳定 ID。',
+              '当用户要求楼层数时，寻找一个完整楼层 Group 子树作为模板，沿 y 轴重复，spacing 使用楼层高度；count 参数整数范围必须不超过 maxCount。屋顶等非重复结构不能放进楼层原型子树。',
+              '当用户要求房间数时，只有能识别完整房间原型和合理排列轴/间距时才创建 repeat；否则说明当前模型缺少可重复房间结构，不能假装参数已生效。',
+              '不能为没有合适原型的结构创建生成器；不允许执行脚本、表达式或自定义函数。最大展开组件数量 300。',
               '所有参数 ID 唯一；新增参数不得与现有 ID 冲突。最多 100 个参数，每项最多 100 个目标。',
               '禁止返回 JavaScript/TypeScript。AI 只声明参数数据，服务端会再次校验所有字段与目标。',
             ].join('\\n') },
@@ -629,7 +671,16 @@ export class BuildingDesignService {
       throw new ServiceUnavailableException('AI 参数设计未返回有效 JSON');
     }
     if (!Array.isArray(parsed?.parameterSchema)) throw new ServiceUnavailableException('AI 参数设计结果缺少 parameterSchema');
-    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, current.componentTree, current.materials);
+    const generators = normalizeObjectGenerators(parsed.generators ?? current.generators ?? [], current.componentTree);
+    const generatorParameterIds = new Set(generators.map((generator: any) => generator.countParameterId));
+    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, current.componentTree, current.materials, generatorParameterIds);
+    for (const generator of generators) {
+      const parameter = parameterSchema.find((item: any) => item.id === generator.countParameterId);
+      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+        || parameter.min < 1 || parameter.max > generator.maxCount) {
+        throw new ServiceUnavailableException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
+      }
+    }
     const previous = current.parameterSchema || [];
     const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));
     for (const item of previous) {
@@ -646,10 +697,11 @@ export class BuildingDesignService {
       objectSculptSpec: current,
     };
     const token = this.signToken('design', createHash('sha256').update(JSON.stringify(design)).digest('hex'));
-    const reviewed = this.reviewObjectDesign(design, token, { ...current, parameterSchema });
+    const reviewed = this.reviewObjectDesign(design, token, { ...current, parameterSchema, generators });
     return {
       objectSculptSpec: reviewed.design.objectSculptSpec,
       addedParameters: parameterSchema.filter((item: any) => !previous.some((old: any) => old.id === item.id)),
+      addedGenerators: generators.filter((item: any) => !(current.generators || []).some((old: any) => old.id === item.id)),
       unsupported: Array.isArray(parsed.unsupported) ? parsed.unsupported.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
     };
   }

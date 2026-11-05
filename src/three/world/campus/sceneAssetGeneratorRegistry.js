@@ -75,13 +75,6 @@ function createVegetationGenerator(THREE, input, materials) {
       crown.castShadow = true;
       group.add(crown);
     }
-    /* layered crowns are separate meshes so their silhouette is inspectable */
-    const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(Math.max(width, depth) * 0.34, 1), materials.leaf);
-    crown.name = 'vegetation-crown';
-    crown.position.y = trunkHeight + height * 0.25;
-    crown.scale.y = Math.max(0.55, height / Math.max(width, depth) * 0.7);
-    crown.castShadow = true;
-    group.add(crown);
     const secondary = new THREE.Mesh(new THREE.IcosahedronGeometry(Math.max(width, depth) * 0.22, 0), materials.secondary);
     secondary.name = 'vegetation-crown-highlight';
     secondary.position.set(width * 0.13, trunkHeight + height * 0.28, depth * 0.1);

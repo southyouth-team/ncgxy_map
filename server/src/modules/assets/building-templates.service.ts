@@ -38,6 +38,16 @@ export class BuildingTemplatesService {
     const design = (input.design || input.buildingDesign) as Record<string, unknown> | undefined;
     const name = typeof input.name === 'string' ? input.name.trim().slice(0, 120) : '';
     if (!name) throw new BadRequestException('模板名称不能为空');
+    const dimensionsInput = input.dimensions && typeof input.dimensions === 'object' ? input.dimensions as Record<string, unknown> : {};
+    const normalizeDimension = (value: unknown, fallback: number) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.min(100, Math.max(0.2, number)) : fallback;
+    };
+    const dimensions = {
+      width: normalizeDimension(dimensionsInput.width, 2),
+      height: normalizeDimension(dimensionsInput.height, 2),
+      depth: normalizeDimension(dimensionsInput.depth, 2),
+    };
     if (objectType.length > 80 || visualStyle.length > 80) throw new BadRequestException('对象类型或视觉风格无效');
     if (!['ai_generated','manual_model','procedural','external'].includes(String(input.sourceType))) throw new BadRequestException('模板来源无效');
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
@@ -52,7 +62,7 @@ export class BuildingTemplatesService {
       if (category !== 'building' && (design as any).visualStyle !== visualStyle) throw new BadRequestException('场景结构参数视觉风格与模板视觉风格不一致');
     }
     const now = new Date().toISOString();
-    const item = { templateId: 'astpl-' + randomUUID(), version: 1, name, category, objectType: objectType || null, visualStyle: visualStyle || null, sourceType: input.sourceType, modelType: input.modelType, status: 'review', design: design || null, prompt: String(input.prompt || '').slice(0,12000), generationModel: input.generationModel || null, referenceImage: null, modelFile: null, createdAt: now, updatedAt: now };
+    const item = { templateId: 'astpl-' + randomUUID(), version: 1, name, category, objectType: objectType || null, visualStyle: visualStyle || null, sourceType: input.sourceType, modelType: input.modelType, status: 'review', dimensions, design: design || null, prompt: String(input.prompt || '').slice(0,12000), generationModel: input.generationModel || null, referenceImage: null, modelFile: null, createdAt: now, updatedAt: now };
     await this.enqueue(async () => { const m = await this.readManifest(); m.templates.unshift(item); await this.writeManifest(m); });
     return item;
   }

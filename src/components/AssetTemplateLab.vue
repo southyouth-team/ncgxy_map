@@ -313,6 +313,7 @@ async function addParametersFromConversation() {
       instruction: parameterInstruction.value.trim(),
     })
     root.userData.objectSculptSpec = result.objectSculptSpec
+    if (root.userData.parameterBaseSpec) root.userData.parameterBaseSpec.parameterSchema = JSON.parse(JSON.stringify(result.objectSculptSpec.parameterSchema || []))
     editorRevision.value += 1
     parameterInstruction.value = ''
     const added = (result.addedParameters || []).map(item => item.label).join('、')

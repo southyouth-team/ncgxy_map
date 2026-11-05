@@ -992,3 +992,14 @@ API 新增 `/assets/scene-templates` 路径，同时保留 `/assets/building-tem
 - 审核成功后服务端生成 `reviewed: true` 设计并重新签发最终凭证，签名覆盖分类、对象类型、视觉风格和完整审核参数。模板创建必须验证该凭证；模板发布再次检查审核状态与归档参考图摘要。
 - 前端修改参数会即时重建预览 Mesh，并清除已审核凭证；必须重新审核。草稿创建后锁定几何参数，避免已存储草稿与用户看到的预览不一致。
 - 此人工参数审核门禁仅针对当前五类通用孤立对象；建筑原有链路与 GLB 导入不在本次改造范围。
+
+
+## 40. img2threejs 风格结构化重建 POC（2026-11-05）
+
+- 新增受控 ObjectSculptSpec componentTree 运行时适配器，将 renderer-independent 组件数据转换为真实 Three.js Group/Mesh；当前支持 box/cuboid、cylinder、cone、sphere/ellipsoid、torus。
+- 组件按 parent 建立层级，每个组件独立 Mesh，材质与 transform 独立；组件 ID、名称和角色保存在 `userData`，用于后续部件选择、参数编辑和阶段重建。
+- 适配器对 component 数量、层级深度、尺寸、scale、材质参数、primitive 类型执行边界校验；拒绝循环引用、重复 ID、缺失父节点和未知几何类型。
+- `BuildingTemplateWorkshop` 预留 `design.objectSculptSpec` 预览入口；该入口不改变旧建筑参数化模型、五类通用对象生成器和 GLB 导入路径。
+- 该实现是上游 img2threejs ObjectSculptSpec 的受控子集，不代表完整 schema 兼容；目前没有执行模型生成的 TypeScript，也没有声称 AI 视觉模型已输出组件树。
+- 下一阶段需新增图像识别结构化输出、城堡专用部件清单、分阶段视觉校正和容器隔离的可选代码生成。Node `vm` 不视为安全沙箱；AI 代码不得在 API 主进程中直接执行。
+- 参考与验收方案：`docs/IMG2THREEJS_RECONSTRUCTION_POC.md`。校园 Feature 的位置、footprint、碰撞、walkable 仍是空间数据唯一事实来源。

@@ -53,7 +53,7 @@ function expandObjectSculptSpec(spec) {
         const clone = JSON.parse(JSON.stringify(source));
         clone.id = idMap.get(source.id);
         if (source.id === rootNode.id) {
-          clone.parent = generator.parentId || rootNode.parent || undefined;
+          clone.parent = rootNode.parent || undefined;
           clone.transform = clone.transform || {};
           const position = Array.isArray(clone.transform.position) ? [...clone.transform.position] : [0, 0, 0];
           position[axisIndex] = Number(position[axisIndex] || 0) + generator.spacing * index;
@@ -249,7 +249,6 @@ export function validateObjectSculptSpec(spec) {
     }
     generatorIds.add(generator.id);
     if (generator.type !== 'repeat' || !nodes.has(generator.templateRootId)) throw new TypeError('结构生成器类型或模板节点无效：' + generator.id);
-    if (generator.parentId != null && !nodes.has(generator.parentId)) throw new TypeError('结构生成器父节点不存在：' + generator.id);
     if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100) throw new TypeError('结构生成器排列规则无效：' + generator.id);
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.countParameterId || '')) throw new TypeError('结构生成器数量参数 ID 无效：' + generator.id);
     const parameter = (spec.parameterSchema || []).find(item => item.id === generator.countParameterId);

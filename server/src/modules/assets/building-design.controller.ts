@@ -28,6 +28,16 @@ export class BuildingDesignController {
     return this.service.reconstructObjectReference(category, objectType, visualStyle, imageDataUrl, approvalToken, prompt);
   }
 
+  @Post('review-object-design')
+  @ApiOperation({ summary: '审核编辑后的 ObjectSculptSpec 组件树并签发最终发布凭证' })
+  reviewObjectDesign(
+    @Body('design') design: Record<string, unknown>,
+    @Body('designToken') designToken: string,
+    @Body('objectSculptSpec') objectSculptSpec: Record<string, unknown>,
+  ) {
+    return this.service.reviewObjectDesign(design, designToken, objectSculptSpec);
+  }
+
   @Post('analyze-building')
   @ApiOperation({ summary: '识别建筑参考图并提取参数化 3D 建模参数' })
   analyze(@Body('imageDataUrl') imageDataUrl: string, @Body('approvalToken') approvalToken: string, @Body('prompt') prompt?: string) {

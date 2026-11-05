@@ -6,6 +6,14 @@
  */
 const MAX_COMPONENTS = 300;
 const MAX_GENERATORS = 30;
+function stableGeneratedIdHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < String(value).length; index += 1) {
+    hash ^= String(value).charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 function expandObjectSculptSpec(spec) {
   const generators = Array.isArray(spec.generators) ? spec.generators : [];
@@ -48,7 +56,7 @@ function expandObjectSculptSpec(spec) {
       followerNode.transform.position = followerPosition;
     }
     for (let index = 0; index < count; index += 1) {
-      const idMap = new Map(subtree.map(node => [node.id, index === 0 ? node.id : generator.id + '-' + index + '-' + node.id]));
+      const idMap = new Map(subtree.map(node => [node.id, index === 0 ? node.id : 'generated-' + stableGeneratedIdHash(generator.id) + '-' + index + '-' + stableGeneratedIdHash(node.id)]));
       for (const source of subtree) {
         const clone = JSON.parse(JSON.stringify(source));
         clone.id = idMap.get(source.id);

@@ -591,7 +591,7 @@ export class BuildingDesignService {
     if (!instruction) throw new BadRequestException('请描述希望新增的模型参数');
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
-    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
     if (!apiKey || !model) throw new ServiceUnavailableException('AI 参数设计未配置视觉模型');
     let response: Response;
     try {

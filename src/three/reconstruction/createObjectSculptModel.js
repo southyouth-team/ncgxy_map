@@ -20,15 +20,23 @@ function expandObjectSculptSpec(spec) {
   if (!generators.length) return { ...spec, componentTree: [...spec.componentTree] };
   const sourceNodes = spec.componentTree;
   const byId = new Map(sourceNodes.map(node => [node.id, node]));
-  const generatorParameterIds = new Set(generators.map(generator => generator.countParameterId));
-  const expanded = sourceNodes.filter(node => !generators.some(generator => {
+  const generatorParameterIds = new Set();
+  for (const generator of generators) {
+    if (generator.type === 'repeat') generatorParameterIds.add(generator.countParameterId);
+    if (generator.type === 'grid') {
+      generatorParameterIds.add(generator.rowParameterId);
+      generatorParameterIds.add(generator.columnParameterId);
+    }
+  }
+  const isInTemplate = node => generators.some(generator => {
     let parent = node.id;
     while (parent) {
       if (parent === generator.templateRootId) return true;
       parent = byId.get(parent)?.parent;
     }
     return false;
-  })).map(node => JSON.parse(JSON.stringify(node)));
+  });
+  const expanded = sourceNodes.filter(node => !isInTemplate(node)).map(node => JSON.parse(JSON.stringify(node)));
   for (const generator of generators) {
     const rootNode = byId.get(generator.templateRootId);
     const subtree = sourceNodes.filter(node => {
@@ -40,23 +48,13 @@ function expandObjectSculptSpec(spec) {
       return false;
     });
     if (!rootNode || !subtree.length) throw new TypeError('结构生成器模板节点不存在：' + generator.id);
-    const count = Math.max(1, Math.min(generator.maxCount, Math.round(
-      Number((spec.parameterSchema || []).find(item => item.id === generator.countParameterId)?.value ?? generator.defaultCount),
-    )));
-    const baseCount = Number(generator.defaultCount ?? count);
-    const axisIndex = 'xyz'.indexOf(generator.axis);
-    for (const follower of generator.followers || []) {
-      const followerNode = expanded.find(node => node.id === follower.nodeId);
-      if (!followerNode) throw new TypeError('结构生成器跟随节点不存在：' + follower.nodeId);
-      followerNode.transform = followerNode.transform || {};
-      const followerPosition = Array.isArray(followerNode.transform.position) ? [...followerNode.transform.position] : [0, 0, 0];
-      const followerAxisIndex = 'xyz'.indexOf(follower.axis);
-      followerPosition[followerAxisIndex] = Number(followerPosition[followerAxisIndex] || 0)
-        + generator.spacing * (count - baseCount) + Number(follower.offset || 0);
-      followerNode.transform.position = followerPosition;
-    }
-    for (let index = 0; index < count; index += 1) {
-      const idMap = new Map(subtree.map(node => [node.id, index === 0 ? node.id : 'generated-' + stableGeneratedIdHash(generator.id) + '-' + index + '-' + stableGeneratedIdHash(node.id)]));
+    const parameterValue = id => Number((spec.parameterSchema || []).find(item => item.id === id)?.value);
+    const materialize = (row, column, offsetX, offsetY, offsetZ) => {
+      const isPrototype = row === 0 && column === 0;
+      const suffix = generator.type === 'grid' ? row + '-' + column : String(row);
+      const idMap = new Map(subtree.map(node => [node.id, isPrototype
+        ? node.id
+        : 'generated-' + stableGeneratedIdHash(generator.id) + '-' + suffix + '-' + stableGeneratedIdHash(node.id)]));
       for (const source of subtree) {
         const clone = JSON.parse(JSON.stringify(source));
         clone.id = idMap.get(source.id);
@@ -64,14 +62,43 @@ function expandObjectSculptSpec(spec) {
           clone.parent = rootNode.parent || undefined;
           clone.transform = clone.transform || {};
           const position = Array.isArray(clone.transform.position) ? [...clone.transform.position] : [0, 0, 0];
-          position[axisIndex] = Number(position[axisIndex] || 0) + generator.spacing * index;
+          position[0] = Number(position[0] || 0) + offsetX;
+          position[1] = Number(position[1] || 0) + offsetY;
+          position[2] = Number(position[2] || 0) + offsetZ;
           clone.transform.position = position;
         } else {
           clone.parent = idMap.get(source.parent);
         }
-        if (index > 0) clone.generatorInstance = { generatorId: generator.id, index, sourceNodeId: source.id };
+        if (!isPrototype) clone.generatorInstance = { generatorId: generator.id, row, column, sourceNodeId: source.id };
         expanded.push(clone);
       }
+    };
+    if (generator.type === 'repeat') {
+      const count = Math.max(1, Math.min(generator.maxCount, Math.round(parameterValue(generator.countParameterId) || generator.defaultCount)));
+      const baseCount = Number(generator.defaultCount);
+      for (const follower of generator.followers || []) {
+        const followerNode = expanded.find(node => node.id === follower.nodeId);
+        if (!followerNode) throw new TypeError('结构生成器跟随节点不存在：' + follower.nodeId);
+        followerNode.transform = followerNode.transform || {};
+        const position = Array.isArray(followerNode.transform.position) ? [...followerNode.transform.position] : [0, 0, 0];
+        const axisIndex = 'xyz'.indexOf(follower.axis);
+        position[axisIndex] = Number(position[axisIndex] || 0) + generator.spacing * (count - baseCount) + Number(follower.offset || 0);
+        followerNode.transform.position = position;
+      }
+      for (let index = 0; index < count; index += 1) {
+        const offset = generator.spacing * index;
+        materialize(index, 0, generator.axis === 'x' ? offset : 0, generator.axis === 'y' ? offset : 0, generator.axis === 'z' ? offset : 0);
+      }
+    } else if (generator.type === 'grid') {
+      const rows = Math.max(1, Math.min(generator.maxRows, Math.round(parameterValue(generator.rowParameterId) || generator.defaultRows)));
+      const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(parameterValue(generator.columnParameterId) || generator.defaultColumns)));
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          materialize(row, column, generator.spacingX * column, 0, generator.spacingZ * row);
+        }
+      }
+    } else {
+      throw new TypeError('不支持的结构生成器类型：' + generator.type);
     }
   }
   if (expanded.length > MAX_COMPONENTS) throw new RangeError('动态生成后的组件数量超过 ' + MAX_COMPONENTS);
@@ -256,12 +283,32 @@ export function validateObjectSculptSpec(spec) {
       throw new TypeError('结构生成器 ID 无效或重复');
     }
     generatorIds.add(generator.id);
-    if (generator.type !== 'repeat' || !nodes.has(generator.templateRootId)) throw new TypeError('结构生成器类型或模板节点无效：' + generator.id);
-    if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100) throw new TypeError('结构生成器排列规则无效：' + generator.id);
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.countParameterId || '')) throw new TypeError('结构生成器数量参数 ID 无效：' + generator.id);
-    const parameter = (spec.parameterSchema || []).find(item => item.id === generator.countParameterId);
-    if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max) || parameter.min < 1 || parameter.max > generator.maxCount || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) throw new TypeError('结构生成器必须绑定有效的整数数量参数：' + generator.id);
-    generatorParameterIds.add(generator.countParameterId);
+    if (!['repeat','grid'].includes(generator.type) || !nodes.has(generator.templateRootId)) throw new TypeError('结构生成器类型或模板节点无效：' + generator.id);
+    const parameterIsValid = (id, max) => {
+      const parameter = (spec.parameterSchema || []).find(item => item.id === id);
+      return parameter && parameter.type === 'number' && Number.isInteger(parameter.min) && Number.isInteger(parameter.max)
+        && Number.isInteger(parameter.value) && parameter.min >= 1 && parameter.max <= max && parameter.value >= parameter.min && parameter.value <= parameter.max;
+    };
+    if (generator.type === 'repeat') {
+      if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100
+        || !Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100
+        || !Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount
+        || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.countParameterId || '')
+        || !parameterIsValid(generator.countParameterId, generator.maxCount)) throw new TypeError('结构生成器排列规则或数量参数无效：' + generator.id);
+      generatorParameterIds.add(generator.countParameterId);
+    } else {
+      if (![generator.spacingX, generator.spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
+        || !Number.isInteger(generator.maxRows) || generator.maxRows < 1 || generator.maxRows > 100
+        || !Number.isInteger(generator.maxColumns) || generator.maxColumns < 1 || generator.maxColumns > 100
+        || !Number.isInteger(generator.defaultRows) || generator.defaultRows < 1 || generator.defaultRows > generator.maxRows
+        || !Number.isInteger(generator.defaultColumns) || generator.defaultColumns < 1 || generator.defaultColumns > generator.maxColumns
+        || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.rowParameterId || '')
+        || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.columnParameterId || '')
+        || !parameterIsValid(generator.rowParameterId, generator.maxRows)
+        || !parameterIsValid(generator.columnParameterId, generator.maxColumns)) throw new TypeError('网格生成器排列规则或行列参数无效：' + generator.id);
+      generatorParameterIds.add(generator.rowParameterId);
+      generatorParameterIds.add(generator.columnParameterId);
+    }
     const descendants = spec.componentTree.filter(node => {
       let parent = node.id;
       while (parent) {
@@ -277,10 +324,9 @@ export function validateObjectSculptSpec(spec) {
     }
     estimatedExpandedCount += descendants.length * (generator.maxCount - 1);
     if (estimatedExpandedCount > MAX_COMPONENTS) throw new RangeError('结构生成器最大展开数量超过 ' + MAX_COMPONENTS);
-    if (!Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100) throw new RangeError('结构生成器 maxCount 必须在 1 到 100 之间：' + generator.id);
-    if (!Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount) throw new RangeError('结构生成器 defaultCount 无效：' + generator.id);
-    if (generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30)) throw new TypeError('结构生成器 followers 无效：' + generator.id);
-    for (const follower of generator.followers || []) {
+    if (generator.type === 'repeat' && generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30)) throw new TypeError('结构生成器 followers 无效：' + generator.id);
+    if (generator.type === 'grid' && (generator.maxRows * generator.maxColumns > MAX_COMPONENTS || generator.maxRows * generator.maxColumns * descendants.length > MAX_COMPONENTS)) throw new RangeError('网格生成器最大展开数量超出限制：' + generator.id);
+    for (const follower of generator.type === 'repeat' ? generator.followers || [] : []) {
       const followerNode = nodes.get(follower.nodeId);
       let parent = follower.nodeId, insideTemplate = false;
       while (parent) { if (parent === generator.templateRootId) { insideTemplate = true; break; } parent = nodes.get(parent)?.parent; }

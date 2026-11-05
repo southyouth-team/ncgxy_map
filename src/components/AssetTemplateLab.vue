@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
           <h3>模型结构 <span>{{ selectedSpec.componentTree.length }} 个部件</span></h3>
           <div class="component-tree">
             <button v-for="node in componentTree" :key="node.id" class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8 + node.depth * 15)+'px'}" @click="selectComponent(node.id)">
-              <span>{{ node.name || node.id }}</span><small>{{ node.role || node.primitive || '组件' }}</small>
+              <span>{{ node.name || node.id }}</span><small>{{ node.kind === 'group' ? '结构分组' : (node.role || node.primitive || 'Mesh') }}</small>
             </button>
           </div>
           <div v-if="selectedParameters.length" class="asset-parameters">
@@ -445,7 +445,8 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="selectedComponent" class="component-properties">
             <b>{{ selectedComponent.name || selectedComponent.id }}</b>
-            <label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)">
+            <template v-if="(selectedComponent.kind || 'mesh') === 'mesh'"><label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)"></template>
+            <small v-else>这是逻辑分组节点，不直接承载几何体或材质；其变换和显隐会作用于整个子树。</small>
             <label>局部位置 X / Y / Z</label>
             <div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div>
             <button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible ? '隐藏此部件' : '显示此部件' }}</button>

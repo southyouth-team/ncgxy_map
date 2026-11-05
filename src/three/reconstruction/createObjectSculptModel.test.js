@@ -988,4 +988,109 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => validateObjectSculptSpec(spec)).toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
   });
 
+
+
+  it('recomputes multi-level attach chains from upstream to downstream after size and scale edits', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'base', parent: 'root', primitive: 'box', dimensions: { width: 4, height: 1, depth: 1 } },
+        { id: 'middle', parent: 'root', primitive: 'box', dimensions: { width: 2, height: 1, depth: 1 } },
+        { id: 'leaf', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+      parameterSchema: [
+        { id: 'base-width', type: 'number', value: 4, min: 2, max: 8, targets: [
+          { nodeId: 'base', property: 'dimensions.width', mode: 'set' },
+        ] },
+        { id: 'middle-scale', type: 'number', value: 1, min: 1, max: 3, targets: [
+          { nodeId: 'middle', property: 'transform.scale.x', mode: 'set' },
+        ] },
+      ],
+      // 故意反向声明：middle -> leaf 在 base -> middle 之前。
+      constraints: [
+        { id: 'middle-to-leaf', type: 'attach', sourceNodeId: 'middle', targetNodeId: 'leaf',
+          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
+        { id: 'base-to-middle', type: 'attach', sourceNodeId: 'base', targetNodeId: 'middle',
+          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
+      ],
+    };
+
+    const model = createObjectSculptModel(THREE, spec);
+    const position = id => model.userData.componentGroups.get(id).position.x;
+    expect(position('middle')).toBeCloseTo(3);
+    expect(position('leaf')).toBeCloseTo(4.5);
+
+    applyObjectSculptParameter(THREE, model, 'base-width', 6);
+    expect(position('middle')).toBeCloseTo(4);
+    expect(position('leaf')).toBeCloseTo(5.5);
+
+    applyObjectSculptParameter(THREE, model, 'middle-scale', 2);
+    expect(position('leaf')).toBeCloseTo(6.5);
+
+    // JSON 序列化/反序列化后，依赖关系仍保留；再次调整从持久化状态重算。
+    const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
+    const reloaded = createObjectSculptModel(THREE, persisted);
+    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(4);
+    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(6.5);
+    applyObjectSculptParameter(THREE, reloaded, 'base-width', 2);
+    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(2);
+    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(4.5);
+  });
+
+  it('rejects cutout boundary-breaking parameter edits without mutating the last valid scene', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'wall', parent: 'root', primitive: 'box', dimensions: { width: 4, height: 3, depth: 0.3 } },
+        { id: 'opening', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 2, depth: 0.5 } },
+      ],
+      parameterSchema: [
+        { id: 'opening-offset', type: 'number', value: 0, min: -1.5, max: 1.8, targets: [
+          { nodeId: 'opening', property: 'transform.position.x', mode: 'set' },
+        ] },
+        { id: 'opening-width', type: 'number', value: 1, min: 0.5, max: 2, targets: [
+          { nodeId: 'opening', property: 'dimensions.width', mode: 'set' },
+        ] },
+        { id: 'wall-width', type: 'number', value: 4, min: 1.5, max: 4, targets: [
+          { nodeId: 'wall', property: 'dimensions.width', mode: 'set' },
+        ] },
+      ],
+      constraints: [
+        { id: 'wall-opening', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening',
+          axis: 'z', operation: 'subtract' },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const getWall = () => model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
+    const getParameter = id => model.userData.objectSculptSpec.parameterSchema.find(item => item.id === id).value;
+
+    applyObjectSculptParameter(THREE, model, 'opening-offset', 0.5);
+    expect(model.userData.componentGroups.get('opening').position.x).toBeCloseTo(0.5);
+    expect(getParameter('opening-offset')).toBe(0.5);
+
+    // 开口右边界 2.1 超出墙体半宽 2；拒绝本次更新，保留上一次合法状态。
+    expect(() => applyObjectSculptParameter(THREE, model, 'opening-offset', 1.6))
+      .toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
+    expect(model.userData.componentGroups.get('opening').position.x).toBeCloseTo(0.5);
+    expect(getParameter('opening-offset')).toBe(0.5);
+    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
+
+    // 缩小目标墙体也必须重新校验已有开口，不能留下越界结构。
+    expect(() => applyObjectSculptParameter(THREE, model, 'wall-width', 1.5))
+      .toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
+    expect(model.userData.componentGroups.get('wall').getObjectByName('wall:mesh').geometry.parameters.shapes.holes)
+      .toHaveLength(1);
+    expect(getParameter('wall-width')).toBe(4);
+
+    // 保存、加载后仍然保留 Cutout 约束，并可继续进行合法参数调整。
+    const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
+    const reloaded = createObjectSculptModel(THREE, persisted);
+    applyObjectSculptParameter(THREE, reloaded, 'opening-width', 1.5);
+    expect(reloaded.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening').dimensions.width).toBe(1.5);
+    expect(reloaded.userData.componentGroups.get('wall').getObjectByName('wall:mesh').geometry.parameters.shapes.holes)
+      .toHaveLength(1);
+  });
+
 });

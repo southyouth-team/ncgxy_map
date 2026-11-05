@@ -7,7 +7,7 @@ import { BuildingTemplatesService } from './building-templates.service';
 describe('BuildingTemplatesService generic scene asset contract', () => {
   let directory: string;
   let service: BuildingTemplatesService;
-  let buildingDesign: { consumeDesignToken: jest.Mock };
+  let buildingDesign: { consumeDesignToken: jest.Mock; consumeSceneDesignToken: jest.Mock };
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'ncgxy-scene-templates-'));

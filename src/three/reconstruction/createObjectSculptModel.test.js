@@ -385,6 +385,54 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(mesh.geometry.getAttribute('normal').count).toBe(12);
   });
 
+  it('orients loft side faces and end caps consistently for clockwise input contours', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'loft-solid', primitive: 'loft', material: 'default',
+        dimensions: { width: 2, height: 2, depth: 2 },
+        geometryDescriptor: {
+          sections: [
+            { height: -0.5, points: [[-0.4, -0.4], [-0.4, 0.4], [0.4, 0.4], [0.4, -0.4]] },
+            { height: 0.5, points: [[-0.3, -0.3], [-0.3, 0.3], [0.3, 0.3], [0.3, -0.3]] },
+          ],
+        },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.userData.componentGroups.get('loft-solid').getObjectByName('loft-solid:mesh');
+    const position = mesh.geometry.getAttribute('position');
+    const index = mesh.geometry.getIndex();
+    const faceNormal = (offset) => {
+      const ids = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];
+      const a = new THREE.Vector3().fromBufferAttribute(position, ids[0]);
+      const b = new THREE.Vector3().fromBufferAttribute(position, ids[1]);
+      const d = new THREE.Vector3().fromBufferAttribute(position, ids[2]);
+      return b.sub(a).cross(d.sub(a)).normalize();
+    };
+    // 4 side edges × 2 triangles × 3 indices = 24 indices before the caps.
+    expect(faceNormal(0).z).toBeLessThan(0);
+    expect(faceNormal(24).y).toBeLessThan(0);
+    expect(faceNormal(30).y).toBeGreaterThan(0);
+  });
+
+  it('rejects loft sections with inconsistent contour winding', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'twisted-loft', primitive: 'loft', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          sections: [
+            { height: -0.5, points: [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]] },
+            { height: 0.5, points: [[-0.3, -0.3], [-0.3, 0.3], [0.3, 0.3], [0.3, -0.3]] },
+          ],
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('必须保持一致的轮廓绕序');
+  });
+
   it('rejects self-intersecting sweep cross-sections before mesh construction', () => {
     const spec = {
       schemaVersion: '2.0',

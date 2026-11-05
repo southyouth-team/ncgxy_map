@@ -74,7 +74,7 @@ function expandObjectSculptSpec(spec) {
       }
     };
     if (generator.type === 'repeat') {
-      const count = Math.max(1, Math.min(generator.maxCount, Math.round(readGeneratorParameter(generator.countParameterId) || generator.defaultCount)));
+      const count = Math.max(1, Math.min(generator.maxCount, Math.round(parameterValue(generator.countParameterId) || generator.defaultCount)));
       const baseCount = Number(generator.defaultCount);
       for (const follower of generator.followers || []) {
         const followerNode = expanded.find(node => node.id === follower.nodeId);
@@ -90,8 +90,8 @@ function expandObjectSculptSpec(spec) {
         materialize(index, 0, generator.axis === 'x' ? offset : 0, generator.axis === 'y' ? offset : 0, generator.axis === 'z' ? offset : 0);
       }
     } else if (generator.type === 'grid') {
-      const rows = Math.max(1, Math.min(generator.maxRows, Math.round(readGeneratorParameter(generator.rowParameterId) || generator.defaultRows)));
-      const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(readGeneratorParameter(generator.columnParameterId) || generator.defaultColumns)));
+      const rows = Math.max(1, Math.min(generator.maxRows, Math.round(parameterValue(generator.rowParameterId) || generator.defaultRows)));
+      const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(parameterValue(generator.columnParameterId) || generator.defaultColumns)));
       for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column < columns; column += 1) {
           materialize(row, column, generator.spacingX * column, 0, generator.spacingZ * row);

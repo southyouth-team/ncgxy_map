@@ -199,6 +199,9 @@ export class BuildingDesignService {
       facility: ['bench', '长椅', '座椅', 'lamp', '路灯', '庭院灯', 'bin', '垃圾桶', 'sign', '指示牌', '公告栏'],
       decoration: ['rock', '景观石', '假山', 'flowerbed', '花坛'],
       sports: ['basketball-hoop', '篮球架', '篮球框'],
+      road: ['road', '道路', '校园道路', '人行道', '步道'],
+      water: ['lake', '湖泊', '池塘', 'river', '河流', '水渠', '喷泉'],
+      terrain: ['terrain', '地面', '山坡', '台地', '草坡', '岩石地形'],
     };
     const styles = ['anime-painted', 'hand-painted', 'low-poly', 'realistic', 'pixel-art', 'stylized', 'toon', 'chinese-traditional', 'european-classical', 'futuristic'];
     if (!supported[category]) throw new BadRequestException('该场景类别尚未接入视觉识别 schema：' + category);
@@ -217,6 +220,9 @@ export class BuildingDesignService {
       facility: '识别公共设施结构。JSON 字段：form(bench/lamp/bin/sign)、seatCount(1-5 整数)、hasBackrest(布尔值)、hasArmrest(布尔值)、poleCount(1-4 整数)、fixtureShape(box/round/lantern)、boardShape(rectangle/round/arrow)、detailLevel(0-3 整数)。',
       decoration: '识别景观装饰。JSON 字段：form(rock/flowerbed)、rockShape(boulder/rugged/stacked)、rockCount(1-8 整数)、borderShape(rectangle/round/organic)、flowerCount(0-40 整数)、layerCount(1-5 整数)、ornamentLevel(0-3 整数)。',
       sports: '识别运动设施。JSON 字段：form(basketball-hoop)、supportType(single/dual/wall)、backboardShape(rectangle/fan)、rimVisible(布尔值)、baseType(fixed/mobile)、braceCount(0-6 整数)。',
+      road: '识别道路断面。JSON 字段：form(road/sidewalk)、roadWidth(1-40)、laneCount(0-8 整数)、sidewalkWidth(0-8)、curbHeight(0.02-0.5)、markingType(none/centerline/double/yellow)、surfaceType(asphalt/concrete/stone/pavers)。不得推断真实道路长度或地图路径。',
+      water: '识别水体外观。JSON 字段：form(lake/pond/river/canal/fountain)、waterColor(blue/green/turquoise)、shoreWidth(0.1-4)、depthEstimate(0.1-20)、hasRipples(布尔值)、bankStyle(natural/stone/concrete/grass)。不推断真实水深。',
+      terrain: '识别地形表面。JSON 字段：form(ground/hill/slope/terrace/rocky)、relief(0-10)、slope(0-1)、layerCount(1-8 整数)、rockiness(0-1)、groundType(grass/soil/rock/sand/concrete)、hasRockOutcrops(布尔值)。不得输出真实高程测绘结论。',
     };
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
@@ -276,8 +282,11 @@ export class BuildingDesignService {
       facility: { seatCount: [3, 1, 5], poleCount: [1, 1, 4], detailLevel: [1, 0, 3] },
       decoration: { rockCount: [3, 1, 8], flowerCount: [12, 0, 40], layerCount: [2, 1, 5], ornamentLevel: [1, 0, 3] },
       sports: { braceCount: [2, 0, 6] },
+      road: { roadWidth: [6, 1, 40], laneCount: [2, 0, 8], sidewalkWidth: [1.5, 0, 8], curbHeight: [0.12, 0.02, 0.5] },
+      water: { shoreWidth: [0.35, 0.1, 4], depthEstimate: [1, 0.1, 20] },
+      terrain: { relief: [2, 0, 10], slope: [0.25, 0, 1], layerCount: [3, 1, 8], rockiness: [0.2, 0, 1] },
     };
-    const decimalFields = new Set(['trunkRatio', 'branchSpread', 'spanRatio']);
+    const decimalFields = new Set(['trunkRatio', 'branchSpread', 'spanRatio', 'curbHeight', 'slope', 'rockiness']);
     for (const [key, [fallback, min, max]] of Object.entries(numberFields[category])) {
       const value = bounded(parsed[key], fallback, min, max);
       geometry[key] = decimalFields.has(key) ? value : Math.round(value);
@@ -288,10 +297,13 @@ export class BuildingDesignService {
       facility: { form: [['bench','lamp','bin','sign'], 'bench'], fixtureShape: [['box','round','lantern'], 'box'], boardShape: [['rectangle','round','arrow'], 'rectangle'] },
       decoration: { form: [['rock','flowerbed'], 'rock'], rockShape: [['boulder','rugged','stacked'], 'rugged'], borderShape: [['rectangle','round','organic'], 'organic'] },
       sports: { form: [['basketball-hoop'], 'basketball-hoop'], supportType: [['single','dual','wall'], 'single'], backboardShape: [['rectangle','fan'], 'rectangle'], baseType: [['fixed','mobile'], 'fixed'] },
+      road: { form: [['road','sidewalk'], 'road'], markingType: [['none','centerline','double','yellow'], 'centerline'], surfaceType: [['asphalt','concrete','stone','pavers'], 'asphalt'] },
+      water: { form: [['lake','pond','river','canal','fountain'], 'lake'], waterColor: [['blue','green','turquoise'], 'blue'], bankStyle: [['natural','stone','concrete','grass'], 'natural'] },
+      terrain: { form: [['ground','hill','slope','terrace','rocky'], 'hill'], groundType: [['grass','soil','rock','sand','concrete'], 'grass'] },
     };
     for (const [key, [allowed, fallback]] of Object.entries(enumFields[category])) geometry[key] = enumValue(parsed[key], allowed, fallback);
     const booleanFields: Record<string, string[]> = {
-      vegetation: [], structure: ['hasRailing','hasRoof'], facility: ['hasBackrest','hasArmrest'], decoration: [], sports: ['rimVisible'],
+      vegetation: [], structure: ['hasRailing','hasRoof'], facility: ['hasBackrest','hasArmrest'], decoration: [], sports: ['rimVisible'], road: [], water: ['hasRipples'], terrain: ['hasRockOutcrops'],
     };
     for (const key of booleanFields[category]) geometry[key] = boolValue(parsed[key]);
     const canonicalForms: Record<string, Record<string, string>> = {
@@ -300,6 +312,9 @@ export class BuildingDesignService {
       facility: { bench: 'bench', '长椅': 'bench', '座椅': 'bench', lamp: 'lamp', '路灯': 'lamp', '庭院灯': 'lamp', bin: 'bin', '垃圾桶': 'bin', sign: 'sign', '指示牌': 'sign', '公告栏': 'sign' },
       decoration: { rock: 'rock', '景观石': 'rock', '假山': 'rock', flowerbed: 'flowerbed', '花坛': 'flowerbed' },
       sports: { 'basketball-hoop': 'basketball-hoop', '篮球架': 'basketball-hoop', '篮球框': 'basketball-hoop' },
+      road: { road: 'road', '道路': 'road', '校园道路': 'road', '人行道': 'sidewalk', '步道': 'sidewalk' },
+      water: { lake: 'lake', '湖泊': 'lake', '池塘': 'pond', river: 'river', '河流': 'river', '水渠': 'canal', '喷泉': 'fountain' },
+      terrain: { terrain: 'hill', '地面': 'ground', '山坡': 'slope', '台地': 'terrace', '草坡': 'slope', '岩石地形': 'rocky' },
     };
     geometry.form = canonicalForms[category][objectType];
     const design = {

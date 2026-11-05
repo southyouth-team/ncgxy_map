@@ -91,6 +91,10 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('树木的枝干连接树干');
     expect(systemPrompt).toContain('车轮连接车轴/底盘');
     expect(systemPrompt).toContain('简单对象可以只有一个组件');
+    expect(systemPrompt).toContain('tube、lathe、sweep、loft');
+    expect(systemPrompt).toContain('generators');
+    expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
+    expect(systemPrompt).toContain('geometryDescriptor.sections');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 

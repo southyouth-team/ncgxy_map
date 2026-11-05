@@ -81,6 +81,18 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
     expect(buildingDesign.consumeSceneDesignToken).not.toHaveBeenCalled();
   });
 
+
+  it('blocks unreviewed building component trees before checking or accepting their signature', async () => {
+    await expect(service.create({
+      name: '未审核教学楼', category: 'building', objectType: '教学楼', visualStyle: 'anime-painted',
+      sourceType: 'ai_generated', modelType: 'procedural',
+      design: { schemaVersion: 1, category: 'building', objectType: '教学楼', visualStyle: 'anime-painted', reviewed: false },
+      designToken: 'ai-identification-token',
+    })).rejects.toThrow('尚未经过人工审核');
+    expect(buildingDesign.consumeDesignToken).not.toHaveBeenCalled();
+  });
+
+
   it('creates and publishes a signed procedural template for a supported non-building category', async () => {
     const design = {
       schemaVersion: 1, source: 'ai-vision-estimate', category: 'vegetation', referenceImageSha256: createHash('sha256').update(Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0,1,2,3,4])).digest('hex'),

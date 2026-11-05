@@ -380,9 +380,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const model = createObjectSculptModel(THREE, spec);
     const mesh = model.userData.componentGroups.get('tapered-pillar').getObjectByName('tapered-pillar:mesh');
     expect(mesh.geometry.type).toBe('BufferGeometry');
-    expect(mesh.geometry.getAttribute('position').count).toBe(12);
+    expect(mesh.geometry.getAttribute('position').count).toBe(32);
     expect(mesh.geometry.getIndex().count).toBeGreaterThan(36);
-    expect(mesh.geometry.getAttribute('normal').count).toBe(12);
+    expect(mesh.geometry.getAttribute('normal').count).toBe(32);
   });
 
   it('orients loft side faces and end caps consistently for clockwise input contours', () => {
@@ -414,6 +414,11 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(faceNormal(0).x).toBeGreaterThan(0);
     expect(faceNormal(24).y).toBeLessThan(0);
     expect(faceNormal(30).y).toBeGreaterThan(0);
+    const normals = mesh.geometry.getAttribute('normal');
+    // The same lower corner is duplicated for its two adjoining wall faces.
+    const cornerA = new THREE.Vector3().fromBufferAttribute(normals, 0);
+    const cornerB = new THREE.Vector3().fromBufferAttribute(normals, 7);
+    expect(cornerA.dot(cornerB)).toBeLessThan(0.9);
   });
 
   it('rejects loft sections with inconsistent contour winding', () => {

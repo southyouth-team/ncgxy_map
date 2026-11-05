@@ -298,7 +298,7 @@ export class BuildingDesignService {
     const materials: Record<string, any> = {};
     for (const [key, value] of Object.entries(materialInput)) {
       const item = value as Record<string, any>;
-      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/.test(key) || !item || typeof item !== 'object' || Array.isArray(item)
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/.test(key) || ['constructor','prototype','toString','valueOf'].includes(key) || !item || typeof item !== 'object' || Array.isArray(item)
         || typeof item.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(item.color)) {
         throw new BadRequestException('材质 ID 或颜色格式无效：' + key);
       }
@@ -340,7 +340,7 @@ export class BuildingDesignService {
       const transform = node.transform && typeof node.transform === 'object' ? node.transform : {};
       const scale = vector(transform.scale, [1,1,1], id + '.scale', -20, 20);
       if (scale.some(value => Math.abs(value) < 0.001)) throw new BadRequestException(id + '.scale 不能为零');
-      if (typeof node.material !== 'string' || !materials[node.material]) throw new BadRequestException(id + '.material 不存在');
+      if (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(materials, node.material)) throw new BadRequestException(id + '.material 不存在');
       const geometryDescriptor: Record<string, any> = {};
       const descriptor = node.geometryDescriptor && typeof node.geometryDescriptor === 'object' ? node.geometryDescriptor : {};
       if (descriptor.segments !== undefined) {

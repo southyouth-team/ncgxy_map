@@ -453,10 +453,6 @@ function createGeometry(THREE, node) {
       return [Number(point[0]) * width, Number(point[1]) * height];
     });
     validateSimpleProfile(profilePoints, node.id + '.geometryDescriptor.profile');
-    const shape = new THREE.Shape();
-    shape.moveTo(profilePoints[0][0], profilePoints[0][1]);
-    for (const point of profilePoints.slice(1)) shape.lineTo(point[0], point[1]);
-    shape.closePath();
     const curve = new THREE.CatmullRomCurve3(pathPoints, descriptor.closed === true, 'centripetal');
     const steps = Math.round(boundedNumber(descriptor.steps, 32, 3, 128, node.id + '.geometryDescriptor.steps'));
     return validateGeneratedGeometry(

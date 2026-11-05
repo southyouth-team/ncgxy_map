@@ -206,7 +206,7 @@ async function generateModel() {
     instances.value.push({ id, name: spec.targetName || objectType.value || 'AI 生成模型', templateId: 'AI ObjectSculptSpec', category: spec.category || 'other', source: 'AI' })
     // 新增模型只更新选择状态，不自动平移相机目标；保持沙盒全局取景不变。
     selectedInstanceId.value = id
-    selectedComponentId.value = spec.componentTree?.[0]?.id || ''
+    selectedComponentId.value = ''
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
     generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n参考图分析：' + (result.referenceAnalysis ? (result.referenceAnalysis.silhouette || '已完成') + '；识别组件：' + (result.referenceAnalysis.components?.length || 0) : '未执行') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI 视觉分析 → ObjectSculptSpec → Three.js Mesh'
     status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
@@ -336,30 +336,42 @@ function updateSelectedComponentTransform(axis, value) {
 }
 async function modifySelectedAsset() {
   const root = objects.get(selectedInstanceId.value)
-  if (!root || !selectedComponentId.value || !modifyInstruction.value.trim() || modifying.value) return
-  modifying.value = true; error.value = ''; status.value = 'AI 正在修改选中部件…'
+  if (!root || !selectedSpec.value || !modifyInstruction.value.trim() || modifying.value) return
+  const targetNodeId = selectedComponentId.value || ''
+  const targetLabel = selectedComponent.value?.name || selectedComponent.value?.id || '整体模型'
+  modifying.value = true
+  error.value = ''
+  status.value = targetNodeId ? 'AI 正在修改选中部件…' : 'AI 正在修改整体模型…'
   try {
     const result = await requestJson('/assets/ai-image/modify-object', {
       objectSculptSpec: selectedSpec.value,
-      selectedNodeIds: [selectedComponentId.value],
+      selectedNodeIds: targetNodeId ? [targetNodeId] : [],
       instruction: modifyInstruction.value.trim(),
     })
     const nextSpec = result.objectSculptSpec
+    if (!nextSpec?.componentTree?.length) throw new Error('AI 修改结果缺少有效模型结构')
     const position = root.position.clone(), rotation = root.rotation.clone(), objectScale = root.scale.clone()
     clearComponentHighlight()
     scene.remove(root)
-    root.traverse(child => { child.geometry?.dispose?.(); if (child.material && !Array.isArray(child.material)) child.material.dispose?.() })
-    const nextRoot = createObjectSculptModel(THREE, nextSpec, { source: 'ai-local-edit' })
+    root.traverse(child => {
+      child.geometry?.dispose?.()
+      if (Array.isArray(child.material)) child.material.forEach(material => material.dispose?.())
+      else child.material?.dispose?.()
+    })
+    const nextRoot = createObjectSculptModel(THREE, nextSpec, { source: 'ai-object-edit' })
     nextRoot.position.copy(position); nextRoot.rotation.copy(rotation); nextRoot.scale.copy(objectScale)
-    scene.add(nextRoot); objects.set(selectedInstanceId.value, nextRoot)
-    selectedComponentId.value = result.affectedNodeIds?.includes(selectedComponentId.value) ? selectedComponentId.value : nextSpec.componentTree[0]?.id || ''
+    nextRoot.userData.assetInstanceId = root.userData.assetInstanceId
+    nextRoot.userData.assetTemplate = root.userData.assetTemplate
+    scene.add(nextRoot)
+    objects.set(selectedInstanceId.value, nextRoot)
+    selectedComponentId.value = targetNodeId && nextSpec.componentTree.some(node => node.id === targetNodeId) ? targetNodeId : ''
     editorRevision.value += 1
     modifyInstruction.value = ''
     if (selectedComponentId.value) selectComponent(selectedComponentId.value)
-    status.value = '局部修改完成；未选中组件保持原结构'
+    status.value = targetNodeId ? '部件修改完成：' + targetLabel : '整体模型修改完成'
   } catch (e) {
-    error.value = e?.message || 'AI 局部修改失败'
-    status.value = '局部修改失败'
+    error.value = e?.message || 'AI 模型修改失败'
+    status.value = 'AI 修改失败'
   } finally { modifying.value = false }
 }
 async function addParametersFromConversation() {
@@ -425,7 +437,7 @@ async function loadSavedAsset() {
     scene.add(object); objects.set(id, object)
     instances.value.push({ id, name: spec.targetName || '已保存资产', templateId: payload.assetId, category: spec.category || 'other', source: '已保存资产' })
     selectedInstanceId.value = id
-    selectedComponentId.value = spec.componentTree?.[0]?.id || ''
+    selectedComponentId.value = ''
     if (selectedComponentId.value) selectComponent(selectedComponentId.value)
     status.value = '已加载结构化资产：' + payload.assetId
   } catch (e) { error.value = e?.message || '资产读取失败' }
@@ -463,7 +475,7 @@ function focusInstance(id) {
   const selectedObject = objects.get(id)
   if (selectedObject) scale.value = selectedObject.scale.x
   const spec = objects.get(id)?.userData?.objectSculptSpec
-  selectedComponentId.value = spec?.componentTree?.[0]?.id || ''
+  selectedComponentId.value = ''
   if (selectedComponentId.value) selectComponent(selectedComponentId.value)
   const object = objects.get(id)
   if (object) { controls.target.copy(object.position); controls.update() }
@@ -602,10 +614,15 @@ onBeforeUnmount(() => {
             <textarea v-model="parameterInstruction" rows="3" placeholder="例如：增加楼层数参数，默认 3 层、最高 8 层；或让树冠增加一层"></textarea>
             <button class="generate" :disabled="parameterizing||!parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing?'AI 正在设计参数…':'根据描述新增 / 调整参数' }}</button>
           </section>
-          <section v-if="selectedComponent" class="ai-local-editor">
-            <label>AI 修改当前部件：{{ selectedComponent.name||selectedComponent.id }}</label>
-            <textarea v-model="modifyInstruction" rows="3" placeholder="例如：把窗户改成拱形，保留原位置和周围墙体"></textarea>
-            <button class="generate" :disabled="modifying||!modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying?'AI 修改中…':'修改选中部件' }}</button>
+          <section v-if="selectedSpec" class="ai-local-editor">
+            <label>AI 修改目标</label>
+            <div class="modify-target-chip" :class="{ 'is-component': !!selectedComponent }">
+              <span class="target-dot"></span>
+              <span>{{ selectedComponent ? '选中部件：' + (selectedComponent.name || selectedComponent.id) : '整体模型（未选中部件）' }}</span>
+              <button v-if="selectedComponent" type="button" class="clear-target" @click="clearComponentSelection">取消选中</button>
+            </div>
+            <textarea v-model="modifyInstruction" rows="3" :placeholder="selectedComponent ? '描述要如何修改这个部件，例如：把窗户改成拱形，保留原位置和周围墙体' : '描述要如何调整整个模型，例如：整体增加一层，保持现有风格和部件关系'"></textarea>
+            <button class="generate" :disabled="modifying||!modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying?'AI 修改中…':selectedComponent?'修改选中部件':'修改整体模型' }}</button>
           </section>
           <section v-if="selectedSpec" class="component-editor">
             <h3>可调参数 <span>{{ selectedParameters.length }} 项</span></h3>
@@ -818,4 +835,10 @@ footer{flex:0 0 auto;width:100%;max-width:1600px;margin:10px auto 0;text-align:r
   }
 }
 
+
+.modify-target-chip{display:flex;align-items:center;gap:8px;min-height:34px;padding:7px 10px;margin:7px 0 9px;border:1px solid #d8e1d8;border-radius:8px;background:#f5f8f4;color:#344536;font-size:12px}
+.modify-target-chip.is-component{border-color:#d6a33b;background:#fff9eb}
+.modify-target-chip .target-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#7b9279}
+.modify-target-chip.is-component .target-dot{background:#d6a33b}
+.modify-target-chip .clear-target{margin-left:auto;border:0;background:transparent;color:#64748b;font-size:12px;cursor:pointer}
 </style>

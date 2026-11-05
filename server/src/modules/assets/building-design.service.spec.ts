@@ -19,7 +19,7 @@ describe('BuildingDesignService', () => {
         VISION_API_BASE_URL: 'http://vision.local/v1',
       } as Record<string, string>)[key],
     } as never);
-    global.fetch = jest.fn().mockResolvedValue({
+    const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         choices: [{ message: { content: JSON.stringify({
@@ -29,12 +29,13 @@ describe('BuildingDesignService', () => {
           evidence: ['重复窗格'], limitations: ['背面不可见'],
         }) } }],
       }),
-    }) as never;
+    });
+    global.fetch = fetchMock as never;
 
     const result = await service.analyzeReference('data:image/png;base64,' + png.toString('base64'));
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch.mock.calls[0][0]).toBe('http://vision.local/v1/chat/completions');
-    expect(JSON.parse(global.fetch.mock.calls[0][1].body).model).toBe('deepseek-flash');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://vision.local/v1/chat/completions');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('deepseek-flash');
     expect(result.design).toMatchObject({
       template: '宿舍楼', floors: 6, height: 7.5,
       heightBasis: 'estimated-scene-units-not-surveyed',

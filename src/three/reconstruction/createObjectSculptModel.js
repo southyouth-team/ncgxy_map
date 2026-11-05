@@ -5,6 +5,60 @@
  * It interprets declarative geometry only; it never evaluates model-generated JavaScript.
  */
 const MAX_COMPONENTS = 300;
+const MAX_GENERATORS = 30;
+
+function expandObjectSculptSpec(spec) {
+  const generators = Array.isArray(spec.generators) ? spec.generators : [];
+  if (!generators.length) return { ...spec, componentTree: [...spec.componentTree] };
+  const sourceNodes = spec.componentTree;
+  const byId = new Map(sourceNodes.map(node => [node.id, node]));
+  const generatedSourceIds = new Set();
+  const expanded = sourceNodes.filter(node => !generators.some(generator => {
+    let parent = node.id;
+    while (parent) {
+      if (parent === generator.templateRootId) return true;
+      parent = byId.get(parent)?.parent;
+    }
+    return false;
+  }));
+  for (const generator of generators) {
+    const rootNode = byId.get(generator.templateRootId);
+    const subtree = sourceNodes.filter(node => {
+      let parent = node.id;
+      while (parent) {
+        if (parent === generator.templateRootId) return true;
+        parent = byId.get(parent)?.parent;
+      }
+      return false;
+    });
+    if (!rootNode || !subtree.length) throw new TypeError('结构生成器模板节点不存在：' + generator.id);
+    const count = Math.max(1, Math.min(generator.maxCount, Math.round(
+      Number((spec.parameterSchema || []).find(item => item.id === generator.countParameterId)?.value ?? generator.defaultCount),
+    )));
+    const axisIndex = 'xyz'.indexOf(generator.axis);
+    for (let index = 0; index < count; index += 1) {
+      const idMap = new Map(subtree.map(node => [node.id, index === 0 ? node.id : generator.id + '-' + index + '-' + node.id]));
+      for (const source of subtree) {
+        const clone = JSON.parse(JSON.stringify(source));
+        clone.id = idMap.get(source.id);
+        if (source.id === rootNode.id) {
+          clone.parent = rootNode.parent || undefined;
+          clone.transform = clone.transform || {};
+          const position = Array.isArray(clone.transform.position) ? [...clone.transform.position] : [0, 0, 0];
+          position[axisIndex] = Number(position[axisIndex] || 0) + generator.spacing * index;
+          clone.transform.position = position;
+        } else {
+          clone.parent = idMap.get(source.parent);
+        }
+        if (index > 0) clone.generatorInstance = { generatorId: generator.id, index };
+        expanded.push(clone);
+      }
+    }
+  }
+  if (expanded.length > MAX_COMPONENTS) throw new RangeError('动态生成后的组件数量超过 ' + MAX_COMPONENTS);
+  return { ...spec, componentTree: expanded, generators: [] };
+}
+
 const MAX_HIERARCHY_DEPTH = 16;
 const MAX_DIMENSION = 100;
 const MAX_SEGMENTS = 48;
@@ -170,6 +224,35 @@ export function validateObjectSculptSpec(spec) {
       parent = nodes.get(parent)?.parent;
     }
   }
+
+  if (spec.generators !== undefined && (!Array.isArray(spec.generators) || spec.generators.length > MAX_GENERATORS)) {
+    throw new RangeError('generators 最多允许 ' + MAX_GENERATORS + ' 项');
+  }
+  const generatorIds = new Set();
+  const generatorParameterIds = new Set();
+  for (const generator of spec.generators || []) {
+    if (!generator || typeof generator !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.id || '') || generatorIds.has(generator.id)) {
+      throw new TypeError('结构生成器 ID 无效或重复');
+    }
+    generatorIds.add(generator.id);
+    if (generator.type !== 'repeat' || !nodes.has(generator.templateRootId)) throw new TypeError('结构生成器类型或模板节点无效：' + generator.id);
+    if (generator.parentId != null && !nodes.has(generator.parentId)) throw new TypeError('结构生成器父节点不存在：' + generator.id);
+    if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100) throw new TypeError('结构生成器排列规则无效：' + generator.id);
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.countParameterId || '')) throw new TypeError('结构生成器数量参数 ID 无效：' + generator.id);
+    const parameter = (spec.parameterSchema || []).find(item => item.id === generator.countParameterId);
+    if (parameter && parameter.type !== 'number') throw new TypeError('结构生成器数量参数必须是 number：' + generator.id);
+    generatorParameterIds.add(generator.countParameterId);
+    const descendants = spec.componentTree.filter(node => {
+      let parent = node.id;
+      while (parent) {
+        if (parent === generator.templateRootId) return true;
+        parent = nodes.get(parent)?.parent;
+      }
+      return false;
+    });
+    if (!descendants.length || descendants.length * generator.maxCount > MAX_COMPONENTS) throw new RangeError('结构生成器最大展开数量超出限制：' + generator.id);
+    if (!Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100) throw new RangeError('结构生成器 maxCount 必须在 1 到 100 之间：' + generator.id);
+  }
   const parameterIds = new Set();
   if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) {
     throw new RangeError('parameterSchema 最多允许 100 个参数');
@@ -191,7 +274,7 @@ export function validateObjectSculptSpec(spec) {
     } else if (parameter.type === 'select' && (!Array.isArray(parameter.options) || !parameter.options.some(option => option.value === parameter.value))) {
       throw new TypeError('枚举参数无效：' + parameter.id);
     }
-    if (!Array.isArray(parameter.targets) || parameter.targets.length > 100) throw new TypeError('参数目标无效：' + parameter.id);
+    if (!Array.isArray(parameter.targets) || parameter.targets.length > 100 || (parameter.targets.length < 1 && !generatorParameterIds.has(parameter.id))) throw new TypeError('参数目标无效：' + parameter.id);
     for (const target of parameter.targets) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
       if (nodes.get(target.nodeId).kind === 'group' && !target.property.startsWith('transform.') && target.property !== 'visibility.visible') throw new TypeError('Group 节点仅支持变换和显隐参数：' + target.nodeId);
@@ -216,16 +299,18 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   if (!THREE?.Group || !THREE?.Mesh || !THREE?.MeshStandardMaterial) {
     throw new TypeError('Three.js runtime is required');
   }
-  const validation = validateObjectSculptSpec(spec);
+  validateObjectSculptSpec(spec);
+  const renderSpec = expandObjectSculptSpec(spec);
+  const validation = validateObjectSculptSpec(renderSpec);
   const root = new THREE.Group();
   root.name = String(spec.targetName || spec.name || 'reconstructed-object').slice(0, 120);
   const groups = new Map();
-  const materialSpecs = spec.materials && typeof spec.materials === 'object' ? spec.materials : {};
+  const materialSpecs = renderSpec.materials && typeof renderSpec.materials === 'object' ? renderSpec.materials : {};
   const resolveMaterial = key => {
     const materialKey = typeof key === 'string' ? key : 'default';
     return normalizeMaterial(THREE, Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL);
   };
-  const ordered = [...spec.componentTree].sort((a, b) => {
+  const ordered = [...renderSpec.componentTree].sort((a, b) => {
     const depth = node => {
       let value = 0, parent = node.parent;
       while (parent) { value += 1; parent = validation.nodes.get(parent)?.parent; }
@@ -355,26 +440,22 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
       }
     }
   }
-  const materialSpecs = spec.materials || {};
-  for (const node of spec.componentTree) {
-    const group = root.userData.componentGroups.get(node.id);
-    if (!group) continue;
-    group.position.set(...finiteVector(node.transform?.position, [0,0,0], node.id + '.position'));
-    group.rotation.set(...finiteVector(node.transform?.rotation, [0,0,0], node.id + '.rotation'));
-    group.scale.set(...finiteVector(node.transform?.scale, [1,1,1], node.id + '.scale'));
-    group.visible = node.hidden !== true;
-    const mesh = group.children.find(child => child.isMesh);
-    if (!mesh) continue;
-    mesh.geometry?.dispose?.();
-    mesh.geometry = createGeometry(THREE, node);
-    const material = materialSpecs[node.material] || DEFAULT_MATERIAL;
-    mesh.material.color.set(material.color || DEFAULT_MATERIAL.color);
-    mesh.material.roughness = Number(material.roughness ?? DEFAULT_MATERIAL.roughness);
-    mesh.material.metalness = Number(material.metalness ?? DEFAULT_MATERIAL.metalness);
-    mesh.material.opacity = Number(material.opacity ?? 1);
-    mesh.material.transparent = mesh.material.opacity < 1;
-    mesh.material.needsUpdate = true;
+  const renderSpec = expandObjectSculptSpec(spec);
+  const rebuilt = createObjectSculptModel(THREE, renderSpec, { source: 'object-sculpt-parameter' });
+  for (const child of [...root.children]) {
+    root.remove(child);
+    child.traverse?.(item => {
+      item.geometry?.dispose?.();
+      if (Array.isArray(item.material)) item.material.forEach(material => material.dispose?.());
+      else item.material?.dispose?.();
+    });
   }
-  root.userData.objectSculptSpec = spec;
+  for (const child of [...rebuilt.children]) root.add(child);
+  root.userData = {
+    ...root.userData,
+    ...rebuilt.userData,
+    objectSculptSpec: spec,
+    parameterBaseSpec: baseline,
+  };
   return spec;
 }

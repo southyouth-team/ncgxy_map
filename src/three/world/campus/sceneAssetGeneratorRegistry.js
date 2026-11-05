@@ -227,6 +227,26 @@ export function createSceneAssetGeneratorRegistry(THREE) {
     throw new TypeError('Three.js runtime is required to create scene asset generators');
   }
   const generators = new Map();
+  const categories = new Map();
+  const register = (category, objectTypes, generator, options = {}) => {
+    const normalizedCategory = normalize(category);
+    if (!normalizedCategory || !Array.isArray(objectTypes) || !objectTypes.length || typeof generator !== 'function') {
+      throw new TypeError('生成器注册参数无效');
+    }
+    const keys = objectTypes.map(normalize).filter(Boolean);
+    if (!keys.length) throw new TypeError('生成器必须声明至少一个对象类型');
+    for (const objectType of keys) {
+      const key = normalizedCategory + ':' + objectType;
+      if (generators.has(key) && options.replace !== true) throw new Error('场景资产生成器重复注册：' + key);
+    }
+    keys.forEach(objectType => generators.set(normalizedCategory + ':' + objectType, generator));
+    if (!categories.has(normalizedCategory)) categories.set(normalizedCategory, new Set());
+    keys.forEach(objectType => categories.get(normalizedCategory).add(objectType));
+    return () => keys.forEach(objectType => {
+      generators.delete(normalizedCategory + ':' + objectType);
+      categories.get(normalizedCategory)?.delete(objectType);
+    });
+  };
   const handlers = {
     vegetation: createVegetationGenerator,
     structure: createStructureGenerator,
@@ -238,15 +258,19 @@ export function createSceneAssetGeneratorRegistry(THREE) {
   for (const definition of SCENE_ASSET_GENERATOR_CATALOG) {
     const handler = handlers[definition.category];
     for (const objectType of definition.objectTypes) {
-      generators.set(definition.category + ':' + normalize(objectType), handler);
+      // 内置与外部扩展走同一注册入口，避免两套路由规则。
+      if (!generators.has(definition.category + ':' + normalize(objectType))) {
+        register(definition.category, [objectType], handler);
+      }
     }
   }
 
   return Object.freeze({
+    register,
     list() {
-      return SCENE_ASSET_GENERATOR_CATALOG.map(item => ({
-        category: item.category,
-        objectTypes: [...item.objectTypes],
+      return [...categories.entries()].map(([category, objectTypes]) => ({
+        category,
+        objectTypes: [...objectTypes],
       }));
     },
     supports(category, objectType) {

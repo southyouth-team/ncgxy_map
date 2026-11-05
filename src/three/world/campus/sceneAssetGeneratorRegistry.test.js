@@ -50,6 +50,18 @@ describe('scene asset generator registry', () => {
     }
   });
 
+  it('allows category-specific generator plugins to be registered and removed', () => {
+    const remove = registry.register('water', ['湖泊'], (three, input, materials) => {
+      const group = new three.Group();
+      group.add(new three.Mesh(new three.BoxGeometry(4, 0.1, 4), materials.glass));
+      return group;
+    });
+    expect(registry.supports('water', '湖泊')).toBe(true);
+    expect(registry.generate({ category: 'water', objectType: '湖泊' }).userData.sceneAsset.category).toBe('water');
+    remove();
+    expect(registry.supports('water', '湖泊')).toBe(false);
+  });
+
   it('fails explicitly for spatial categories without a dedicated generator', () => {
     expect(registry.supports('water', '湖泊')).toBe(false);
     expect(() => registry.generate({ category: 'water', objectType: '湖泊' }))

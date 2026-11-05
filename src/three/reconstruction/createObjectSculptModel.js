@@ -48,6 +48,28 @@ function createGeometry(THREE, node) {
   const segments = Math.round(boundedNumber(descriptor.segments, 16, 3, MAX_SEGMENTS, node.id + '.segments'));
 
   switch (String(node.primitive || 'box').toLowerCase()) {
+    case 'polygon': {
+      const points = descriptor.points;
+      if (!Array.isArray(points) || points.length < 3 || points.length > 32) throw new RangeError(node.id + '.points 必须包含 3 到 32 个轮廓点');
+      const normalized = points.map((point, index) => {
+        if (!Array.isArray(point) || point.length !== 2 || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {
+          throw new TypeError(node.id + '.points[' + index + '] 必须是 [-0.5,0.5] 范围内的二维坐标');
+        }
+        return [Number(point[0]) * width, Number(point[1]) * height];
+      });
+      const area = normalized.reduce((sum, point, index) => {
+        const next = normalized[(index + 1) % normalized.length];
+        return sum + point[0] * next[1] - next[0] * point[1];
+      }, 0) / 2;
+      if (Math.abs(area) < 0.0001) throw new RangeError(node.id + '.points 轮廓面积不能为零');
+      const shape = new THREE.Shape();
+      shape.moveTo(normalized[0][0], normalized[0][1]);
+      for (const point of normalized.slice(1)) shape.lineTo(point[0], point[1]);
+      shape.closePath();
+      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
+      geometry.translate(0, 0, -depth / 2);
+      return geometry;
+    }
     case 'wedge': {
       const shape = new THREE.Shape();
       shape.moveTo(-width / 2, -height / 2);

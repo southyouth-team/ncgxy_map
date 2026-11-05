@@ -17,7 +17,7 @@ export class BuildingDesignController {
 
   @Post('analyze-building')
   @ApiOperation({ summary: '识别建筑参考图并提取参数化 3D 建模参数' })
-  analyze(@Body('imageDataUrl') imageDataUrl: string, @Body('approvalToken') approvalToken: string) {
-    return this.service.analyzeReference(imageDataUrl, approvalToken);
+  analyze(@Body('imageDataUrl') imageDataUrl: string, @Body('approvalToken') approvalToken: string, @Body('prompt') prompt?: string) {
+    return this.service.analyzeReference(imageDataUrl, approvalToken, prompt);
   }
 }

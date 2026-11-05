@@ -348,6 +348,8 @@ function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
   return geometry;
 }
 

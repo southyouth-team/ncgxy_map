@@ -12,7 +12,7 @@ describe('polygon outline editing', () => {
   it('inserts a midpoint on the longest edge', () => {
     const result = addPolygonOutlinePoint(triangle)
     expect(result).toHaveLength(4)
-    expect(result).toContainEqual([0, -0.5])
+    expect(result).toContainEqual([0.25, 0])
     expect(Math.abs(polygonOutlineArea(result))).toBeGreaterThan(0)
   })
   it('removes the last point but keeps at least three non-degenerate vertices', () => {

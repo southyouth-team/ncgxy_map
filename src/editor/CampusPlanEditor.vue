@@ -772,6 +772,20 @@ function onWindowKeyDown(event) {
 }
 function onWindowKeyUp(event) { if (event.code === 'Space') spacePressed.value = false }
 function preventCanvasContextMenu(event) { event.preventDefault() }
+async function requestEditorClose() {
+  if (persistenceBusy.value) {
+    persistenceMessage.value = '当前保存请求尚未完成，请等待保存结束后再退出。'
+    return
+  }
+  if (documentLoaded.value && props.campusId && props.mapId) {
+    const currentSnapshot = JSON.stringify(buildDocument())
+    if (currentSnapshot !== lastSavedSnapshot) {
+      await saveEditorDocument()
+      if (lastSavedSnapshot !== currentSnapshot) return
+    }
+  }
+  emit('close')
+}
 onMounted(() => {
   window.addEventListener('keydown', handleEditorKeydown)
   window.addEventListener('keydown', onWindowKeyDown)
@@ -1243,7 +1257,7 @@ function exportDocument() {
         <button @click="undo" :disabled="!history.length" title="上一步（Ctrl/Cmd + Z）">上一步</button><button @click="redo" :disabled="!future.length" title="下一步（Ctrl/Cmd + Shift + Z）">下一步</button>
         <button @click="showGrid = !showGrid">{{ showGrid ? '隐藏网格' : '显示网格' }}</button><button :class="{primary:snapEnabled}" @click="snapEnabled=!snapEnabled">顶点吸附 {{ snapEnabled ? '开' : '关' }}</button>
         <button title="缩小（-）" @click="zoomAt(Math.max(.05, scale / 1.12))">−</button><span class="zoom-value">{{ Math.round(scale*100) }}%</span><button @click="resetCanvasView">适配工作区</button><button title="放大（+）" @click="zoomAt(Math.min(8, scale * 1.12))">＋</button><button @click="zoomToSelection" :disabled="!selected.id">定位选中</button>
-        <button @click="preview3d">三维预览</button><span class="save-indicator" :class="persistenceState" :title="persistenceMessage">{{ persistenceBusy ? '正在保存…' : persistenceState === 'saved' ? `已保存 · v${documentRevision}` : persistenceState === 'dirty' ? '有未保存修改' : persistenceState === 'conflict' ? '保存冲突' : persistenceState === 'error' ? '保存失败' : '等待修改' }}</span><button @click="saveEditorDocument" :disabled="persistenceBusy || revisionConflict || !documentLoaded">立即保存</button><button @click="exportDocument">导出场景</button><button @click="emit('close')">退出编辑</button>
+        <button @click="preview3d">三维预览</button><span class="save-indicator" :class="persistenceState" :title="persistenceMessage">{{ persistenceBusy ? '正在保存…' : persistenceState === 'saved' ? `已保存 · v${documentRevision}` : persistenceState === 'dirty' ? '有未保存修改' : persistenceState === 'conflict' ? '保存冲突' : persistenceState === 'error' ? '保存失败' : '等待修改' }}</span><button @click="saveEditorDocument" :disabled="persistenceBusy || revisionConflict || !documentLoaded">立即保存</button><button @click="exportDocument">导出场景</button><button @click="requestEditorClose">退出编辑</button>
       </div>
     </header>
     <div class="workspace">

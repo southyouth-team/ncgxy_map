@@ -811,8 +811,16 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 
 - `gpt-image-2` 只负责生成建筑外观参考图；`VISION_MODEL`（当前配置 `deepseek-flash`）通过 `/assets/ai-image/analyze-building` 提取参数化外观结构，不把图片误当成 3D 模型。
 - 识别参数包括建筑模板、楼层数、场景视觉高度、屋顶类型/坡度、窗户密度与尺寸、门宽、墙面色板、置信度、证据和识别限制。
-- 素材工坊在用户审核后将 `buildingDesign` 与 2.5D 参考图一起入库到同一 Feature 资产记录。运行时通过 `resolveCampusBuildingDesign` 读取已审核参数，并交给 `createPixelBuilding` 生成墙体、屋顶、窗户和入口 Mesh。
-- 2.5D 模式显示参考图 Sprite；3D 模式隐藏参考图并显示参数化 3D 几何。两种视角使用同一个 Feature ID 和空间 footprint。
+- 素材工坊在用户审核后将 `buildingDesign` 与原始参考图一起入库到同一 Feature 资产记录。参考图仅用于识别、审核和追溯，不进入校园地图场景。
+- 运行时通过 `resolveCampusBuildingDesign` 读取已审核参数，并交给 `createPixelBuilding` 生成墙体、屋顶、窗户和入口 Mesh。2.5D 与 3D 始终共用同一套真实 3D 几何和空间 footprint；2.5D 使用固定斜俯视正交相机，3D 使用可旋转透视相机。
 - 参数仅用于视觉生成。`heightBasis=estimated-scene-units-not-surveyed` 明确表示高度为场景单位估算，不是真实建筑高度；位置、footprint、碰撞、walkable 和校园测绘数据不由 AI 修改。
 - 人工 GLB 继续作为可选的高精度替代轨道。旧章节中“3D 必须导入 GLB”的描述已由本流程替代。
 - 端到端真实识图仍需在本地后端环境使用已配置的 `VISION_MODEL` 联调；GitHub CI 单测不代表第三方视觉服务可用，也不代表最终建筑外观已通过浏览器验收。
+
+
+## 31. 2.5D / 3D 建筑表现统一（2026-11-05）
+
+- 建筑运行时禁止将 AI 参考图创建为 Sprite 或隐藏程序化建筑。参考图仅保存在资产库，供视觉识别、人工审核和来源追溯。
+- `createCampusScene` 仅从审核通过的 `buildingDesign` 读取建筑外观参数，并调用 `createPixelBuilding` 生成实体 Mesh。AI 识别参数同时作用于 2.5D 与 3D。
+- `setViewMode` 只切换 `CameraRig` 的相机投影/观察控制，不再切换建筑 Sprite、隐藏 Mesh 或切换基础建筑可见性。
+- 两种模式共享建筑位置、footprint、材质、几何、碰撞和 walkable；模式差异仅在相机与交互：2.5D 固定斜俯视正交视角，3D 可旋转透视视角。

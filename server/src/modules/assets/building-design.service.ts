@@ -218,6 +218,8 @@ export class BuildingDesignService {
         id,
         name: String(input.name || id).slice(0, 120),
         role: String(input.role || 'component').slice(0, 80),
+        hidden: input.hidden === true,
+        locked: input.locked === true,
         ...(typeof input.parent === 'string' && input.parent ? { parent: input.parent } : {}),
         primitive,
         dimensions: {
@@ -371,6 +373,7 @@ export class BuildingDesignService {
       }
       return {
         id, name: String(node.name || id).slice(0,120), role: String(node.role || 'component').slice(0,80),
+        hidden: node.hidden === true, locked: node.locked === true,
         ...(typeof node.parent === 'string' && node.parent ? { parent: node.parent } : {}),
         primitive,
         dimensions: { width, height, depth },

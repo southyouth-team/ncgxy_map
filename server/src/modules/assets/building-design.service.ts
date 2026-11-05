@@ -17,7 +17,9 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
   if (!Array.isArray(input) || input.length > 30) throw new ServiceUnavailableException('generators 必须是最多 30 项的数组');
   const ids = new Set<string>();
   const nodeIds = new Set(componentTree.map(node => node.id));
-  return input.map((raw: any) => {
+  let estimatedExpandedCount = componentTree.length;
+  const claimedTemplateNodeIds = new Set<string>();
+  const normalized = input.map((raw: any) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ServiceUnavailableException('结构生成器定义无效');
     const id = typeof raw.id === 'string' ? raw.id : '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('结构生成器 ID 无效或重复：' + id);
@@ -46,9 +48,16 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
       }
       return false;
     });
-    if (!descendants.length || descendants.length * maxCount > 300) throw new ServiceUnavailableException('结构生成器展开后超过组件数量限制：' + id);
+    if (!descendants.length) throw new ServiceUnavailableException('结构生成器模板子树为空：' + id);
+    for (const node of descendants) {
+      if (claimedTemplateNodeIds.has(node.id)) throw new ServiceUnavailableException('暂不支持嵌套或重叠的结构生成器模板：' + id);
+      claimedTemplateNodeIds.add(node.id);
+    }
+    estimatedExpandedCount += descendants.length * (maxCount - 1);
+    if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('结构生成器最大展开数量超过 300：' + id);
     return { id, type: 'repeat', templateRootId: raw.templateRootId, ...(raw.parentId == null ? {} : { parentId: raw.parentId }), countParameterId, axis: raw.axis, spacing, defaultCount, maxCount, followers };
   });
+  return normalized;
 }
 function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>, generatorParameterIds = new Set<string>()) {
   if (input == null) return [];

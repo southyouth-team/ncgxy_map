@@ -59,10 +59,10 @@ describe('scene asset generator registry', () => {
       group.add(new three.Mesh(new three.BoxGeometry(4, 0.1, 4), materials.glass));
       return group;
     });
-    expect(registry.supports('water', '湖泊')).toBe(true);
+    expect(registry.supports('indoor', '教室')).toBe(true);
     expect(registry.generate({ category: 'indoor', objectType: '教室' }).userData.sceneAsset.category).toBe('indoor');
     remove();
-    expect(registry.supports('water', '湖泊')).toBe(false);
+    expect(registry.supports('indoor', '教室')).toBe(false);
   });
 
   it('fails explicitly for categories without a dedicated generator', () => {

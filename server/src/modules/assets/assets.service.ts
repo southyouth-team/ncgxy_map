@@ -244,9 +244,13 @@ export class AssetsService {
     const byId = new Map<string, any>(spec.componentTree.map((node: any) => [node.id, node] as [string, any]));
     for (const node of spec.componentTree) {
       if (node.parent && !ids.has(node.parent)) throw new BadRequestException('资产组件父节点不存在：' + node.id);
-      if (!primitives.has(String(node.primitive || '').toLowerCase())) throw new BadRequestException('资产组件几何类型无效：' + node.id);
-      if (!node.dimensions || ['width','height','depth'].some(key => !Number.isFinite(Number(node.dimensions[key])) || Number(node.dimensions[key]) < 0.02 || Number(node.dimensions[key]) > 100)) throw new BadRequestException('资产组件尺寸无效：' + node.id);
-      if (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(spec.materials, node.material)) throw new BadRequestException('资产组件材质引用无效：' + node.id);
+      const kind = node.kind || 'mesh';
+      if (!['group', 'mesh'].includes(kind)) throw new BadRequestException('资产组件 kind 无效：' + node.id);
+      if (kind === 'mesh') {
+        if (!primitives.has(String(node.primitive || '').toLowerCase())) throw new BadRequestException('资产组件几何类型无效：' + node.id);
+        if (!node.dimensions || ['width','height','depth'].some(key => !Number.isFinite(Number(node.dimensions[key])) || Number(node.dimensions[key]) < 0.02 || Number(node.dimensions[key]) > 100)) throw new BadRequestException('资产组件尺寸无效：' + node.id);
+        if (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(spec.materials, node.material)) throw new BadRequestException('资产组件材质引用无效：' + node.id);
+      }
       const visited = new Set([node.id]);
       let parent = node.parent;
       let depth = 1;

@@ -692,6 +692,13 @@ export class BuildingDesignService {
         throw new ServiceUnavailableException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
       }
     }
+    const previousGenerators = current.generators || [];
+    const nextGeneratorById = new Map(generators.map((item: any) => [item.id, item]));
+    for (const item of previousGenerators) {
+      if (stableSerialize(nextGeneratorById.get(item.id)) !== stableSerialize(item)) {
+        throw new ServiceUnavailableException('AI 参数设计不得修改或删除已有结构生成器：' + item.id);
+      }
+    }
     const previous = current.parameterSchema || [];
     const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));
     for (const item of previous) {

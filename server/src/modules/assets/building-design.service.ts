@@ -260,7 +260,7 @@ export class BuildingDesignService {
         if (input.geometryDescriptor.segments !== undefined) geometryDescriptor.segments = Math.round(number(input.geometryDescriptor.segments, 16, 3, 48));
         if (input.geometryDescriptor.tube !== undefined) geometryDescriptor.tube = number(input.geometryDescriptor.tube, 0.1, 0.01, 10);
         if (input.geometryDescriptor.inset !== undefined) geometryDescriptor.inset = number(input.geometryDescriptor.inset, 0.2, 0.02, 20);
-        if (primitive === 'polygon') {
+        if (kind === 'mesh' && primitive === 'polygon') {
           const points = input.geometryDescriptor.points;
           if (!Array.isArray(points) || points.length < 3 || points.length > 32 || points.some((point: any) => !Array.isArray(point) || point.length !== 2 || point.some((v: unknown) => typeof v !== 'number' || !Number.isFinite(v) || v < -0.5 || v > 0.5))) {
             throw new ServiceUnavailableException('polygon 轮廓必须包含 3 到 32 个 [-0.5,0.5] 范围内的二维坐标点');
@@ -396,31 +396,34 @@ export class BuildingDesignService {
       const id = typeof node.id === 'string' ? node.id : '';
       if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new BadRequestException('组件 ID 无效或重复：' + id);
       ids.add(id);
+      const kind = node.kind === 'group' ? 'group' : 'mesh';
       const primitive = String(node.primitive || '').toLowerCase();
-      if (!primitives.includes(primitive)) throw new BadRequestException('组件几何类型不受支持：' + primitive);
-      const dimensions = node.dimensions;
-      if (!dimensions || typeof dimensions !== 'object') throw new BadRequestException('组件尺寸缺失：' + id);
+      if (kind === 'mesh' && !primitives.includes(primitive)) throw new BadRequestException('组件几何类型不受支持：' + primitive);
+      const dimensions = node.dimensions || {};
+      if (kind === 'mesh' && (!dimensions || typeof dimensions !== 'object')) throw new BadRequestException('组件尺寸缺失：' + id);
       const dimension = (key: string) => {
         const value = dimensions[key];
         if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.02 || value > 100) throw new BadRequestException(id + '.' + key + ' 超出允许范围');
         return value;
       };
-      const width = dimension('width'), height = dimension('height'), depth = dimension('depth');
+      const width = kind === 'mesh' ? dimension('width') : undefined;
+      const height = kind === 'mesh' ? dimension('height') : undefined;
+      const depth = kind === 'mesh' ? dimension('depth') : undefined;
       const transform = node.transform && typeof node.transform === 'object' ? node.transform : {};
       const scale = vector(transform.scale, [1,1,1], id + '.scale', -20, 20);
       if (scale.some(value => Math.abs(value) < 0.001)) throw new BadRequestException(id + '.scale 不能为零');
-      if (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(materials, node.material)) throw new BadRequestException(id + '.material 不存在');
+      if (kind === 'mesh' && (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(materials, node.material))) throw new BadRequestException(id + '.material 不存在');
       const geometryDescriptor: Record<string, any> = {};
       const descriptor = node.geometryDescriptor && typeof node.geometryDescriptor === 'object' ? node.geometryDescriptor : {};
-      if (descriptor.segments !== undefined) {
+      if (kind === 'mesh' && descriptor.segments !== undefined) {
         if (typeof descriptor.segments !== 'number' || !Number.isInteger(descriptor.segments) || descriptor.segments < 3 || descriptor.segments > 48) throw new BadRequestException(id + '.segments 超出范围');
         geometryDescriptor.segments = descriptor.segments;
       }
-      if (descriptor.tube !== undefined) {
+      if (kind === 'mesh' && descriptor.tube !== undefined) {
         if (typeof descriptor.tube !== 'number' || !Number.isFinite(descriptor.tube) || descriptor.tube < 0.01 || descriptor.tube > Math.max(width, depth) * 0.225) throw new BadRequestException(id + '.tube 超出范围');
         geometryDescriptor.tube = descriptor.tube;
       }
-      if (descriptor.inset !== undefined) {
+      if (kind === 'mesh' && descriptor.inset !== undefined) {
         if (typeof descriptor.inset !== 'number' || !Number.isFinite(descriptor.inset) || descriptor.inset < 0.02 || descriptor.inset > Math.min(width, height) * 0.4) throw new BadRequestException(id + '.inset 超出范围');
         geometryDescriptor.inset = descriptor.inset;
       }
@@ -439,18 +442,16 @@ export class BuildingDesignService {
         geometryDescriptor.points = points.map((point: number[]) => [...point]);
       }
       return {
-        id, name: String(node.name || id).slice(0,120), role: String(node.role || 'component').slice(0,80),
+        id, kind, name: String(node.name || id).slice(0,120), role: String(node.role || 'component').slice(0,80),
         hidden: node.hidden === true, locked: node.locked === true,
         ...(typeof node.parent === 'string' && node.parent ? { parent: node.parent } : {}),
-        primitive,
-        dimensions: { width, height, depth },
+        ...(kind === 'mesh' ? { primitive, dimensions: { width, height, depth }, material: node.material } : {}),
         transform: {
           position: vector(transform.position, [0,0,0], id + '.position', -100, 100),
           rotation: vector(transform.rotation, [0,0,0], id + '.rotation', -100, 100),
           scale,
         },
-        material: node.material,
-        ...(Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),
+        ...(kind === 'mesh' && Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),
       };
     });
     const byId = new Map<string, any>(componentTree.map((node: any) => [node.id, node] as [string, any]));

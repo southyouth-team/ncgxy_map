@@ -364,6 +364,9 @@ export class AssetsService {
             || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
             throw new BadRequestException('资产 attach 必须连接同一父级下的 Mesh 面：' + constraint.id);
           }
+          const attachTargetKey = targetNode.id + ':attach:' + constraint.axis;
+          if (claimedConstraintTargets.has(attachTargetKey)) throw new BadRequestException('资产 attach 目标轴重复绑定：' + constraint.id);
+          claimedConstraintTargets.add(attachTargetKey);
         } else if (!['adjacent','connects'].includes(constraint.relation)) {
           throw new BadRequestException('资产 adjacency 关系类型无效：' + constraint.id);
         }

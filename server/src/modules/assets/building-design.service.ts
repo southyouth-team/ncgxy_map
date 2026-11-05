@@ -55,9 +55,9 @@ export class BuildingDesignService {
   }
 
   private parseReferenceImage(imageDataUrlInput: unknown) {
-    if (typeof imageDataUrlInput !== 'string') throw new BadRequestException('请提供建筑参考图');
+    if (typeof imageDataUrlInput !== 'string') throw new BadRequestException('请提供场景资产参考图');
     const match = imageDataUrlInput.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
-    if (!match) throw new BadRequestException('参考图必须是 Base64 PNG、JPG 或 WebP');
+    if (!match) throw new BadRequestException('场景资产参考图必须是 Base64 PNG、JPG 或 WebP');
     const image = Buffer.from(match[2], 'base64');
     if (image.length < 16 || image.length > MAX_REFERENCE_BYTES) throw new BadRequestException('参考图为空或超过 10 MB');
     const validSignature = image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))

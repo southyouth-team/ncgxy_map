@@ -263,6 +263,33 @@ export class AssetsService {
     }
     if (spec.componentTree.filter((node: any) => !node.parent).length !== 1) throw new BadRequestException('结构化资产必须只有一个主体根节点');
     if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) throw new BadRequestException('资产参数 Schema 无效');
+    const generators = spec.generators === undefined ? [] : spec.generators;
+    if (!Array.isArray(generators) || generators.length > 30) throw new BadRequestException('资产结构生成器数量无效');
+    const generatorIds = new Set<string>();
+    for (const generator of generators) {
+      if (!generator || typeof generator !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.id || '')
+        || generatorIds.has(generator.id) || generator.type !== 'repeat' || !byId.has(generator.templateRootId)
+        || !['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100
+        || !Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100) {
+        throw new BadRequestException('资产结构生成器定义无效');
+      }
+      generatorIds.add(generator.id);
+      const parameter = (spec.parameterSchema || []).find((item: any) => item.id === generator.countParameterId);
+      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+        || parameter.min < 1 || parameter.max > generator.maxCount) {
+        throw new BadRequestException('资产结构生成器缺少有效的整数数量参数：' + generator.id);
+      }
+      const subtreeCount = spec.componentTree.filter((node: any) => {
+        let current = node.id;
+        while (current) {
+          if (current === generator.templateRootId) return true;
+          current = byId.get(current)?.parent;
+        }
+        return false;
+      }).length;
+      if (!subtreeCount || subtreeCount * generator.maxCount > 300) throw new BadRequestException('资产结构生成器最大展开数量超出限制：' + generator.id);
+    }
+
     const assetId = randomUUID();
     const directory = resolve(this.storageDir, 'campus-visual-assets', 'objects');
     await mkdir(directory, { recursive: true });

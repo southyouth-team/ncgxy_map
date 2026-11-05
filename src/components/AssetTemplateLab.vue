@@ -14,6 +14,8 @@ const prompt = ref('生成一座动漫彩绘风格的奇幻学院城堡，包含
 const objectType = ref('城堡')
 const imageFile = ref(null), imageDataUrl = ref(''), referencePreview = ref('')
 const generating = ref(false), generationLog = ref('')
+const modifying = ref(false), modifyInstruction = ref('')
+const savedAssetId = ref('')
 const categories = computed(() => [...new Set(templates.value.map(x => x.category))])
 const visibleTemplates = computed(() => templates.value.filter(x => selectedCategory.value === 'all' || x.category === selectedCategory.value))
 const selectedTemplate = computed(() => templates.value.find(x => x.id === selectedId.value))
@@ -272,6 +274,61 @@ function updateSelectedComponentTransform(axis, value) {
   group.position.set(...node.transform.position)
   editorRevision.value += 1
 }
+async function modifySelectedAsset() {
+  const root = objects.get(selectedInstanceId.value)
+  if (!root || !selectedComponentId.value || !modifyInstruction.value.trim() || modifying.value) return
+  modifying.value = true; error.value = ''; status.value = 'AI 正在修改选中部件…'
+  try {
+    const result = await requestJson('/assets/ai-image/modify-object', {
+      objectSculptSpec: selectedSpec.value,
+      selectedNodeIds: [selectedComponentId.value],
+      instruction: modifyInstruction.value.trim(),
+    })
+    const nextSpec = result.objectSculptSpec
+    const position = root.position.clone(), rotation = root.rotation.clone(), objectScale = root.scale.clone()
+    scene.remove(root)
+    root.traverse(child => { child.geometry?.dispose?.(); if (child.material && !Array.isArray(child.material)) child.material.dispose?.() })
+    const nextRoot = createObjectSculptModel(THREE, nextSpec, { source: 'ai-local-edit' })
+    nextRoot.position.copy(position); nextRoot.rotation.copy(rotation); nextRoot.scale.copy(objectScale)
+    scene.add(nextRoot); objects.set(selectedInstanceId.value, nextRoot)
+    selectedComponentId.value = result.affectedNodeIds?.includes(selectedComponentId.value) ? selectedComponentId.value : nextSpec.componentTree[0]?.id || ''
+    editorRevision.value += 1
+    modifyInstruction.value = ''
+    if (selectedComponentId.value) selectComponent(selectedComponentId.value)
+    status.value = '局部修改完成；未选中组件保持原结构'
+  } catch (e) {
+    error.value = e?.message || 'AI 局部修改失败'
+    status.value = '局部修改失败'
+  } finally { modifying.value = false }
+}
+async function saveSelectedAsset() {
+  if (!selectedSpec.value) return
+  try {
+    const result = await requestJson('/assets/visual-assets/objects', {
+      name: selectedSpec.value.targetName || selectedInstance.value?.name || '3D 资产',
+      objectSculptSpec: selectedSpec.value,
+    })
+    savedAssetId.value = result.assetId
+    status.value = '结构化资产已保存：' + result.assetId
+  } catch (e) { error.value = e?.message || '资产保存失败' }
+}
+async function loadSavedAsset() {
+  if (!savedAssetId.value.trim()) return
+  try {
+    const response = await fetch(API_BASE + '/assets/visual-assets/objects/' + encodeURIComponent(savedAssetId.value.trim()), { headers: { 'X-Dev-User-Id': DEV_USER_ID } })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || '资产读取失败：HTTP ' + response.status)
+    const spec = payload.spec
+    const id = 'saved-asset-' + (++serial)
+    const object = createObjectSculptModel(THREE, spec, { source: 'saved-object-asset' })
+    scene.add(object); objects.set(id, object)
+    instances.value.push({ id, name: spec.targetName || '已保存资产', templateId: payload.assetId, category: spec.category || 'other', source: '已保存资产' })
+    selectedInstanceId.value = id
+    selectedComponentId.value = spec.componentTree?.[0]?.id || ''
+    if (selectedComponentId.value) selectComponent(selectedComponentId.value)
+    status.value = '已加载结构化资产：' + payload.assetId
+  } catch (e) { error.value = e?.message || '资产读取失败' }
+}
 function addTemplate() {
   try {
     const item = selectedTemplate.value
@@ -393,6 +450,16 @@ onBeforeUnmount(() => {
             <button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible ? '隐藏此部件' : '显示此部件' }}</button>
           </div>
         </section>
+        <section v-if="selectedSpec" class="asset-actions">
+          <button class="secondary" @click="saveSelectedAsset">保存完整资产</button>
+          <label>已保存资产 ID</label><input v-model="savedAssetId" placeholder="保存后自动填入，也可粘贴 ID">
+          <button class="secondary" @click="loadSavedAsset">加载资产</button>
+        </section>
+        <section v-if="selectedComponent" class="ai-local-editor">
+          <label>AI 局部修改 · 当前部件：{{ selectedComponent.name || selectedComponent.id }}</label>
+          <textarea v-model="modifyInstruction" rows="3" placeholder="例如：把这个窗户改成拱形，保留原位置和周围墙体"></textarea>
+          <button class="generate" :disabled="modifying || !modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying ? 'AI 修改中…' : '修改选中部件' }}</button>
+        </section>
         <p class="hint">AI 生成对象与预置模板共用同一个 Scene。每个模型作为独立 THREE.Group 管理，可单独聚焦、缩放和删除。</p>
       </aside>
     </section>
@@ -401,5 +468,5 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:330px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel input:not([type=file]),.panel textarea,.panel select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #dce4dc;border-radius:7px;font:inherit;font-size:12px}.panel input[type=file]{font-size:11px;max-width:100%}.reference{display:block;max-width:100%;max-height:170px;object-fit:contain;margin-top:10px;border-radius:7px;background:#f3f5f2}.generate,.secondary{margin-top:12px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.generate:disabled{opacity:.55;cursor:wait}.secondary{background:#fff;color:#3d7950;border:1px solid #b9cdbb}.hint{font-size:10px;color:#7d8b80;line-height:1.65}.log{white-space:pre-wrap;background:#f3f7f2;border-radius:7px;padding:10px;margin-top:10px;font-size:10px;color:#53675a;line-height:1.6}.error{margin-top:10px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}.subheading{margin-top:22px!important;padding-top:14px;border-top:1px solid #e8ede8}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small{font-size:10px;color:#89968b}.viewport-panel{position:relative;height:clamp(580px,calc(100vh - 190px),900px);min-height:580px;background:#dfe8e0} .viewport{position:absolute;inset:0;background:#b9c8bb}.viewport :deep(canvas){display:block;width:100%;height:100%;touch-action:none}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.status{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px}.inspector input{accent-color:#4f855e}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}.asset-parameters{margin-top:12px;padding-top:10px;border-top:1px solid #edf0ed}.asset-parameters h4{font-size:11px;margin:0 0 8px}.asset-parameters h4 small{color:#89968b;font-weight:400}.parameter-row{display:flex;flex-direction:column;gap:5px;margin:8px 0}.parameter-row label{margin:0}.parameter-row input[type=range]{width:100%;accent-color:#4f855e}.parameter-row input[type=color]{width:100%;height:30px}.parameter-row input[type=checkbox]{width:auto;align-self:flex-start}.parameter-row select{width:100%}.parameter-value{font-size:10px;color:#78867b;text-align:right}.component-editor{margin-top:18px;padding-top:14px;border-top:1px solid #e8ede8}.component-editor h3{margin-bottom:8px}.component-tree{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:3px}.component-node{display:flex;justify-content:space-between;gap:6px;align-items:center;text-align:left;border:1px solid transparent;border-radius:5px;background:#f7f9f7;padding:7px 8px;color:#34453a;cursor:pointer;min-width:0}.component-node.active{background:#eaf4eb;border-color:#a9c8ae}.component-node span{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.component-node small{font-size:9px;color:#8a978c;white-space:nowrap}.component-properties{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #edf0ed}.component-properties>b{font-size:12px}.component-properties label{margin:4px 0 0}.component-properties input[type=color]{width:100%;height:32px;border:1px solid #dce4dc;border-radius:6px;padding:2px}.axis-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.axis-inputs input{min-width:0}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1100px){.layout{grid-template-columns:290px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:220px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:180px}.viewport-panel{min-height:450px}footer{text-align:left}}
+.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:330px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel input:not([type=file]),.panel textarea,.panel select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #dce4dc;border-radius:7px;font:inherit;font-size:12px}.panel input[type=file]{font-size:11px;max-width:100%}.reference{display:block;max-width:100%;max-height:170px;object-fit:contain;margin-top:10px;border-radius:7px;background:#f3f5f2}.generate,.secondary{margin-top:12px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.generate:disabled{opacity:.55;cursor:wait}.secondary{background:#fff;color:#3d7950;border:1px solid #b9cdbb}.hint{font-size:10px;color:#7d8b80;line-height:1.65}.log{white-space:pre-wrap;background:#f3f7f2;border-radius:7px;padding:10px;margin-top:10px;font-size:10px;color:#53675a;line-height:1.6}.error{margin-top:10px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}.subheading{margin-top:22px!important;padding-top:14px;border-top:1px solid #e8ede8}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small{font-size:10px;color:#89968b}.viewport-panel{position:relative;height:clamp(580px,calc(100vh - 190px),900px);min-height:580px;background:#dfe8e0} .viewport{position:absolute;inset:0;background:#b9c8bb}.viewport :deep(canvas){display:block;width:100%;height:100%;touch-action:none}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.status{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px}.inspector input{accent-color:#4f855e}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}.asset-parameters{margin-top:12px;padding-top:10px;border-top:1px solid #edf0ed}.asset-parameters h4{font-size:11px;margin:0 0 8px}.asset-parameters h4 small{color:#89968b;font-weight:400}.parameter-row{display:flex;flex-direction:column;gap:5px;margin:8px 0}.parameter-row label{margin:0}.parameter-row input[type=range]{width:100%;accent-color:#4f855e}.parameter-row input[type=color]{width:100%;height:30px}.parameter-row input[type=checkbox]{width:auto;align-self:flex-start}.parameter-row select{width:100%}.parameter-value{font-size:10px;color:#78867b;text-align:right}.asset-actions,.ai-local-editor{margin-top:14px;padding-top:12px;border-top:1px solid #edf0ed}.ai-local-editor textarea{width:100%;box-sizing:border-box;resize:vertical}.asset-actions label,.ai-local-editor label{display:block;font-size:10px;color:#78867b;margin:8px 0}.asset-actions input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #dce4dc;border-radius:6px;font-size:11px}.component-editor{margin-top:18px;padding-top:14px;border-top:1px solid #e8ede8}.component-editor h3{margin-bottom:8px}.component-tree{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:3px}.component-node{display:flex;justify-content:space-between;gap:6px;align-items:center;text-align:left;border:1px solid transparent;border-radius:5px;background:#f7f9f7;padding:7px 8px;color:#34453a;cursor:pointer;min-width:0}.component-node.active{background:#eaf4eb;border-color:#a9c8ae}.component-node span{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.component-node small{font-size:9px;color:#8a978c;white-space:nowrap}.component-properties{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #edf0ed}.component-properties>b{font-size:12px}.component-properties label{margin:4px 0 0}.component-properties input[type=color]{width:100%;height:32px;border:1px solid #dce4dc;border-radius:6px;padding:2px}.axis-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.axis-inputs input{min-width:0}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1100px){.layout{grid-template-columns:290px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:220px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:180px}.viewport-panel{min-height:450px}footer{text-align:left}}
 </style>

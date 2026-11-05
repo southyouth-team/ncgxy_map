@@ -46,9 +46,9 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
 
   it('rejects procedural generation for categories without a registered generator', async () => {
     await expect(service.create({
-      name: '湖泊模板',
-      category: 'water',
-      objectType: '湖泊',
+      name: '室内场景模板',
+      category: 'indoor',
+      objectType: '教室',
       visualStyle: 'stylized',
       sourceType: 'ai_generated',
       modelType: 'procedural',

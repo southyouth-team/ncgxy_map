@@ -305,6 +305,7 @@ export class AssetsService {
         return false;
       });
       if (!subtreeCount) throw new BadRequestException('资产结构生成器模板子树为空：' + generator.id);
+      if ((generator.followers || []).some((follower: any) => subtree.some((node: any) => node.id === follower.nodeId))) throw new BadRequestException('资产结构生成器跟随节点不能位于重复原型子树内：' + generator.id);
       for (const node of subtree) {
         if (claimedTemplateNodeIds.has(node.id)) throw new BadRequestException('暂不支持嵌套或重叠的资产结构生成器：' + generator.id);
         claimedTemplateNodeIds.add(node.id);

@@ -260,7 +260,7 @@ export function validateObjectSculptSpec(spec) {
     if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100) throw new TypeError('结构生成器排列规则无效：' + generator.id);
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.countParameterId || '')) throw new TypeError('结构生成器数量参数 ID 无效：' + generator.id);
     const parameter = (spec.parameterSchema || []).find(item => item.id === generator.countParameterId);
-    if (!parameter || parameter.type !== 'number' || parameter.value !== generator.defaultCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max) || parameter.min < 1 || parameter.max > generator.maxCount) throw new TypeError('结构生成器必须绑定有效的整数数量参数：' + generator.id);
+    if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max) || parameter.min < 1 || parameter.max > generator.maxCount || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) throw new TypeError('结构生成器必须绑定有效的整数数量参数：' + generator.id);
     generatorParameterIds.add(generator.countParameterId);
     const descendants = spec.componentTree.filter(node => {
       let parent = node.id;

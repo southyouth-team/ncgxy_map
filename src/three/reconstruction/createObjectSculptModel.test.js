@@ -197,4 +197,31 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => validateObjectSculptSpec(spec)).toThrow('参数目标属性不受支持');
   });
 
+  it('supports AI-declared shape selectors and floor visibility dependencies', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'body', primitive: 'box', material: 'wall', dimensions: { width: 4, height: 4, depth: 3 } },
+        { id: 'window', parent: 'body', primitive: 'box', material: 'wall', dimensions: { width: 1, height: 1.5, depth: 0.1 } },
+        { id: 'floor-2', parent: 'body', primitive: 'box', material: 'wall', dimensions: { width: 3, height: 0.2, depth: 2 } },
+        { id: 'floor-3', parent: 'body', primitive: 'box', material: 'wall', dimensions: { width: 3, height: 0.2, depth: 2 } },
+      ],
+      parameterSchema: [
+        { id: 'window-shape', label: '窗户形状', type: 'select', value: 'box', options: [{ label: '矩形', value: 'box' }, { label: '拱形', value: 'arch' }], targets: [{ nodeId: 'window', property: 'geometry.primitive', mode: 'set' }] },
+        { id: 'floor-count', label: '楼层数量', type: 'number', value: 2, min: 1, max: 3, targets: [
+          { nodeId: 'floor-2', property: 'visibility.visible', mode: 'visible-from', threshold: 2 },
+          { nodeId: 'floor-3', property: 'visibility.visible', mode: 'visible-from', threshold: 3 },
+        ] },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    applyObjectSculptParameter(THREE, model, 'window-shape', 'arch');
+    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'window').primitive).toBe('arch');
+    applyObjectSculptParameter(THREE, model, 'floor-count', 2);
+    expect(model.userData.componentGroups.get('floor-2').visible).toBe(true);
+    expect(model.userData.componentGroups.get('floor-3').visible).toBe(false);
+    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'window-shape').value).toBe('arch');
+  });
+
 });

@@ -305,7 +305,7 @@ export class ImageGenerationService {
       sizeBytes: imageBuffer.length,
     };
   }
-  async repairObjectFromValidation(objectSculptSpecInput: unknown, validationErrorInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown) {
+  async repairObjectFromValidation(objectSculptSpecInput: unknown, validationErrorInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown): Promise<any> {
     if (!objectSculptSpecInput || typeof objectSculptSpecInput !== 'object' || Array.isArray(objectSculptSpecInput)) throw new BadRequestException('待修复的 ObjectSculptSpec 无效');
     const validationError = typeof validationErrorInput === 'string' ? validationErrorInput.trim().slice(0, 2000) : '';
     if (!validationError) throw new BadRequestException('缺少 Runtime 校验错误信息');
@@ -330,7 +330,7 @@ export class ImageGenerationService {
    * Prompt-to-3D POC: ask the configured vision/chat model for a bounded ObjectSculptSpec.
    * The model returns JSON data only; no generated JavaScript is evaluated in the server.
    */
-  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, allowGeometryRepair = true) {
+  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, allowGeometryRepair = true): Promise<any> {
     if (typeof promptInput !== 'string' || !promptInput.trim()) {
       throw new BadRequestException('Three.js 模型生成提示词不能为空');
     }

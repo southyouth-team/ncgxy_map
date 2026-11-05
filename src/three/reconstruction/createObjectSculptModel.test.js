@@ -209,6 +209,40 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(1.2);
   });
 
+
+  it('rebuilds repeat-generated component subtrees when a template count parameter changes', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      targetName: 'three-storey-school',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'building-root', kind: 'group', name: '教学楼主体' },
+        { id: 'floor-prototype', kind: 'group', name: '标准楼层', parent: 'building-root', transform: { position: [0, 0, 0] } },
+        { id: 'floor-slab', kind: 'mesh', name: '楼板', parent: 'floor-prototype', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 0.25, depth: 6 }, transform: { position: [0, 0, 0] } },
+        { id: 'roof', kind: 'mesh', name: '屋顶', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 8.5, height: 0.4, depth: 6.5 }, transform: { position: [0, 11, 0] } },
+      ],
+      parameterSchema: [{
+        id: 'floor-count', label: '楼层数', type: 'number', value: 3, min: 1, max: 8, step: 1, unit: '层', targets: [],
+      }],
+      generators: [{
+        id: 'floor-repeat', type: 'repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count',
+        axis: 'y', spacing: 3.2, maxCount: 8,
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    expect(model.userData.componentGroups.size).toBe(7);
+    expect(model.userData.componentGroups.has('floor-repeat-2-floor-prototype')).toBe(true);
+    applyObjectSculptParameter(THREE, model, 'floor-count', 5);
+    expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(5);
+    expect(model.userData.objectSculptSpec.generators).toHaveLength(1);
+    expect(model.userData.componentGroups.size).toBe(11);
+    expect(model.userData.componentGroups.get('floor-repeat-4-floor-prototype').position.y).toBeCloseTo(12.8);
+    applyObjectSculptParameter(THREE, model, 'floor-count', 2);
+    expect(model.userData.componentGroups.size).toBe(5);
+    expect(model.userData.componentGroups.has('floor-repeat-2-floor-prototype')).toBe(false);
+  });
+
+
   it('rejects AI parameter targets outside the renderer allowlist', () => {
     const spec = {
       schemaVersion: '2.0',

@@ -478,6 +478,7 @@ export class AssetsService {
       }
     }
     const constraintIds = new Set<string>();
+    const cutoutRegions = new Map<string, Array<{ centerX: number; centerY: number; width: number; height: number }>>();
     for (const constraint of constraints) {
       if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
         || constraintIds.has(constraint.id) || !['follow','span','attach','adjacency','cutout'].includes(constraint.type)) {
@@ -505,6 +506,15 @@ export class AssetsService {
           || Math.abs(centerY) + Number(cutter.dimensions.height) / 2 > Number(target.dimensions.height) / 2) {
           throw new BadRequestException('资产 cutout 开口必须完整位于目标 Mesh 边界内：' + constraint.id);
         }
+        const regions = cutoutRegions.get(target.id) || [];
+        const width = Number(cutter.dimensions.width), height = Number(cutter.dimensions.height);
+        for (const region of regions) {
+          const overlapsX = Math.abs(centerX - region.centerX) <= (width + region.width) / 2 + 0.0001;
+          const overlapsY = Math.abs(centerY - region.centerY) <= (height + region.height) / 2 + 0.0001;
+          if (overlapsX && overlapsY) throw new BadRequestException('资产 cutout 开口不能重叠或边界接触：' + constraint.id);
+        }
+        regions.push({ centerX, centerY, width, height });
+        cutoutRegions.set(target.id, regions);
         continue;
       }
       if (constraint.type === 'attach' || constraint.type === 'adjacency') {

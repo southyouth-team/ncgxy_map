@@ -81,7 +81,7 @@ export class BuildingTemplatesService {
     if (role === 'reference' && !(png || jpg || webp)) throw new BadRequestException('参考文件必须为 PNG/JPG/WebP');
     const ext = role === 'model' ? '.glb' : jpg ? '.jpg' : webp ? '.webp' : '.png';
     const checksumSha256 = createHash('sha256').update(b).digest('hex');
-    if (role === 'reference' && item.modelType === 'procedural' && item.category !== 'building') {
+    if (role === 'reference' && item.modelType === 'procedural' && (item.category !== 'building' || typeof item.design?.referenceImageSha256 === 'string')) {
       const expected = item.design?.referenceImageSha256;
       if (typeof expected !== 'string' || !/^[a-f0-9]{64}$/.test(expected) || expected !== checksumSha256) {
         throw new BadRequestException('参考图片与签发结构参数时使用的图片不一致；请重新确认图片并识别');
@@ -117,7 +117,7 @@ export class BuildingTemplatesService {
       if (item.modelType === 'procedural' && !item.design && !item.buildingDesign) throw new BadRequestException('程序化模板缺少结构参数');
       if (item.modelType === 'procedural' && !item.referenceImage) throw new BadRequestException('程序化模板必须保留已确认的参考图片');
       if (item.modelType === 'procedural' && item.category !== 'building' && item.design?.reviewed !== true) throw new BadRequestException('模板参数尚未经过人工审核，不能发布');
-      if (item.modelType === 'procedural' && item.category !== 'building' && item.referenceImage.sha256 !== item.design?.referenceImageSha256) throw new BadRequestException('模板参考图片与 AI 结构识别凭证不匹配');
+      if (item.modelType === 'procedural' && (item.category !== 'building' || typeof item.design?.referenceImageSha256 === 'string') && item.referenceImage.sha256 !== item.design?.referenceImageSha256) throw new BadRequestException('模板参考图片与 AI 结构识别凭证不匹配');
       item.status = 'ready'; item.updatedAt = new Date().toISOString(); result = item; await this.writeManifest(m);
     });
     return result;

@@ -6,6 +6,54 @@ const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
 const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
 const ROOFS = ['flat', 'pitched', 'span', 'glass'];
 const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
+const PARAMETER_TARGETS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity']);
+function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>) {
+  if (input == null) return [];
+  if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('parameterSchema 必须是最多 100 项的数组');
+  const ids = new Set<string>();
+  const nodeIds = new Set(componentTree.map(node => node.id));
+  return input.map((raw: any) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ServiceUnavailableException('参数定义格式无效');
+    const id = typeof raw.id === 'string' ? raw.id : '';
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('参数 ID 无效或重复：' + id);
+    ids.add(id);
+    const type = raw.type;
+    if (!['number','color','boolean','select'].includes(type)) throw new ServiceUnavailableException('参数类型不受支持：' + id);
+    const parameter: Record<string, any> = { id, label: String(raw.label || id).slice(0, 100), type, value: raw.value };
+    if (type === 'number') {
+      const min = Number(raw.min), max = Number(raw.max), value = Number(raw.value);
+      if (![min,max,value].every(Number.isFinite) || min > max || value < min || value > max || min < -1000 || max > 1000) throw new ServiceUnavailableException('数值参数范围无效：' + id);
+      parameter.min = min; parameter.max = max; parameter.value = value;
+      if (raw.step !== undefined) {
+        const step = Number(raw.step);
+        if (!Number.isFinite(step) || step <= 0 || step > max - min + 0.000001) throw new ServiceUnavailableException('数值参数步长无效：' + id);
+        parameter.step = step;
+      }
+      if (typeof raw.unit === 'string') parameter.unit = raw.unit.slice(0, 20);
+    } else if (type === 'color') {
+      if (typeof raw.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(raw.value)) throw new ServiceUnavailableException('颜色参数无效：' + id);
+    } else if (type === 'boolean') {
+      if (typeof raw.value !== 'boolean') throw new ServiceUnavailableException('布尔参数无效：' + id);
+    } else {
+      if (!Array.isArray(raw.options) || raw.options.length < 1 || raw.options.length > 30 || !raw.options.some((item: any) => item?.value === raw.value)) throw new ServiceUnavailableException('枚举参数选项无效：' + id);
+      parameter.options = raw.options.map((item: any) => {
+        if (!item || typeof item.value !== 'string' || item.value.length > 80) throw new ServiceUnavailableException('枚举参数选项无效：' + id);
+        return { label: String(item.label || item.value).slice(0, 100), value: item.value };
+      });
+    }
+    if (!Array.isArray(raw.targets) || raw.targets.length < 1 || raw.targets.length > 100) throw new ServiceUnavailableException('参数目标不能为空或超出数量限制：' + id);
+    parameter.targets = raw.targets.map((target: any) => {
+      const node = componentTree.find(item => item.id === target?.nodeId);
+      if (!nodeIds.has(target?.nodeId) || !PARAMETER_TARGETS.has(target?.property)) throw new ServiceUnavailableException('参数目标无效：' + id);
+      const mode = target.mode || 'set';
+      if (!['set','multiply','add'].includes(mode) || (target.property.startsWith('material.') && mode !== 'set')) throw new ServiceUnavailableException('参数目标运算无效：' + id);
+      if (target.property.startsWith('material.') && !materials[node.material]) throw new ServiceUnavailableException('参数引用的材质不存在：' + id);
+      return { nodeId: target.nodeId, property: target.property, mode };
+    });
+    return parameter;
+  });
+}
+
 
 @Injectable()
 export class BuildingDesignService {
@@ -79,13 +127,10 @@ export class BuildingDesignService {
     approvalTokenInput: unknown,
     promptInput?: unknown,
   ) {
-    const category = typeof categoryInput === 'string' ? categoryInput.trim().toLowerCase() : '';
+    const categoryHint = typeof categoryInput === 'string' ? categoryInput.trim().slice(0, 80) : '';
     const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.trim().slice(0, 80) : '';
-    const visualStyle = typeof visualStyleInput === 'string' ? visualStyleInput.trim() : '';
-    const supportedCategories = ['building', 'structure', 'vegetation', 'facility', 'decoration', 'sports'];
-    const styles = ['anime-painted', 'hand-painted', 'low-poly', 'realistic', 'pixel-art', 'stylized', 'toon', 'chinese-traditional', 'european-classical', 'futuristic'];
-    if (!supportedCategories.includes(category)) throw new BadRequestException('该分类尚未接入孤立物体结构重建');
-    if (!objectType || !styles.includes(visualStyle)) throw new BadRequestException('对象类型或视觉风格无效');
+    const visualStyle = typeof visualStyleInput === 'string' ? visualStyleInput.trim().slice(0, 80) : 'stylized';
+    if (!visualStyle) throw new BadRequestException('视觉风格不能为空');
     const image = this.parseReferenceImage(imageDataUrlInput);
     if (typeof approvalTokenInput !== 'string' || !approvalTokenInput) throw new BadRequestException('请先确认参考图片，再执行结构化重建');
     const referenceImageSha256 = createHash('sha256').update(image).digest('hex');
@@ -112,20 +157,18 @@ export class BuildingDesignService {
             {
               role: 'system',
               content: [
-                '你是专业的 Three.js 结构化物体重建工程师。根据单张参考图输出 ObjectSculptSpec JSON，不要输出代码、Markdown 或解释。',
-                '输出根对象字段：schemaVersion（固定字符串 2.0）、targetName（字符串）、materials（对象，键为材质 ID，每项含 color=#RRGGBB、roughness 0-1、metalness 0-1、opacity 0.05-1）、componentTree（数组）。',
-                '每个 componentTree 节点字段：id（唯一英文 ID）、name（中文部件名）、role（部件角色）、parent（唯一主体根节点省略，其余组件必须填写直接父节点 ID）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth，均为正数）、transform（position/rotation/scale 三个长度为 3 的数字数组）、material（materials 中的键）、geometryDescriptor（可选 segments 3-48、tube 正数、arch inset 正数；polygon points 为 3-32 个 [-0.5,0.5] 归一化二维坐标点）。',
-                '必须输出 12-40 个有意义的独立组件，不能只输出一个整体 Mesh。组件按真实结构拆分；主结构、附属结构、装饰件应有清晰 parent 关系。禁止重复 ID、缺失 parent、循环层级、未知 primitive。',
-                '装配完整性是最高优先级：componentTree 必须恰好只有一个根节点，该根节点代表建筑主楼/主体承重体；其余所有组件都必须设置 parent，不能存在多个互相分离的根组件。所有组件必须通过 parent 链接到唯一根节点，形成一棵连通的建筑装配树。',
-                '所有子组件的 transform.position 都是相对直接 parent 的局部坐标，不是世界坐标。先确定主体的尺寸、中心和局部坐标系，再将塔楼、翼楼、屋顶、门窗、檐口、城垛等放到主体对应的连接位置。每个部件必须与其承载部件接触、嵌入或合理搭接，禁止留出可见空气间隙，禁止把各部件分散摆放成零件陈列。',
-                '部件尺寸与位置必须按几何边界计算：塔楼底部与主体顶部/侧面相交或贴合；屋顶底面贴合墙体顶部；塔尖底部贴合塔楼顶部；门窗贴在墙体外立面，不能漂浮在墙前或埋入墙体；旗杆、装饰件必须连接到屋顶或墙体。parent 负责层级和局部坐标，不代表自动吸附，必须主动给出正确的局部坐标。',
-                '根据图片推断可见部件的相对比例、空间位置、颜色分区和层级。不要用单个大盒子代表整个对象。窗户、门、塔楼、屋顶、栏杆、檐口等明显结构应拆分为独立 Mesh。拱形门窗使用 arch，三角山墙/屋顶剖面使用 wedge；不规则可见平面轮廓使用 polygon 并输出 3-32 个归一化轮廓点；不要把拱门简化为矩形盒子。',
-                '如果对象是城堡，优先识别主城楼、左右塔楼、各自塔顶、主屋顶、城垛/女儿墙、入口拱门、窗洞/窗框、旗杆、装饰边线等可见部件；塔楼与塔顶必须独立，左右结构不得错误合并。根据参考图实际内容决定数量，不要机械补全不可见部件。',
-                '坐标约定：Y 轴向上；主体中心在 X/Z 原点附近；地面约为 Y=0；position 使用相对父节点坐标；rotation 使用弧度；scale 通常为 [1,1,1]。组件尺寸与场景单位无关，但整体建议落在 2-20 单位范围。',
-                '风格必须匹配：' + visualStyle + '。材质颜色和粗糙度应反映图片的色彩分区；禁止把所有部件都输出为白色/灰色。',
-                '只描述单张图可见的内容。背面、内部和遮挡部分不可确知，采用结构上合理的保守推断，并在 limitations 中明确说明。',
-                '另返回 confidence（0-1）、evidence（最多 8 条字符串）、limitations（最多 8 条字符串）。',
-                '分类：' + category + '；对象类型：' + objectType + '。用户补充要求：' + (userPrompt || '按参考图忠实重建可见结构。'),
+                '你是通用 3D 资产理解与重建引擎。根据参考图推断它是什么、由哪些结构组成，以及各结构之间的空间关系。不要依赖固定物体类别清单，也不要把用户提供的名称当作事实。',
+                '只返回 ObjectSculptSpec JSON，不要输出 JavaScript、TypeScript、Markdown 或解释。',
+                '根对象字段：schemaVersion 固定为字符串 2.0，targetName，category（你判断的开放式分类标签），objectType（你判断的具体物体名称），visualStyle，materials，componentTree，parameterSchema，confidence，evidence，limitations。',
+                'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
+                'componentTree 是有意义的结构节点数组。节点字段：id（稳定唯一英文 ID）、name、role、parent（唯一根节点省略，其余节点填写直接父节点 ID）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth）、transform（position/rotation/scale）、material、geometryDescriptor（可选）。',
+                '根据对象本身的真实组成自主决定组件数量和层级；不要求固定层数或固定部件数量。简单对象可以只有一个 Mesh；复杂对象必须拆分为可独立编辑的部件。',
+                '整个资产必须只有一个根节点，其他节点通过 parent 形成连通树。子节点 position 是相对直接 parent 的局部坐标。parent 只定义层级，不会自动吸附几何体，必须根据尺寸和连接关系计算位置。',
+                'parameterSchema 用于声明真正有意义的可编辑参数，而不是穷举通用参数。每项格式：id、label、type(number/color/boolean/select)、value；number 另含 min/max/step/unit；select 另含 options([{label,value}])；targets 为数组，每项含 nodeId、property、mode。property 只允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity。mode 允许 set/multiply/add，材质只允许 set。',
+                '只声明对当前资产有实际意义的参数。例如重复楼层、树冠层、车轮、窗户、叶片等结构的尺寸/颜色/比例；一个参数可绑定多个节点实现联动。不要凭空声明没有可控目标的参数。',
+                '参数目标必须引用真实存在的 nodeId。数值参数给出合理 min/max/current value；颜色参数使用 #RRGGBB；枚举参数提供有限 options。不要输出表达式、函数、脚本或任意属性路径。',
+                '材质颜色必须匹配参考图，不得全部白色/灰色。几何部件应合理接合，避免无理由漂浮。只推断图中可见结构，遮挡/背面不确定性写入 limitations。',
+                '分类提示：' + (categoryHint || '未指定，请自行判断') + '；对象名称提示：' + (objectType || '未指定，请自行判断') + '；视觉风格提示：' + visualStyle + '；补充要求：' + (userPrompt || '忠实还原参考图的主要轮廓、结构和色彩。'),
               ].join('\\n'),
             },
             {
@@ -157,10 +200,7 @@ export class BuildingDesignService {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.componentTree)) {
       throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 格式无效');
     }
-    const minimumComponents = category === 'building' && /城堡|castle/i.test(objectType) ? 12 : category === 'building' ? 6 : 1;
-    if (parsed.componentTree.length < minimumComponents || parsed.componentTree.length > 100) {
-      throw new ServiceUnavailableException('ObjectSculptSpec 组件数量必须在 ' + minimumComponents + ' 到 100 之间；禁止用单一整体 Mesh 代替结构重建');
-    }
+    if (parsed.componentTree.length < 1 || parsed.componentTree.length > 100) throw new ServiceUnavailableException('ObjectSculptSpec 组件数量必须在 1 到 100 之间');
     const materialsInput = parsed.materials && typeof parsed.materials === 'object' && !Array.isArray(parsed.materials) ? parsed.materials : {};
     const materials: Record<string, any> = {};
     for (const [key, value] of Object.entries(materialsInput).slice(0, 40)) {
@@ -257,17 +297,22 @@ export class BuildingDesignService {
         parent = byId.get(parent)?.parent;
       }
     }
+    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, materials);
     const objectSculptSpec = {
       schemaVersion: '2.0',
-      targetName: String(parsed.targetName || objectType).slice(0, 120),
+      targetName: String(parsed.targetName || objectType || 'AI 生成资产').slice(0, 120),
+      category: String(parsed.category || categoryHint || 'other').slice(0, 80),
+      objectType: String(parsed.objectType || objectType || parsed.targetName || '3D 资产').slice(0, 120),
+      visualStyle: String(parsed.visualStyle || visualStyle).slice(0, 80),
       materials,
       componentTree,
+      parameterSchema,
     };
     const design = {
       schemaVersion: 1,
       source: 'ai-vision-object-sculpt',
-      category,
-      objectType,
+      category: objectSculptSpec.category,
+      objectType: objectSculptSpec.objectType,
       visualStyle,
       referenceImageSha256,
       objectSculptSpec,
@@ -289,9 +334,9 @@ export class BuildingDesignService {
   reviewObjectDesign(originalDesignInput: unknown, originalTokenInput: unknown, objectSculptSpecInput: unknown) {
     const original = originalDesignInput as Record<string, any> | undefined;
     if (!original || typeof original !== 'object' || Array.isArray(original)
-      || original.category !== 'building' || original.source !== 'ai-vision-object-sculpt'
+      || original.source !== 'ai-vision-object-sculpt'
       || original.reviewed === true || !this.consumeDesignToken(originalTokenInput, original)) {
-      throw new BadRequestException('原始建筑设计凭证无效、已审核或已过期，请重新识别');
+      throw new BadRequestException('原始资产设计凭证无效、已审核或已过期，请重新识别');
     }
     const input = objectSculptSpecInput as Record<string, any> | undefined;
     if (!input || typeof input !== 'object' || Array.isArray(input)
@@ -394,8 +439,6 @@ export class BuildingDesignService {
       };
     });
     const byId = new Map<string, any>(componentTree.map((node: any) => [node.id, node] as [string, any]));
-    const rootNodes = componentTree.filter((node: any) => !node.parent);
-    if (rootNodes.length !== 1) throw new BadRequestException('建筑组件必须连接到唯一主体根节点，不能拆成多个独立物体');
     for (const node of componentTree) {
       if (node.parent && !byId.has(node.parent)) throw new BadRequestException('组件父节点不存在：' + node.id);
       const visited = new Set([node.id]);
@@ -408,13 +451,20 @@ export class BuildingDesignService {
         parent = byId.get(parent)?.parent;
       }
     }
+    const rootNodes = componentTree.filter((node: any) => !node.parent);
+    if (rootNodes.length !== 1) throw new BadRequestException('资产组件必须连接到唯一主体根节点，不能拆成多个独立物体');
+    const parameterSchema = normalizeObjectParameterSchema(input.parameterSchema ?? original.objectSculptSpec?.parameterSchema, componentTree, materials);
     const design = {
       ...original,
       objectSculptSpec: {
         schemaVersion: '2.0',
         targetName: String(input.targetName || original.objectType).slice(0,120),
+        category: String(input.category || original.category || 'other').slice(0,80),
+        objectType: String(input.objectType || original.objectType || '3D 资产').slice(0,120),
+        visualStyle: String(input.visualStyle || original.visualStyle || 'stylized').slice(0,80),
         materials,
         componentTree,
+        parameterSchema,
       },
       reviewed: true,
       reviewedAt: new Date().toISOString(),

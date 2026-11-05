@@ -99,6 +99,43 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 
+  it('analyzes reference-image proportions and spatial relations before generating geometry', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
+    const analysis = {
+      subject: '广州塔',
+      silhouette: '高耸的双曲线收腰塔身，中部有环绕式观景结构',
+      aspectRatio: { value: 0.22, confidence: 0.8 },
+      verticalSections: [{ name: '塔身下段', heightRatio: 0.45 }, { name: '观景结构', heightRatio: 0.2 }, { name: '塔身上段', heightRatio: 0.35 }],
+      components: [{ id: 'tower-shaft', position: '中心贯穿主体' }, { id: 'observation-pods', position: '中上部环绕塔身' }],
+      spatialRelations: [{ type: 'surrounds', source: 'observation-pods', target: 'tower-shaft' }, { type: 'elevated', source: 'observation-pods', target: 'ground', support: 'tower-shaft' }],
+      supports: ['塔身支撑中部观景结构'],
+      groundContact: '塔基底部',
+      uncertainties: [],
+    };
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { steel: { color: '#777777' } },
+      componentTree: [{ id: 'tower-root', kind: 'group', name: '广州塔主体' }],
+    };
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(analysis) } }] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(spec) } }] }) });
+    global.fetch = fetchMock as never;
+
+    const result = await service.reconstructObjectFromImage(
+      'data:image/png;base64,' + png.toString('base64'), '按参考图还原广州塔', '广州塔', 'realistic',
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const analysisRequest = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(analysisRequest.messages[1].content[1].type).toBe('image_url');
+    const generationRequest = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(generationRequest.messages[0].content).toContain('参考图片结构分析');
+    expect(generationRequest.messages[0].content).toContain('观景结构');
+    expect(generationRequest.messages[1].content[0].text).toContain('允许并保留图片中真实存在的悬空');
+    expect(result.objectSculptSpec.componentTree[0].id).toBe('tower-root');
+  });
+
   it('accepts validated repeat controls with empty component targets in prompt generation', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const objectSculptSpec = {

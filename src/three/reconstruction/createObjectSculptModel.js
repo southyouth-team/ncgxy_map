@@ -285,41 +285,49 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
   } else if (parameter.type === 'select' && !parameter.options.some(option => option.value === value)) {
     throw new TypeError('枚举参数值无效：' + parameterId);
   }
+  const activeSchema = root.userData.objectSculptSpec?.parameterSchema || baseline.parameterSchema || [];
+  const activeValues = new Map(activeSchema.map(item => [item.id, item.value]));
+  activeValues.set(parameterId, value);
   const spec = JSON.parse(JSON.stringify(baseline));
-  const currentParameter = spec.parameterSchema.find(item => item.id === parameterId);
-  currentParameter.value = value;
   const findNode = id => spec.componentTree.find(node => node.id === id);
-  for (const target of parameter.targets) {
-    const node = findNode(target.nodeId);
-    const mode = target.mode || 'set';
-    const read = () => {
-      const [section, field] = target.property.split('.');
-      if (section === 'material') return spec.materials[node.material]?.[field];
-      if (section === 'transform' && field.startsWith('position.') || section === 'transform' && field.startsWith('scale.')) {
-        const [vector, axis] = field.split('.');
-        return node.transform?.[vector]?.['xyz'.indexOf(axis)] ?? 0;
+  for (const currentParameter of spec.parameterSchema || []) {
+    const parameterValue = activeValues.has(currentParameter.id) ? activeValues.get(currentParameter.id) : currentParameter.value;
+    currentParameter.value = parameterValue;
+    for (const target of currentParameter.targets) {
+      const node = findNode(target.nodeId);
+      if (!node) continue;
+      const mode = target.mode || 'set';
+      let current;
+      if (target.property.startsWith('material.')) {
+        const field = target.property.split('.')[1];
+        current = spec.materials[node.material]?.[field];
+      } else if (target.property.startsWith('transform.position.') || target.property.startsWith('transform.scale.')) {
+        const [, vector, axis] = target.property.split('.');
+        current = node.transform?.[vector]?.['xyz'.indexOf(axis)] ?? (vector === 'scale' ? 1 : 0);
+      } else {
+        const [section, field] = target.property.split('.');
+        current = node[section]?.[field];
       }
-      return node[section]?.[field];
-    };
-    const current = read();
-    const resolved = mode === 'multiply' ? Number(current) * Number(value) : mode === 'add' ? Number(current) + Number(value) : value;
-    if (target.property.startsWith('material.')) {
-      const previousMaterial = spec.materials[node.material] || DEFAULT_MATERIAL;
-      const uniqueKey = 'parameter-' + node.id;
-      spec.materials[uniqueKey] = { ...previousMaterial };
-      node.material = uniqueKey;
-      const field = target.property.split('.')[1];
-      if (field === 'color') spec.materials[uniqueKey].color = resolved;
-      else spec.materials[uniqueKey][field] = Math.max(field === 'opacity' ? 0.05 : 0, Math.min(1, Number(resolved)));
-    } else if (target.property.startsWith('transform.position.') || target.property.startsWith('transform.scale.')) {
-      const [, vector, axis] = target.property.split('.');
-      const index = 'xyz'.indexOf(axis);
-      node.transform = node.transform || {};
-      node.transform[vector] = node.transform[vector] || (vector === 'scale' ? [1,1,1] : [0,0,0]);
-      node.transform[vector][index] = resolved;
-    } else {
-      const [section, field] = target.property.split('.');
-      node[section][field] = Math.max(0.02, Math.min(100, Number(resolved)));
+      const resolved = mode === 'multiply' ? Number(current) * Number(parameterValue)
+        : mode === 'add' ? Number(current) + Number(parameterValue) : parameterValue;
+      if (target.property.startsWith('material.')) {
+        const previousMaterial = spec.materials[node.material] || DEFAULT_MATERIAL;
+        const uniqueKey = 'parameter-' + node.id;
+        if (node.material !== uniqueKey) spec.materials[uniqueKey] = { ...previousMaterial };
+        node.material = uniqueKey;
+        const field = target.property.split('.')[1];
+        if (field === 'color') spec.materials[uniqueKey].color = resolved;
+        else spec.materials[uniqueKey][field] = Math.max(field === 'opacity' ? 0.05 : 0, Math.min(1, Number(resolved)));
+      } else if (target.property.startsWith('transform.position.') || target.property.startsWith('transform.scale.')) {
+        const [, vector, axis] = target.property.split('.');
+        const index = 'xyz'.indexOf(axis);
+        node.transform = node.transform || {};
+        node.transform[vector] = node.transform[vector] || (vector === 'scale' ? [1,1,1] : [0,0,0]);
+        node.transform[vector][index] = Number(resolved);
+      } else {
+        const [section, field] = target.property.split('.');
+        node[section][field] = Math.max(0.02, Math.min(100, Number(resolved)));
+      }
     }
   }
   const materialSpecs = spec.materials || {};

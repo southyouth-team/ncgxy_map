@@ -188,11 +188,14 @@ export function validateObjectSculptSpec(spec) {
     if (!Array.isArray(parameter.targets) || parameter.targets.length > 100) throw new TypeError('参数目标无效：' + parameter.id);
     for (const target of parameter.targets) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
-      if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity'].includes(target.property)) {
+      if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','visibility.visible'].includes(target.property)) {
         throw new TypeError('参数目标属性不受支持：' + target.property);
       }
-      if (!['set','multiply','add'].includes(target.mode || 'set')) throw new TypeError('参数目标运算不受支持：' + target.mode);
-      if (target.property.startsWith('material.') && ['multiply','add'].includes(target.mode)) throw new TypeError('材质参数仅支持 set');
+      if (!['set','multiply','add','visible-from','visible-through'].includes(target.mode || 'set')) throw new TypeError('参数目标运算不受支持：' + target.mode);
+      if (target.property.startsWith('material.') && target.mode !== 'set') throw new TypeError('材质参数仅支持 set');
+      if (['visible-from','visible-through'].includes(target.mode) && target.property !== 'visibility.visible') throw new TypeError('可见性阈值运算只能用于 visibility.visible');
+      if (target.property === 'visibility.visible' && !['set','visible-from','visible-through'].includes(target.mode || 'set')) throw new TypeError('可见性参数运算无效');
+      if (target.property === 'geometry.primitive' && !['set'].includes(target.mode || 'set')) throw new TypeError('几何类型参数仅支持 set');
     }
   }
   return { nodes, componentCount: nodes.size };
@@ -310,7 +313,19 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
       }
       const resolved = mode === 'multiply' ? Number(current) * Number(parameterValue)
         : mode === 'add' ? Number(current) + Number(parameterValue) : parameterValue;
-      if (target.property.startsWith('material.')) {
+      if (target.property === 'visibility.visible') {
+        const threshold = Number(target.threshold ?? 1);
+        if (!Number.isFinite(threshold) || threshold < 1 || threshold > 100) throw new RangeError('可见性阈值无效：' + currentParameter.id);
+        node.hidden = mode === 'visible-from' ? Number(parameterValue) < threshold
+          : mode === 'visible-through' ? Number(parameterValue) > threshold
+            : !Boolean(parameterValue);
+      } else if (target.property === 'geometry.primitive') {
+        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
+        node.primitive = resolved;
+      } else if (target.property === 'geometryDescriptor.inset' || target.property === 'geometryDescriptor.tube') {
+        node.geometryDescriptor = node.geometryDescriptor || {};
+        node.geometryDescriptor[target.property.split('.')[1]] = Number(resolved);
+      } else if (target.property.startsWith('material.')) {
         const previousMaterial = spec.materials[node.material] || DEFAULT_MATERIAL;
         const uniqueKey = 'parameter-' + node.id;
         if (node.material !== uniqueKey) spec.materials[uniqueKey] = { ...previousMaterial };

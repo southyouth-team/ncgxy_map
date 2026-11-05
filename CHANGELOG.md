@@ -1,3 +1,12 @@
+## 2026-11-05 — img2threejs 风格结构化重建 POC 基础适配器
+
+- 新增 `src/three/reconstruction/createObjectSculptModel.js`，将受控 ObjectSculptSpec componentTree 转换为真实 Three.js Group/Mesh，保留独立组件层级、材质和变换。
+- 首批支持 box/cuboid、cylinder、cone、sphere/ellipsoid、torus；增加组件数量、层级深度、尺寸、变换、材质与 primitive 白名单校验。
+- 工坊预览增加 `design.objectSculptSpec` 入口；有结构化组件树时优先生成 Mesh，既有建筑参数化、五类对象生成器和 GLB 路径保持兼容。
+- 新增适配器测试，覆盖组件树层级、重复 ID、缺失父节点、循环引用、越界几何和预算限制。
+- 本阶段不执行 AI 生成的 JS/TS；当前完成的是结构化组件树运行时适配，不代表视觉模型已输出 ObjectSculptSpec 或城堡端到端 POC 已验收。
+- POC 方案、后续识图契约、隔离代码生成边界和验收标准见 `docs/IMG2THREEJS_RECONSTRUCTION_POC.md`。
+
 ## 2026-11-05 — 五类场景参数人工审核与最终发布凭证
 
 - 新增 `POST /assets/ai-image/review-scene`：审核请求必须携带原始 AI 识别设计、原始签名和编辑后的 geometry；服务端先验证原始识别凭证，再按类别 Schema 校验字段集合、数值边界、枚举和布尔类型。

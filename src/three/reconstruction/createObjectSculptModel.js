@@ -322,7 +322,8 @@ export function validateObjectSculptSpec(spec) {
       if (generatorTemplateNodeIds.has(descendant.id)) throw new TypeError('暂不支持嵌套或重叠的结构生成器模板：' + generator.id);
       generatorTemplateNodeIds.add(descendant.id);
     }
-    estimatedExpandedCount += descendants.length * (generator.maxCount - 1);
+    const maximumInstances = generator.type === 'repeat' ? generator.maxCount : generator.maxRows * generator.maxColumns;
+    estimatedExpandedCount += descendants.length * (maximumInstances - 1);
     if (estimatedExpandedCount > MAX_COMPONENTS) throw new RangeError('结构生成器最大展开数量超过 ' + MAX_COMPONENTS);
     if (generator.type === 'repeat' && generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30)) throw new TypeError('结构生成器 followers 无效：' + generator.id);
     if (generator.type === 'grid' && (generator.maxRows * generator.maxColumns > MAX_COMPONENTS || generator.maxRows * generator.maxColumns * descendants.length > MAX_COMPONENTS)) throw new RangeError('网格生成器最大展开数量超出限制：' + generator.id);

@@ -458,6 +458,24 @@ export function validateObjectSculptSpec(spec) {
     if (managedConstraintTargets.has(targetKey)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
     managedConstraintTargets.add(targetKey);
   }
+  const attachGraph = new Map();
+  for (const constraint of spec.constraints || []) {
+    if (constraint.type === 'attach') {
+      const sources = attachGraph.get(constraint.targetNodeId) || new Set();
+      sources.add(constraint.sourceNodeId);
+      attachGraph.set(constraint.targetNodeId, sources);
+    }
+  }
+  const visiting = new Set(), visited = new Set();
+  const visitAttachment = nodeId => {
+    if (visiting.has(nodeId)) throw new TypeError('attach 关系存在循环依赖：' + nodeId);
+    if (visited.has(nodeId)) return;
+    visiting.add(nodeId);
+    for (const sourceId of attachGraph.get(nodeId) || []) visitAttachment(sourceId);
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+  };
+  for (const nodeId of attachGraph.keys()) visitAttachment(nodeId);
   const parameterIds = new Set();
   if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) {
     throw new RangeError('parameterSchema 最多允许 100 个参数');

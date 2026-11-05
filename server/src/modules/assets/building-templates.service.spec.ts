@@ -12,7 +12,7 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'ncgxy-scene-templates-'));
     const config = { get: (key: string, fallback?: string) => key === 'ASSET_STORAGE_DIR' ? directory : fallback };
-    buildingDesign = { consumeDesignToken: jest.fn(() => true) };
+    buildingDesign = { consumeDesignToken: jest.fn(() => true), consumeSceneDesignToken: jest.fn(() => true) };
     service = new BuildingTemplatesService(config as any, buildingDesign as unknown as BuildingDesignService);
   });
 
@@ -67,4 +67,34 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
       modelType: 'glb',
     })).rejects.toThrow('模板分类无效');
   });
+
+  it('creates and publishes a signed procedural template for a supported non-building category', async () => {
+    const design = {
+      schemaVersion: 1, source: 'ai-vision-estimate', category: 'vegetation',
+      objectType: '香樟树', visualStyle: 'low-poly', geometry: { form: 'tree', crownLayers: 3 },
+      confidence: 0.8, evidence: [], limitations: [], reviewed: false,
+    };
+    const item = await service.create({
+      name: '识别香樟树', category: 'vegetation', objectType: '香樟树', visualStyle: 'low-poly',
+      sourceType: 'ai_generated', modelType: 'procedural', design, designToken: 'signed-scene-token',
+    });
+    expect(buildingDesign.consumeSceneDesignToken).toHaveBeenCalledWith('signed-scene-token', 'vegetation', '香樟树', 'low-poly', design);
+    const png = Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0,1,2,3,4]);
+    await service.uploadFile(item.templateId, 'reference', {
+      buffer: png, size: png.length, originalname: 'confirmed-reference.png',
+    });
+    const published = await service.approve(item.templateId);
+    expect(published).toMatchObject({ status: 'ready', category: 'vegetation', modelType: 'procedural' });
+  });
+
+  it('rejects a scene design whose embedded category, object type or style differs from template metadata', async () => {
+    await expect(service.create({
+      name: '错误分类模板', category: 'vegetation', objectType: '香樟树', visualStyle: 'low-poly',
+      sourceType: 'ai_generated', modelType: 'procedural',
+      design: { schemaVersion: 1, category: 'facility', objectType: '长椅', visualStyle: 'toon' },
+      designToken: 'token',
+    })).rejects.toThrow('场景结构参数分类与模板分类不一致');
+    expect(buildingDesign.consumeSceneDesignToken).toHaveBeenCalledTimes(1);
+  });
+
 });

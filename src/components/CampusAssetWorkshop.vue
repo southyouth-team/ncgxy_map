@@ -138,6 +138,7 @@ async function copyPrompt() {
 
 async function generateImage() {
   if (viewMode.value !== '2.5d' || generating.value) return
+  buildingDesign.value = null
   if (!generatedPrompt.value.trim()) buildPrompt()
   if (!generatedPrompt.value.trim()) return
 
@@ -229,6 +230,7 @@ function resetPreview() {
 }
 
 async function onFileChange(event) {
+  buildingDesign.value = null
   fileError.value = ''
   resetPreview()
   const file = event.target.files?.[0]

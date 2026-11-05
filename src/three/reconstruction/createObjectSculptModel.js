@@ -1,0 +1,173 @@
+/**
+ * Bounded ObjectSculptSpec -> Three.js runtime adapter.
+ *
+ * This is the first integration seam for img2threejs-style component-tree specs.
+ * It interprets declarative geometry only; it never evaluates model-generated JavaScript.
+ */
+const MAX_COMPONENTS = 300;
+const MAX_HIERARCHY_DEPTH = 16;
+const MAX_DIMENSION = 100;
+const MAX_SEGMENTS = 48;
+const DEFAULT_MATERIAL = Object.freeze({ color: '#b8b8b8', roughness: 0.82, metalness: 0 });
+
+function finiteVector(value, fallback, label) {
+  if (value === undefined || value === null) return [...fallback];
+  if (!Array.isArray(value) || value.length !== 3 || value.some(item => !Number.isFinite(Number(item)))) {
+    throw new TypeError(label + ' 必须是三个有限数值');
+  }
+  return value.map(Number);
+}
+
+function boundedNumber(value, fallback, min, max, label) {
+  const number = value === undefined || value === null ? fallback : Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) {
+    throw new RangeError(label + ' 超出允许范围');
+  }
+  return number;
+}
+
+function normalizeMaterial(THREE, source = {}) {
+  const color = typeof source.color === 'string' && /^#[0-9a-f]{6}$/i.test(source.color)
+    ? source.color : DEFAULT_MATERIAL.color;
+  const roughness = boundedNumber(source.roughness, DEFAULT_MATERIAL.roughness, 0, 1, '材质 roughness');
+  const metalness = boundedNumber(source.metalness, DEFAULT_MATERIAL.metalness, 0, 1, '材质 metalness');
+  const opacity = boundedNumber(source.opacity, 1, 0.05, 1, '材质 opacity');
+  return new THREE.MeshStandardMaterial({
+    color, roughness, metalness, opacity,
+    transparent: opacity < 1,
+  });
+}
+
+function createGeometry(THREE, node) {
+  const dimensions = node.dimensions || {};
+  const width = boundedNumber(dimensions.width, 1, 0.02, MAX_DIMENSION, node.id + '.width');
+  const height = boundedNumber(dimensions.height, 1, 0.02, MAX_DIMENSION, node.id + '.height');
+  const depth = boundedNumber(dimensions.depth, 1, 0.02, MAX_DIMENSION, node.id + '.depth');
+  const descriptor = node.geometryDescriptor || {};
+  const segments = Math.round(boundedNumber(descriptor.segments, 16, 3, MAX_SEGMENTS, node.id + '.segments'));
+
+  switch (String(node.primitive || 'box').toLowerCase()) {
+    case 'box':
+    case 'cuboid':
+      return new THREE.BoxGeometry(width, height, depth);
+    case 'cylinder':
+      return new THREE.CylinderGeometry(width / 2, depth / 2, height, segments);
+    case 'cone':
+      return new THREE.ConeGeometry(Math.max(width, depth) / 2, height, segments);
+    case 'sphere':
+    case 'ellipsoid': {
+      const geometry = new THREE.SphereGeometry(0.5, segments, Math.max(4, Math.floor(segments * 0.66)));
+      geometry.scale(width, height, depth);
+      return geometry;
+    }
+    case 'torus': {
+      const radius = Math.max(width, depth) / 2;
+      const tube = boundedNumber(descriptor.tube, Math.min(width, depth) * 0.12, 0.01, radius * 0.45, node.id + '.tube');
+      return new THREE.TorusGeometry(radius - tube, tube, Math.min(16, segments), segments);
+    }
+    default:
+      throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
+  }
+}
+
+/**
+ * Validate the transferable, renderer-independent subset of ObjectSculptSpec.
+ * The upstream spec may contain richer fields; this adapter intentionally consumes only
+ * a bounded subset and preserves the original spec outside the runtime object.
+ */
+export function validateObjectSculptSpec(spec) {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new TypeError('ObjectSculptSpec 必须是 JSON 对象');
+  if (![1, 2, '2.0', '2.0.0'].includes(spec.schemaVersion)) throw new TypeError('ObjectSculptSpec schemaVersion 不受支持');
+  if (!Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > MAX_COMPONENTS) {
+    throw new RangeError('componentTree 数量必须在 1 到 ' + MAX_COMPONENTS + ' 之间');
+  }
+  const ids = new Set();
+  const nodes = new Map();
+  for (const node of spec.componentTree) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) throw new TypeError('组件节点必须是对象');
+    if (typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id)) throw new TypeError('组件 id 无效');
+    if (ids.has(node.id)) throw new TypeError('组件 id 重复：' + node.id);
+    ids.add(node.id);
+    nodes.set(node.id, node);
+    finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
+    finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
+    finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
+  }
+  for (const node of spec.componentTree) {
+    if (node.parent !== undefined && node.parent !== null && !nodes.has(node.parent)) {
+      throw new TypeError('组件父节点不存在：' + node.id + ' -> ' + node.parent);
+    }
+    const visited = new Set([node.id]);
+    let parent = node.parent;
+    let depth = 1;
+    while (parent !== undefined && parent !== null) {
+      if (visited.has(parent)) throw new TypeError('组件层级存在循环引用：' + node.id);
+      visited.add(parent);
+      depth += 1;
+      if (depth > MAX_HIERARCHY_DEPTH) throw new RangeError('组件层级超过 ' + MAX_HIERARCHY_DEPTH + ' 层');
+      parent = nodes.get(parent)?.parent;
+    }
+  }
+  return { nodes, componentCount: nodes.size };
+}
+
+/**
+ * Build a real THREE.Group from a validated component tree.
+ * Material keys resolve through spec.materials; missing keys use a neutral fallback.
+ */
+export function createObjectSculptModel(THREE, spec, options = {}) {
+  if (!THREE?.Group || !THREE?.Mesh || !THREE?.MeshStandardMaterial) {
+    throw new TypeError('Three.js runtime is required');
+  }
+  const validation = validateObjectSculptSpec(spec);
+  const root = new THREE.Group();
+  root.name = String(spec.targetName || spec.name || 'reconstructed-object').slice(0, 120);
+  const groups = new Map();
+  const materials = new Map();
+  const materialSpecs = spec.materials && typeof spec.materials === 'object' ? spec.materials : {};
+  const resolveMaterial = key => {
+    const materialKey = typeof key === 'string' ? key : 'default';
+    if (!materials.has(materialKey)) materials.set(materialKey, normalizeMaterial(THREE, materialSpecs[materialKey] || DEFAULT_MATERIAL));
+    return materials.get(materialKey);
+  };
+  const ordered = [...spec.componentTree].sort((a, b) => {
+    const depth = node => {
+      let value = 0, parent = node.parent;
+      while (parent) { value += 1; parent = validation.nodes.get(parent)?.parent; }
+      return value;
+    };
+    return depth(a) - depth(b);
+  });
+  for (const node of ordered) {
+    const group = new THREE.Group();
+    group.name = String(node.name || node.id).slice(0, 120);
+    group.userData.componentId = node.id;
+    group.userData.componentRole = String(node.role || 'component').slice(0, 80);
+    const geometry = createGeometry(THREE, node);
+    const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
+    mesh.name = node.id + ':mesh';
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    const [px, py, pz] = finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
+    const [rx, ry, rz] = finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
+    const [sx, sy, sz] = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
+    if ([sx, sy, sz].some(value => Math.abs(value) < 0.001 || Math.abs(value) > 20)) {
+      throw new RangeError(node.id + '.scale 超出允许范围');
+    }
+    group.position.set(px, py, pz);
+    group.rotation.set(rx, ry, rz);
+    group.scale.set(sx, sy, sz);
+    const parent = node.parent ? groups.get(node.parent) : root;
+    if (!parent) throw new TypeError('组件父节点尚未构建：' + node.id);
+    parent.add(group);
+    groups.set(node.id, group);
+  }
+  root.userData.objectSculpt = {
+    schemaVersion: spec.schemaVersion,
+    targetName: root.name,
+    componentCount: validation.componentCount,
+    source: options.source || 'object-sculpt-spec',
+  };
+  return root;
+}

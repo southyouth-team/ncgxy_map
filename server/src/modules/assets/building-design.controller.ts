@@ -15,6 +15,19 @@ export class BuildingDesignController {
     return this.service.approveReference(imageDataUrl);
   }
 
+  @Post('reconstruct-object')
+  @ApiOperation({ summary: '从已确认参考图生成受约束的 ObjectSculptSpec 组件树' })
+  reconstructObject(
+    @Body('category') category: string,
+    @Body('objectType') objectType: string,
+    @Body('visualStyle') visualStyle: string,
+    @Body('imageDataUrl') imageDataUrl: string,
+    @Body('approvalToken') approvalToken: string,
+    @Body('prompt') prompt?: string,
+  ) {
+    return this.service.reconstructObjectReference(category, objectType, visualStyle, imageDataUrl, approvalToken, prompt);
+  }
+
   @Post('analyze-building')
   @ApiOperation({ summary: '识别建筑参考图并提取参数化 3D 建模参数' })
   analyze(@Body('imageDataUrl') imageDataUrl: string, @Body('approvalToken') approvalToken: string, @Body('prompt') prompt?: string) {

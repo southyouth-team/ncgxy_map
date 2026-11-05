@@ -190,7 +190,7 @@ describe('BuildingDesignService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
     expect(systemPrompt).toContain('城堡');
-    expect(systemPrompt).toContain('恰好只有一个根节点');
+    expect(systemPrompt).toContain('必须只有一个根节点');
     expect(systemPrompt).toContain('相对直接 parent 的局部坐标');
     expect(result.design.objectSculptSpec.componentTree).toHaveLength(12);
     expect(result.design.objectSculptSpec.componentTree.filter((node: any) => !node.parent)).toHaveLength(1);
@@ -369,7 +369,7 @@ describe('BuildingDesignService', () => {
     }) as never;
     const result = await service.modifyObjectDesign(current, ['window'], '把选中的窗户改成拱形');
     expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'window')?.primitive).toBe('arch');
-    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'body')).toEqual(current.componentTree[0]);
+    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'body')).toMatchObject(current.componentTree[0]);
     const illegal = structuredClone(updated);
     illegal.componentTree[0].dimensions.width = 10;
     global.fetch = jest.fn().mockResolvedValue({

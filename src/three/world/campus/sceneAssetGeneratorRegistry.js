@@ -302,7 +302,7 @@ function createRoadGenerator(THREE, input, materials) {
       createMesh(THREE, edgeGeometry, materials.secondary, 'road-sidewalk', group);
     }
   }
-  if (design.markingType && design.markingType !== 'none') {
+  if (design.form !== 'sidewalk' && design.markingType && design.markingType !== 'none') {
     for (let index = 0; index < points.length - 1; index += 1) {
       const [x1, z1] = points[index];
       const [x2, z2] = points[index + 1];
@@ -343,12 +343,22 @@ function createWaterGenerator(THREE, input, materials) {
   const shoreWidth = Math.max(0.1, Math.min(4, Number(design.shoreWidth) || 0.35));
   const bankColors = { natural: '#8f9c72', stone: '#9b9588', concrete: '#a8aaa4', grass: '#71965c' };
   const shoreMaterial = new THREE.LineBasicMaterial({ color: bankColors[design.bankStyle] || materials.accent.color });
-  const shorePoints = outer.map(([x, z]) => new THREE.Vector3(x, 0.045, z));
-  shorePoints.push(shorePoints[0].clone());
-  const shoreGeometry = new THREE.BufferGeometry().setFromPoints(shorePoints);
-  const shore = new THREE.Line(shoreGeometry, new THREE.LineBasicMaterial({ color: shoreMaterial.color, linewidth: Math.max(1, shoreWidth) }));
-  shore.name = 'water-shoreline';
-  group.add(shore);
+  const shorelineRings = [outer, ...holes];
+  shorelineRings.forEach((ring, index) => {
+    const shorePoints = ring.map(([x, z]) => new THREE.Vector3(x, 0.045, z));
+    shorePoints.push(shorePoints[0].clone());
+    const shoreGeometry = new THREE.BufferGeometry().setFromPoints(shorePoints);
+    const shore = new THREE.Line(shoreGeometry, new THREE.LineBasicMaterial({ color: shoreMaterial.color, linewidth: Math.max(1, shoreWidth) }));
+    shore.name = index === 0 ? 'water-shoreline' : 'water-island-shoreline';
+    group.add(shore);
+  });
+  if (design.form === 'fountain') {
+    const jetHeight = Math.max(0.5, Math.min(4, Number(design.depthEstimate) * 0.2 || 1));
+    const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, jetHeight, 8), waterMaterial);
+    jet.name = 'water-fountain-jet';
+    jet.position.set(0, jetHeight / 2, 0);
+    group.add(jet);
+  }
   return group;
 }
 
@@ -370,7 +380,16 @@ function createTerrainGenerator(THREE, input, materials) {
       const z = (v - 0.5) * depth;
       const providedHeight = Array.isArray(supplied?.[row]) ? Number(supplied[row][col]) : NaN;
       const mound = Math.max(0, 1 - Math.hypot((u - 0.5) * 2, (v - 0.5) * 2));
-      const y = Number.isFinite(providedHeight) ? providedHeight : relief * Math.pow(mound, 1 + slope * 3);
+      const form = design.form || 'hill';
+      const layers = Math.max(1, Number(design.layerCount) || 3);
+      const terraceLevel = Math.max(0, Math.floor(mound * layers) / layers);
+      const rockyNoise = Math.sin(col * 12.9898 + row * 78.233) * 0.5 + 0.5;
+      const generatedHeight = form === 'ground' ? 0
+        : form === 'slope' ? relief * (1 - u) * (0.35 + slope * 0.65)
+          : form === 'terrace' ? relief * terraceLevel
+            : form === 'rocky' ? relief * Math.max(0, mound + (rockyNoise - 0.5) * Math.max(0, Number(design.rockiness) || 0) * 0.18)
+              : relief * Math.pow(mound, 1 + slope * 3);
+      const y = Number.isFinite(providedHeight) ? providedHeight : generatedHeight;
       vertices.push(x, y, z);
       if (row < gridSize && col < gridSize) {
         const a = row * (gridSize + 1) + col;

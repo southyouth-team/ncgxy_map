@@ -299,6 +299,9 @@ function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps
   let binormal = new THREE.Vector3().crossVectors(firstTangent, normal).normalize();
   frames.push({ normal: normal.clone(), binormal: binormal.clone() });
   for (let index = 1; index < tangents.length; index += 1) {
+    if (tangents[index - 1].dot(tangents[index]) < Math.cos(Math.PI * (150 / 180))) {
+      throw new RangeError(label + ' 插值曲线存在超过 150° 的急转弯，无法稳定传递截面方向');
+    }
     const rotation = new THREE.Quaternion().setFromUnitVectors(tangents[index - 1], tangents[index]);
     normal.applyQuaternion(rotation);
     normal.addScaledVector(tangents[index], -normal.dot(tangents[index])).normalize();

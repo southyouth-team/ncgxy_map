@@ -38,6 +38,16 @@ export class BuildingDesignController {
     return this.service.reviewObjectDesign(design, designToken, objectSculptSpec);
   }
 
+  @Post('modify-object')
+  @ApiOperation({ summary: '对选中组件执行受约束的 AI 局部修改' })
+  modifyObject(
+    @Body('objectSculptSpec') objectSculptSpec: Record<string, unknown>,
+    @Body('selectedNodeIds') selectedNodeIds: string[],
+    @Body('instruction') instruction: string,
+  ) {
+    return this.service.modifyObjectDesign(objectSculptSpec, selectedNodeIds, instruction);
+  }
+
   @Post('analyze-building')
   @ApiOperation({ summary: '识别建筑参考图并提取参数化 3D 建模参数' })
   analyze(@Body('imageDataUrl') imageDataUrl: string, @Body('approvalToken') approvalToken: string, @Body('prompt') prompt?: string) {

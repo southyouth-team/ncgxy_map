@@ -468,6 +468,57 @@ describe('BuildingDesignService', () => {
   });
 
 
+  it('preserves tube, lathe, sweep and loft descriptors through parameter-design review', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'advanced-geometry-secret',
+        VISION_MODEL: 'vision-test',
+        VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const current = {
+      schemaVersion: '2.0', targetName: 'advanced-object', category: 'other', objectType: '组合模型', visualStyle: 'stylized',
+      materials: { surface: { color: '#aaaaaa', roughness: 0.8, metalness: 0, opacity: 1 } },
+      componentTree: [
+        { id: 'root', kind: 'group', name: '主体' },
+        { id: 'tube-part', parent: 'root', primitive: 'tube', material: 'surface',
+          dimensions: { width: 2, height: 2, depth: 2 }, geometryDescriptor: {
+            path: [[-0.4, 0, 0], [0, 0.2, 0], [0.4, 0.4, 0]], radius: 0.08, tubularSegments: 24, radialSegments: 8,
+          } },
+        { id: 'lathe-part', parent: 'root', primitive: 'lathe', material: 'surface',
+          dimensions: { width: 2, height: 3, depth: 2 }, geometryDescriptor: {
+            profile: [[0.1, -0.5], [0.3, -0.2], [0.2, 0.2], [0.1, 0.5]], segments: 24,
+          } },
+        { id: 'sweep-part', parent: 'root', primitive: 'sweep', material: 'surface',
+          dimensions: { width: 2, height: 2, depth: 2 }, geometryDescriptor: {
+            path: [[-0.4, 0, 0], [0, 0.1, 0], [0.4, 0.2, 0]],
+            profile: [[-0.1, -0.1], [0.1, -0.1], [0.1, 0.1], [-0.1, 0.1]], steps: 24,
+          } },
+        { id: 'loft-part', parent: 'root', primitive: 'loft', material: 'surface',
+          dimensions: { width: 2, height: 3, depth: 2 }, geometryDescriptor: {
+            sections: [
+              { height: -0.5, points: [[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]] },
+              { height: 0.5, points: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]] },
+            ],
+          } },
+      ],
+      parameterSchema: [],
+      generators: [],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema: [] }) } }] }),
+    }) as never;
+
+    const result = await service.addObjectParameters(current, '检查并保留当前几何结构');
+    const nodes = new Map(result.objectSculptSpec.componentTree.map((node: any) => [node.id, node]));
+    expect(nodes.get('tube-part').geometryDescriptor).toMatchObject({ radius: 0.08, tubularSegments: 24, radialSegments: 8, path: current.componentTree[1].geometryDescriptor.path });
+    expect(nodes.get('lathe-part').geometryDescriptor).toMatchObject({ segments: 24, profile: current.componentTree[2].geometryDescriptor.profile });
+    expect(nodes.get('sweep-part').geometryDescriptor).toMatchObject({ steps: 24, path: current.componentTree[3].geometryDescriptor.path, profile: current.componentTree[3].geometryDescriptor.profile });
+    expect(nodes.get('loft-part').geometryDescriptor).toEqual(current.componentTree[4].geometryDescriptor);
+  });
+
+
   it('creates a repeat generator and a direct floor-count parameter for a reusable template', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({

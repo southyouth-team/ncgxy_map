@@ -194,6 +194,7 @@ export class BuildingDesignService {
         : fallback;
       const dimensions = input.dimensions && typeof input.dimensions === 'object' ? input.dimensions : {};
       const transform = input.transform && typeof input.transform === 'object' ? input.transform : {};
+      const scale = vector(transform.scale, [1, 1, 1]).map((value: number) => Math.abs(value) < 0.001 ? 1 : Math.max(-20, Math.min(20, value)));
       const material = typeof input.material === 'string' && materials[input.material] ? input.material : Object.keys(materials)[0];
       const geometryDescriptor: Record<string, number> = {};
       if (input.geometryDescriptor && typeof input.geometryDescriptor === 'object') {
@@ -214,7 +215,7 @@ export class BuildingDesignService {
         transform: {
           position: vector(transform.position, [0, 0, 0]),
           rotation: vector(transform.rotation, [0, 0, 0]),
-          scale: vector(transform.scale, [1, 1, 1]),
+          scale,
         },
         material,
         ...(Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),

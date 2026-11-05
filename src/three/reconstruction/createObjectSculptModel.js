@@ -106,11 +106,11 @@ function expandObjectSculptSpec(spec) {
   const readGeneratorParameter = id => Number((spec.parameterSchema || []).find(item => item.id === id)?.value);
   for (const generator of generators) {
     if (generator.type === 'grid') {
-      const rows = Math.max(1, Math.min(generator.maxRows, Math.round(parameterValue(generator.rowParameterId) || generator.defaultRows)));
-      const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(parameterValue(generator.columnParameterId) || generator.defaultColumns)));
+      const rows = Math.max(1, Math.min(generator.maxRows, Math.round(readGeneratorParameter(generator.rowParameterId) || generator.defaultRows)));
+      const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(readGeneratorParameter(generator.columnParameterId) || generator.defaultColumns)));
       generatorMetrics.set(generator.id, { rows, columns, repeatCount: 1, spacingX: generator.spacingX, spacingZ: generator.spacingZ });
     } else if (generator.type === 'repeat') {
-      const count = Math.max(1, Math.min(generator.maxCount, Math.round(parameterValue(generator.countParameterId) || generator.defaultCount)));
+      const count = Math.max(1, Math.min(generator.maxCount, Math.round(readGeneratorParameter(generator.countParameterId) || generator.defaultCount)));
       generatorMetrics.set(generator.id, { rows: 1, columns: 1, repeatCount: count, spacing: generator.spacing, axis: generator.axis });
     }
   }

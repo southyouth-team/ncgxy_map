@@ -12,6 +12,7 @@ function expandObjectSculptSpec(spec) {
   if (!generators.length) return { ...spec, componentTree: [...spec.componentTree] };
   const sourceNodes = spec.componentTree;
   const byId = new Map(sourceNodes.map(node => [node.id, node]));
+  const generatorParameterIds = new Set(generators.map(generator => generator.countParameterId));
   const generatedSourceIds = new Set();
   const expanded = sourceNodes.filter(node => !generators.some(generator => {
     let parent = node.id;

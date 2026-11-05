@@ -620,9 +620,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         id: 'spatial-sweep', primitive: 'sweep', material: 'default',
         dimensions: { width: 3, height: 3, depth: 3 },
         geometryDescriptor: {
-          path: [[-0.45, -0.35, -0.35], [-0.15, 0.2, -0.1], [0.15, -0.15, 0.2], [0.45, 0.35, 0.4]],
-          profile: [[-0.12, -0.1], [0.12, -0.1], [0.12, 0.1], [-0.12, 0.1]],
-          steps: 24,
+          path: [[-0.45, -0.25, -0.2], [-0.15, -0.1, -0.05], [0.15, 0.1, 0.05], [0.45, 0.25, 0.2]],
+          profile: [[-0.025, -0.02], [0.025, -0.02], [0.025, 0.02], [-0.025, 0.02]],
+          steps: 48,
         },
       }],
     };
@@ -631,7 +631,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const position = mesh.geometry.getAttribute('position');
     const normals = mesh.geometry.getAttribute('normal');
     const index = mesh.geometry.getIndex();
-    const sideIndexCount = 24 * 4 * 6;
+    const sideIndexCount = 48 * 4 * 6;
 
     for (let offset = 0; offset < sideIndexCount; offset += 3) {
       const ids = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];

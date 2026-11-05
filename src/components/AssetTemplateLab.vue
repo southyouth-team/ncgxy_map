@@ -195,7 +195,7 @@ onMounted(() => {
     centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-3, 0.05, 0), new THREE.Vector3(3, 0.05, 0)]), markerMaterial))
     centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, -3), new THREE.Vector3(0, 0.05, 3)]), markerMaterial))
     scene.add(centerMarker)
-    camera = new THREE.OrthographicCamera(-90, 90, 70, -70, 0.1, 1000); camera.position.set(0, 200, 0.001); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0)
+    camera = new THREE.OrthographicCamera(-90, 90, 70, -70, 0.1, 1000); camera.position.set(0, 200, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0)
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace; viewport.value.replaceChildren(renderer.domElement)

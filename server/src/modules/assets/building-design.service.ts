@@ -25,10 +25,17 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     if (raw.type !== 'repeat' || !nodeIds.has(raw.templateRootId)) throw new ServiceUnavailableException('结构生成器模板节点无效：' + id);
     if (raw.parentId != null && !nodeIds.has(raw.parentId)) throw new ServiceUnavailableException('结构生成器父节点无效：' + id);
     if (!['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构生成器排列轴无效：' + id);
-    const spacing = Number(raw.spacing), maxCount = Number(raw.maxCount);
-    if (!Number.isFinite(spacing) || Math.abs(spacing) > 100 || !Number.isInteger(maxCount) || maxCount < 1 || maxCount > 100) {
-      throw new ServiceUnavailableException('结构生成器间距或最大数量无效：' + id);
+    const spacing = Number(raw.spacing), maxCount = Number(raw.maxCount), defaultCount = Number(raw.defaultCount);
+    if (!Number.isFinite(spacing) || Math.abs(spacing) > 100 || !Number.isInteger(maxCount) || maxCount < 1 || maxCount > 100
+      || !Number.isInteger(defaultCount) || defaultCount < 1 || defaultCount > maxCount) {
+      throw new ServiceUnavailableException('结构生成器间距、默认数量或最大数量无效：' + id);
     }
+    if (raw.followers !== undefined && (!Array.isArray(raw.followers) || raw.followers.length > 30)) throw new ServiceUnavailableException('结构生成器 followers 无效：' + id);
+    const followers = (raw.followers || []).map((follower: any) => {
+      if (!nodeIds.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis)
+        || !Number.isFinite(Number(follower.offset ?? 0))) throw new ServiceUnavailableException('结构生成器跟随规则无效：' + id);
+      return { nodeId: follower.nodeId, axis: follower.axis, offset: Number(follower.offset ?? 0) };
+    });
     const countParameterId = typeof raw.countParameterId === 'string' ? raw.countParameterId : '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(countParameterId)) throw new ServiceUnavailableException('结构生成器数量参数 ID 无效：' + id);
     const descendants = componentTree.filter(node => {
@@ -40,7 +47,7 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
       return false;
     });
     if (!descendants.length || descendants.length * maxCount > 300) throw new ServiceUnavailableException('结构生成器展开后超过组件数量限制：' + id);
-    return { id, type: 'repeat', templateRootId: raw.templateRootId, ...(raw.parentId == null ? {} : { parentId: raw.parentId }), countParameterId, axis: raw.axis, spacing, maxCount };
+    return { id, type: 'repeat', templateRootId: raw.templateRootId, ...(raw.parentId == null ? {} : { parentId: raw.parentId }), countParameterId, axis: raw.axis, spacing, defaultCount, maxCount, followers };
   });
 }
 function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>, generatorParameterIds = new Set<string>()) {
@@ -505,7 +512,7 @@ export class BuildingDesignService {
     const parameterSchema = normalizeObjectParameterSchema(input.parameterSchema ?? original.objectSculptSpec?.parameterSchema, componentTree, materials, generatorParameterIds);
     for (const generator of generators) {
       const parameter = parameterSchema.find((item: any) => item.id === generator.countParameterId);
-      if (!parameter || parameter.type !== 'number' || parameter.min < 1 || parameter.max > generator.maxCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)) {
+      if (!parameter || parameter.type !== 'number' || parameter.value !== generator.defaultCount || parameter.min < 1 || parameter.max > generator.maxCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)) {
         throw new BadRequestException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
       }
     }
@@ -652,8 +659,8 @@ export class BuildingDesignService {
               'targets 只能引用当前 componentTree 中真实存在的 nodeId。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。',
               '结构数量参数可以 targets=[]，但必须同时创建一个 generators 项并绑定 countParameterId。禁止把楼层数只映射到预生成节点显隐。',
               '没有可用原型时必须明确返回 unsupported，不能伪造目标或生成器。',
-              'generators 只支持安全声明式 repeat：{id,type:"repeat",templateRootId,countParameterId,axis:"x"|"y"|"z",spacing,maxCount}。templateRootId 必须是当前 componentTree 中代表一个完整可重复单元的现有节点；其子树会作为原型复制。第一份保留原节点 ID，后续实例由运行时派生稳定 ID。',
-              '当用户要求楼层数时，寻找一个完整楼层 Group 子树作为模板，沿 y 轴重复，spacing 使用楼层高度；count 参数整数范围必须不超过 maxCount。屋顶等非重复结构不能放进楼层原型子树。',
+              'generators 只支持安全声明式 repeat：{id,type:"repeat",templateRootId,countParameterId,axis:"x"|"y"|"z",spacing,defaultCount,maxCount,followers:[{nodeId,axis,offset}]}。templateRootId 必须是当前 componentTree 中代表一个完整可重复单元的现有节点；其子树会作为原型复制。第一份保留原节点 ID，后续实例由运行时派生稳定 ID。defaultCount 必须等于数量参数默认 value；followers 用于在数量变化时同步移动屋顶等非重复节点。',
+              '当用户要求楼层数时，寻找一个完整楼层 Group 子树作为模板，沿 y 轴重复，spacing 使用楼层高度；设置 defaultCount 为当前楼层数，maxCount 为允许上限，并把屋顶等结构加入 followers，沿 y 轴偏移 spacing*(楼层数-defaultCount)。屋顶等非重复结构不能放进楼层原型子树。',
               '当用户要求房间数时，只有能识别完整房间原型和合理排列轴/间距时才创建 repeat；否则说明当前模型缺少可重复房间结构，不能假装参数已生效。',
               '不能为没有合适原型的结构创建生成器；不允许执行脚本、表达式或自定义函数。最大展开组件数量 300。',
               '所有参数 ID 唯一；新增参数不得与现有 ID 冲突。最多 100 个参数，每项最多 100 个目标。',
@@ -680,7 +687,7 @@ export class BuildingDesignService {
     const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, current.componentTree, current.materials, generatorParameterIds);
     for (const generator of generators) {
       const parameter = parameterSchema.find((item: any) => item.id === generator.countParameterId);
-      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+      if (!parameter || parameter.type !== 'number' || parameter.value !== generator.defaultCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
         || parameter.min < 1 || parameter.max > generator.maxCount) {
         throw new ServiceUnavailableException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
       }

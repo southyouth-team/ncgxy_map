@@ -177,8 +177,7 @@ async function generateModel() {
     result.__runtimeModel = model
     const id = 'ai-instance-' + (++serial)
     const index = instances.value.length
-    model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
-    model.scale.setScalar(scale.value)
+    model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)    model.scale.setScalar(scale.value)
     // 不在 Runtime 层强制整体接地：悬空、架空或飞行资产应保留生成结构中的真实高度。
     // 地面接触与内部支撑关系由视觉分析和 ObjectSculptSpec 决定，不能通过移动整个根节点掩盖结构偏差。
     model.userData.assetInstanceId = id
@@ -210,6 +209,17 @@ function clearComponentHighlight() {
     }
   })
   highlightedComponentGroup = null
+}
+function clearComponentSelection() {
+  clearComponentHighlight()
+  selectedComponentId.value = ''
+}
+function toggleComponentSelection(componentId) {
+  if (selectedComponentId.value === componentId) {
+    clearComponentSelection()
+    return
+  }
+  selectComponent(componentId)
 }
 function selectComponent(componentId) {
   if (!selectedSpec.value?.componentTree?.some(node => node.id === componentId)) return
@@ -274,10 +284,19 @@ function onViewportPointerUp(event) {
   raycaster.setFromCamera(pointer, camera)
   const hits = raycaster.intersectObjects([...objects.values()], true)
   const hit = hits.find(item => item.object.userData?.componentId)
-  if (!hit) return
+  if (!hit) {
+    clearComponentSelection()
+    return
+  }
   const componentId = hit.object.userData.componentSourceId || hit.object.userData.componentId
   for (const [instanceId, root] of objects) {
-    if (root.userData?.componentGroups?.has(componentId)) { selectedInstanceId.value = instanceId; selectComponent(componentId); break }
+    if (root.userData?.componentGroups?.has(componentId)) {
+      if (selectedInstanceId.value !== instanceId) clearComponentHighlight()
+      selectedInstanceId.value = instanceId
+      selectComponent(componentId)
+      nextTick(() => document.querySelector('.component-node.active')?.scrollIntoView({ block: 'nearest' }))
+      break
+    }
   }
 }
 function updateSelectedComponentTransform(axis, value) {
@@ -357,8 +376,7 @@ async function addParametersFromConversation() {
     error.value = e?.message || 'AI 参数设计失败'
     status.value = '参数设计失败'
   } finally { parameterizing.value = false }
-}
-async function saveSelectedAsset() {
+}async function saveSelectedAsset() {
   if (!selectedSpec.value) return
   if (!templateName.value.trim()) { error.value = '请先填写模板名称'; return }
   try {
@@ -410,7 +428,10 @@ function removeInstance(id) {
     object.traverse(child => { child.geometry?.dispose?.(); if (Array.isArray(child.material)) child.material.forEach(m => m.dispose?.()); else child.material?.dispose?.() })
   }
   objects.delete(id); instances.value = instances.value.filter(x => x.id !== id)
-  if (selectedInstanceId.value === id) selectedInstanceId.value = instances.value.at(-1)?.id || ''
+  if (selectedInstanceId.value === id) {
+    clearComponentSelection()
+    selectedInstanceId.value = instances.value.at(-1)?.id || ''
+  }
 }
 function focusInstance(id) {
   clearComponentHighlight()
@@ -504,13 +525,10 @@ onBeforeUnmount(() => {
       <a href="/">返回校园</a>
     </header>
     <nav class="wizard-progress" aria-label="模板创建进度">
-      <div v-for="(label,index) in ['创建模板','生成预览','微调与保存']" :key="label" :class="{active:wizardStep===index+1,done:wizardStep>index+1}">
+      <div v-for="(label,index) in ['创建模板','微调与预览','保存模板']" :key="label" :class="{active:wizardStep===index+1,done:wizardStep>index+1}">
         <span>{{ index+1 }}</span><b>{{ label }}</b>
       </div>
     </nav>
-    <div v-show="wizardStep>=2" class="shared-viewport">
-      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">全局视角</button><button :disabled="!selectedInstanceId" @click="frameSelectedInstance">聚焦选中</button><button @click="setCameraView('iso')">等轴测</button><button @click="setCameraView('top')">俯视</button><button @click="setCameraView('front')">正视</button><button @click="setCameraView('side')">侧视</button></div><div class="hint status">{{ status }}</div></section>
-    </div>
 
     <section v-if="wizardStep===1" class="wizard-card create-step">
       <div class="step-heading"><div><small>STEP 01</small><h2>定义模板内容</h2><p>模板基础信息与生成素材在同一步完成，图片和提示词可任选其一，也可以同时提供。</p></div></div>
@@ -531,34 +549,54 @@ onBeforeUnmount(() => {
       <div class="step-actions"><span class="hint">模板名称和分类用于后续资产检索与复用。</span><button class="generate" :disabled="generating || !templateName.trim() || (!prompt.trim() && !imageDataUrl)" @click="generateModel">{{ generating ? 'AI 正在生成结构…' : '生成 3D 素材' }}</button></div>
     </section>
 
-    <section v-show="wizardStep===2" class="wizard-preview">
-      <div class="preview-heading"><div><small>STEP 02</small><h2>检查整体生成效果</h2><p>先判断整体轮廓、比例和主要部件是否符合预期；暂时不展示复杂参数。</p></div><div class="preview-meta"><b>{{ templateName }}</b><span>{{ templateCategory }}</span></div></div>
-      <div v-if="error" class="error">{{ error }}</div><div v-if="generationLog" class="log">{{ generationLog }}</div>
-      <div class="step-actions"><button class="secondary" @click="wizardStep=1">返回修改输入</button><button class="secondary" :disabled="generating" @click="generateModel">重新生成</button><button class="generate" :disabled="!selectedSpec" @click="wizardStep=3">整体符合预期，进入微调</button></div>
-    </section>
-
-    <section v-if="wizardStep===3" class="wizard-editor">
-      <div class="preview-heading"><div><small>STEP 03</small><h2>微调结构与参数</h2><p>选中部件后调整局部属性，也可以通过 AI 修改部件或新增可调参数。</p></div><div class="preview-meta"><b>{{ templateName }}</b><span>{{ templateCategory }}</span></div></div>
+    <section v-show="wizardStep===2" class="wizard-preview editor-step">
+      <div class="preview-heading"><div><small>STEP 02</small><h2>微调结构与预览</h2><p>左侧负责高频调整，右侧实时预览；点击模型部件可同步定位到对应结构。</p></div><div class="preview-meta"><b>{{ templateName }}</b><span>{{ templateCategory }}</span></div></div>
       <div class="editor-workspace">
         <aside class="panel inspector">
+          <section v-if="selectedSpec" class="ai-local-editor primary-editor">
+            <label>AI 参数与结构对话</label>
+            <textarea v-model="parameterInstruction" rows="3" placeholder="例如：增加楼层数参数，默认 3 层、最高 8 层；或让树冠增加一层"></textarea>
+            <button class="generate" :disabled="parameterizing||!parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing?'AI 正在设计参数…':'根据描述新增 / 调整参数' }}</button>
+          </section>
+          <section v-if="selectedComponent" class="ai-local-editor">
+            <label>AI 修改当前部件：{{ selectedComponent.name||selectedComponent.id }}</label>
+            <textarea v-model="modifyInstruction" rows="3" placeholder="例如：把窗户改成拱形，保留原位置和周围墙体"></textarea>
+            <button class="generate" :disabled="modifying||!modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying?'AI 修改中…':'修改选中部件' }}</button>
+          </section>
+          <section v-if="selectedSpec" class="component-editor">
+            <h3>可调参数 <span>{{ selectedParameters.length }} 项</span></h3>
+            <div v-if="selectedParameters.length" class="asset-parameters">
+              <div v-for="parameter in selectedParameters" :key="parameter.id" class="parameter-row"><label>{{ parameter.label }}</label><input v-if="parameter.type==='number'" type="range" :min="parameter.min" :max="parameter.max" :step="parameter.step||0.1" :value="parameter.value" @input="updateAssetParameter(parameter.id,Number($event.target.value))"><div v-if="parameter.type==='number'" class="parameter-value">{{ parameter.value }} {{ parameter.unit||'' }}</div><input v-else-if="parameter.type==='color'" type="color" :value="parameter.value" @input="updateAssetParameter(parameter.id,$event.target.value)"><input v-else-if="parameter.type==='boolean'" type="checkbox" :checked="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.checked)"><select v-else-if="parameter.type==='select'" :value="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.value)"><option v-for="option in parameter.options" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+              <p v-else class="empty-hint">当前模型还没有可调参数，可先通过上方 AI 对话生成。</p>
+            </div>
+            <div v-if="selectedComponent" class="component-properties"><b>{{ selectedComponent.name||selectedComponent.id }}</b><template v-if="(selectedComponent.kind||'mesh')==='mesh'"><label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)"></template><small v-else>逻辑分组节点：变换和显隐作用于整个子树。</small><label>局部位置 X / Y / Z</label><div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div><button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible?'隐藏此部件':'显示此部件' }}</button>
+            </div>
+          </section>
           <section v-if="selectedSpec" class="component-editor">
             <h3>模型结构 <span>{{ selectedSpec.componentTree.length }} 个部件</span></h3>
-            <div class="component-tree"><button v-for="node in componentTree" :key="node.id" class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8+node.depth*15)+'px'}" @click="selectComponent(node.id)"><span>{{ node.name || node.id }}</span><small>{{ node.kind==='group'?'结构分组':(node.role||node.primitive||'Mesh') }}</small></button></div>
-            <div v-if="selectedParameters.length" class="asset-parameters"><h4>可调参数 <small>{{ selectedParameters.length }} 项</small></h4>
-              <div v-for="parameter in selectedParameters" :key="parameter.id" class="parameter-row"><label>{{ parameter.label }}</label><input v-if="parameter.type==='number'" type="range" :min="parameter.min" :max="parameter.max" :step="parameter.step||0.1" :value="parameter.value" @input="updateAssetParameter(parameter.id,Number($event.target.value))"><div v-if="parameter.type==='number'" class="parameter-value">{{ parameter.value }} {{ parameter.unit||'' }}</div><input v-else-if="parameter.type==='color'" type="color" :value="parameter.value" @input="updateAssetParameter(parameter.id,$event.target.value)"><input v-else-if="parameter.type==='boolean'" type="checkbox" :checked="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.checked)"><select v-else-if="parameter.type==='select'" :value="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.value)"><option v-for="option in parameter.options" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-            </div>
-            <div v-if="selectedComponent" class="component-properties"><b>{{ selectedComponent.name||selectedComponent.id }}</b><template v-if="(selectedComponent.kind||'mesh')==='mesh'"><label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)"></template><small v-else>逻辑分组节点：变换和显隐作用于整个子树。</small><label>局部位置 X / Y / Z</label><div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div><button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible?'隐藏此部件':'显示此部件' }}</button></div>
+            <div class="component-tree"><button v-for="node in componentTree" :key="node.id" class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8+node.depth*15)+'px'}" @click="toggleComponentSelection(node.id)"><span>{{ node.name || node.id }}</span><small>{{ node.kind==='group'?'结构分组':(node.role||node.primitive||'Mesh') }}</small></button></div>
           </section>
-          <section v-if="selectedSpec" class="ai-local-editor"><label>AI 新增可调参数</label><textarea v-model="parameterInstruction" rows="3" placeholder="例如：给建筑增加楼层数参数，默认 3 层、最高 8 层"></textarea><button class="generate" :disabled="parameterizing||!parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing?'AI 正在设计参数…':'根据描述新增参数' }}</button></section>
-          <section v-if="selectedComponent" class="ai-local-editor"><label>AI 修改当前部件：{{ selectedComponent.name||selectedComponent.id }}</label><textarea v-model="modifyInstruction" rows="3" placeholder="例如：把窗户改成拱形，保留原位置和周围墙体"></textarea><button class="generate" :disabled="modifying||!modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying?'AI 修改中…':'修改选中部件' }}</button></section>
         </aside>
+        <div class="editor-viewport-column">
+          <section class="viewport-panel">
+            <div ref="viewport" class="viewport"></div>
+            <div class="toolbar"><button @click="resetCamera">全局视角</button><button :disabled="!selectedInstanceId" @click="frameSelectedInstance">聚焦选中</button><button @click="setCameraView('iso')">等轴测</button><button @click="setCameraView('top')">俯视</button><button @click="setCameraView('front')">正视</button><button @click="setCameraView('side')">侧视</button></div>
+            <div class="hint status">{{ status }}</div>
+          </section>
+          <div v-if="generationLog" class="log">{{ generationLog }}</div>
+        </div>
       </div>
       <div v-if="error" class="error">{{ error }}</div>
-      <div class="save-panel"><div><b>保存模板</b><p>保存当前结构、材质和参数定义，后续可在素材模板库中复用。</p><small v-if="savedAssetId">已保存 ID：{{ savedAssetId }}</small></div><button class="generate" :disabled="!selectedSpec" @click="saveSelectedAsset">保存模板</button></div>
-      <div class="step-actions"><button class="secondary" @click="wizardStep=2">返回整体预览</button><button class="secondary" @click="wizardStep=1">返回模板信息</button></div>
+      <div class="step-actions"><button class="secondary" @click="wizardStep=1">返回修改输入</button><button class="secondary" :disabled="generating" @click="generateModel">重新生成</button><button class="generate" :disabled="!selectedSpec" @click="wizardStep=3">下一步：保存模板</button></div>
     </section>
-    <footer>独立素材模板实验环境 · AI 输出 ObjectSculptSpec，由 Three.js Runtime 转换为真实 Mesh。</footer>
-  </main>
+
+    <section v-if="wizardStep===3" class="wizard-editor save-step">
+      <div class="preview-heading"><div><small>STEP 03</small><h2>保存模板</h2><p>确认微调结果，将当前结构、材质和参数定义保存到素材库。</p></div><div class="preview-meta"><b>{{ templateName }}</b><span>{{ templateCategory }}</span></div></div>
+      <div class="save-panel"><div><b>模板保存</b><p>保存后可在后续场景中复用该结构化资产。</p><small v-if="savedAssetId">已保存 ID：{{ savedAssetId }}</small></div><button class="generate" :disabled="!selectedSpec" @click="saveSelectedAsset">保存模板</button></div>
+      <div v-if="error" class="error">{{ error }}</div>
+      <div class="step-actions"><button class="secondary" @click="wizardStep=2">返回继续微调</button><button class="secondary" @click="wizardStep=1">返回模板信息</button></div>
+    </section>
+    <footer>独立素材模板实验环境 · AI 输出 ObjectSculptSpec，由 Three.js Runtime 转换为真实 Mesh。</footer>  </main>
 </template>
 
 <style scoped>
@@ -647,9 +685,9 @@ header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}
 .component-properties input[type=color]{width:100%;height:32px;border:1px solid #dce4dc;border-radius:6px;padding:2px}
 .axis-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
 .axis-inputs input{min-width:0}
-.wizard-lab{height:auto;min-height:100dvh;overflow:visible;max-width:100%;align-items:center}.wizard-header,.wizard-progress,.wizard-card,.wizard-preview,.wizard-editor,footer{width:100%;max-width:1500px}.wizard-progress{display:flex;gap:12px;margin:0 auto 16px}.wizard-progress>div{flex:1;display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fff;border:1px solid #dce4dc;border-radius:10px;color:#829086}.wizard-progress span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#edf1ed;font-weight:700}.wizard-progress .active{border-color:#4f855e;color:#315f3e;background:#f5faf5}.wizard-progress .done span,.wizard-progress .active span{background:#3d7950;color:white}.wizard-card,.wizard-preview,.wizard-editor{background:#fff;border:1px solid #dce4dc;border-radius:12px;padding:24px;margin:0 auto 16px;box-sizing:border-box}.step-heading,.preview-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:22px}.step-heading small,.preview-heading small{font-size:10px;letter-spacing:.12em;color:#66816b;font-weight:800}.step-heading h2,.preview-heading h2{margin:6px 0;font-size:21px}.step-heading p,.preview-heading p{margin:0;color:#7a887d;font-size:12px}.create-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);gap:28px}.form-column,.reference-column{min-width:0}.create-step label{display:block;margin:14px 0 7px;font-size:12px;color:#59695d}.create-step label em{color:#b45a4e;font-style:normal}.create-step input:not([type=file]),.create-step textarea{width:100%;box-sizing:border-box;padding:11px;border:1px solid #dce4dc;border-radius:8px;font:inherit;font-size:13px}.create-step textarea{resize:vertical;line-height:1.6}.upload-drop{min-height:220px;border:1px dashed #b9cbbb;border-radius:10px;padding:18px;background:#f8faf8}.upload-drop p{font-size:11px;color:#87948a}.upload-empty{display:grid;min-height:110px;place-items:center}.input-rule{margin-top:14px;padding:12px;background:#f2f7f2;border-radius:8px;font-size:11px;color:#66776a;line-height:1.6}.create-step .reference{max-width:100%;max-height:260px;object-fit:contain}.step-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid #edf0ed}.step-actions .generate,.step-actions .secondary{width:auto;min-width:150px;margin:0}.preview-meta{display:flex;flex-direction:column;align-items:flex-end;gap:6px;color:#34453a}.preview-meta span{font-size:11px;color:#829086}.shared-viewport{width:100%;max-width:1500px;margin:0 auto 16px}.shared-viewport .viewport-panel{height:min(68vh,720px);min-height:440px}.wizard-editor .editor-workspace{display:block;min-height:0}.wizard-editor .viewport-panel{min-height:560px}.wizard-editor .inspector{max-height:700px}.save-panel{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px;margin-top:16px;background:#f5f8f5;border:1px solid #dce8dc;border-radius:10px}.save-panel p{margin:6px 0;color:#78867b;font-size:12px}.save-panel small{font-size:10px;color:#4f855e}.save-panel .generate{width:auto;min-width:150px;margin:0}.wizard-lab footer{margin:12px auto 0;text-align:left}.wizard-lab .toolbar{z-index:2}.wizard-lab .status{z-index:2}.wizard-lab .panel{overflow:auto}.wizard-lab .component-tree{max-height:250px}
+.wizard-lab{height:auto;min-height:100dvh;overflow:visible;max-width:100%;align-items:center}.wizard-header,.wizard-progress,.wizard-card,.wizard-preview,.wizard-editor,footer{width:100%;max-width:1500px}.wizard-progress{display:flex;gap:12px;margin:0 auto 16px}.wizard-progress>div{flex:1;display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fff;border:1px solid #dce4dc;border-radius:10px;color:#829086}.wizard-progress span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#edf1ed;font-weight:700}.wizard-progress .active{border-color:#4f855e;color:#315f3e;background:#f5faf5}.wizard-progress .done span,.wizard-progress .active span{background:#3d7950;color:white}.wizard-card,.wizard-preview,.wizard-editor{background:#fff;border:1px solid #dce4dc;border-radius:12px;padding:24px;margin:0 auto 16px;box-sizing:border-box}.step-heading,.preview-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:22px}.step-heading small,.preview-heading small{font-size:10px;letter-spacing:.12em;color:#66816b;font-weight:800}.step-heading h2,.preview-heading h2{margin:6px 0;font-size:21px}.step-heading p,.preview-heading p{margin:0;color:#7a887d;font-size:12px}.create-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);gap:28px}.form-column,.reference-column{min-width:0}.create-step label{display:block;margin:14px 0 7px;font-size:12px;color:#59695d}.create-step label em{color:#b45a4e;font-style:normal}.create-step input:not([type=file]),.create-step textarea{width:100%;box-sizing:border-box;padding:11px;border:1px solid #dce4dc;border-radius:8px;font:inherit;font-size:13px}.create-step textarea{resize:vertical;line-height:1.6}.upload-drop{min-height:220px;border:1px dashed #b9cbbb;border-radius:10px;padding:18px;background:#f8faf8}.upload-drop p{font-size:11px;color:#87948a}.upload-empty{display:grid;min-height:110px;place-items:center}.input-rule{margin-top:14px;padding:12px;background:#f2f7f2;border-radius:8px;font-size:11px;color:#66776a;line-height:1.6}.create-step .reference{max-width:100%;max-height:260px;object-fit:contain}.step-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid #edf0ed}.step-actions .generate,.step-actions .secondary{width:auto;min-width:150px;margin:0}.preview-meta{display:flex;flex-direction:column;align-items:flex-end;gap:6px;color:#34453a}.preview-meta span{font-size:11px;color:#829086}.shared-viewport{width:100%;max-width:1500px;margin:0 auto 16px}.shared-viewport .viewport-panel{height:min(68vh,720px);min-height:440px}.editor-step .editor-workspace{display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr);gap:14px;align-items:stretch;min-height:680px}.editor-step .inspector{max-height:720px;gap:0}.editor-viewport-column{display:flex;min-width:0;min-height:0;flex-direction:column;gap:10px}.editor-step .viewport-panel{position:relative;flex:1 1 auto;min-height:620px}.editor-step .log{margin:0}.save-step{min-height:260px}.empty-hint{margin:8px 0;color:#87948a;font-size:11px;line-height:1.5}.save-panel{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px;margin-top:16px;background:#f5f8f5;border:1px solid #dce8dc;border-radius:10px}.save-panel p{margin:6px 0;color:#78867b;font-size:12px}.save-panel small{font-size:10px;color:#4f855e}.save-panel .generate{width:auto;min-width:150px;margin:0}.wizard-lab footer{margin:12px auto 0;text-align:left}.wizard-lab .toolbar{z-index:2}.wizard-lab .status{z-index:2}.wizard-lab .panel{overflow:auto}.wizard-lab .component-tree{max-height:250px}.editor-step .component-tree{max-height:200px}.editor-step .primary-editor{margin-top:0;padding-top:0;border-top:0}.editor-step .inspector .component-editor{margin-top:14px}
 footer{flex:0 0 auto;width:100%;max-width:1600px;margin:10px auto 0;text-align:right;color:#87948a;font-size:10px}
 @media(max-width:1180px) and (min-width:701px){.lab{padding:16px}.layout{grid-template-columns:minmax(270px,300px) minmax(320px,1fr);grid-template-rows:minmax(360px,1fr) minmax(260px,.75fr);overflow-y:auto}.viewport-panel{grid-column:2;grid-row:1}.generator{grid-column:1;grid-row:1}.inspector{grid-column:1/-1;grid-row:2}.panel{overflow:visible}.inspector{overflow-y:visible}.instances{max-height:180px}.component-tree{max-height:180px}}
-@media(max-width:900px){.create-grid{grid-template-columns:1fr}.wizard-editor .editor-workspace{display:block}.wizard-editor .inspector{max-height:none}.wizard-editor .viewport-panel{min-height:440px}}
+@media(max-width:1100px){.editor-step .editor-workspace{grid-template-columns:minmax(280px,360px) minmax(0,1fr)}.editor-step .viewport-panel{min-height:560px}}@media(max-width:900px){.create-grid{grid-template-columns:1fr}.editor-step .editor-workspace{display:flex;flex-direction:column-reverse;min-height:0}.editor-step .inspector{max-height:none;overflow:visible}.editor-step .viewport-panel{min-height:480px;flex:0 0 60vh}}
 @media(max-width:700px){.wizard-progress{gap:5px}.wizard-progress>div{padding:8px 5px;gap:5px;font-size:10px}.wizard-card,.wizard-preview,.wizard-editor{padding:14px}.step-heading,.preview-heading{flex-direction:column}.step-actions{align-items:stretch;flex-wrap:wrap}.step-actions .generate,.step-actions .secondary{flex:1;min-width:120px}.save-panel{align-items:stretch;flex-direction:column}.save-panel .generate{width:100%}.shared-viewport .viewport-panel{min-height:380px;height:55vh}.wizard-editor .viewport-panel{min-height:380px}.lab{height:auto;min-height:100dvh;overflow:visible;padding:12px}header{align-items:flex-start;flex-direction:column;gap:8px}.layout{display:flex;flex:initial;min-height:0;overflow:visible;flex-direction:column}.panel{max-height:none;overflow:visible}.templates,.instances{max-height:180px}.viewport-panel{height:min(65vh,560px);min-height:420px;flex:0 0 auto}.toolbar{right:8px;left:8px;gap:4px}.toolbar button{font-size:10px;padding:6px 7px}.toolbar span{display:none}footer{text-align:left}}
 </style>

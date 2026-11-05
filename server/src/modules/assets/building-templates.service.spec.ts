@@ -106,7 +106,7 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
       objectType: '香樟树', visualStyle: 'low-poly',
       referenceImageSha256: createHash('sha256').update(Buffer.from('approved-image')).digest('hex'),
       geometry: { form: 'tree', crownLayers: 3 },
-      confidence: 0.8, evidence: [], limitations: [], reviewed: false,
+      confidence: 0.8, evidence: [], limitations: [], reviewed: true, reviewedAt: new Date().toISOString(),
     };
     const item = await service.create({
       name: '签名图片绑定测试', category: 'vegetation', objectType: '香樟树', visualStyle: 'low-poly',
@@ -130,7 +130,7 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
     await expect(service.create({
       name: '错误分类模板', category: 'vegetation', objectType: '香樟树', visualStyle: 'low-poly',
       sourceType: 'ai_generated', modelType: 'procedural',
-      design: { schemaVersion: 1, category: 'facility', objectType: '长椅', visualStyle: 'toon' },
+      design: { schemaVersion: 1, category: 'facility', objectType: '长椅', visualStyle: 'toon', reviewed: true, reviewedAt: new Date().toISOString() },
       designToken: 'token',
     })).rejects.toThrow('场景结构参数分类与模板分类不一致');
     expect(buildingDesign.consumeSceneDesignToken).toHaveBeenCalledTimes(1);

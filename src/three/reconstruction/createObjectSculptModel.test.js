@@ -1120,7 +1120,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         { id: 'wall-opening-top', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'opening',
           axis: 'y', sourceSide: 1, targetSide: 1, offset: 0 },
         { id: 'wall-opening-center', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'opening',
-          axis: 'x', sourceSide: 0, targetSide: 0, offset: 0 },
+          axis: 'x', sourceSide: 1, targetSide: 1, offset: 0 },
         { id: 'base-wall', type: 'attach', sourceNodeId: 'base', targetNodeId: 'wall',
           axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
       ],
@@ -1131,7 +1131,8 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const wallMesh = instance => group(instance, 'wall').getObjectByName('wall:mesh');
     const expectAligned = (instance, wallX) => {
       expect(group(instance, 'wall').position.x).toBeCloseTo(wallX);
-      expect(group(instance, 'opening').position.x).toBeCloseTo(wallX);
+      const openingWidth = instance.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening').dimensions.width;
+      expect(group(instance, 'opening').position.x).toBeCloseTo(wallX + 1 - openingWidth / 2);
       expect(group(instance, 'opening').position.y).toBeCloseTo(1.5);
       expect(wallMesh(instance).geometry.parameters.shapes.holes).toHaveLength(1);
     };

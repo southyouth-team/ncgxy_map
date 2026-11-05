@@ -25,6 +25,10 @@ function expandObjectSculptSpec(spec) {
     if (generator.type === 'grid') {
       generatorParameterIds.add(generator.rowParameterId);
       generatorParameterIds.add(generator.columnParameterId);
+      for (const parameterId of [generator.spacingXParameterId, generator.spacingZParameterId].filter(Boolean)) {
+        const parameter = (spec.parameterSchema || []).find(item => item.id === parameterId);
+        if (!parameter || parameter.type !== 'number') throw new TypeError('网格动态间距必须绑定数值参数：' + generator.id);
+      }
     }
   }
   const isInTemplate = node => generators.some(generator => {
@@ -91,10 +95,12 @@ function expandObjectSculptSpec(spec) {
     } else if (generator.type === 'grid') {
       const rows = Math.max(1, Math.min(generator.maxRows, Math.round(parameterValue(generator.rowParameterId) || generator.defaultRows)));
       const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(parameterValue(generator.columnParameterId) || generator.defaultColumns)));
+      const spacingX = generator.spacingXParameterId ? parameterValue(generator.spacingXParameterId) * generator.spacingXScale : generator.spacingX;
+      const spacingZ = generator.spacingZParameterId ? parameterValue(generator.spacingZParameterId) * generator.spacingZScale : generator.spacingZ;
       for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column < columns; column += 1) {
-          const offsetX = generator.spacingX * (generator.centered === true ? column - (columns - 1) / 2 : column);
-          const offsetZ = generator.spacingZ * (generator.centered === true ? row - (rows - 1) / 2 : row);
+          const offsetX = spacingX * (generator.centered === true ? column - (columns - 1) / 2 : column);
+          const offsetZ = spacingZ * (generator.centered === true ? row - (rows - 1) / 2 : row);
           materialize(row, column, offsetX, 0, offsetZ);
         }
       }
@@ -109,7 +115,9 @@ function expandObjectSculptSpec(spec) {
     if (generator.type === 'grid') {
       const rows = Math.max(1, Math.min(generator.maxRows, Math.round(readGeneratorParameter(generator.rowParameterId) || generator.defaultRows)));
       const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(readGeneratorParameter(generator.columnParameterId) || generator.defaultColumns)));
-      generatorMetrics.set(generator.id, { rows, columns, repeatCount: 1, spacingX: generator.spacingX, spacingZ: generator.spacingZ });
+      const spacingX = generator.spacingXParameterId ? readGeneratorParameter(generator.spacingXParameterId) * generator.spacingXScale : generator.spacingX;
+      const spacingZ = generator.spacingZParameterId ? readGeneratorParameter(generator.spacingZParameterId) * generator.spacingZScale : generator.spacingZ;
+      generatorMetrics.set(generator.id, { rows, columns, repeatCount: 1, spacingX, spacingZ });
     } else if (generator.type === 'repeat') {
       const count = Math.max(1, Math.min(generator.maxCount, Math.round(readGeneratorParameter(generator.countParameterId) || generator.defaultCount)));
       generatorMetrics.set(generator.id, { rows: 1, columns: 1, repeatCount: count, spacing: generator.spacing, axis: generator.axis });
@@ -825,6 +833,8 @@ export function validateObjectSculptSpec(spec) {
       if (generator.rowParameterId === generator.columnParameterId) throw new TypeError('网格生成器行列参数不能相同：' + generator.id);
       if ((generator.centered !== undefined && typeof generator.centered !== 'boolean')
          || ![generator.spacingX, generator.spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
+         || (generator.spacingXParameterId !== undefined && (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.spacingXParameterId) || !Number.isFinite(generator.spacingXScale) || Math.abs(generator.spacingXScale) > 10))
+         || (generator.spacingZParameterId !== undefined && (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.spacingZParameterId) || !Number.isFinite(generator.spacingZScale) || Math.abs(generator.spacingZScale) > 10))
         || !Number.isInteger(generator.maxRows) || generator.maxRows < 1 || generator.maxRows > 100
         || !Number.isInteger(generator.maxColumns) || generator.maxColumns < 1 || generator.maxColumns > 100
         || !Number.isInteger(generator.defaultRows) || generator.defaultRows < 1 || generator.defaultRows > generator.maxRows

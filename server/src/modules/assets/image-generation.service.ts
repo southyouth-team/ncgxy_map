@@ -82,9 +82,13 @@ function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
     }
     const rowParameterId = parameterId(raw.rowParameterId), columnParameterId = parameterId(raw.columnParameterId);
     const spacingX = Number(raw.spacingX), spacingZ = Number(raw.spacingZ);
+    const spacingXParameterId = raw.spacingXParameterId == null ? undefined : raw.spacingXParameterId;
+    const spacingZParameterId = raw.spacingZParameterId == null ? undefined : raw.spacingZParameterId;
+    const spacingXScale = Number(raw.spacingXScale), spacingZScale = Number(raw.spacingZScale);
     const defaultRows = Number(raw.defaultRows), defaultColumns = Number(raw.defaultColumns);
     const maxRows = Number(raw.maxRows), maxColumns = Number(raw.maxColumns);
     if (raw.centered !== undefined && typeof raw.centered !== 'boolean') throw new ServiceUnavailableException('AI grid centered 必须是布尔值：' + id);
+    if ((spacingXParameterId && (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(spacingXParameterId) || !Number.isFinite(spacingXScale) || Math.abs(spacingXScale) > 10)) || (spacingZParameterId && (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(spacingZParameterId) || !Number.isFinite(spacingZScale) || Math.abs(spacingZScale) > 10))) throw new ServiceUnavailableException('AI grid 动态间距比例无效：' + id);
     if (rowParameterId === columnParameterId || ![spacingX,spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
       || ![defaultRows,defaultColumns,maxRows,maxColumns].every(Number.isInteger)
       || defaultRows < 1 || defaultColumns < 1 || defaultRows > maxRows || defaultColumns > maxColumns
@@ -93,7 +97,7 @@ function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
     }
     expandedCount += subtree.length * (maxRows * maxColumns - 1);
     if (expandedCount > 300) throw new ServiceUnavailableException('AI 生成器最大展开组件数超过 300：' + id);
-    return { ...raw, id, rowParameterId, columnParameterId, spacingX, spacingZ, centered: raw.centered === true, defaultRows, defaultColumns, maxRows, maxColumns };
+    return { ...raw, id, rowParameterId, columnParameterId, spacingX, spacingZ, spacingXParameterId, spacingXScale, spacingZParameterId, spacingZScale, centered: raw.centered === true, defaultRows, defaultColumns, maxRows, maxColumns };
   });
   return { generators, parameterIds };
 }
@@ -110,6 +114,13 @@ function validateGeneratorParameterBindings(generators: any[], parameterSchema: 
         || parameter.min < 1 || parameter.max > maximums[index]
         || parameter.value !== defaults[index] || parameter.value < parameter.min || parameter.value > parameter.max) {
         throw new ServiceUnavailableException('AI 生成器必须绑定默认值一致的有效整数数量参数：' + generator.id);
+      }
+    }
+    if (generator.type === 'grid') {
+      for (const [parameterId, scale] of [[generator.spacingXParameterId, generator.spacingXScale], [generator.spacingZParameterId, generator.spacingZScale]]) {
+        if (!parameterId) continue;
+        const parameter = parameterSchema.find(item => item.id === parameterId);
+        if (!parameter || parameter.type !== 'number' || !Number.isFinite(parameter.value) || !Number.isFinite(scale) || Math.abs(scale) > 10) throw new ServiceUnavailableException('AI 网格动态间距必须绑定有效数值参数：' + generator.id);
       }
     }
   }

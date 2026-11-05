@@ -1275,7 +1275,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
           ],
           generators: [{ id: 'leg-grid', type: 'grid', templateRootId: 'leg-pair',
             rowParameterId: 'leg-rows', columnParameterId: 'leg-columns',
-            spacingX: 1.0, spacingZ: 1.0, centered: true, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
+            spacingX: 1.0, spacingZ: 1.0, spacingXParameterId: 'table-width', spacingXScale: 0.45, centered: true, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
         },
         countParameter: 'leg-columns',
         nextCount: 3,
@@ -1341,7 +1341,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       if (fixture.name === 'furniture') {
         const expandedLegs = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
         expect(expandedLegs).toHaveLength(6);
-        expect([...new Set(expandedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b)).toEqual([-1, 0, 1]);
+        expect([...new Set(expandedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b)).toEqual([-1.89, 0, 1.89]);
         expect([...new Set(expandedLegs.map(group => Number(group.position.z.toFixed(2))))].sort((a, b) => a - b)).toEqual([-0.5, 0.5]);
         const tabletop = model.userData.componentGroups.get('table-top').getObjectByName('table-top:mesh');
         tabletop.geometry.computeBoundingBox();

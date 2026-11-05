@@ -110,9 +110,13 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     const columnParameterId = countParameterId(raw.columnParameterId);
     if (rowParameterId === columnParameterId) throw new ServiceUnavailableException('网格生成器行列参数不能相同：' + id);
     const spacingX = Number(raw.spacingX), spacingZ = Number(raw.spacingZ);
+    const spacingXParameterId = raw.spacingXParameterId == null ? undefined : countParameterId(raw.spacingXParameterId);
+    const spacingZParameterId = raw.spacingZParameterId == null ? undefined : countParameterId(raw.spacingZParameterId);
+    const spacingXScale = Number(raw.spacingXScale), spacingZScale = Number(raw.spacingZScale);
     const defaultRows = Number(raw.defaultRows), defaultColumns = Number(raw.defaultColumns);
     const maxRows = Number(raw.maxRows), maxColumns = Number(raw.maxColumns);
     if (raw.centered !== undefined && typeof raw.centered !== 'boolean') throw new ServiceUnavailableException('网格生成器 centered 必须是布尔值：' + id);
+    if ((spacingXParameterId && (!Number.isFinite(spacingXScale) || Math.abs(spacingXScale) > 10)) || (spacingZParameterId && (!Number.isFinite(spacingZScale) || Math.abs(spacingZScale) > 10))) throw new ServiceUnavailableException('网格生成器动态间距比例无效：' + id);
     if (![spacingX,spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
       || !Number.isInteger(defaultRows) || !Number.isInteger(defaultColumns) || !Number.isInteger(maxRows) || !Number.isInteger(maxColumns)
       || defaultRows < 1 || defaultColumns < 1 || maxRows < defaultRows || maxColumns < defaultColumns
@@ -121,7 +125,7 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     }
     estimatedExpandedCount += descendants.length * (maxRows * maxColumns - 1);
     if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('网格生成器最大展开数量超过 300：' + id);
-    return { id, type: 'grid', templateRootId: raw.templateRootId, rowParameterId, columnParameterId, spacingX, spacingZ, centered: raw.centered === true, defaultRows, defaultColumns, maxRows, maxColumns };
+    return { id, type: 'grid', templateRootId: raw.templateRootId, rowParameterId, columnParameterId, spacingX, spacingZ, spacingXParameterId, spacingXScale, spacingZParameterId, spacingZScale, centered: raw.centered === true, defaultRows, defaultColumns, maxRows, maxColumns };
   });
   return normalized;
 }

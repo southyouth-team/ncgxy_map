@@ -33,40 +33,34 @@ function resize() {
 }
 
 /**
- * 根据对象真实世界包围盒自动居中并适配相机。
- * 不假设模型原点就是几何中心，也不依赖固定模型尺寸。
+ * 只把对象几何中心放到视口中心，不自动放大填满视口。
+ * 初始保持较远的总览距离，用户通过滚轮自行放大。
  */
-function frameObject(object, padding = 1.35) {
+function centerObjectAtOverview(object) {
   if (!object || !camera || !controls) return
   object.updateWorldMatrix(true, true)
   const bounds = new THREE.Box3().setFromObject(object)
-  if (bounds.isEmpty()) {
-    controls.target.copy(object.getWorldPosition(new THREE.Vector3()))
-    camera.position.set(controls.target.x + 18, controls.target.y + 14, controls.target.z + 18)
-    controls.update()
-    return
-  }
-
-  const center = bounds.getCenter(new THREE.Vector3())
-  const sphere = bounds.getBoundingSphere(new THREE.Sphere())
+  const center = bounds.isEmpty()
+    ? object.getWorldPosition(new THREE.Vector3())
+    : bounds.getCenter(new THREE.Vector3())
+  const sphere = bounds.isEmpty()
+    ? new THREE.Sphere(center, 1)
+    : bounds.getBoundingSphere(new THREE.Sphere())
   const radius = Math.max(sphere.radius, 0.5)
-  const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov * 0.5)
-  const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(camera.aspect, 0.1))
-  const limitingHalfFov = Math.max(0.05, Math.min(verticalHalfFov, horizontalHalfFov))
-  const distance = (radius / Math.sin(limitingHalfFov)) * padding
 
-  // 保留当前观察方向，只调整目标中心和距离。
   const direction = camera.position.clone().sub(controls.target)
   if (direction.lengthSq() < 0.0001) direction.set(1, 0.8, 1)
   direction.normalize()
 
+  // 视口中仅显示较小的模型轮廓，具体观察倍率交给用户控制。
+  const distance = Math.max(45, radius * 8)
   controls.target.copy(center)
   camera.position.copy(center).addScaledVector(direction, distance)
   camera.near = Math.max(0.01, distance / 1000)
-  camera.far = Math.max(1000, distance * 20)
+  camera.far = Math.max(2000, distance * 30)
   camera.updateProjectionMatrix()
-  controls.minDistance = Math.max(0.2, radius * 0.15)
-  controls.maxDistance = Math.max(100, distance * 12)
+  controls.minDistance = 0.1
+  controls.maxDistance = Math.max(500, distance * 30)
   controls.update()
 }
 function readFileAsDataUrl(file) {
@@ -134,7 +128,7 @@ async function generateModel() {
     const model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
     const id = 'ai-instance-' + (++serial)
     const index = instances.value.length
-    model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
+    model.position.set(0, 0, 0)
     model.scale.setScalar(scale.value)
     model.userData.assetInstanceId = id
     model.userData.assetTemplate = { id: 'ai-generated:' + id, version: 1, category: 'building', objectType: objectType.value }
@@ -142,7 +136,7 @@ async function generateModel() {
     objects.set(id, model)
     instances.value.push({ id, name: spec.targetName || objectType.value || 'AI 生成模型', templateId: 'AI ObjectSculptSpec', category: 'building', source: 'AI' })
     selectedInstanceId.value = id
-    frameObject(model)
+    centerObjectAtOverview(model)
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
     generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI ObjectSculptSpec → Three.js Mesh'
     status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
@@ -178,13 +172,13 @@ function removeInstance(id) {
 function focusInstance(id) {
   selectedInstanceId.value = id
   const object = objects.get(id)
-  if (object) frameObject(object)
+  if (object) centerObjectAtOverview(object)
 }
 function clearScene() { [...objects.keys()].forEach(removeInstance); status.value = '场景已清空' }
 function resetCamera() {
   const object = objects.get(selectedInstanceId.value)
-  if (object) return frameObject(object)
-  camera.position.set(30, 28, 34)
+  if (object) return centerObjectAtOverview(object)
+  camera.position.set(90, 72, 90)
   controls.target.set(0, 0, 0)
   camera.near = 0.1; camera.far = 500; camera.updateProjectionMatrix()
   controls.update()

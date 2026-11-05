@@ -520,6 +520,7 @@ export class BuildingDesignService {
           const pointCount = Array.isArray(sections[0]?.points) ? sections[0].points.length : 0;
           if (pointCount < 3 || pointCount > 24) throw new ServiceUnavailableException('loft 每个截面必须包含 3 到 24 个轮廓点');
           let previousHeight = -Infinity;
+          let contourOrientation = 0;
           geometryDescriptor.sections = sections.map((section: any, sectionIndex: number) => {
             if (!section || typeof section !== 'object' || typeof section.height !== 'number'
               || !Number.isFinite(section.height) || section.height < -0.5 || section.height > 0.5
@@ -530,6 +531,15 @@ export class BuildingDesignService {
               throw new ServiceUnavailableException('loft sections 必须按高度严格递增，并保持相同数量的有效二维轮廓点（截面 ' + sectionIndex + '）');
             }
             assertSimpleAssetProfile(section.points, 'loft section ' + sectionIndex, ServiceUnavailableException);
+            const signedArea = section.points.reduce((sum: number, point: number[], pointIndex: number) => {
+              const next = section.points[(pointIndex + 1) % section.points.length];
+              return sum + point[0] * next[1] - next[0] * point[1];
+            }, 0);
+            const orientation = Math.sign(signedArea);
+            if (contourOrientation && orientation !== contourOrientation) {
+              throw new ServiceUnavailableException('loft sections 必须保持一致的轮廓绕序');
+            }
+            contourOrientation = orientation;
             previousHeight = section.height;
             return { height: section.height, points: section.points.map((point: number[]) => [...point]) };
           });

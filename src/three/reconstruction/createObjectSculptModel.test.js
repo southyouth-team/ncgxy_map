@@ -453,6 +453,21 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => createObjectSculptModel(THREE, spec)).toThrow('存在自相交边');
   });
 
+  it('rejects sharp reversing turns in sweep paths before geometry construction', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'reversing-sweep', primitive: 'sweep', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          path: [[-0.5, 0, 0], [0, 0, 0], [-0.45, 0.02, 0]],
+          profile: [[-0.1, -0.1], [0.1, -0.1], [0.1, 0.1], [-0.1, 0.1]],
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('超过 150° 的急转弯');
+  });
+
   it('rejects duplicate adjacent points in sweep paths', () => {
     const spec = {
       schemaVersion: '2.0',

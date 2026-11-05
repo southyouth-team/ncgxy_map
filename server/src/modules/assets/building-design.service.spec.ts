@@ -240,7 +240,7 @@ describe('BuildingDesignService', () => {
     expect(valid.design.objectSculptSpec.generators).toMatchObject([{ id: 'crown-repeat', templateRootId: 'crown-prototype', defaultCount: 3 }]);
     expect(valid.design.objectSculptSpec.parameterSchema[0]).toMatchObject({ value: 3, targets: [] });
 
-    const meshTemplate = structuredClone(componentTree);
+    const meshTemplate: any[] = structuredClone(componentTree);
     meshTemplate[1] = { ...meshTemplate[1], kind: 'mesh', primitive: 'sphere', dimensions: { width: 1, height: 1, depth: 1 }, material: 'leaf' };
     respond(meshTemplate, parameterSchema, generators);
     await expect(service.reconstructObjectReference('vegetation', '树木', 'low-poly', imageDataUrl, approval.approvalToken))

@@ -142,7 +142,7 @@ describe('ImageGenerationService', () => {
         ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(value) } }] }),
       }) as never;
     };
-    const meshTemplate = structuredClone(base);
+    const meshTemplate: any = structuredClone(base);
     meshTemplate.componentTree[1] = { id: 'crown-prototype', kind: 'mesh', parent: 'tree-root', primitive: 'sphere',
       dimensions: { width: 1, height: 1, depth: 1 }, material: 'leaf' };
     respond(meshTemplate);

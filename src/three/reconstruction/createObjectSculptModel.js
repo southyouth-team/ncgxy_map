@@ -13,7 +13,6 @@ function expandObjectSculptSpec(spec) {
   const sourceNodes = spec.componentTree;
   const byId = new Map(sourceNodes.map(node => [node.id, node]));
   const generatorParameterIds = new Set(generators.map(generator => generator.countParameterId));
-  const generatedSourceIds = new Set();
   const expanded = sourceNodes.filter(node => !generators.some(generator => {
     let parent = node.id;
     while (parent) {
@@ -43,7 +42,7 @@ function expandObjectSculptSpec(spec) {
         const clone = JSON.parse(JSON.stringify(source));
         clone.id = idMap.get(source.id);
         if (source.id === rootNode.id) {
-          clone.parent = rootNode.parent || undefined;
+          clone.parent = generator.parentId || rootNode.parent || undefined;
           clone.transform = clone.transform || {};
           const position = Array.isArray(clone.transform.position) ? [...clone.transform.position] : [0, 0, 0];
           position[axisIndex] = Number(position[axisIndex] || 0) + generator.spacing * index;

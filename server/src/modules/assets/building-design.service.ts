@@ -323,7 +323,7 @@ export class BuildingDesignService {
     };
     const designDigest = createHash('sha256').update(JSON.stringify(design)).digest('hex');
     const designToken = this.signToken('design', designDigest);
-    return { provider: baseUrl, model, category, objectType, visualStyle, design, designToken, designTokenExpiresInSeconds: 900 };
+    return { provider: baseUrl, model, category: objectSculptSpec.category, objectType: objectSculptSpec.objectType, visualStyle, design, designToken, designTokenExpiresInSeconds: 900 };
   }
 
 

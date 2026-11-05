@@ -336,6 +336,7 @@ export class BuildingDesignService {
         if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.02 || value > 100) throw new BadRequestException(id + '.' + key + ' 超出允许范围');
         return value;
       };
+      const width = dimension('width'), height = dimension('height'), depth = dimension('depth');
       const transform = node.transform && typeof node.transform === 'object' ? node.transform : {};
       const scale = vector(transform.scale, [1,1,1], id + '.scale', -20, 20);
       if (scale.some(value => Math.abs(value) < 0.001)) throw new BadRequestException(id + '.scale 不能为零');
@@ -347,11 +348,11 @@ export class BuildingDesignService {
         geometryDescriptor.segments = descriptor.segments;
       }
       if (descriptor.tube !== undefined) {
-        if (typeof descriptor.tube !== 'number' || !Number.isFinite(descriptor.tube) || descriptor.tube < 0.01 || descriptor.tube > 10) throw new BadRequestException(id + '.tube 超出范围');
+        if (typeof descriptor.tube !== 'number' || !Number.isFinite(descriptor.tube) || descriptor.tube < 0.01 || descriptor.tube > Math.max(width, depth) * 0.225) throw new BadRequestException(id + '.tube 超出范围');
         geometryDescriptor.tube = descriptor.tube;
       }
       if (descriptor.inset !== undefined) {
-        if (typeof descriptor.inset !== 'number' || !Number.isFinite(descriptor.inset) || descriptor.inset < 0.02 || descriptor.inset > 20) throw new BadRequestException(id + '.inset 超出范围');
+        if (typeof descriptor.inset !== 'number' || !Number.isFinite(descriptor.inset) || descriptor.inset < 0.02 || descriptor.inset > Math.min(width, height) * 0.4) throw new BadRequestException(id + '.inset 超出范围');
         geometryDescriptor.inset = descriptor.inset;
       }
       if (primitive === 'polygon') {
@@ -372,7 +373,7 @@ export class BuildingDesignService {
         id, name: String(node.name || id).slice(0,120), role: String(node.role || 'component').slice(0,80),
         ...(typeof node.parent === 'string' && node.parent ? { parent: node.parent } : {}),
         primitive,
-        dimensions: { width: dimension('width'), height: dimension('height'), depth: dimension('depth') },
+        dimensions: { width, height, depth },
         transform: {
           position: vector(transform.position, [0,0,0], id + '.position', -100, 100),
           rotation: vector(transform.rotation, [0,0,0], id + '.rotation', -100, 100),

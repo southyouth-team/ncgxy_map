@@ -194,7 +194,7 @@ export function validateObjectSculptSpec(spec) {
     if (!Array.isArray(parameter.targets) || parameter.targets.length > 100) throw new TypeError('参数目标无效：' + parameter.id);
     for (const target of parameter.targets) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
-      if (nodes.get(target.nodeId).kind === 'group' && target.property.startsWith('material.')) throw new TypeError('Group 节点不能直接绑定材质参数：' + target.nodeId);
+      if (nodes.get(target.nodeId).kind === 'group' && !target.property.startsWith('transform.') && target.property !== 'visibility.visible') throw new TypeError('Group 节点仅支持变换和显隐参数：' + target.nodeId);
       if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','visibility.visible'].includes(target.property)) {
         throw new TypeError('参数目标属性不受支持：' + target.property);
       }

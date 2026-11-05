@@ -373,9 +373,22 @@ function createGeometry(THREE, node) {
         throw new RangeError(node.id + '.geometryDescriptor.sections 的 height 必须严格递增');
       }
     }
+    let contourOrientation = 0;
     normalizedSections.forEach((section, index) => {
-      validateSimpleProfile(section.points.map(point => [point.x, point.y]), node.id + '.geometryDescriptor.sections[' + index + ']');
+      const profile = section.points.map(point => [point.x, point.y]);
+      validateSimpleProfile(profile, node.id + '.geometryDescriptor.sections[' + index + ']');
+      const signedArea = profile.reduce((sum, point, pointIndex) => {
+        const next = profile[(pointIndex + 1) % profile.length];
+        return sum + point[0] * next[1] - next[0] * point[1];
+      }, 0);
+      const orientation = Math.sign(signedArea);
+      if (contourOrientation && orientation !== contourOrientation) {
+        throw new RangeError(node.id + '.geometryDescriptor.sections 必须保持一致的轮廓绕序');
+      }
+      contourOrientation = orientation;
     });
+    // Normalize every ring together so corresponding vertices retain the same topology.
+    if (contourOrientation < 0) normalizedSections.forEach(section => section.points.reverse());
     const geometry = new THREE.BufferGeometry();
     const positions = [];
     const indices = [];
@@ -393,9 +406,10 @@ function createGeometry(THREE, node) {
       }
     }
     const capTriangles = THREE.ShapeUtils.triangulateShape(normalizedSections[0].points, []);
-    capTriangles.forEach(triangle => indices.push(triangle[2], triangle[1], triangle[0]));
+    // The normalized X/Z contour is CCW: its natural 3D normal points down (-Y).
+    capTriangles.forEach(triangle => indices.push(triangle[0], triangle[1], triangle[2]));
     const topOffset = (normalizedSections.length - 1) * ringSize;
-    capTriangles.forEach(triangle => indices.push(topOffset + triangle[0], topOffset + triangle[1], topOffset + triangle[2]));
+    capTriangles.forEach(triangle => indices.push(topOffset + triangle[2], topOffset + triangle[1], topOffset + triangle[0]));
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();

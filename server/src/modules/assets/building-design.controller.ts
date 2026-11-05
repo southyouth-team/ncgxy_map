@@ -10,7 +10,7 @@ export class BuildingDesignController {
   constructor(private readonly service: BuildingDesignService) {}
 
   @Post('approve-reference')
-  @ApiOperation({ summary: '用户确认建筑参考图预览并签发一次性识别凭证' })
+  @ApiOperation({ summary: '用户确认场景资产参考图预览并签发一次性识别凭证' })
   approve(@Body('imageDataUrl') imageDataUrl: string) {
     return this.service.approveReference(imageDataUrl);
   }

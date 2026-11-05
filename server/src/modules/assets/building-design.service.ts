@@ -116,6 +116,9 @@ export class BuildingDesignService {
                 '输出根对象字段：schemaVersion（固定字符串 2.0）、targetName（字符串）、materials（对象，键为材质 ID，每项含 color=#RRGGBB、roughness 0-1、metalness 0-1、opacity 0.05-1）、componentTree（数组）。',
                 '每个 componentTree 节点字段：id（唯一英文 ID）、name（中文部件名）、role（部件角色）、parent（父节点 ID，可省略或 null）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth，均为正数）、transform（position/rotation/scale 三个长度为 3 的数字数组）、material（materials 中的键）、geometryDescriptor（可选 segments 3-48、tube 正数、arch inset 正数；polygon points 为 3-32 个 [-0.5,0.5] 归一化二维坐标点）。',
                 '必须输出 12-40 个有意义的独立组件，不能只输出一个整体 Mesh。组件按真实结构拆分；主结构、附属结构、装饰件应有清晰 parent 关系。禁止重复 ID、缺失 parent、循环层级、未知 primitive。',
+                '装配完整性是最高优先级：componentTree 必须恰好只有一个根节点，该根节点代表建筑主楼/主体承重体；其余所有组件都必须设置 parent，不能存在多个互相分离的根组件。所有组件必须通过 parent 链接到唯一根节点，形成一棵连通的建筑装配树。',
+                '所有子组件的 transform.position 都是相对直接 parent 的局部坐标，不是世界坐标。先确定主体的尺寸、中心和局部坐标系，再将塔楼、翼楼、屋顶、门窗、檐口、城垛等放到主体对应的连接位置。每个部件必须与其承载部件接触、嵌入或合理搭接，禁止留出可见空气间隙，禁止把各部件分散摆放成零件陈列。',
+                '部件尺寸与位置必须按几何边界计算：塔楼底部与主体顶部/侧面相交或贴合；屋顶底面贴合墙体顶部；塔尖底部贴合塔楼顶部；门窗贴在墙体外立面，不能漂浮在墙前或埋入墙体；旗杆、装饰件必须连接到屋顶或墙体。parent 负责层级和局部坐标，不代表自动吸附，必须主动给出正确的局部坐标。',
                 '根据图片推断可见部件的相对比例、空间位置、颜色分区和层级。不要用单个大盒子代表整个对象。窗户、门、塔楼、屋顶、栏杆、檐口等明显结构应拆分为独立 Mesh。拱形门窗使用 arch，三角山墙/屋顶剖面使用 wedge；不规则可见平面轮廓使用 polygon 并输出 3-32 个归一化轮廓点；不要把拱门简化为矩形盒子。',
                 '如果对象是城堡，优先识别主城楼、左右塔楼、各自塔顶、主屋顶、城垛/女儿墙、入口拱门、窗洞/窗框、旗杆、装饰边线等可见部件；塔楼与塔顶必须独立，左右结构不得错误合并。根据参考图实际内容决定数量，不要机械补全不可见部件。',
                 '坐标约定：Y 轴向上；主体中心在 X/Z 原点附近；地面约为 Y=0；position 使用相对父节点坐标；rotation 使用弧度；scale 通常为 [1,1,1]。组件尺寸与场景单位无关，但整体建议落在 2-20 单位范围。',
@@ -237,6 +240,10 @@ export class BuildingDesignService {
       };
     });
     const byId = new Map<string, any>(componentTree.map((node: any) => [node.id, node] as [string, any]));
+    const rootNodes = componentTree.filter((node: any) => !node.parent);
+    if (rootNodes.length !== 1) {
+      throw new ServiceUnavailableException('ObjectSculptSpec 必须只有一个主体根节点；检测到 ' + rootNodes.length + ' 个根节点，组件可能没有组成完整建筑');
+    }
     for (const node of componentTree) {
       if (node.parent && !byId.has(node.parent)) throw new ServiceUnavailableException('组件父节点不存在：' + node.id);
       const visited = new Set([node.id]);
@@ -387,6 +394,8 @@ export class BuildingDesignService {
       };
     });
     const byId = new Map<string, any>(componentTree.map((node: any) => [node.id, node] as [string, any]));
+    const rootNodes = componentTree.filter((node: any) => !node.parent);
+    if (rootNodes.length !== 1) throw new BadRequestException('建筑组件必须连接到唯一主体根节点，不能拆成多个独立物体');
     for (const node of componentTree) {
       if (node.parent && !byId.has(node.parent)) throw new BadRequestException('组件父节点不存在：' + node.id);
       const visited = new Set([node.id]);

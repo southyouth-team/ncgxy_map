@@ -216,7 +216,7 @@ describe('BuildingDesignService', () => {
         ok: true,
         json: async () => ({ choices: [{ message: { content: JSON.stringify({ componentTree, materials: { default: { color: '#aaaaaa' } } }) } }] }),
       }) as never;
-      await expect(service.reconstructObjectReference('building', '城堡', 'anime-painted', imageDataUrl, approval.approvalToken))
+      await expect(service.reconstructObjectReference('facility', '长椅', 'anime-painted', imageDataUrl, approval.approvalToken))
         .rejects.toBeInstanceOf(ServiceUnavailableException);
     }
   });

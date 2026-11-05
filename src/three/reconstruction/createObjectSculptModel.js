@@ -287,6 +287,70 @@ function validateSweepPathCurvature(points, label) {
   }
 }
 
+
+function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps, label) {
+  const centers = curve.getSpacedPoints(steps);
+  const tangents = centers.map((_, index) => curve.getTangentAt(index / steps).normalize());
+  const frames = [];
+  const referenceAxes = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+  const firstTangent = tangents[0];
+  const reference = referenceAxes.slice().sort((a, b) => Math.abs(firstTangent.dot(a)) - Math.abs(firstTangent.dot(b)))[0];
+  let normal = new THREE.Vector3().crossVectors(firstTangent, reference).normalize();
+  let binormal = new THREE.Vector3().crossVectors(firstTangent, normal).normalize();
+  frames.push({ normal: normal.clone(), binormal: binormal.clone() });
+  for (let index = 1; index < tangents.length; index += 1) {
+    const rotation = new THREE.Quaternion().setFromUnitVectors(tangents[index - 1], tangents[index]);
+    normal.applyQuaternion(rotation);
+    normal.addScaledVector(tangents[index], -normal.dot(tangents[index])).normalize();
+    binormal.crossVectors(tangents[index], normal).normalize();
+    frames.push({ normal: normal.clone(), binormal: binormal.clone() });
+  }
+
+  const profile = profilePoints.map(point => new THREE.Vector2(point[0], point[1]));
+  const triangles = THREE.ShapeUtils.triangulateShape(profile, []);
+  if (!triangles.length) throw new RangeError(label + ' 无法三角化截面轮廓');
+  const positions = [];
+  const indices = [];
+  const ringSize = profile.length;
+  centers.forEach((center, ringIndex) => {
+    const frame = frames[ringIndex];
+    profile.forEach(point => {
+      const vertex = center.clone()
+        .addScaledVector(frame.normal, point.x)
+        .addScaledVector(frame.binormal, point.y);
+      positions.push(vertex.x, vertex.y, vertex.z);
+    });
+  });
+  for (let ring = 0; ring < centers.length - 1; ring += 1) {
+    for (let edge = 0; edge < ringSize; edge += 1) {
+      const next = (edge + 1) % ringSize;
+      const a = ring * ringSize + edge;
+      const b = ring * ringSize + next;
+      const c = (ring + 1) * ringSize + edge;
+      const d = (ring + 1) * ringSize + next;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+  let area = 0;
+  for (let index = 0; index < profile.length; index += 1) {
+    const next = profile[(index + 1) % profile.length];
+    area += profile[index].x * next.y - next.x * profile[index].y;
+  }
+  const startOffset = 0;
+  const endOffset = (centers.length - 1) * ringSize;
+  triangles.forEach(([a, b, d]) => {
+    const ordered = area >= 0 ? [a, b, d] : [a, d, b];
+    indices.push(ordered[0] + startOffset, ordered[2] + startOffset, ordered[1] + startOffset);
+    indices.push(ordered[0] + endOffset, ordered[1] + endOffset, ordered[2] + endOffset);
+  });
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function validateGeneratedGeometry(geometry, label) {
   const position = geometry.getAttribute('position');
   const normal = geometry.getAttribute('normal');
@@ -395,12 +459,10 @@ function createGeometry(THREE, node) {
     shape.closePath();
     const curve = new THREE.CatmullRomCurve3(pathPoints, descriptor.closed === true, 'centripetal');
     const steps = Math.round(boundedNumber(descriptor.steps, 32, 3, 128, node.id + '.geometryDescriptor.steps'));
-    return validateGeneratedGeometry(new THREE.ExtrudeGeometry(shape, {
-      steps,
-      bevelEnabled: false,
-      extrudePath: curve,
-      curveSegments: segments,
-    }), node.id + '.sweep');
+    return validateGeneratedGeometry(
+      createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps, node.id + '.sweep'),
+      node.id + '.sweep',
+    );
   }
 
   if (String(node.primitive || '').toLowerCase() === 'loft') {

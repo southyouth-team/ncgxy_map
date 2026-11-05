@@ -58,7 +58,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(arch.geometry.type).toBe('ExtrudeGeometry');
     expect(arch.geometry.parameters.shapes.holes).toHaveLength(1);
     expect(wedge.geometry.type).toBe('ExtrudeGeometry');
-    expect(wedge.geometry.boundingBox).toBeTruthy();
+    expect(wedge.geometry.getAttribute('position').count).toBeGreaterThan(0);
   });
 
   it('accepts an upstream-style component tree independent of renderer objects', () => {

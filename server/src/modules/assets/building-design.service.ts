@@ -420,11 +420,11 @@ export class BuildingDesignService {
         geometryDescriptor.segments = descriptor.segments;
       }
       if (kind === 'mesh' && descriptor.tube !== undefined) {
-        if (typeof descriptor.tube !== 'number' || !Number.isFinite(descriptor.tube) || descriptor.tube < 0.01 || descriptor.tube > Math.max(width, depth) * 0.225) throw new BadRequestException(id + '.tube 超出范围');
+        if (typeof descriptor.tube !== 'number' || !Number.isFinite(descriptor.tube) || descriptor.tube < 0.01 || descriptor.tube > Math.max(width ?? 1, depth ?? 1) * 0.225) throw new BadRequestException(id + '.tube 超出范围');
         geometryDescriptor.tube = descriptor.tube;
       }
       if (kind === 'mesh' && descriptor.inset !== undefined) {
-        if (typeof descriptor.inset !== 'number' || !Number.isFinite(descriptor.inset) || descriptor.inset < 0.02 || descriptor.inset > Math.min(width, height) * 0.4) throw new BadRequestException(id + '.inset 超出范围');
+        if (typeof descriptor.inset !== 'number' || !Number.isFinite(descriptor.inset) || descriptor.inset < 0.02 || descriptor.inset > Math.min(width ?? 1, height ?? 1) * 0.4) throw new BadRequestException(id + '.inset 超出范围');
         geometryDescriptor.inset = descriptor.inset;
       }
       if (primitive === 'polygon') {

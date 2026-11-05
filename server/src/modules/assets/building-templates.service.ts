@@ -33,8 +33,8 @@ export class BuildingTemplatesService {
     const category = String(input.category || 'building');
     if (!categories.includes(category)) throw new BadRequestException('模板分类无效');
     if (input.modelType === 'procedural' && category !== 'building') throw new BadRequestException('当前仅建筑类别接入参数化生成器；其他类别请先使用 GLB 导入');
-    const objectType = typeof input.objectType === 'string' ? input.objectType.trim().slice(0, 80) : '';
-    const visualStyle = typeof input.visualStyle === 'string' ? input.visualStyle.trim().slice(0, 80) : '';
+    const objectType = typeof input.objectType === 'string' ? input.objectType.trim() : '';
+    const visualStyle = typeof input.visualStyle === 'string' ? input.visualStyle.trim() : '';
     const design = (input.design || input.buildingDesign) as Record<string, unknown> | undefined;
     const name = typeof input.name === 'string' ? input.name.trim().slice(0, 120) : '';
     if (!name) throw new BadRequestException('模板名称不能为空');

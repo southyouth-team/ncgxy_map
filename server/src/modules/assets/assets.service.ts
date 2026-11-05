@@ -56,6 +56,44 @@ export class AssetsService {
       throw new BadRequestException('仅支持真实格式匹配的 PNG、JPG、WebP 图片');
     }
 
+    const constraints = spec.constraints === undefined ? [] : spec.constraints;
+    if (!Array.isArray(constraints) || constraints.length > 60) throw new BadRequestException('资产结构约束数量无效');
+    const generatorIdSet = new Set(generators.map((item: any) => item.id));
+    const claimedConstraintTargets = new Set<string>();
+    const templateNodeIds = new Set<string>();
+    for (const generator of generators) {
+      for (const node of spec.componentTree) {
+        let current = node.id;
+        while (current) {
+          if (current === generator.templateRootId) { templateNodeIds.add(node.id); break; }
+          current = byId.get(current)?.parent;
+        }
+      }
+    }
+    const constraintIds = new Set<string>();
+    for (const constraint of constraints) {
+      if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
+        || constraintIds.has(constraint.id) || !['follow','span'].includes(constraint.type)
+        || !generatorIdSet.has(constraint.sourceGeneratorId) || !ids.has(constraint.targetNodeId)
+        || templateNodeIds.has(constraint.targetNodeId) || !['x','y','z'].includes(constraint.axis)) {
+        throw new BadRequestException('资产结构约束 ID、类型或引用无效');
+      }
+      constraintIds.add(constraint.id);
+      const targetNode = byId.get(constraint.targetNodeId);
+      if (constraint.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(constraint.property) || targetNode?.kind === 'group')) {
+        throw new BadRequestException('资产 span 约束目标属性无效：' + constraint.id);
+      }
+      if (constraint.type === 'follow' && constraint.property !== undefined) throw new BadRequestException('资产 follow 约束不能声明 property：' + constraint.id);
+      if (!['rows','columns','repeat'].includes(constraint.measure || 'repeat')
+        || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
+        || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
+        throw new BadRequestException('资产结构约束计算规则无效：' + constraint.id);
+      }
+      const targetKey = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis);
+      if (claimedConstraintTargets.has(targetKey)) throw new BadRequestException('资产结构约束重复管理同一目标：' + constraint.id);
+      claimedConstraintTargets.add(targetKey);
+    }
+
     const assetId = randomUUID();
     const objectKey = `${campusId}/${mapId}/${assetId}${detected.extension}`;
     const absolutePath = resolve(this.storageDir, objectKey);

@@ -3,10 +3,17 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { createCampusAssetTemplateRuntime } from '../three/world/campus/createCampusAssetTemplateRuntime.js'
+import { createObjectSculptModel } from '../three/reconstruction/createObjectSculptModel.js'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
+const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
 const viewport = ref(null), templates = ref([]), instances = ref([])
 const selectedId = ref(''), selectedCategory = ref('all'), selectedInstanceId = ref('')
 const scale = ref(1), status = ref('正在初始化'), error = ref('')
+const prompt = ref('生成一座动漫彩绘风格的奇幻学院城堡，包含主楼、左右塔楼、彩色尖顶、拱形入口、窗户、城垛和丰富装饰，严格还原参考图的轮廓与配色。')
+const objectType = ref('城堡')
+const imageFile = ref(null), imageDataUrl = ref(''), referencePreview = ref('')
+const generating = ref(false), generationLog = ref('')
 const categories = computed(() => [...new Set(templates.value.map(x => x.category))])
 const visibleTemplates = computed(() => templates.value.filter(x => selectedCategory.value === 'all' || x.category === selectedCategory.value))
 const selectedTemplate = computed(() => templates.value.find(x => x.id === selectedId.value))
@@ -15,11 +22,94 @@ const labels = {building:'建筑',vegetation:'植被',structure:'构筑物',faci
 let renderer, scene, camera, controls, observer, frame, serial = 0
 const objects = new Map()
 const categoryLabel = value => labels[value] || value
+const authHeaders = () => ({ 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID })
 
 function resize() {
   if (!renderer || !viewport.value) return
   const w = Math.max(1, viewport.value.clientWidth), h = Math.max(1, viewport.value.clientHeight)
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix()
+}
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('读取参考图片失败'))
+    reader.readAsDataURL(file)
+  })
+}
+async function onImageChange(event) {
+  const file = event.target.files?.[0]
+  imageFile.value = file || null
+  imageDataUrl.value = ''
+  referencePreview.value = ''
+  if (!file) return
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    error.value = '仅支持 PNG、JPG、WebP 图片'; imageFile.value = null; return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    error.value = '参考图片不能超过 10 MB'; imageFile.value = null; return
+  }
+  try {
+    imageDataUrl.value = await readFileAsDataUrl(file)
+    referencePreview.value = imageDataUrl.value
+    error.value = ''
+  } catch (e) { error.value = e?.message || '读取图片失败' }
+}
+async function requestJson(path, body) {
+  const response = await fetch(API_BASE + path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.message || payload.error || '接口请求失败：HTTP ' + response.status)
+  return payload
+}
+async function generateModel() {
+  if (generating.value) return
+  if (!prompt.value.trim() && !imageDataUrl.value) {
+    error.value = '请填写生成提示词或上传参考图片'; return
+  }
+  generating.value = true; error.value = ''; generationLog.value = ''; status.value = '正在请求 AI 生成模型…'
+  const startedAt = performance.now()
+  try {
+    let sourceImage = imageDataUrl.value
+    // 纯提示词入口复用项目现有图片生成服务，再交给视觉模型转成结构化 3D 组件树。
+    if (!sourceImage) {
+      status.value = '提示词模式：正在生成参考图…'
+      const generatedImage = await requestJson('/assets/ai-image/generate', { prompt: prompt.value.trim() })
+      sourceImage = generatedImage.dataUrl
+      if (!sourceImage) throw new Error('图片生成接口没有返回 dataUrl')
+      referencePreview.value = sourceImage
+      generationLog.value = '参考图生成模型：' + (generatedImage.model || '未返回') + '\n'
+    }
+    status.value = '正在确认参考图并调用视觉模型重建 Three.js 组件…'
+    const approved = await requestJson('/assets/ai-image/approve-reference', { imageDataUrl: sourceImage })
+    const result = await requestJson('/assets/ai-image/reconstruct-object', {
+      category: 'building',
+      objectType: objectType.value.trim() || '独立 3D 物体',
+      visualStyle: 'anime-painted',
+      imageDataUrl: sourceImage,
+      approvalToken: approved.approvalToken,
+      prompt: prompt.value.trim(),
+    })
+    const spec = result?.design?.objectSculptSpec
+    if (!spec) throw new Error('AI 返回结果缺少 ObjectSculptSpec')
+    const model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
+    const id = 'ai-instance-' + (++serial)
+    const index = instances.value.length
+    model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
+    model.scale.setScalar(scale.value)
+    model.userData.assetInstanceId = id
+    model.userData.assetTemplate = { id: 'ai-generated:' + id, version: 1, category: 'building', objectType: objectType.value }
+    scene.add(model)
+    objects.set(id, model)
+    instances.value.push({ id, name: spec.targetName || objectType.value || 'AI 生成模型', templateId: 'AI ObjectSculptSpec', category: 'building', source: 'AI' })
+    selectedInstanceId.value = id
+    controls.target.copy(model.position); controls.update()
+    const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
+    generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n模型来源：AI 结构化组件树 → Three.js Mesh'
+    status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
+  } catch (e) {
+    error.value = e?.message || 'AI 模型生成失败'
+    status.value = '生成失败'
+  } finally { generating.value = false }
 }
 function addTemplate() {
   try {
@@ -32,13 +122,16 @@ function addTemplate() {
       transform: { position: [((n % 4) - 1.5) * 10, 0, Math.floor(n / 4) * 9 - 5], scale: [scale.value, scale.value, scale.value] },
     })
     objects.set(id, object)
-    instances.value.push({ id, name: item.name, templateId: item.id, category: item.category })
-    selectedInstanceId.value = id; status.value = '已添加 ' + item.name; error.value = ''
+    instances.value.push({ id, name: item.name, templateId: item.id, category: item.category, source: '预置模板' })
+    selectedInstanceId.value = id; status.value = '已添加预置模板 ' + item.name; error.value = ''
   } catch (e) { error.value = e?.message || '模板实例化失败' }
 }
 function removeInstance(id) {
   const object = objects.get(id)
-  if (object) scene.remove(object)
+  if (object) {
+    scene.remove(object)
+    object.traverse(child => { child.geometry?.dispose?.(); if (Array.isArray(child.material)) child.material.forEach(m => m.dispose?.()); else child.material?.dispose?.() })
+  }
   objects.delete(id); instances.value = instances.value.filter(x => x.id !== id)
   if (selectedInstanceId.value === id) selectedInstanceId.value = instances.value.at(-1)?.id || ''
 }
@@ -59,8 +152,8 @@ onMounted(() => {
     scene = runtime.createSandboxScene()
     scene.background = new THREE.Color('#dfe8e0')
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshStandardMaterial({ color: '#9eae8d', roughness: 1 }))
-    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.08; ground.receiveShadow = true; scene.add(ground)
-    const grid = new THREE.GridHelper(180, 36, '#71836e', '#c2cdbb'); grid.position.y = -0.06; scene.add(grid)
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.08; ground.receiveShadow = true; ground.name = 'sandbox-ground'; scene.add(ground)
+    const grid = new THREE.GridHelper(180, 36, '#71836e', '#c2cdbb'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
     camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500); camera.position.set(30, 28, 34)
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -68,41 +161,48 @@ onMounted(() => {
     controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0); controls.update()
     observer = new ResizeObserver(resize); observer.observe(viewport.value); resize()
     const render = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(render) }; render()
-    status.value = '模板库已加载 ' + templates.value.length + ' 个模板定义'
+    status.value = '沙盒已就绪；可输入提示词或上传图片生成独立模型'
   } catch (e) { error.value = e?.message || '初始化失败'; status.value = '初始化失败' }
 })
 watch(scale, value => { const object = objects.get(selectedInstanceId.value); if (object) object.scale.setScalar(value) })
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame); observer?.disconnect(); controls?.dispose()
-  scene?.traverse(o => { if (o.geometry) o.geometry.dispose() })
+  scene?.traverse(o => { o.geometry?.dispose?.(); if (Array.isArray(o.material)) o.material.forEach(m => m.dispose?.()); else o.material?.dispose?.() })
   renderer?.dispose()
 })
 </script>
 
 <template>
   <main class="lab">
-    <header><div><small>NCGXY CAMPUS / ASSET RUNTIME POC</small><h1>Three.js 素材模板验收台</h1><p>验证独立模板加载、实例化和组合。此页面为隔离环境，不修改正式沙盒。</p></div><a href="/">返回校园</a></header>
+    <header><div><small>NCGXY CAMPUS / THREE.JS GENERATION POC</small><h1>AI Three.js 模型实验沙盒</h1><p>输入提示词或参考图片，生成独立三维对象，并验证其能否加入统一 Three.js Scene。</p></div><a href="/">返回校园</a></header>
     <section class="layout">
-      <aside class="panel">
-        <h3>素材模板库 <span>{{ visibleTemplates.length }} 项</span></h3>
+      <aside class="panel generator">
+        <h3>AI 模型生成 <span>POC</span></h3>
+        <label>对象名称 / 类型</label><input v-model="objectType" placeholder="例如：动漫彩绘城堡、香樟树、拱桥">
+        <label>生成提示词</label><textarea v-model="prompt" rows="6" placeholder="描述轮廓、组成部件、比例、颜色、材质和视觉风格"></textarea>
+        <label>参考图片（可选）</label><input type="file" accept="image/png,image/jpeg,image/webp" @change="onImageChange">
+        <img v-if="referencePreview" class="reference" :src="referencePreview" alt="模型参考图">
+        <button class="generate" :disabled="generating" @click="generateModel">{{ generating ? 'AI 正在生成…' : '生成 Three.js 模型并加入沙盒' }}</button>
+        <p class="hint">提示词模式会先调用现有图片生成服务，再由视觉模型生成结构化组件树；图片模式直接根据上传图片重建。当前运行时将组件树转换为真实 Three.js Mesh，不执行 AI 任意 JavaScript。</p>
+        <div v-if="generationLog" class="log">{{ generationLog }}</div>
+        <div v-if="error" class="error">{{ error }}</div>
+        <h3 class="subheading">预置模板对照 <span>{{ visibleTemplates.length }} 项</span></h3>
         <label>类别筛选</label><select v-model="selectedCategory"><option value="all">全部类别</option><option v-for="c in categories" :key="c" :value="c">{{ categoryLabel(c) }}</option></select>
         <div class="templates"><button v-for="item in visibleTemplates" :key="item.id" :class="{active:selectedId===item.id}" @click="selectedId=item.id"><b>{{ item.name }}</b><small>{{ categoryLabel(item.category) }} · v{{ item.version }}</small></button></div>
+        <button class="secondary" :disabled="!selectedTemplate" @click="addTemplate">添加选中的预置模板（对照）</button>
       </aside>
-      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键旋转 · 滚轮缩放 · 右键平移</span></div><div v-if="error" class="error">{{ error }}</div><div class="hint">{{ status }}</div></section>
+      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键旋转 · 滚轮缩放 · 右键平移</span></div><div class="hint status">{{ status }}</div></section>
       <aside class="panel inspector">
-        <h3>模板实例化 <span>POC</span></h3>
-        <div v-if="selectedTemplate" class="selected"><small>{{ categoryLabel(selectedTemplate.category) }} / {{ selectedTemplate.id }}</small><b>{{ selectedTemplate.name }}</b><small>模板版本 {{ selectedTemplate.version }}</small></div>
-        <label>初始缩放 {{ scale.toFixed(1) }}×</label><input v-model.number="scale" type="range" min="0.5" max="2" step="0.1">
-        <button class="add" @click="addTemplate">＋ 添加到场景</button>
-        <hr><h3>场景实例 <span>{{ instances.length }} 个</span></h3>
-        <div class="instances"><div v-for="item in instances" :key="item.id" :class="{active:selectedInstanceId===item.id}"><button class="instance" @click="focusInstance(item.id)"><b>{{ item.name }}</b><small>{{ item.id }}</small></button><button class="remove" @click="removeInstance(item.id)">×</button></div><p v-if="!instances.length">尚未添加实例。选择模板后点击添加。</p></div>
-        <label v-if="selectedInstance">选中实例缩放</label><input v-if="selectedInstance" v-model.number="scale" type="range" min="0.5" max="2" step="0.1">
+        <h3>沙盒实例 <span>{{ instances.length }} 个</span></h3>
+        <label>选中实例缩放 {{ scale.toFixed(1) }}×</label><input v-model.number="scale" type="range" min="0.3" max="2.5" step="0.1">
+        <div class="instances"><div v-for="item in instances" :key="item.id" :class="{active:selectedInstanceId===item.id}"><button class="instance" @click="focusInstance(item.id)"><b>{{ item.name }}</b><small>{{ item.source || '预置模板' }} · {{ item.id }}</small></button><button class="remove" @click="removeInstance(item.id)">×</button></div><p v-if="!instances.length">尚未生成或添加模型。</p></div>
+        <p class="hint">AI 生成对象与预置模板共用同一个 Scene。每个模型作为独立 THREE.Group 管理，可单独聚焦、缩放和删除。</p>
       </aside>
     </section>
-    <footer>仅验证模板加载与组合，不连接正式校园数据，不写入地图文档或编辑器状态。</footer>
+    <footer>本页面为独立技术验证环境，不写入正式校园地图数据。当前 AI 输出为受控 ObjectSculptSpec，由 Three.js 运行时生成 Mesh；尚未验证任意 JavaScript Factory 代码执行。</footer>
   </main>
 </template>
 
 <style scoped>
-.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:250px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel select{padding:9px;border:1px solid #dce4dc;border-radius:7px}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small,.selected small{font-size:10px;color:#89968b}.viewport-panel{position:relative;min-height:580px;background:#dfe8e0}.viewport{position:absolute;inset:0}.viewport :deep(canvas){display:block;width:100%;height:100%}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.hint{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px;font-size:10px;color:#647468}.selected{display:flex;flex-direction:column;gap:7px;padding:12px;background:#f4f7f3;border-radius:8px}.selected b{font-size:15px}.panel input{width:100%;accent-color:#4f855e}.add{margin-top:14px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.panel hr{border:0;border-top:1px solid #e8ede8;margin:18px 0}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}.error{position:absolute;bottom:48px;left:12px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1000px){.layout{grid-template-columns:210px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:240px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:220px}.viewport-panel{min-height:450px}footer{text-align:left}}
+.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:330px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel input:not([type=file]),.panel textarea,.panel select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #dce4dc;border-radius:7px;font:inherit;font-size:12px}.panel input[type=file]{font-size:11px;max-width:100%}.reference{display:block;max-width:100%;max-height:170px;object-fit:contain;margin-top:10px;border-radius:7px;background:#f3f5f2}.generate,.secondary{margin-top:12px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.generate:disabled{opacity:.55;cursor:wait}.secondary{background:#fff;color:#3d7950;border:1px solid #b9cdbb}.hint{font-size:10px;color:#7d8b80;line-height:1.65}.log{white-space:pre-wrap;background:#f3f7f2;border-radius:7px;padding:10px;margin-top:10px;font-size:10px;color:#53675a;line-height:1.6}.error{margin-top:10px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}.subheading{margin-top:22px!important;padding-top:14px;border-top:1px solid #e8ede8}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small{font-size:10px;color:#89968b}.viewport-panel{position:relative;min-height:580px;background:#dfe8e0}.viewport{position:absolute;inset:0}.viewport :deep(canvas){display:block;width:100%;height:100%;touch-action:none}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.status{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px}.inspector input{accent-color:#4f855e}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1100px){.layout{grid-template-columns:290px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:220px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:180px}.viewport-panel{min-height:450px}footer{text-align:left}}
 </style>

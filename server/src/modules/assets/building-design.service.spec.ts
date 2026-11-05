@@ -256,4 +256,58 @@ describe('BuildingDesignService', () => {
   });
 
 
+  it('revalidates edited ObjectSculptSpec and issues a new credential bound to the reviewed tree', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'sculpt-review-secret', VISION_MODEL: 'vision-test',
+        VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        targetName: 'test-building',
+        materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
+        componentTree: [{
+          id: 'main', name: '主体', role: 'main', primitive: 'box',
+          dimensions: { width: 8, height: 6, depth: 7 },
+          transform: { position: [0, 3, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          material: 'wall',
+        }],
+      }) } }] }),
+    }) as never;
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const identified = await service.reconstructObjectReference('building', '教学楼', 'stylized', imageDataUrl, approval.approvalToken);
+    const edited = structuredClone(identified.design.objectSculptSpec);
+    edited.componentTree[0].dimensions.width = 9.5;
+    edited.materials.wall.color = '#aa8866';
+
+    const reviewed = service.reviewObjectDesign(identified.design, identified.designToken, edited);
+    expect(reviewed.design).toMatchObject({
+      reviewed: true,
+      objectSculptSpec: { componentTree: [{ dimensions: { width: 9.5 } }], materials: { wall: { color: '#aa8866' } } },
+    });
+    expect(service.consumeDesignToken(reviewed.designToken, reviewed.design)).toBe(true);
+    expect(service.consumeDesignToken(identified.designToken, reviewed.design)).toBe(false);
+    expect(service.consumeDesignToken(reviewed.designToken, identified.design)).toBe(false);
+
+    const invalidDimension = structuredClone(edited);
+    invalidDimension.componentTree[0].dimensions.width = 1000;
+    expect(() => service.reviewObjectDesign(identified.design, identified.designToken, invalidDimension)).toThrow('超出允许范围');
+
+    const invalidHierarchy = structuredClone(edited);
+    invalidHierarchy.componentTree[0].parent = 'missing';
+    expect(() => service.reviewObjectDesign(identified.design, identified.designToken, invalidHierarchy)).toThrow('父节点不存在');
+
+    const invalidMaterial = structuredClone(edited);
+    invalidMaterial.materials.wall.opacity = 0;
+    expect(() => service.reviewObjectDesign(identified.design, identified.designToken, invalidMaterial)).toThrow('opacity');
+
+    const invalidToken = structuredClone(identified.design);
+    invalidToken.objectType = '被篡改';
+    expect(() => service.reviewObjectDesign(invalidToken, identified.designToken, edited)).toThrow('凭证无效');
+  });
+
+
 });

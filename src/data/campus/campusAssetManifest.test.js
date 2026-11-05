@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createCampusAssetManifestFromWorkshopRecords, resolveCampusVisualAsset, validateCampusAssetManifest } from './campusAssetManifest.js'
+import { createCampusAssetManifestFromWorkshopRecords, resolveCampusBuildingDesign, resolveCampusVisualAsset, validateCampusAssetManifest } from './campusAssetManifest.js'
 
 const manifest = {
   schemaVersion: 1,
@@ -33,6 +33,23 @@ describe('campus visual asset manifest', () => {
     const only2d = structuredClone(manifest)
     only2d.assets[0].files = [only2d.assets[0].files[0]]
     expect(resolveCampusVisualAsset(only2d, 'building-001', '3d').reason).toBe('view-variant-not-found')
+  })
+
+
+  it('resolves bounded AI building design metadata without changing spatial bindings', () => {
+    const designed = structuredClone(manifest);
+    designed.assets[0].buildingDesign = {
+      schemaVersion: 1, template: '宿舍楼', floors: 6, height: 7.5,
+      roofStyle: 'flat', roofRise: 0.2, windowDensity: 1.8,
+      windowWidth: 0.42, windowHeight: 0.58, doorWidth: 0.9,
+      wallPalette: 'wallPeach', confidence: 0.82,
+      evidence: ['重复窗格'], limitations: ['背面不可见'],
+    };
+    expect(resolveCampusBuildingDesign(designed, 'building-001')).toMatchObject({
+      template: '宿舍楼', floors: 6, height: 7.5, roofStyle: 'flat',
+      wallPalette: 'wallPeach', heightBasis: 'estimated-scene-units-not-surveyed',
+    });
+    expect(resolveCampusBuildingDesign(manifest, 'building-001')).toBeNull();
   })
 
   it('uses shared primary files only as an explicit fallback', () => {

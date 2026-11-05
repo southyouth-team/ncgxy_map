@@ -480,6 +480,43 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(cornerA.dot(cornerB)).toBeLessThan(0.9);
   });
 
+  it('keeps loft side-face winding aligned with generated vertex normals across multiple sections', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'offset-loft', primitive: 'loft', material: 'default',
+        dimensions: { width: 4, height: 6, depth: 3 },
+        geometryDescriptor: {
+          sections: [
+            { height: -0.5, points: [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]] },
+            { height: 0, points: [[-0.3, -0.35], [0.35, -0.3], [0.3, 0.35], [-0.35, 0.3]] },
+            { height: 0.5, points: [[-0.2, -0.25], [0.25, -0.2], [0.2, 0.25], [-0.25, 0.2]] },
+          ],
+        },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.userData.componentGroups.get('offset-loft').getObjectByName('offset-loft:mesh');
+    const position = mesh.geometry.getAttribute('position');
+    const normals = mesh.geometry.getAttribute('normal');
+    const index = mesh.geometry.getIndex();
+    const ringSize = 4;
+    const sideIndexCount = (3 - 1) * ringSize * 6;
+
+    for (let offset = 0; offset < sideIndexCount; offset += 3) {
+      const ids = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];
+      const a = new THREE.Vector3().fromBufferAttribute(position, ids[0]);
+      const b = new THREE.Vector3().fromBufferAttribute(position, ids[1]);
+      const c = new THREE.Vector3().fromBufferAttribute(position, ids[2]);
+      const faceNormal = b.sub(a).cross(c.sub(a)).normalize();
+      expect(faceNormal.length()).toBeGreaterThan(0.99);
+      ids.forEach(id => {
+        const vertexNormal = new THREE.Vector3().fromBufferAttribute(normals, id);
+        expect(faceNormal.dot(vertexNormal)).toBeGreaterThan(0.5);
+      });
+    }
+  });
+
   it('rejects loft sections with inconsistent contour winding', () => {
     const spec = {
       schemaVersion: '2.0',

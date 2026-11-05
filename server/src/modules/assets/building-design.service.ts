@@ -141,6 +141,7 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
   }
   const ids = new Set<string>();
   const targets = new Set<string>();
+  const cutoutRegions = new Map<string, Array<{ centerX: number; centerY: number; width: number; height: number }>>();
   const normalized = input.map((raw: any) => {
     const id = typeof raw?.id === 'string' ? raw.id : '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)
@@ -167,6 +168,15 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
         || Math.abs(centerY) + Number(cutter.dimensions.height) / 2 > Number(target.dimensions.height) / 2) {
         throw new ServiceUnavailableException('cutout 开口必须完整位于目标 Mesh 边界内：' + id);
       }
+      const regions = cutoutRegions.get(target.id) || [];
+      const width = Number(cutter.dimensions.width), height = Number(cutter.dimensions.height);
+      for (const region of regions) {
+        const overlapsX = Math.abs(centerX - region.centerX) <= (width + region.width) / 2 + 0.0001;
+        const overlapsY = Math.abs(centerY - region.centerY) <= (height + region.height) / 2 + 0.0001;
+        if (overlapsX && overlapsY) throw new ServiceUnavailableException('cutout 开口不能重叠或边界接触：' + id);
+      }
+      regions.push({ centerX, centerY, width, height });
+      cutoutRegions.set(target.id, regions);
       return { id, type: 'cutout', targetNodeId: target.id, cutterNodeId: cutter.id, axis: 'z', operation: 'subtract' };
     }
     if (raw.type === 'attach' || raw.type === 'adjacency') {

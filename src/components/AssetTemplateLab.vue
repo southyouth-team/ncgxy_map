@@ -177,7 +177,8 @@ async function generateModel() {
     result.__runtimeModel = model
     const id = 'ai-instance-' + (++serial)
     const index = instances.value.length
-    model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)    model.scale.setScalar(scale.value)
+    model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
+    model.scale.setScalar(scale.value)
     // 不在 Runtime 层强制整体接地：悬空、架空或飞行资产应保留生成结构中的真实高度。
     // 地面接触与内部支撑关系由视觉分析和 ObjectSculptSpec 决定，不能通过移动整个根节点掩盖结构偏差。
     model.userData.assetInstanceId = id
@@ -376,7 +377,8 @@ async function addParametersFromConversation() {
     error.value = e?.message || 'AI 参数设计失败'
     status.value = '参数设计失败'
   } finally { parameterizing.value = false }
-}async function saveSelectedAsset() {
+}
+async function saveSelectedAsset() {
   if (!selectedSpec.value) return
   if (!templateName.value.trim()) { error.value = '请先填写模板名称'; return }
   try {
@@ -596,7 +598,8 @@ onBeforeUnmount(() => {
       <div v-if="error" class="error">{{ error }}</div>
       <div class="step-actions"><button class="secondary" @click="wizardStep=2">返回继续微调</button><button class="secondary" @click="wizardStep=1">返回模板信息</button></div>
     </section>
-    <footer>独立素材模板实验环境 · AI 输出 ObjectSculptSpec，由 Three.js Runtime 转换为真实 Mesh。</footer>  </main>
+    <footer>独立素材模板实验环境 · AI 输出 ObjectSculptSpec，由 Three.js Runtime 转换为真实 Mesh。</footer>
+  </main>
 </template>
 
 <style scoped>

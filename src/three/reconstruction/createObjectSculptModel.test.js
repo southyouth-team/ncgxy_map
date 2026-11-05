@@ -44,6 +44,27 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   });
 
 
+  it('builds pure logical Group nodes without creating placeholder meshes', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'root-group', kind: 'group', name: '主体分组' },
+        { id: 'facade-group', kind: 'group', name: '立面分组', parent: 'root-group', transform: { position: [0, 2, 0] } },
+        { id: 'wall', kind: 'mesh', primitive: 'box', material: 'wall', parent: 'facade-group', dimensions: { width: 4, height: 4, depth: 0.4 } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const rootGroup = model.userData.componentGroups.get('root-group');
+    const facadeGroup = model.userData.componentGroups.get('facade-group');
+    expect(rootGroup.isGroup).toBe(true);
+    expect(facadeGroup.parent).toBe(rootGroup);
+    expect(rootGroup.children.some(child => child.isMesh)).toBe(false);
+    expect(facadeGroup.children.some(child => child.isMesh)).toBe(false);
+    expect(model.getObjectByName('wall:mesh').isMesh).toBe(true);
+    expect(model.userData.objectSculpt.componentCount).toBe(3);
+  });
+
   it('exposes stable component IDs and gives each mesh an independently editable material', () => {
     const spec = {
       schemaVersion: '2.0',

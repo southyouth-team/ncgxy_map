@@ -289,6 +289,7 @@ function validateSweepPathCurvature(points, label) {
 
 
 function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps, label) {
+  if (curve.closed) throw new RangeError(label + ' 暂不支持闭合扫掠路径；闭合路径需要额外的截面接缝扭转校正');
   const centers = curve.getSpacedPoints(steps);
   const tangents = centers.map((_, index) => curve.getTangentAt(index / steps).normalize());
   const frames = [];
@@ -308,8 +309,14 @@ function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps
     binormal.crossVectors(tangents[index], normal).normalize();
     frames.push({ normal: normal.clone(), binormal: binormal.clone() });
   }
-
+  // Normalize the profile winding so side faces and caps have deterministic orientation.
   const profile = profilePoints.map(point => new THREE.Vector2(point[0], point[1]));
+  let area = 0;
+  for (let index = 0; index < profile.length; index += 1) {
+    const next = profile[(index + 1) % profile.length];
+    area += profile[index].x * next.y - next.x * profile[index].y;
+  }
+  if (area < 0) profile.reverse();
   const triangles = THREE.ShapeUtils.triangulateShape(profile, []);
   if (!triangles.length) throw new RangeError(label + ' 无法三角化截面轮廓');
   const positions = [];
@@ -319,9 +326,7 @@ function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps
     const frame = frames[ringIndex];
     for (let edge = 0; edge < ringSize; edge += 1) {
       for (const point of [profile[edge], profile[(edge + 1) % ringSize]]) {
-        const vertex = center.clone()
-          .addScaledVector(frame.normal, point.x)
-          .addScaledVector(frame.binormal, point.y);
+        const vertex = center.clone().addScaledVector(frame.normal, point.x).addScaledVector(frame.binormal, point.y);
         positions.push(vertex.x, vertex.y, vertex.z);
       }
     }
@@ -329,36 +334,24 @@ function createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps
   for (let ring = 0; ring < centers.length - 1; ring += 1) {
     for (let edge = 0; edge < ringSize; edge += 1) {
       const a = ring * ringSize * 2 + edge * 2;
-      const b = a + 1;
-      const c = (ring + 1) * ringSize * 2 + edge * 2;
-      const d = c + 1;
+      const b = a + 1, c = (ring + 1) * ringSize * 2 + edge * 2, d = c + 1;
       indices.push(a, b, c, b, d, c);
     }
   }
-
-  let area = 0;
-  for (let index = 0; index < profile.length; index += 1) {
-    const next = profile[(index + 1) % profile.length];
-    area += profile[index].x * next.y - next.x * profile[index].y;
-  }
-  const capBase = positions.length / 3;
-  triangles.forEach(([a, b, c]) => {
-    const ordered = area >= 0 ? [a, b, c] : [a, c, b];
-    const startTriangle = [ordered[0], ordered[2], ordered[1]];
-    const endTriangle = ordered;
-    for (const [ringIndex, triangle] of [[0, startTriangle], [centers.length - 1, endTriangle]]) {
-      const frame = frames[ringIndex];
-      for (const pointIndex of triangle) {
+  // Each cap triangle owns three vertices, keeping cap normals independent from side normals.
+  for (const [ringIndex, reverse] of [[0, true], [centers.length - 1, false]]) {
+    const frame = frames[ringIndex];
+    for (const [a, b, c] of triangles) {
+      const triangleIndices = [];
+      for (const pointIndex of (reverse ? [a, c, b] : [a, b, c])) {
         const point = profile[pointIndex];
-        const vertex = centers[ringIndex].clone()
-          .addScaledVector(frame.normal, point.x)
-          .addScaledVector(frame.binormal, point.y);
+        const vertex = centers[ringIndex].clone().addScaledVector(frame.normal, point.x).addScaledVector(frame.binormal, point.y);
+        triangleIndices.push(positions.length / 3);
         positions.push(vertex.x, vertex.y, vertex.z);
-        indices.push(indices.length ? positions.length / 3 - 1 : capBase);
       }
+      indices.push(...triangleIndices);
     }
-  });
-
+  }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);

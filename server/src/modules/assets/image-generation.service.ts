@@ -419,10 +419,19 @@ export class ImageGenerationService {
         }
       }
       const preservedNodes = original.componentTree.filter((node: any) => !allowedIds.has(node.id));
-      const editedNodes = (result.objectSculptSpec.componentTree || []).filter((node: any) => allowedIds.has(node.id));
+      const editedNodes = (result.objectSculptSpec.componentTree || []).filter((node: any) => allowedIds.has(node.id)).map((node: any) => ({ ...node }));
+      const mergedMaterials = { ...(original.materials || {}) };
+      editedNodes.forEach((node: any) => {
+        const materialKey = typeof node.material === 'string' ? node.material : '';
+        const generatedMaterial = materialKey ? result.objectSculptSpec.materials?.[materialKey] : null;
+        if (!generatedMaterial) return;
+        const isolatedKey = 'local-edit-' + node.id + '-' + materialKey;
+        mergedMaterials[isolatedKey] = generatedMaterial;
+        node.material = isolatedKey;
+      });
       const mergedSpec = {
         ...original,
-        materials: { ...(original.materials || {}), ...(result.objectSculptSpec.materials || {}) },
+        materials: mergedMaterials,
         componentTree: [...preservedNodes, ...editedNodes],
         // 局部编辑不允许重写全局参数/生成器/约束；避免选中部件之外的联动被意外改变。
         parameterSchema: original.parameterSchema || [],

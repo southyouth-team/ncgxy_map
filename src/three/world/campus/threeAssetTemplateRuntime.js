@@ -5,7 +5,7 @@
  * passed here as executable source; AI-generated designs are normalized data consumed
  * by reviewed factories/adapters.
  */
-const TEMPLATE_ID = /^[\p{L}\p{N}][\p{L}\p{N}:._/-]{0,119}$/u;
+const TEMPLATE_ID = /^[A-Za-z0-9\u0080-\uFFFF][A-Za-z0-9\u0080-\uFFFF:._/-]{0,119}$/;
 
 function vector(value, fallback, label, min, max, allowZero = true) {
   const result = value === undefined ? [...fallback] : value;

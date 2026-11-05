@@ -316,6 +316,10 @@ export class AssetsService {
               || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {
             throw new BadRequestException('资产 sweep path 必须包含 2 到 32 个有效三维归一化坐标点：' + node.id);
           }
+          if (path.some((point: any, index: number) => index > 0
+            && Math.hypot(Number(point[0]) - Number(path[index - 1][0]), Number(point[1]) - Number(path[index - 1][1]), Number(point[2]) - Number(path[index - 1][2])) < 0.0001)) {
+            throw new BadRequestException('资产 sweep path 不能包含重复或零长度路径段：' + node.id);
+          }
           if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24
             || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
               || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {

@@ -50,7 +50,7 @@ function centerObjectAtOverview(object) {
     ? object.getWorldPosition(new THREE.Vector3())
     : bounds.getCenter(new THREE.Vector3())
   controls.target.set(center.x, 0, center.z)
-  camera.position.set(center.x, 200, center.z + 0.001)
+  camera.position.set(center.x, 200, center.z)
   camera.up.set(0, 0, -1)
   camera.lookAt(controls.target)
   controls.update()
@@ -170,9 +170,9 @@ function clearScene() { [...objects.keys()].forEach(removeInstance); status.valu
 function resetCamera() {
   const object = objects.get(selectedInstanceId.value)
   if (object) return centerObjectAtOverview(object)
-  camera.position.set(0, 200, 0.001)
+  camera.position.set(0, 200, 0)
   controls.target.set(0, 0, 0)
-  camera.position.set(0, 200, 0.001); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0); camera.zoom = 1; camera.updateProjectionMatrix()
+  camera.position.set(0, 200, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0); camera.zoom = 1; camera.updateProjectionMatrix()
   controls.update()
 }
 
@@ -184,14 +184,22 @@ onMounted(() => {
     selectedId.value = templates.value.find(x => x.category === 'building')?.id || templates.value[0]?.id || ''
     scene = runtime.createSandboxScene()
     scene.background = new THREE.Color('#dfe8e0')
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshBasicMaterial({ color: '#78b96b' }))
-    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.08; ground.receiveShadow = true; ground.name = 'sandbox-ground'; scene.add(ground)
-    const grid = new THREE.GridHelper(180, 36, '#477b43', '#a3d197'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshBasicMaterial({ color: '#78b96b', side: THREE.DoubleSide }))
+    ground.rotation.x = -Math.PI / 2; ground.position.y = 0; ground.name = 'sandbox-ground'; scene.add(ground)
+    const grid = new THREE.GridHelper(180, 36, '#315f35', '#9bc58e'); grid.position.y = 0.025; grid.name = 'sandbox-grid'; scene.add(grid)
+    const borderPoints = [new THREE.Vector3(-90, 0.04, -70), new THREE.Vector3(90, 0.04, -70), new THREE.Vector3(90, 0.04, 70), new THREE.Vector3(-90, 0.04, 70)]
+    const border = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(borderPoints), new THREE.LineBasicMaterial({ color: '#244f2c' }))
+    border.name = 'sandbox-boundary'; scene.add(border)
+    const centerMarker = new THREE.Group(); centerMarker.name = 'sandbox-center-marker'
+    const markerMaterial = new THREE.LineBasicMaterial({ color: '#173d20' })
+    centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-3, 0.05, 0), new THREE.Vector3(3, 0.05, 0)]), markerMaterial))
+    centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, -3), new THREE.Vector3(0, 0.05, 3)]), markerMaterial))
+    scene.add(centerMarker)
     camera = new THREE.OrthographicCamera(-90, 90, 70, -70, 0.1, 1000); camera.position.set(0, 200, 0.001); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0)
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace; viewport.value.replaceChildren(renderer.domElement)
-    controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enableRotate = false; controls.screenSpacePanning = true; controls.target.set(0, 0, 0); controls.minZoom = 0.25; controls.maxZoom = 8; controls.update()
+    controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enableRotate = false; controls.enablePan = true; controls.screenSpacePanning = true; controls.mouseButtons.LEFT = THREE.MOUSE.PAN; controls.mouseButtons.RIGHT = THREE.MOUSE.PAN; controls.target.set(0, 0, 0); controls.minZoom = 0.25; controls.maxZoom = 8; controls.update()
     observer = new ResizeObserver(resize); observer.observe(viewport.value); resize()
     const render = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(render) }; render()
     status.value = '沙盒已就绪；可输入提示词或上传图片生成独立模型'
@@ -224,7 +232,7 @@ onBeforeUnmount(() => {
         <div class="templates"><button v-for="item in visibleTemplates" :key="item.id" :class="{active:selectedId===item.id}" @click="selectedId=item.id"><b>{{ item.name }}</b><small>{{ categoryLabel(item.category) }} · v{{ item.version }}</small></button></div>
         <button class="secondary" :disabled="!selectedTemplate" @click="addTemplate">添加选中的预置模板（对照）</button>
       </aside>
-      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键旋转 · 滚轮缩放 · 右键平移</span></div><div class="hint status">{{ status }}</div></section>
+      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键 / 右键平移 · 滚轮缩放</span></div><div class="hint status">{{ status }}</div></section>
       <aside class="panel inspector">
         <h3>沙盒实例 <span>{{ instances.length }} 个</span></h3>
         <label>选中实例缩放 {{ scale.toFixed(1) }}×</label><input v-model.number="scale" type="range" min="0.3" max="2.5" step="0.1">

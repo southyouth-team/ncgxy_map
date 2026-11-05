@@ -114,6 +114,9 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
           || !Number.isFinite(Number(raw.offset ?? 0)) || Math.abs(Number(raw.offset ?? 0)) > 100) {
           throw new ServiceUnavailableException('attach 必须连接同一父级下的 Mesh 面：' + id);
         }
+        const targetKey = target.id + ':attach:' + raw.axis;
+        if (targets.has(targetKey)) throw new ServiceUnavailableException('attach 目标轴重复绑定：' + id);
+        targets.add(targetKey);
         return { id, type: 'attach', sourceNodeId: source.id, targetNodeId: target.id, axis: raw.axis,
           sourceSide: Number(raw.sourceSide), targetSide: Number(raw.targetSide), offset: Number(raw.offset ?? 0) };
       }

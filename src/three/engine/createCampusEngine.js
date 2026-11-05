@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
@@ -747,21 +748,20 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const width = Math.max(4.2, maxX - minX)
       const depth = Math.max(2.4, maxZ - minZ)
       const localShape = new THREE.Shape(worldPoints.map(point => new THREE.Vector2(point.x - centerX, -(point.z - centerZ))))
-      const height = Math.max(2.2, Number(building.height || building.floors * 0.45 || 3.4))
+      const publishedTemplate = options.buildingTemplates?.find(entry => entry.templateId === building.modelTemplateId && entry.status === 'ready') || null
+      const design = publishedTemplate?.modelType === 'procedural' ? publishedTemplate.buildingDesign || {} : {}
+      const height = Math.max(2.2, Number(design.height ?? building.height ?? building.floors * 0.45 ?? 3.4))
       const group = createPixelBuilding(THREE, {
-        footprint: localShape,
-        width,
-        depth,
-        height: building.height,
-        floors: building.floors,
-        roofStyle: building.roofStyle,
-        roofRise: building.roofRise,
-        windowDensity: building.windowDensity,
-        windowWidth: building.windowWidth,
-        windowHeight: building.windowHeight,
-        doorWidth: building.doorWidth,
+        footprint: localShape, width, depth, height,
+        floors: design.floors ?? building.floors,
+        roofStyle: design.roofStyle ?? building.roofStyle,
+        roofRise: design.roofRise ?? building.roofRise,
+        windowDensity: design.windowDensity ?? building.windowDensity,
+        windowWidth: design.windowWidth ?? building.windowWidth,
+        windowHeight: design.windowHeight ?? building.windowHeight,
+        doorWidth: design.doorWidth ?? building.doorWidth,
         entranceEdgeIndex: building.entranceEdgeIndex,
-        template: building.template || building.label,
+        template: design.template || building.template || building.label,
         materials: buildingMaterials,
         label: building.label || building.id || 'Campus Building',
         confidence: building.confidence || 'unverified',
@@ -770,6 +770,22 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       group.userData.campusBuildingId = building.id
       group.userData.objectType = 'building'
       group.userData.displayName = building.label
+      group.userData.modelTemplateId = publishedTemplate?.templateId || null
+      if (publishedTemplate?.modelType === 'glb' && publishedTemplate.modelFile?.url && options.assetBaseUrl) {
+        const modelUrl = new URL(publishedTemplate.modelFile.url, options.assetBaseUrl).toString()
+        new GLTFLoader().load(modelUrl, gltf => {
+          const model = gltf.scene
+          const originalBounds = new THREE.Box3().setFromObject(model)
+          const size = originalBounds.getSize(new THREE.Vector3())
+          const fit = Math.min(width / Math.max(size.x, 0.001), depth / Math.max(size.z, 0.001), height / Math.max(size.y, 0.001))
+          model.scale.setScalar(fit)
+          const fitted = new THREE.Box3().setFromObject(model)
+          const center = fitted.getCenter(new THREE.Vector3())
+          model.position.set(-center.x, -fitted.min.y, -center.z)
+          group.clear()
+          group.add(model)
+        }, undefined, error => console.warn('[CampusEditorPreview] GLB 模板加载失败，保留程序化回退：', publishedTemplate.templateId, error))
+      }
       rpgPreviewGroup.add(group)
     }
     rpgPreviewGroup.userData.invalidBuildingFootprints = invalidBuildingFootprints

@@ -31,6 +31,39 @@ export class BuildingTemplatesService {
     await this.enqueue(async () => { const m = await this.readManifest(); m.templates.unshift(item); await this.writeManifest(m); });
     return item;
   }
+  async uploadFile(id: string, role: string, file: any) {
+    if (!file?.buffer || file.size < 1 || file.size > 30 * 1024 * 1024) throw new BadRequestException('模板文件无效或超过 30 MB');
+    if (!['model', 'reference'].includes(role)) throw new BadRequestException('文件角色无效');
+    const item = await this.get(id);
+    const b: Buffer = file.buffer;
+    const glb = b.length >= 20 && b.toString('ascii', 0, 4) === 'glTF' && b.readUInt32LE(4) === 2 && b.readUInt32LE(8) === b.length;
+    const png = b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+    const jpg = b.length >= 3 && b[0] === 255 && b[1] === 216 && b[2] === 255;
+    const webp = b.length >= 12 && b.toString('ascii',0,4) === 'RIFF' && b.toString('ascii',8,12) === 'WEBP';
+    if (role === 'model' && (item.modelType !== 'glb' || !glb)) throw new BadRequestException('GLB 模板必须上传有效 GLB 文件');
+    if (role === 'reference' && !(png || jpg || webp)) throw new BadRequestException('参考文件必须为 PNG/JPG/WebP');
+    const ext = role === 'model' ? '.glb' : jpg ? '.jpg' : webp ? '.webp' : '.png';
+    const fileId = randomUUID();
+    await mkdir(resolve(this.root, 'files'), { recursive: true });
+    const storageName = fileId + ext;
+    await writeFile(resolve(this.root, 'files', storageName), b, { flag: 'wx' });
+    const metadata = { fileId, storageName, fileName: String(file.originalname || 'asset').slice(0,180),
+      mimeType: role === 'model' ? 'model/gltf-binary' : jpg ? 'image/jpeg' : webp ? 'image/webp' : 'image/png',
+      sizeBytes: file.size, url: '/api/v1/assets/building-templates/' + id + '/files/' + role };
+    await this.enqueue(async () => {
+      const m = await this.readManifest(); const target = m.templates.find((x: any) => x.templateId === id);
+      if (!target) throw new NotFoundException('建筑模板不存在');
+      if (role === 'model') target.modelFile = metadata; else target.referenceImage = metadata;
+      target.updatedAt = new Date().toISOString(); await this.writeManifest(m);
+    });
+    const { storageName: _storageName, ...publicMetadata } = metadata;
+    return publicMetadata;
+  }
+  async getFile(id: string, role: string) {
+    const item = await this.get(id); const file = role === 'model' ? item.modelFile : item.referenceImage;
+    if (!file?.storageName) throw new NotFoundException('模板文件不存在');
+    return { absolutePath: resolve(this.root, 'files', file.storageName), mimeType: file.mimeType, size: file.sizeBytes };
+  }
   async approve(id: string) {
     let result: any;
     await this.enqueue(async () => {

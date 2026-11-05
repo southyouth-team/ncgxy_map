@@ -411,7 +411,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       return b.sub(a).cross(d.sub(a)).normalize();
     };
     // 4 side edges × 2 triangles × 3 indices = 24 indices before the caps.
-    expect(faceNormal(0).z).toBeLessThan(0);
+    expect(faceNormal(0).x).toBeGreaterThan(0);
     expect(faceNormal(24).y).toBeLessThan(0);
     expect(faceNormal(30).y).toBeGreaterThan(0);
   });

@@ -29,7 +29,7 @@ function validateGeneratedParameterSchema(input: unknown, componentTree: any[], 
 }
 
 function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
-  if (input == null) return [];
+  if (input == null) return { generators: [], parameterIds: new Set<string>() };
   if (!Array.isArray(input) || input.length > 30) throw new ServiceUnavailableException('AI generators 必须是最多 30 项的数组');
   const byId = new Map(componentTree.map(node => [node.id, node]));
   const ids = new Set<string>(), parameterIds = new Set<string>(), claimedNodes = new Set<string>();
@@ -55,7 +55,7 @@ function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
       if (claimedNodes.has(node.id)) throw new ServiceUnavailableException('AI 结构生成器模板不能嵌套或重叠：' + id);
       claimedNodes.add(node.id);
     }
-    const parameterId = value => {
+    const parameterId = (value: unknown): string => {
       if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value) || parameterIds.has(value)) {
         throw new ServiceUnavailableException('AI 结构生成器数量参数 ID 无效或重复：' + id);
       }

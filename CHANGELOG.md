@@ -1,3 +1,13 @@
+## 2026-11-05 — ObjectSculptSpec 组件级编辑与二次审核发布
+
+- 工坊组件清单支持选中部件；在 2.5D/3D 视口点击 Mesh 也会同步选中，并以高亮反馈当前部件。
+- 新增组件属性检查器，可编辑宽/高/深、位置、旋转（弧度）、缩放，以及材质颜色、roughness、metalness、opacity；编辑后刷新同一份 ObjectSculptSpec 和两个视口。
+- 每个组件 Mesh 使用独立材质实例，避免修改某个部件材质时意外影响其他部件；Mesh 暴露稳定 componentId 元数据。
+- 新增 `POST /assets/ai-image/review-object-design`：要求原始 AI 设计及其短时 HMAC 凭证有效，服务端重新校验材质、组件数量、primitive、尺寸、变换、polygon 轮廓、父节点和循环层级，再签发绑定最终 ObjectSculptSpec 的新凭证。
+- 建筑和其他程序化模板统一要求 `design.reviewed=true` 且最终凭证有效；任何编辑均清空旧最终凭证，未重新审核不能创建/发布模板。
+- 新增服务端测试覆盖修改后重新签名、旧 token 失效、越界尺寸、无效父节点、非法材质和篡改原始设计；新增前端适配器测试验证组件 ID 和材质隔离。
+- 该功能已完成代码接入，需以后端/前端 CI 和真实浏览器交互验收为准；当前不声称已完成实际视觉模型质量验收。
+
 ## 2026-11-05 — ObjectSculptSpec 任意受限轮廓拉伸
 
 - 新增 `polygon` primitive：视觉模型可输出 3-32 个归一化二维轮廓点，Three.js 使用 Shape + ExtrudeGeometry 构造真实拉伸 Mesh。

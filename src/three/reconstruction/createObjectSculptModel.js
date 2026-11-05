@@ -318,6 +318,9 @@ function createGeometry(THREE, node) {
     if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24) {
       throw new RangeError(node.id + '.geometryDescriptor.profile 必须包含 3 到 24 个截面轮廓点');
     }
+    if (pathPoints.some((point, index) => index > 0 && point.distanceTo(pathPoints[index - 1]) < 0.0001)) {
+      throw new RangeError(node.id + '.geometryDescriptor.path 存在重复或零长度路径段');
+    }
     const profilePoints = profile.map((point, index) => {
       if (!Array.isArray(point) || point.length !== 2
         || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {

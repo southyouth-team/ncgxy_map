@@ -693,4 +693,65 @@ footer{flex:0 0 auto;width:100%;max-width:1600px;margin:10px auto 0;text-align:r
 @media(max-width:1180px) and (min-width:701px){.lab{padding:16px}.layout{grid-template-columns:minmax(270px,300px) minmax(320px,1fr);grid-template-rows:minmax(360px,1fr) minmax(260px,.75fr);overflow-y:auto}.viewport-panel{grid-column:2;grid-row:1}.generator{grid-column:1;grid-row:1}.inspector{grid-column:1/-1;grid-row:2}.panel{overflow:visible}.inspector{overflow-y:visible}.instances{max-height:180px}.component-tree{max-height:180px}}
 @media(max-width:1100px){.editor-step .editor-workspace{grid-template-columns:minmax(280px,360px) minmax(0,1fr)}.editor-step .viewport-panel{min-height:560px}}@media(max-width:900px){.create-grid{grid-template-columns:1fr}.editor-step .editor-workspace{display:flex;flex-direction:column-reverse;min-height:0}.editor-step .inspector{max-height:none;overflow:visible}.editor-step .viewport-panel{min-height:480px;flex:0 0 60vh}}
 @media(max-width:700px){.wizard-progress{gap:5px}.wizard-progress>div{padding:8px 5px;gap:5px;font-size:10px}.wizard-card,.wizard-preview,.wizard-editor{padding:14px}.step-heading,.preview-heading{flex-direction:column}.step-actions{align-items:stretch;flex-wrap:wrap}.step-actions .generate,.step-actions .secondary{flex:1;min-width:120px}.save-panel{align-items:stretch;flex-direction:column}.save-panel .generate{width:100%}.shared-viewport .viewport-panel{min-height:380px;height:55vh}.wizard-editor .viewport-panel{min-height:380px}.lab{height:auto;min-height:100dvh;overflow:visible;padding:12px}header{align-items:flex-start;flex-direction:column;gap:8px}.layout{display:flex;flex:initial;min-height:0;overflow:visible;flex-direction:column}.panel{max-height:none;overflow:visible}.templates,.instances{max-height:180px}.viewport-panel{height:min(65vh,560px);min-height:420px;flex:0 0 auto}.toolbar{right:8px;left:8px;gap:4px}.toolbar button{font-size:10px;padding:6px 7px}.toolbar span{display:none}footer{text-align:left}}
+/* Wizard scroll ownership: the editor shell itself must scroll, independent of app-level overflow rules. */
+.wizard-lab.lab{
+  display:block!important;
+  width:100%;
+  height:100dvh!important;
+  min-height:0!important;
+  max-height:100dvh;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  overscroll-behavior-y:contain;
+  scrollbar-gutter:stable;
+  box-sizing:border-box;
+  padding-bottom:max(28px,env(safe-area-inset-bottom))!important;
+}
+.wizard-lab.lab>.wizard-header,
+.wizard-lab.lab>.wizard-progress,
+.wizard-lab.lab>.wizard-preview,
+.wizard-lab.lab>.wizard-card,
+.wizard-lab.lab>.wizard-editor,
+.wizard-lab.lab>footer{
+  flex:none;
+}
+.editor-step .editor-workspace{
+  min-height:680px;
+  overflow:visible;
+}
+.editor-step .inspector{
+  height:calc(100dvh - 250px);
+  max-height:none;
+  min-height:420px;
+  min-width:0;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+.editor-step .editor-viewport-column{
+  min-height:620px;
+}
+@media(max-width:900px){
+  .wizard-lab.lab{
+    height:100dvh!important;
+    min-height:0!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+  }
+  .editor-step .editor-workspace{
+    min-height:0;
+    overflow:visible;
+  }
+  .editor-step .inspector{
+    height:auto;
+    max-height:none;
+    min-height:0;
+    overflow:visible!important;
+  }
+  .editor-step .editor-viewport-column{
+    min-height:0;
+  }
+}
+
 </style>

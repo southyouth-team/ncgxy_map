@@ -807,6 +807,39 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     });
   });
 
+  it('recomputes face attachments when linked source dimensions change', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'building', kind: 'group' },
+        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 4, height: 3, depth: 0.3 } },
+        { id: 'door', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 1, height: 2, depth: 0.2 } },
+      ],
+      parameterSchema: [{
+        id: 'wall-width', label: '墙体宽度', type: 'number', value: 4, min: 2, max: 8, step: 0.5, unit: 'm',
+        targets: [{ nodeId: 'wall', property: 'dimensions.width', mode: 'set' }],
+      }],
+      constraints: [{
+        id: 'door-to-wall', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'door',
+        axis: 'x', sourceSide: 1, targetSide: -1, offset: 0,
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const door = model.userData.componentGroups.get('door');
+    expect(door.position.x).toBeCloseTo(2.5);
+
+    applyObjectSculptParameter(THREE, model, 'wall-width', 6);
+    expect(model.userData.componentGroups.get('door').position.x).toBeCloseTo(3.5);
+
+    applyObjectSculptParameter(THREE, model, 'wall-width', 2);
+    expect(model.userData.componentGroups.get('door').position.x).toBeCloseTo(1.5);
+
+    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
+    expect(reloaded.userData.componentGroups.get('door').position.x).toBeCloseTo(1.5);
+  });
+
   it('rejects cyclic attach dependencies before building the model', () => {
     const spec = {
       schemaVersion: '2.0',

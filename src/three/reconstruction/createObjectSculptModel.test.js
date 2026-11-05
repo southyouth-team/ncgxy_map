@@ -314,6 +314,44 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'handrail').geometryDescriptor.radius).toBe(0.1);
   });
 
+  it('builds a lathe mesh from a bounded radial profile and recalculates it when dimensions change', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { ceramic: { color: '#d7b98c', roughness: 0.72, metalness: 0 } },
+      componentTree: [{
+        id: 'vase', primitive: 'lathe', material: 'ceramic',
+        dimensions: { width: 2, height: 3, depth: 2 },
+        geometryDescriptor: {
+          profile: [[0, -0.5], [0.28, -0.48], [0.34, -0.3], [0.22, 0.05], [0.3, 0.32], [0.38, 0.5]],
+        },
+      }],
+      parameterSchema: [{
+        id: 'vase-height', label: '花瓶高度', type: 'number', value: 3, min: 2, max: 5, step: 0.5,
+        targets: [{ nodeId: 'vase', property: 'dimensions.height', mode: 'set' }],
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    let mesh = model.userData.componentGroups.get('vase').getObjectByName('vase:mesh');
+    expect(mesh.geometry.type).toBe('LatheGeometry');
+    expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(100);
+    applyObjectSculptParameter(THREE, model, 'vase-height', 4.5);
+    mesh = model.userData.componentGroups.get('vase').getObjectByName('vase:mesh');
+    expect(mesh.geometry.parameters.points[0].y).toBe(-2.25);
+    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'vase').dimensions.height).toBe(4.5);
+  });
+
+  it('rejects lathe profiles outside normalized radius and height bounds', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'vase', primitive: 'lathe', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: { profile: [[0, -0.5], [0.7, 0.5]] },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('必须是 [0,0.5] 半径与 [-0.5,0.5] 高度');
+  });
+
   it('rejects tube paths with coordinates outside the normalized bounds', () => {
     const spec = {
       schemaVersion: '2.0',

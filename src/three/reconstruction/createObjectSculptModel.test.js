@@ -103,8 +103,8 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     spec.componentTree[0].hidden = true;
     spec.componentTree[1].locked = true;
     const model = createObjectSculptModel(THREE, spec);
-    const keep = model.getObjectByName('keep');
-    const tower = model.getObjectByName('west-tower');
+    const keep = model.getObjectByName('主城堡主体');
+    const tower = model.getObjectByName('西侧圆塔');
     expect(keep.visible).toBe(false);
     expect(keep.userData.componentHidden).toBe(true);
     expect(tower.userData.componentLocked).toBe(true);

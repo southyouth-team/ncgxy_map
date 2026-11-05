@@ -393,23 +393,40 @@ function createGeometry(THREE, node) {
     const positions = [];
     const indices = [];
     const ringSize = profileCount;
+
+    // Each profile edge owns its side vertices. This keeps adjacent walls
+    // from averaging normals across hard corners while preserving smoothing
+    // along the loft direction between matching sections.
     normalizedSections.forEach(section => {
-      section.points.forEach(point => positions.push(point.x, section.height, point.y));
+      for (let edgeIndex = 0; edgeIndex < ringSize; edgeIndex += 1) {
+        const a = section.points[edgeIndex];
+        const b = section.points[(edgeIndex + 1) % ringSize];
+        positions.push(a.x, section.height, a.y, b.x, section.height, b.y);
+      }
     });
     for (let sectionIndex = 0; sectionIndex < normalizedSections.length - 1; sectionIndex += 1) {
-      const lower = sectionIndex * ringSize;
-      const upper = (sectionIndex + 1) * ringSize;
-      for (let pointIndex = 0; pointIndex < ringSize; pointIndex += 1) {
-        const next = (pointIndex + 1) % ringSize;
-        const a = lower + pointIndex, b = lower + next, c = upper + pointIndex, d = upper + next;
+      const lower = sectionIndex * ringSize * 2;
+      const upper = (sectionIndex + 1) * ringSize * 2;
+      for (let edgeIndex = 0; edgeIndex < ringSize; edgeIndex += 1) {
+        const a = lower + edgeIndex * 2;
+        const b = a + 1;
+        const c = upper + edgeIndex * 2;
+        const d = c + 1;
         indices.push(a, c, b, b, c, d);
       }
     }
+
+    // Caps use independent vertices so their vertical normals do not blend
+    // into the side-wall normals at the perimeter.
+    const bottomCapOffset = positions.length / 3;
+    normalizedSections[0].points.forEach(point => positions.push(point.x, normalizedSections[0].height, point.y));
+    const topSection = normalizedSections[normalizedSections.length - 1];
+    const topCapOffset = positions.length / 3;
+    topSection.points.forEach(point => positions.push(point.x, topSection.height, point.y));
     const capTriangles = THREE.ShapeUtils.triangulateShape(normalizedSections[0].points, []);
     // The normalized X/Z contour is CCW: its natural 3D normal points down (-Y).
-    capTriangles.forEach(triangle => indices.push(triangle[0], triangle[1], triangle[2]));
-    const topOffset = (normalizedSections.length - 1) * ringSize;
-    capTriangles.forEach(triangle => indices.push(topOffset + triangle[2], topOffset + triangle[1], topOffset + triangle[0]));
+    capTriangles.forEach(triangle => indices.push(bottomCapOffset + triangle[0], bottomCapOffset + triangle[1], bottomCapOffset + triangle[2]));
+    capTriangles.forEach(triangle => indices.push(topCapOffset + triangle[2], topCapOffset + triangle[1], topCapOffset + triangle[0]));
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();

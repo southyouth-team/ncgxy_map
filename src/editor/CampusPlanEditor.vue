@@ -1050,6 +1050,14 @@ function addRoad(event) {
   selected.value = { type: 'road', id }
   tool.value = 'select'
 }
+function applyBuildingTemplate(template) {
+  const item = selectedBuilding.value
+  const preset = CAMPUS_BUILDING_ASSET_CATALOG.find(entry => entry.template === template)
+  if (!item || !preset) return
+  snapshot()
+  const patch = { template: preset.template, height: preset.height, floors: preset.floors, windowDensity: preset.windowDensity, windowWidth: preset.windowWidth, windowHeight: preset.windowHeight, doorWidth: preset.doorWidth, roofRise: preset.roofRise, roofStyle: preset.roofStyle, wall: preset.wall }
+  commitFeatureCollectionMutation(collection => updateCampusFeatureProperties(collection, item.id, patch))
+}
 function updateBuildingMetric(metric, rawValue) {
   const item = selectedBuilding.value
   const value = Number(rawValue)
@@ -1313,7 +1321,7 @@ function exportDocument() {
         </template>
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input  :value="selectedBuilding.label" @focus="snapshot" @change="updateSelectedFeatureProperty('name',$event.target.value)">
-          <label>建筑模板</label><select  :value="selectedBuilding.template" @focus="snapshot" @change="updateSelectedFeatureProperty('template',$event.target.value)"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select>
+          <label>建筑模板（选择后立即套用整套参数）</label><select :value="selectedBuilding.template" @change="applyBuildingTemplate($event.target.value)"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select><small class="hint property-hint">模板会覆盖高度、楼层、屋顶、门窗和墙面预设；不会修改建筑位置、占地轮廓、碰撞或通行属性。</small>
           <label>三维建筑参数</label>
           <div class="property-grid">
             <label>建筑高度<input type="number" min="1" max="80" step="0.2"  :value="selectedBuilding.height" @focus="snapshot" @change="updateSelectedFeatureProperty('height',$event.target.value,{numeric:true})"></label>

@@ -954,6 +954,28 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('right-opening').children).toHaveLength(0);
   });
 
+  it('rejects overlapping and edge-touching cutout regions on one target mesh', () => {
+    const createSpec = (rightX: number) => ({
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'building', kind: 'group' },
+        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 4, height: 3, depth: 0.3 } },
+        { id: 'left-opening', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 1, height: 1, depth: 0.5 }, transform: { position: [-0.5, 0, 0] } },
+        { id: 'right-opening', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 1, height: 1, depth: 0.5 }, transform: { position: [rightX, 0, 0] } },
+      ],
+      constraints: [
+        { id: 'left-cut', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'left-opening', axis: 'z', operation: 'subtract' },
+        { id: 'right-cut', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'right-opening', axis: 'z', operation: 'subtract' },
+      ],
+    });
+    expect(() => validateObjectSculptSpec(createSpec(0.25))).toThrow('cutout 开口不能重叠或边界接触');
+    expect(() => validateObjectSculptSpec(createSpec(0.5))).toThrow('cutout 开口不能重叠或边界接触');
+    expect(() => validateObjectSculptSpec(createSpec(0.5002))).not.toThrow();
+  });
+
   it('rejects cutouts that exceed the target mesh bounds', () => {
     const spec = {
       schemaVersion: '2.0',

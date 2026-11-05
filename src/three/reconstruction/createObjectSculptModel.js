@@ -252,7 +252,7 @@ export function validateObjectSculptSpec(spec) {
     if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100) throw new TypeError('结构生成器排列规则无效：' + generator.id);
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.countParameterId || '')) throw new TypeError('结构生成器数量参数 ID 无效：' + generator.id);
     const parameter = (spec.parameterSchema || []).find(item => item.id === generator.countParameterId);
-    if (parameter && parameter.type !== 'number') throw new TypeError('结构生成器数量参数必须是 number：' + generator.id);
+    if (!parameter || parameter.type !== 'number' || parameter.value !== generator.defaultCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max) || parameter.min < 1 || parameter.max > generator.maxCount) throw new TypeError('结构生成器必须绑定有效的整数数量参数：' + generator.id);
     generatorParameterIds.add(generator.countParameterId);
     const descendants = spec.componentTree.filter(node => {
       let parent = node.id;
@@ -273,7 +273,10 @@ export function validateObjectSculptSpec(spec) {
     if (!Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount) throw new RangeError('结构生成器 defaultCount 无效：' + generator.id);
     if (generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30)) throw new TypeError('结构生成器 followers 无效：' + generator.id);
     for (const follower of generator.followers || []) {
-      if (!nodes.has(follower.nodeId) || !['x','y','z'].includes(follower.axis) || !Number.isFinite(follower.offset ?? 0)) throw new TypeError('结构生成器跟随规则无效：' + generator.id);
+      const followerNode = nodes.get(follower.nodeId);
+      let parent = follower.nodeId, insideTemplate = false;
+      while (parent) { if (parent === generator.templateRootId) { insideTemplate = true; break; } parent = nodes.get(parent)?.parent; }
+      if (!followerNode || insideTemplate || !['x','y','z'].includes(follower.axis) || !Number.isFinite(follower.offset ?? 0)) throw new TypeError('结构生成器跟随规则无效：' + generator.id);
     }
   }
   const parameterIds = new Set();

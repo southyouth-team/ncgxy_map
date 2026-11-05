@@ -433,7 +433,7 @@ export function selectBuildingEntranceEdge(edges = [], requestedIndex = null) {
 export function createPixelBuilding(THREE, options = {}) {
   const {
     footprint, width = 8, depth = 5, height,
-    materials, wallMaterial, template = '教学楼', facadeStyle = 'modern', hasBalconies = false, balconyFloors = [], columnCount = 0, roofColor = 'roofRed',
+    materials, wallMaterial, template = '教学楼', facadeStyle = 'modern', hasBalconies = false, balconyFloors = [], columnCount = 0, roofColor = 'roofRed', facadeSections = 1, hasArcade = false, podiumFloors = 0,
     label = 'Campus Building', confidence = 'unverified', entranceEdgeIndex = null, floors, height: customHeight, roofStyle: customRoofStyle, roofRise: customRoofRise, windowDensity: customWindowDensity, windowWidth: customWindowWidth, windowHeight: customWindowHeight, doorWidth: customDoorWidth,
   } = options
   const basePreset = CAMPUS_BUILDING_TEMPLATES[template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
@@ -735,7 +735,7 @@ export function createPixelBuilding(THREE, options = {}) {
   })
   // 立面柱廊按识图结果生成，优先布置在入口立面，不改变建筑 footprint。
   if (Number(columnCount) > 0 && wallEntrance?.length > 1) {
-    const count = Math.min(20, Math.max(1, Math.floor(Number(columnCount))));
+    const count = Math.min(20, Math.max(1, Math.floor(Number(columnCount) || (hasArcade ? 4 : 0))));
     const normalX = wallArea >= 0 ? wallEntrance.dy / wallEntrance.length : -wallEntrance.dy / wallEntrance.length;
     const normalZ = wallArea >= 0 ? wallEntrance.dx / wallEntrance.length : -wallEntrance.dx / wallEntrance.length;
     for (let index = 0; index < count; index += 1) {
@@ -747,6 +747,37 @@ export function createPixelBuilding(THREE, options = {}) {
       column.userData.objectType = 'building-column';
       group.add(column);
     }
+  }
+
+  // AI 识别的立面分区：沿真实外墙边界生成竖向分格线，表达主立面节奏。
+  const sectionCount = Math.min(8, Math.max(1, Math.floor(Number(facadeSections) || 1)));
+  if (sectionCount > 1) {
+    edges.forEach(edge => {
+      if (edge.length < 1) return;
+      const normalX = area >= 0 ? edge.dy / edge.length : -edge.dy / edge.length;
+      const normalZ = area >= 0 ? edge.dx / edge.length : -edge.dx / edge.length;
+      for (let section = 1; section < sectionCount; section += 1) {
+        const t = section / sectionCount;
+        const divider = new THREE.Mesh(new THREE.BoxGeometry(0.12, buildingHeight, 0.13), materials.windowTrim || facadeMaterial);
+        divider.position.set(edge.point.x + edge.dx * t + normalX * 0.08, buildingHeight / 2, -(edge.point.y + edge.dy * t) + normalZ * 0.08);
+        divider.rotation.y = Math.atan2(edge.dy, edge.dx);
+        divider.userData.objectType = 'building-facade-section';
+        group.add(divider);
+      }
+    });
+  }
+  // 裙房/基座层通过独立水平线表达，不改变楼层高度和空间 footprint。
+  const podiumLevel = Math.floor(Number(podiumFloors) || 0);
+  if (podiumLevel > 0 && podiumLevel < floorLayout.floors) {
+    const podiumY = floorLayout.floorHeight * podiumLevel;
+    edges.forEach(edge => {
+      if (edge.length < 0.2) return;
+      const band = new THREE.Mesh(new THREE.BoxGeometry(edge.length + 0.06, 0.22, 0.16), materials.stoneLight || materials.windowTrim);
+      band.position.set((edge.point.x + edge.next.x) / 2, podiumY, -(edge.point.y + edge.next.y) / 2);
+      band.rotation.y = Math.atan2(edge.dy, edge.dx);
+      band.userData.objectType = 'building-podium-band';
+      group.add(band);
+    });
   }
 
   // 檐口沿 footprint 每条边生成，收口建筑墙顶，避免矩形檐口越界。

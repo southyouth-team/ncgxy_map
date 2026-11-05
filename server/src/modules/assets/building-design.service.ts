@@ -723,7 +723,7 @@ export class BuildingDesignService {
       };
     }
     const ids = new Set<string>();
-    const primitives = ['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'];
+    const primitives = ['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft'];
     const vector = (value: unknown, fallback: number[], field: string, min: number, max: number) => {
       if (value === undefined || value === null) return [...fallback];
       if (!Array.isArray(value) || value.length !== 3 || value.some(v => typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max)) {

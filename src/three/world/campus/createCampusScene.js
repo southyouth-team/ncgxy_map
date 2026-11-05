@@ -2,7 +2,7 @@ import {
   CAMPUS_PLAN_REFERENCE, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
 import { createCampusSceneRenderData } from './campusSceneData.js'
-import { resolveCampusBuildingDesign, resolveCampusVisualAsset } from '../../../data/campus/campusAssetManifest.js'
+import { resolveCampusBuildingDesign } from '../../../data/campus/campusAssetManifest.js'
 import { createCampusPlayer } from './createCampusPlayer.js'
 
 import {
@@ -337,50 +337,9 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
     }
     root.add(group)
 
-    const resolved = resolveCampusVisualAsset(visualAssets.manifest, item.id, '2.5d')
-    if (resolved.resolved && resolved.file?.mediaType === 'image' && visualAssets.baseUrl) {
-      const imageUrl = new URL(resolved.file.url, visualAssets.baseUrl).toString()
-      const loader = new THREE.TextureLoader()
-      loader.load(imageUrl, (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace
-        texture.magFilter = THREE.LinearFilter
-        texture.minFilter = THREE.LinearMipmapLinearFilter
-        const spriteMaterial = new THREE.SpriteMaterial({
-          map: texture,
-          transparent: true,
-          depthWrite: false,
-          depthTest: true,
-        })
-        const sprite = new THREE.Sprite(spriteMaterial)
-        const imageAspect = texture.image?.height && texture.image?.width
-          ? texture.image.height / texture.image.width
-          : 1
-        const spriteWidth = Math.max(width, depth) * 1.12
-        const spriteHeight = spriteWidth * imageAspect
-        sprite.name = 'ai-visual-asset-' + item.id
-        sprite.position.set(0, spriteHeight / 2, 0)
-        sprite.scale.set(spriteWidth, spriteHeight, 1)
-        sprite.userData.featureId = item.id
-        sprite.userData.featureCategory = 'buildings'
-        sprite.userData.objectType = 'building-visual-asset'
-        sprite.userData.assetId = resolved.assetId
-        group.add(sprite)
-        const fallbackObjects = []
-        group.children.forEach((child) => {
-          if (child !== sprite) {
-            fallbackObjects.push({ object: child, visible: child.visible })
-          }
-        })
-        group.userData.visualAsset2d = { sprite, fallbackObjects, foundation, assetId: resolved.assetId }
-        const currentViewMode = typeof visualAssets.getViewMode === 'function' ? visualAssets.getViewMode() : visualAssets.viewMode
-        const useImage = currentViewMode !== '3d'
-        sprite.visible = useImage
-        fallbackObjects.forEach(({ object }) => { object.visible = !useImage })
-        foundation.visible = !useImage
-      }, undefined, (error) => {
-        console.warn('[CampusVisualAsset] 图片加载失败，保留程序化建筑：' + item.id, error)
-      })
-    }
+    // 同一套真实 3D Mesh 同时服务 2.5D 与 3D；参考图只用于 AI 识别和工坊审核，不进入运行时场景。
+    group.userData.visualAssetSource = buildingDesign ? 'ai-reference-derived-procedural-3d' : 'procedural-3d'
+    group.userData.referenceAssetId = visualAssets.manifest?.bindings?.find(binding => String(binding.featureId) === String(item.id))?.assetId || null
   }
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)
 

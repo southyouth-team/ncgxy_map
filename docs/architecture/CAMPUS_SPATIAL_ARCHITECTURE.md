@@ -824,3 +824,12 @@ Express 默认 JSON parser 的 100 KiB 上限不足以承载包含完整 Feature
 - `createCampusScene` 仅从审核通过的 `buildingDesign` 读取建筑外观参数，并调用 `createPixelBuilding` 生成实体 Mesh。AI 识别参数同时作用于 2.5D 与 3D。
 - `setViewMode` 只切换 `CameraRig` 的相机投影/观察控制，不再切换建筑 Sprite、隐藏 Mesh 或切换基础建筑可见性。
 - 两种模式共享建筑位置、footprint、材质、几何、碰撞和 walkable；模式差异仅在相机与交互：2.5D 固定斜俯视正交视角，3D 可旋转透视视角。
+
+
+## 32. 建筑模板编辑职责与 AI 素材双视角预览（2026-11-05）
+
+- 建筑模板库由地图编辑器消费。用户在编辑器选中建筑并选择模板后，应用模板完整视觉参数（高度、楼层、屋顶、门窗、墙面）；修改进入空间 FeatureCollection 历史和自动保存链路。
+- 模板套用不覆盖建筑 footprint、位置、碰撞、Feature ID 或 walkable。视觉参数与空间语义保持分层。
+- AI 素材工坊只负责生成参考图、识别结构参数、审核与资产入库，不承担编辑器模板选择职责。
+- 工坊展示同一程序化建筑的 2.5D 正交斜俯视和 3D 透视预览。两个 viewport 调用同一 `createPixelBuilding` 构造 Mesh；相机投影不同，几何、材质、屋顶、门窗与结构参数相同。
+- AI 参考图不得作为 Sprite、平面贴图或最终地图显示素材；仅用于识别与人工审核。人工 GLB 是可选的高精度替代资产来源。

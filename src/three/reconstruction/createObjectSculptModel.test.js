@@ -955,7 +955,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   });
 
   it('rejects overlapping and edge-touching cutout regions on one target mesh', () => {
-    const createSpec = (rightX: number) => ({
+    const createSpec = rightX => ({
       schemaVersion: '2.0',
       componentTree: [
         { id: 'building', kind: 'group' },

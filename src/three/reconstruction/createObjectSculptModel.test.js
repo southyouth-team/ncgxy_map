@@ -323,4 +323,58 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'window-shape').value).toBe('arch');
   });
 
+  it('recalculates follow and span constraints from the baseline when grid dimensions change', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'building-root', kind: 'group', name: '建筑主体' },
+        { id: 'room-prototype', kind: 'group', name: '房间原型', parent: 'building-root' },
+        { id: 'room-shell', kind: 'mesh', name: '房间', parent: 'room-prototype', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 5 } },
+        { id: 'outer-wall', kind: 'mesh', name: '外墙边界', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 0.3 } },
+        { id: 'roof', kind: 'mesh', name: '屋顶', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 0.4, depth: 7 }, transform: { position: [0, 4, 0] } },
+        { id: 'decoration', kind: 'mesh', name: '独立装饰', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 1, height: 1, depth: 1 }, transform: { position: [3, 2, 1] } },
+      ],
+      parameterSchema: [
+        { id: 'rows', label: '行数', type: 'number', value: 2, min: 1, max: 4, step: 1, targets: [] },
+        { id: 'columns', label: '列数', type: 'number', value: 3, min: 1, max: 5, step: 1, targets: [] },
+      ],
+      generators: [{
+        id: 'room-grid', type: 'grid', templateRootId: 'room-prototype',
+        rowParameterId: 'rows', columnParameterId: 'columns',
+        spacingX: 7, spacingZ: 6, defaultRows: 2, defaultColumns: 3, maxRows: 4, maxColumns: 5,
+      }],
+      constraints: [
+        { id: 'roof-follow', type: 'follow', sourceGeneratorId: 'room-grid', targetNodeId: 'roof', axis: 'x', measure: 'columns', factor: 1, offset: 0 },
+        { id: 'wall-span', type: 'span', sourceGeneratorId: 'room-grid', targetNodeId: 'outer-wall', axis: 'x', measure: 'columns', property: 'dimensions.width', factor: 1, offset: 0 },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(14);
+    expect(model.userData.componentGroups.get('outer-wall').userData.componentSpec.dimensions.width).toBeCloseTo(20);
+    applyObjectSculptParameter(THREE, model, 'columns', 2);
+    expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(7);
+    expect(model.userData.componentGroups.get('outer-wall').userData.componentSpec.dimensions.width).toBeCloseTo(13);
+    applyObjectSculptParameter(THREE, model, 'columns', 4);
+    expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(21);
+    expect(model.userData.componentGroups.get('outer-wall').userData.componentSpec.dimensions.width).toBeCloseTo(27);
+    expect(model.userData.componentGroups.get('decoration').position.toArray()).toEqual([3, 2, 1]);
+  });
+
+  it('rejects structural constraints that reference unknown generators or template nodes', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc' } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'prototype', kind: 'group', parent: 'root' },
+        { id: 'part', primitive: 'box', parent: 'prototype', material: 'wall', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+      parameterSchema: [{ id: 'count', type: 'number', value: 1, min: 1, max: 2, targets: [] }],
+      generators: [{ id: 'repeat', type: 'repeat', templateRootId: 'prototype', countParameterId: 'count', axis: 'y', spacing: 2, defaultCount: 1, maxCount: 2 }],
+      constraints: [{ id: 'bad-follow', type: 'follow', sourceGeneratorId: 'missing', targetNodeId: 'root', axis: 'y' }],
+    };
+    expect(() => validateObjectSculptSpec(spec)).toThrow('结构约束引用无效');
+  });
+
 });

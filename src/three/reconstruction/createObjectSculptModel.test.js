@@ -300,12 +300,18 @@ describe('ObjectSculptSpec Three.js adapter', () => {
             radius: 0.06, tubularSegments: 48, radialSegments: 10,
           } },
       ],
+      parameterSchema: [{ id: 'rail-radius', label: '扶手半径', type: 'number', value: 0.06, min: 0.03, max: 0.12, step: 0.01,
+        targets: [{ nodeId: 'handrail', property: 'geometryDescriptor.radius', mode: 'set' }] }],
     };
     const model = createObjectSculptModel(THREE, spec);
-    const mesh = model.userData.componentGroups.get('handrail').getObjectByName('handrail:mesh');
+    let mesh = model.userData.componentGroups.get('handrail').getObjectByName('handrail:mesh');
     expect(mesh.geometry.type).toBe('TubeGeometry');
     expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(100);
     expect(mesh.geometry.getAttribute('normal').count).toBe(mesh.geometry.getAttribute('position').count);
+    applyObjectSculptParameter(THREE, model, 'rail-radius', 0.1);
+    mesh = model.userData.componentGroups.get('handrail').getObjectByName('handrail:mesh');
+    expect(mesh.geometry.parameters.radius).toBe(0.1);
+    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'handrail').geometryDescriptor.radius).toBe(0.1);
   });
 
   it('rejects tube paths with coordinates outside the normalized bounds', () => {

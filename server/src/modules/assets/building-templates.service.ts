@@ -32,7 +32,7 @@ export class BuildingTemplatesService {
     const categories = ['building', 'structure', 'vegetation', 'road', 'water', 'terrain', 'facility', 'decoration', 'sports', 'indoor', 'vehicle', 'character', 'effect'];
     const category = String(input.category || 'building');
     if (!categories.includes(category)) throw new BadRequestException('模板分类无效');
-    if (input.modelType === 'procedural' && category !== 'building') throw new BadRequestException('当前仅建筑类别接入参数化生成器；其他类别请先使用 GLB 导入');
+    if (input.modelType === 'procedural' && category !== 'building' && !['vegetation', 'structure', 'facility', 'decoration', 'sports'].includes(category)) throw new BadRequestException('该场景类别尚未接入参数化生成与识别 schema；请使用 GLB 导入');
     const objectType = typeof input.objectType === 'string' ? input.objectType.trim() : '';
     const visualStyle = typeof input.visualStyle === 'string' ? input.visualStyle.trim() : '';
     const design = (input.design || input.buildingDesign) as Record<string, unknown> | undefined;
@@ -42,7 +42,7 @@ export class BuildingTemplatesService {
     if (!['ai_generated','manual_model','procedural','external'].includes(String(input.sourceType))) throw new BadRequestException('模板来源无效');
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
     if (input.modelType === 'procedural' && (!design || typeof design !== 'object')) throw new BadRequestException('程序化模板缺少结构参数');
-    if (input.modelType === 'procedural' && !this.buildingDesign.consumeDesignToken(input.designToken, design)) throw new BadRequestException('程序化模板必须使用已确认图片生成的有效结构参数；请重新确认图片并识别');
+    if (input.modelType === 'procedural') {\n      const validToken = category === 'building'\n        ? this.buildingDesign.consumeDesignToken(input.designToken, design)\n        : this.buildingDesign.consumeSceneDesignToken(input.designToken, category, objectType, visualStyle, design);\n      if (!validToken) throw new BadRequestException('程序化模板必须使用当前图片、分类、对象类型、视觉风格绑定的有效结构参数；请重新确认图片并识别');\n      if (category !== 'building' && (design as any).category !== category) throw new BadRequestException('场景结构参数分类与模板分类不一致');\n      if (category !== 'building' && (design as any).objectType !== objectType) throw new BadRequestException('场景结构参数对象类型与模板对象类型不一致');\n      if (category !== 'building' && (design as any).visualStyle !== visualStyle) throw new BadRequestException('场景结构参数视觉风格与模板视觉风格不一致');\n    }
     const now = new Date().toISOString();
     const item = { templateId: 'astpl-' + randomUUID(), version: 1, name, category, objectType: objectType || null, visualStyle: visualStyle || null, sourceType: input.sourceType, modelType: input.modelType, status: 'review', design: design || null, prompt: String(input.prompt || '').slice(0,12000), generationModel: input.generationModel || null, referenceImage: null, modelFile: null, createdAt: now, updatedAt: now };
     await this.enqueue(async () => { const m = await this.readManifest(); m.templates.unshift(item); await this.writeManifest(m); });

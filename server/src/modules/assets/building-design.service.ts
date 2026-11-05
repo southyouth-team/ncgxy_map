@@ -46,7 +46,7 @@ export class BuildingDesignService {
 
   constructor(private readonly config: ConfigService) {}
 
-  /** 用户确认预览图后签发一次性短时凭证。 */
+  /** 用户确认预览图后签发绑定图片摘要的 15 分钟短时凭证。 */
   approveReference(imageDataUrlInput: unknown) {
     const image = this.parseReferenceImage(imageDataUrlInput);
     const digest = createHash('sha256').update(image).digest('hex');

@@ -8,18 +8,18 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DevIdentityGuard } from '../../common/dev-identity.guard';
 import { BuildingTemplatesService } from './building-templates.service';
 
-@ApiTags('building-templates')
-@Controller('assets/building-templates')
+@ApiTags('scene-asset-templates')
+@Controller(['assets/scene-templates', 'assets/building-templates'])
 export class BuildingTemplatesController {
   constructor(private readonly service: BuildingTemplatesService) {}
   @Get()
-  @ApiOperation({ summary: '获取独立建筑模板库' })
+  @ApiOperation({ summary: '获取独立场景资产模板库' })
   list() { return this.service.list(); }
   @Get(':templateId')
   get(@Param('templateId') id: string) { return this.service.getPublished(id); }
   @Post()
   @UseGuards(DevIdentityGuard)
-  @ApiOperation({ summary: '创建独立建筑模板草稿，不关联校园 Feature' })
+  @ApiOperation({ summary: '创建独立场景资产模板草稿，不关联校园 Feature' })
   create(@Body() body: Record<string, unknown>) { return this.service.create(body); }
   @Get(':templateId/files/:role')
   async getFile(@Param('templateId') id: string, @Param('role') role: string, @Res({ passthrough: true }) response: Response) {
@@ -40,6 +40,6 @@ export class BuildingTemplatesController {
   }
   @Patch(':templateId/approve')
   @UseGuards(DevIdentityGuard)
-  @ApiOperation({ summary: '审核通过并发布独立建筑模板' })
+  @ApiOperation({ summary: '审核通过并发布独立场景资产模板' })
   approve(@Param('templateId') id: string) { return this.service.approve(id); }
 }

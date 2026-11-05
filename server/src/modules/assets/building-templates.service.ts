@@ -20,23 +20,25 @@ export class BuildingTemplatesService {
   }
   async getPublished(id: string) {
     const item = await this.get(id);
-    if (item.status !== 'ready') throw new NotFoundException('已发布建筑模板不存在');
+    if (item.status !== 'ready') throw new NotFoundException('已发布场景资产模板不存在');
     return item;
   }
   async get(id: string) {
     const item = (await this.readManifest()).templates.find((x: any) => x.templateId === id);
-    if (!item) throw new NotFoundException('建筑模板不存在');
+    if (!item) throw new NotFoundException('场景资产模板不存在');
     return item;
   }
   async create(input: Record<string, unknown>) {
     const categories = ['building', 'structure', 'vegetation', 'road', 'water', 'terrain', 'facility', 'decoration', 'sports', 'indoor', 'vehicle', 'character', 'effect'];
     const category = String(input.category || 'building');
     if (!categories.includes(category)) throw new BadRequestException('模板分类无效');
+    if (input.modelType === 'procedural' && category !== 'building') throw new BadRequestException('当前仅建筑类别接入参数化生成器；其他类别请先使用 GLB 导入');
     const objectType = typeof input.objectType === 'string' ? input.objectType.trim().slice(0, 80) : '';
     const visualStyle = typeof input.visualStyle === 'string' ? input.visualStyle.trim().slice(0, 80) : '';
     const design = (input.design || input.buildingDesign) as Record<string, unknown> | undefined;
     const name = typeof input.name === 'string' ? input.name.trim().slice(0, 120) : '';
     if (!name) throw new BadRequestException('模板名称不能为空');
+    if (objectType.length > 80 || visualStyle.length > 80) throw new BadRequestException('对象类型或视觉风格无效');
     if (!['ai_generated','manual_model','procedural','external'].includes(String(input.sourceType))) throw new BadRequestException('模板来源无效');
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
     if (input.modelType === 'procedural' && (!design || typeof design !== 'object')) throw new BadRequestException('程序化模板缺少结构参数');
@@ -68,7 +70,7 @@ export class BuildingTemplatesService {
       sizeBytes: file.size, url: '/api/v1/assets/building-templates/' + id + '/files/' + role };
     await this.enqueue(async () => {
       const m = await this.readManifest(); const target = m.templates.find((x: any) => x.templateId === id);
-      if (!target) throw new NotFoundException('建筑模板不存在');
+      if (!target) throw new NotFoundException('场景资产模板不存在');
       if (role === 'model') target.modelFile = metadata; else target.referenceImage = metadata;
       target.updatedAt = new Date().toISOString(); await this.writeManifest(m);
     });
@@ -84,7 +86,7 @@ export class BuildingTemplatesService {
     let result: any;
     await this.enqueue(async () => {
       const m = await this.readManifest(); const item = m.templates.find((x: any) => x.templateId === id);
-      if (!item) throw new NotFoundException('建筑模板不存在');
+      if (!item) throw new NotFoundException('场景资产模板不存在');
       if (item.modelType === 'glb' && !item.modelFile) throw new BadRequestException('请先上传 GLB 模型');
       if (item.modelType === 'procedural' && !item.design && !item.buildingDesign) throw new BadRequestException('程序化模板缺少结构参数');
       if (item.modelType === 'procedural' && !item.referenceImage) throw new BadRequestException('程序化模板必须保留已确认的参考图片');

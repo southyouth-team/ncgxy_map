@@ -410,9 +410,46 @@ describe('BuildingDesignService', () => {
     expect(result.objectSculptSpec.parameterSchema.map((item: any) => item.id)).toEqual(['gate-length', 'gate-width', 'gate-height']);
     expect(service.reviewObjectDesign).toBeDefined();
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
-    expect(systemPrompt).toContain('不得伪造目标');
+    expect(systemPrompt).toContain('不能伪造目标');
     expect(systemPrompt).toContain('禁止返回 JavaScript/TypeScript');
   });
+
+
+  it('creates a repeat generator and a direct floor-count parameter for a reusable template', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'floor-parameter-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const current = {
+      schemaVersion: '2.0', targetName: 'school', category: 'building', objectType: '教学楼', visualStyle: 'stylized',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
+      componentTree: [
+        { id: 'school-root', kind: 'group', name: '教学楼主体', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
+        { id: 'floor-prototype', kind: 'group', name: '标准楼层', parent: 'school-root', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
+        { id: 'floor-slab', kind: 'mesh', name: '楼板', parent: 'floor-prototype', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 0.25, depth: 6 }, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
+        { id: 'roof', kind: 'mesh', name: '屋顶', parent: 'school-root', primitive: 'box', material: 'wall', dimensions: { width: 8.5, height: 0.4, depth: 6.5 }, transform: { position: [0,11,0], rotation: [0,0,0], scale: [1,1,1] } },
+      ],
+      parameterSchema: [],
+      generators: [],
+    };
+    const parameterSchema = [{
+      id: 'floor-count', label: '楼层数', type: 'number', value: 3, min: 1, max: 8, step: 1, unit: '层', targets: [],
+    }];
+    const generators = [{
+      id: 'floor-repeat', type: 'repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count',
+      axis: 'y', spacing: 3.2, maxCount: 8,
+    }];
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema, generators }) } }] }),
+    }) as never;
+    const result = await service.addObjectParameters(current, '增加一个楼层数调整变量，默认三层，最高八层');
+    expect(result.objectSculptSpec.parameterSchema).toMatchObject([{ id: 'floor-count', value: 3, targets: [] }]);
+    expect(result.objectSculptSpec.generators).toMatchObject([{ id: 'floor-repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count', axis: 'y', maxCount: 8 }]);
+    expect(result.addedGenerators).toHaveLength(1);
+  });
+
 
   it('rejects conversational parameters that target components outside the current model', async () => {
     const service = new BuildingDesignService({

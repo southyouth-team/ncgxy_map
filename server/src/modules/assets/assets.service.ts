@@ -284,8 +284,8 @@ export class AssetsService {
         }
       }
       const parameter = (spec.parameterSchema || []).find((item: any) => item.id === generator.countParameterId);
-      if (!parameter || parameter.type !== 'number' || parameter.value !== generator.defaultCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
-        || parameter.min < 1 || parameter.max > generator.maxCount) {
+      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+        || parameter.min < 1 || parameter.max > generator.maxCount || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) {
         throw new BadRequestException('资产结构生成器缺少有效的整数数量参数：' + generator.id);
       }
       const subtreeCount = spec.componentTree.filter((node: any) => {

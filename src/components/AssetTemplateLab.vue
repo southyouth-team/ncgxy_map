@@ -27,14 +27,20 @@ const authHeaders = () => ({ 'Content-Type': 'application/json', 'X-Dev-User-Id'
 function resize() {
   if (!renderer || !viewport.value) return
   const w = Math.max(1, viewport.value.clientWidth), h = Math.max(1, viewport.value.clientHeight)
+  const aspect = w / h
   renderer.setSize(w, h, false)
-  camera.aspect = w / h
+  // 固定俯视平铺范围，确保 180×140 的沙盒地面完整进入视口。
+  const viewHeight = Math.max(140, 180 / Math.max(aspect, 0.1)) * 1.12
+  const viewWidth = viewHeight * aspect
+  camera.left = -viewWidth / 2
+  camera.right = viewWidth / 2
+  camera.top = viewHeight / 2
+  camera.bottom = -viewHeight / 2
   camera.updateProjectionMatrix()
 }
 
 /**
- * 只把对象几何中心放到视口中心，不自动放大填满视口。
- * 初始保持较远的总览距离，用户通过滚轮自行放大。
+ * 俯视模式只移动观察中心，不改变缩放倍率，也不改变相机倾角。
  */
 function centerObjectAtOverview(object) {
   if (!object || !camera || !controls) return
@@ -43,24 +49,10 @@ function centerObjectAtOverview(object) {
   const center = bounds.isEmpty()
     ? object.getWorldPosition(new THREE.Vector3())
     : bounds.getCenter(new THREE.Vector3())
-  const sphere = bounds.isEmpty()
-    ? new THREE.Sphere(center, 1)
-    : bounds.getBoundingSphere(new THREE.Sphere())
-  const radius = Math.max(sphere.radius, 0.5)
-
-  const direction = camera.position.clone().sub(controls.target)
-  if (direction.lengthSq() < 0.0001) direction.set(1, 0.8, 1)
-  direction.normalize()
-
-  // 视口中仅显示较小的模型轮廓，具体观察倍率交给用户控制。
-  const distance = Math.max(45, radius * 8)
-  controls.target.copy(center)
-  camera.position.copy(center).addScaledVector(direction, distance)
-  camera.near = Math.max(0.01, distance / 1000)
-  camera.far = Math.max(2000, distance * 30)
-  camera.updateProjectionMatrix()
-  controls.minDistance = 0.1
-  controls.maxDistance = Math.max(500, distance * 30)
+  controls.target.set(center.x, 0, center.z)
+  camera.position.set(center.x, 200, center.z + 0.001)
+  camera.up.set(0, 0, -1)
+  camera.lookAt(controls.target)
   controls.update()
 }
 function readFileAsDataUrl(file) {
@@ -178,9 +170,9 @@ function clearScene() { [...objects.keys()].forEach(removeInstance); status.valu
 function resetCamera() {
   const object = objects.get(selectedInstanceId.value)
   if (object) return centerObjectAtOverview(object)
-  camera.position.set(90, 72, 90)
+  camera.position.set(0, 200, 0.001)
   controls.target.set(0, 0, 0)
-  camera.near = 0.1; camera.far = 500; camera.updateProjectionMatrix()
+  camera.position.set(0, 200, 0.001); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0); camera.zoom = 1; camera.updateProjectionMatrix()
   controls.update()
 }
 
@@ -195,11 +187,11 @@ onMounted(() => {
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshStandardMaterial({ color: '#9eae8d', roughness: 1 }))
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.08; ground.receiveShadow = true; ground.name = 'sandbox-ground'; scene.add(ground)
     const grid = new THREE.GridHelper(180, 36, '#71836e', '#c2cdbb'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
-    camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500); camera.position.set(30, 28, 34)
+    camera = new THREE.OrthographicCamera(-90, 90, 70, -70, 0.1, 1000); camera.position.set(0, 200, 0.001); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0)
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace; viewport.value.replaceChildren(renderer.domElement)
-    controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0); controls.update()
+    controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enableRotate = false; controls.screenSpacePanning = true; controls.target.set(0, 0, 0); controls.minZoom = 0.25; controls.maxZoom = 8; controls.update()
     observer = new ResizeObserver(resize); observer.observe(viewport.value); resize()
     const render = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(render) }; render()
     status.value = '沙盒已就绪；可输入提示词或上传图片生成独立模型'

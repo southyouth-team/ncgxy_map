@@ -287,6 +287,11 @@ describe('BuildingDesignService', () => {
     expect(reviewed.design.reviewed).toBe(true);
     expect(reviewed.design.objectSculptSpec.componentTree[0].dimensions.width).toBe(9.5);
     expect(reviewed.design.objectSculptSpec.materials.wall.color).toBe('#aa8866');
+    edited.componentTree[0].hidden = true;
+    edited.componentTree[1].locked = true;
+    const flagsReviewed = service.reviewObjectDesign(identified.design, identified.designToken, edited);
+    expect(flagsReviewed.design.objectSculptSpec.componentTree[0]).toMatchObject({ hidden: true, locked: false });
+    expect(flagsReviewed.design.objectSculptSpec.componentTree[1]).toMatchObject({ hidden: false, locked: true });
     expect(service.consumeDesignToken(reviewed.designToken, reviewed.design)).toBe(true);
     expect(service.consumeDesignToken(identified.designToken, reviewed.design)).toBe(false);
     expect(service.consumeDesignToken(reviewed.designToken, identified.design)).toBe(false);

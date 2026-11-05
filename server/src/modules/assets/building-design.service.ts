@@ -663,11 +663,12 @@ export class BuildingDesignService {
           messages: [
             { role: 'system', content: [
               '你是参数化 3D 模型的参数设计器。根据用户要求和当前 ObjectSculptSpec，为现有模型设计可编辑参数。',
-              '只返回 JSON：{ "parameterSchema": [...], "generators": [...], "unsupported": [...] }。parameterSchema 和 generators 必须返回完整定义，原有定义必须逐字段保持不变。',
+              '只返回 JSON：{ "componentTree": [...], "parameterSchema": [...], "generators": [...], "unsupported": [...] }。componentTree 必须是完整结构树；若无需重构，原样返回当前树。parameterSchema 和 generators 必须返回完整定义，原有定义必须逐字段保持不变。',
               '普通参数包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options。',
               'targets 只能引用当前 componentTree 中真实存在的 nodeId。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。',
               '结构数量参数可以 targets=[]，但必须同时创建一个 generators 项并绑定 countParameterId。禁止把楼层数只映射到预生成节点显隐。',
               '没有可用原型时必须明确返回 unsupported，不能伪造目标或生成器。',
+              '如果用户要求楼层数变量而当前楼层是多个独立重复节点，可以在 componentTree 中把一个完整楼层整理为 Group 原型，并只在确认其余楼层是相同重复实例时将其从静态树中移除；必须保持该原型的几何、材质和局部结构不变。无法可靠识别单层完整子树时，不得强行重构，应返回 unsupported。',
               'generators 只支持安全声明式 repeat：{id,type:"repeat",templateRootId,countParameterId,axis:"x"|"y"|"z",spacing,defaultCount,maxCount,followers:[{nodeId,axis,offset}]}。templateRootId 必须是当前 componentTree 中代表一个完整可重复单元的现有节点；其子树会作为原型复制。第一份保留原节点 ID，后续实例由运行时派生稳定 ID。defaultCount 必须等于数量参数默认 value；followers 用于在数量变化时同步移动屋顶等非重复节点。',
               '当用户要求楼层数时，寻找一个完整楼层 Group 子树作为模板，沿 y 轴重复，spacing 使用楼层高度；设置 defaultCount 为当前楼层数，maxCount 为允许上限，并把屋顶等结构加入 followers，沿 y 轴偏移 spacing*(楼层数-defaultCount)。屋顶等非重复结构不能放进楼层原型子树。',
               '当用户要求房间数时，只有能识别完整房间原型和合理排列轴/间距时才创建 repeat；否则说明当前模型缺少可重复房间结构，不能假装参数已生效。',
@@ -691,9 +692,10 @@ export class BuildingDesignService {
       throw new ServiceUnavailableException('AI 参数设计未返回有效 JSON');
     }
     if (!Array.isArray(parsed?.parameterSchema)) throw new ServiceUnavailableException('AI 参数设计结果缺少 parameterSchema');
-    const generators = normalizeObjectGenerators(parsed.generators ?? current.generators ?? [], current.componentTree);
+    const componentTree = Array.isArray(parsed.componentTree) ? parsed.componentTree : current.componentTree;
+    const generators = normalizeObjectGenerators(parsed.generators ?? current.generators ?? [], componentTree);
     const generatorParameterIds = new Set(generators.map((generator: any) => generator.countParameterId));
-    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, current.componentTree, current.materials, generatorParameterIds);
+    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, current.materials, generatorParameterIds);
     for (const generator of generators) {
       const parameter = parameterSchema.find((item: any) => item.id === generator.countParameterId);
       if (!parameter || parameter.type !== 'number' || parameter.value !== generator.defaultCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
@@ -724,7 +726,7 @@ export class BuildingDesignService {
       objectSculptSpec: current,
     };
     const token = this.signToken('design', createHash('sha256').update(JSON.stringify(design)).digest('hex'));
-    const reviewed = this.reviewObjectDesign(design, token, { ...current, parameterSchema, generators });
+    const reviewed = this.reviewObjectDesign(design, token, { ...current, componentTree, parameterSchema, generators });
     return {
       objectSculptSpec: reviewed.design.objectSculptSpec,
       addedParameters: parameterSchema.filter((item: any) => !previous.some((old: any) => old.id === item.id)),

@@ -123,6 +123,31 @@ function expandObjectSculptSpec(spec) {
     const key = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis);
     if (constrainedNodes.has(key)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
     constrainedNodes.add(key);
+    if (constraint.type === 'adjacency') {
+      const sourceNode = expanded.find(node => node.id === constraint.sourceNodeId);
+      const targetNode = expanded.find(node => node.id === constraint.targetNodeId);
+      sourceNode.relations = [...(sourceNode.relations || []), { id: constraint.id, type: 'adjacency', relation: constraint.relation, nodeId: targetNode.id }];
+      targetNode.relations = [...(targetNode.relations || []), { id: constraint.id, type: 'adjacency', relation: constraint.relation, nodeId: sourceNode.id }];
+      continue;
+    }
+    if (constraint.type === 'attach') {
+      const sourceNode = expanded.find(node => node.id === constraint.sourceNodeId);
+      const targetNode = expanded.find(node => node.id === constraint.targetNodeId);
+      const axisIndex = 'xyz'.indexOf(constraint.axis);
+      const dimensionKey = ['width','height','depth'][axisIndex];
+      const sourcePosition = sourceNode.transform?.position || [0, 0, 0];
+      const targetPosition = targetNode.transform?.position || [0, 0, 0];
+      const sourceHalf = Number(sourceNode.dimensions?.[dimensionKey] || 1) * Math.abs(Number(sourceNode.transform?.scale?.[axisIndex] ?? 1)) / 2;
+      const targetHalf = Number(targetNode.dimensions?.[dimensionKey] || 1) * Math.abs(Number(targetNode.transform?.scale?.[axisIndex] ?? 1)) / 2;
+      targetNode.transform = targetNode.transform || {};
+      const nextPosition = [...targetPosition];
+      nextPosition[axisIndex] = Number(sourcePosition[axisIndex] || 0)
+        + Number(constraint.sourceSide) * sourceHalf - Number(constraint.targetSide) * targetHalf + Number(constraint.offset || 0);
+      targetNode.transform.position = nextPosition;
+      sourceNode.relations = [...(sourceNode.relations || []), { id: constraint.id, type: 'attach', nodeId: targetNode.id, axis: constraint.axis }];
+      targetNode.relations = [...(targetNode.relations || []), { id: constraint.id, type: 'attach', nodeId: sourceNode.id, axis: constraint.axis }];
+      continue;
+    }
     target.transform = target.transform || {};
     const position = Array.isArray(target.transform.position) ? [...target.transform.position] : [0, 0, 0];
     const axisIndex = 'xyz'.indexOf(constraint.axis);
@@ -394,22 +419,41 @@ export function validateObjectSculptSpec(spec) {
     if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
       || constraintIds.has(constraint.id)) throw new TypeError('结构约束 ID 无效或重复');
     constraintIds.add(constraint.id);
-    if (!['follow','span'].includes(constraint.type) || !generatorIds.has(constraint.sourceGeneratorId)
-      || !nodes.has(constraint.targetNodeId) || generatorTemplateNodeIds.has(constraint.targetNodeId)
-      || !['x','y','z'].includes(constraint.axis)) throw new TypeError('结构约束引用无效：' + constraint.id);
-    const sourceGenerator = (spec.generators || []).find(item => item.id === constraint.sourceGeneratorId);
-    const expectedAxis = { 'dimensions.width': 'x', 'dimensions.height': 'y', 'dimensions.depth': 'z' }[constraint.property];
-    if (!['rows','columns','repeat'].includes(constraint.measure || 'repeat')
-      || (sourceGenerator?.type === 'grid' && !['rows','columns'].includes(constraint.measure))
-      || (sourceGenerator?.type === 'repeat' && constraint.measure !== 'repeat')
-      || (constraint.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(constraint.property)
-        || expectedAxis !== constraint.axis || nodes.get(constraint.targetNodeId).kind === 'group'))
-      || (constraint.type === 'follow' && constraint.property !== undefined)
-      || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
-      || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
-      throw new TypeError('结构约束规则无效：' + constraint.id);
+    if (!['follow','span','attach','adjacency'].includes(constraint.type)) throw new TypeError('结构约束类型无效：' + constraint.id);
+    if (constraint.type === 'follow' || constraint.type === 'span') {
+      if (!generatorIds.has(constraint.sourceGeneratorId) || !nodes.has(constraint.targetNodeId)
+        || generatorTemplateNodeIds.has(constraint.targetNodeId) || !['x','y','z'].includes(constraint.axis)) {
+        throw new TypeError('结构约束引用无效：' + constraint.id);
+      }
+      const sourceGenerator = (spec.generators || []).find(item => item.id === constraint.sourceGeneratorId);
+      const expectedAxis = { 'dimensions.width': 'x', 'dimensions.height': 'y', 'dimensions.depth': 'z' }[constraint.property];
+      if (!['rows','columns','repeat'].includes(constraint.measure || 'repeat')
+        || (sourceGenerator?.type === 'grid' && !['rows','columns'].includes(constraint.measure))
+        || (sourceGenerator?.type === 'repeat' && constraint.measure !== 'repeat')
+        || (constraint.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(constraint.property)
+          || expectedAxis !== constraint.axis || nodes.get(constraint.targetNodeId).kind === 'group'))
+        || (constraint.type === 'follow' && constraint.property !== undefined)
+        || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
+        || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
+        throw new TypeError('结构约束规则无效：' + constraint.id);
+      }
+    } else {
+      const source = nodes.get(constraint.sourceNodeId), target = nodes.get(constraint.targetNodeId);
+      if (!source || !target || source.id === target.id || generatorTemplateNodeIds.has(source.id) || generatorTemplateNodeIds.has(target.id)) {
+        throw new TypeError('组件连接关系引用无效：' + constraint.id);
+      }
+      if (constraint.type === 'attach') {
+        if ((source.kind || 'mesh') !== 'mesh' || (target.kind || 'mesh') !== 'mesh'
+          || source.parent !== target.parent || !['x','y','z'].includes(constraint.axis)
+          || ![-1,1].includes(Number(constraint.sourceSide)) || ![-1,1].includes(Number(constraint.targetSide))
+          || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
+          throw new TypeError('attach 必须连接同一父级下的 Mesh 面：' + constraint.id);
+        }
+      } else if (!['adjacent','connects'].includes(constraint.relation)) {
+        throw new TypeError('adjacency relation 无效：' + constraint.id);
+      }
     }
-    const targetKey = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis);
+    const targetKey = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis || constraint.sourceNodeId);
     if (managedConstraintTargets.has(targetKey)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
     managedConstraintTargets.add(targetKey);
   }
@@ -484,6 +528,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     group.userData.componentId = node.id;
     group.userData.componentSourceId = node.generatorInstance?.sourceNodeId || node.id;
     group.userData.componentRole = String(node.role || 'component').slice(0, 80);
+    group.userData.componentRelations = Array.isArray(node.relations) ? JSON.parse(JSON.stringify(node.relations)) : [];
     group.userData.componentHidden = node.hidden === true;
     group.userData.componentLocked = node.locked === true;
     group.visible = node.hidden !== true;

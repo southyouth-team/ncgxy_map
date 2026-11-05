@@ -1300,8 +1300,37 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         expect(mesh.geometry.boundingSphere).not.toBeNull();
       }
 
+      if (fixture.name === 'vehicle') {
+        const wheelGroups = [...model.userData.componentGroups.values()]
+          .filter(group => group.userData.componentSourceId === 'wheel-pair');
+        expect(wheelGroups).toHaveLength(4);
+        const wheelPositions = wheelGroups
+          .map(group => [Number(group.position.x.toFixed(2)), Number(group.position.z.toFixed(2))])
+          .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        expect(wheelPositions).toEqual([[0, 0], [0, 1.5], [2.6, 0], [2.6, 1.5]]);
+        for (const wheelGroup of wheelGroups) {
+          const wheelNode = [...model.userData.componentGroups.values()]
+            .find(group => group.userData.componentSourceId === 'wheel'
+              && group.parent === wheelGroup);
+          expect(wheelNode).toBeTruthy();
+          const wheelMesh = wheelNode.getObjectByName(wheelNode.name + ':mesh');
+          expect(wheelMesh.geometry.type).toBe('CylinderGeometry');
+          wheelMesh.geometry.computeBoundingBox();
+          expect(wheelMesh.geometry.boundingBox.getSize(new THREE.Vector3()).length()).toBeGreaterThan(0);
+        }
+      }
+
       applyObjectSculptParameter(THREE, model, fixture.countParameter, fixture.nextCount);
       expect(model.userData.componentGroups.size).toBe(fixture.expectedComponents);
+      if (fixture.name === 'vehicle') {
+        const expandedWheelGroups = [...model.userData.componentGroups.values()]
+          .filter(group => group.userData.componentSourceId === 'wheel-pair');
+        expect(expandedWheelGroups).toHaveLength(6);
+        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.x.toFixed(2)))].sort((a, b) => a - b))
+          .toEqual([0, 2.6, 5.2]);
+        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.z.toFixed(2)))].sort((a, b) => a - b))
+          .toEqual([0, 1.5]);
+      }
 
       applyObjectSculptParameter(THREE, model, fixture.dimensionParameter, fixture.nextDimension);
       const node = model.userData.componentGroups.get(fixture.dimensionNode);

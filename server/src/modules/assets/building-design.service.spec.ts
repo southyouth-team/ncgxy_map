@@ -45,22 +45,23 @@ describe('BuildingDesignService', () => {
     });
     expect(result.designToken).toBeTruthy();
     expect(service.consumeDesignToken(result.designToken, result.design)).toBe(true);
-    expect(service.consumeDesignToken(result.designToken, result.design)).toBe(false);
+    const secondInstance = new BuildingDesignService({ get: (key: string) => ({ VISION_API_KEY: 'secret' } as Record<string, string>)[key] } as never);
+    expect(secondInstance.consumeDesignToken(result.designToken, result.design)).toBe(true);
   });
 
 
-  it('requires approval of the exact preview image and consumes the token once', async () => {
-    const service = new BuildingDesignService({ get: () => undefined } as never);
+  it('requires approval of the exact preview image and verifies approval across service instances', async () => {
+    const service = new BuildingDesignService({ get: (key: string) => ({ VISION_API_KEY: 'shared-secret' } as Record<string, string>)[key] } as never);
     const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
     await expect(service.analyzeReference(imageDataUrl, undefined)).rejects.toThrow('请先确认建筑参考图片');
     const approval = service.approveReference(imageDataUrl);
     await expect(service.analyzeReference(imageDataUrl, 'wrong-token')).rejects.toThrow('图片确认凭证无效');
-    await expect(service.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toBeInstanceOf(ServiceUnavailableException);
-    await expect(service.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toThrow('图片确认凭证无效');
+    const secondInstance = new BuildingDesignService({ get: () => 'shared-secret' } as never);
+    await expect(secondInstance.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('fails clearly when vision configuration is absent', async () => {
-    const service = new BuildingDesignService({ get: () => undefined } as never);
+    const service = new BuildingDesignService({ get: (key: string) => ({ ASSET_TOKEN_SECRET: 'test-token-secret' } as Record<string, string>)[key] } as never);
     const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
     const approval = service.approveReference(imageDataUrl);
     await expect(service.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toBeInstanceOf(ServiceUnavailableException);

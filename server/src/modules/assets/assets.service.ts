@@ -240,7 +240,7 @@ export class AssetsService {
       if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id) || ids.has(node.id)) throw new BadRequestException('资产组件 ID 无效或重复');
       ids.add(node.id);
     }
-    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe']);
+    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep']);
     const byId = new Map<string, any>(spec.componentTree.map((node: any) => [node.id, node] as [string, any]));
     for (const node of spec.componentTree) {
       if (node.parent && !ids.has(node.parent)) throw new BadRequestException('资产组件父节点不存在：' + node.id);
@@ -277,6 +277,24 @@ export class AssetsService {
               || (Math.abs(Number(point[0]) - Number(profile[index - 1][0])) < 0.0001
                 && Math.abs(Number(point[1]) - Number(profile[index - 1][1])) < 0.0001))) {
             throw new BadRequestException('资产 lathe profile 必须包含 2 到 32 个有效的 [半径,高度] 归一化截面点：' + node.id);
+          }
+        }
+        if (String(node.primitive).toLowerCase() === 'sweep') {
+          const path = node.geometryDescriptor?.path;
+          const profile = node.geometryDescriptor?.profile;
+          if (!Array.isArray(path) || path.length < 2 || path.length > 32
+            || path.some((point: any) => !Array.isArray(point) || point.length !== 3
+              || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {
+            throw new BadRequestException('资产 sweep path 必须包含 2 到 32 个有效三维归一化坐标点：' + node.id);
+          }
+          if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24
+            || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
+              || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {
+            throw new BadRequestException('资产 sweep profile 必须包含 3 到 24 个有效二维归一化坐标点：' + node.id);
+          }
+          const steps = Number(node.geometryDescriptor?.steps ?? 32);
+          if (!Number.isInteger(steps) || steps < 3 || steps > 128) {
+            throw new BadRequestException('资产 sweep steps 参数无效：' + node.id);
           }
         }
       }

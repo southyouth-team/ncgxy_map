@@ -240,7 +240,7 @@ export class AssetsService {
       if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id) || ids.has(node.id)) throw new BadRequestException('资产组件 ID 无效或重复');
       ids.add(node.id);
     }
-    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep']);
+    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft']);
     const byId = new Map<string, any>(spec.componentTree.map((node: any) => [node.id, node] as [string, any]));
     for (const node of spec.componentTree) {
       if (node.parent && !ids.has(node.parent)) throw new BadRequestException('资产组件父节点不存在：' + node.id);
@@ -295,6 +295,27 @@ export class AssetsService {
           const steps = Number(node.geometryDescriptor?.steps ?? 32);
           if (!Number.isInteger(steps) || steps < 3 || steps > 128) {
             throw new BadRequestException('资产 sweep steps 参数无效：' + node.id);
+          }
+        }
+        if (String(node.primitive).toLowerCase() === 'loft') {
+          const sections = node.geometryDescriptor?.sections;
+          if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) {
+            throw new BadRequestException('资产 loft 必须包含 2 到 12 个截面：' + node.id);
+          }
+          const pointCount = Array.isArray(sections[0]?.points) ? sections[0].points.length : 0;
+          let previousHeight = -Infinity;
+          if (pointCount < 3 || pointCount > 24
+            || sections.some((section: any) => {
+              const invalid = !section || typeof section !== 'object'
+                || !Number.isFinite(Number(section.height)) || Number(section.height) < -0.5 || Number(section.height) > 0.5
+                || Number(section.height) <= previousHeight + 0.0001
+                || !Array.isArray(section.points) || section.points.length !== pointCount
+                || section.points.some((point: any) => !Array.isArray(point) || point.length !== 2
+                  || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5));
+              if (!invalid) previousHeight = Number(section.height);
+              return invalid;
+            })) {
+            throw new BadRequestException('资产 loft 截面高度必须严格递增，且每个截面包含相同数量的有效轮廓点：' + node.id);
           }
         }
       }

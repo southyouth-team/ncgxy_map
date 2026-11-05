@@ -152,7 +152,7 @@ function expandObjectSculptSpec(spec) {
     }
   }
   if (expanded.length > MAX_COMPONENTS) throw new RangeError('动态生成后的组件数量超过 ' + MAX_COMPONENTS);
-  return { ...spec, componentTree: expanded, generators: [], parameterSchema: (spec.parameterSchema || []).map(parameter => generatorParameterIds.has(parameter.id) ? { ...parameter, generatorControl: true } : parameter) };
+  return { ...spec, componentTree: expanded, generators: [], constraints: [], parameterSchema: (spec.parameterSchema || []).map(parameter => generatorParameterIds.has(parameter.id) ? { ...parameter, generatorControl: true } : parameter) };
 }
 
 const MAX_HIERARCHY_DEPTH = 16;

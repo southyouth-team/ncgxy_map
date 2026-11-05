@@ -32,7 +32,7 @@ export class BuildingTemplatesService {
     const categories = ['building', 'structure', 'vegetation', 'road', 'water', 'terrain', 'facility', 'decoration', 'sports', 'indoor', 'vehicle', 'character', 'effect'];
     const category = String(input.category || 'building');
     if (!categories.includes(category)) throw new BadRequestException('模板分类无效');
-    if (input.modelType === 'procedural' && category !== 'building' && !['vegetation', 'structure', 'facility', 'decoration', 'sports'].includes(category)) throw new BadRequestException('该场景类别尚未接入参数化生成与识别 schema；请使用 GLB 导入');
+    if (input.modelType === 'procedural' && category !== 'building' && !['vegetation', 'structure', 'facility', 'decoration', 'sports', 'road', 'water', 'terrain'].includes(category)) throw new BadRequestException('该场景类别尚未接入参数化生成与识别 schema；请使用 GLB 导入');
     const objectType = typeof input.objectType === 'string' ? input.objectType.trim() : '';
     const visualStyle = typeof input.visualStyle === 'string' ? input.visualStyle.trim() : '';
     const design = (input.design || input.buildingDesign) as Record<string, unknown> | undefined;

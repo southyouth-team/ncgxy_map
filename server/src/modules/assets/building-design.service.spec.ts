@@ -66,4 +66,39 @@ describe('BuildingDesignService', () => {
     const approval = service.approveReference(imageDataUrl);
     await expect(service.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
+
+  it('analyzes a confirmed non-building scene reference and signs category-specific geometry', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'scene-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        form: 'tree', canopyShape: 'layered', trunkRatio: 0.5, crownLayers: 4, branchSpread: 0.8,
+        leafPalette: 'darkGreen', flowerCount: 0, confidence: 0.9, evidence: ['分层树冠'], limitations: ['背面不可见'],
+      }) } }] }),
+    }) as never;
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const result = await service.analyzeSceneReference('vegetation', '香樟树', 'low-poly', imageDataUrl, approval.approvalToken);
+    expect(result.design).toMatchObject({
+      schemaVersion: 1, category: 'vegetation', objectType: '香樟树', visualStyle: 'low-poly',
+      geometry: { form: 'tree', canopyShape: 'layered', trunkRatio: 0.5, crownLayers: 4, leafPalette: 'darkGreen' },
+      confidence: 0.9, reviewed: false,
+    });
+    expect(service.consumeSceneDesignToken(result.designToken, 'vegetation', '香樟树', 'low-poly', result.design)).toBe(true);
+    expect(service.consumeSceneDesignToken(result.designToken, 'vegetation', '灌木', 'low-poly', result.design)).toBe(false);
+    expect(service.consumeSceneDesignToken(result.designToken, 'vegetation', '香樟树', 'anime-painted', result.design)).toBe(false);
+  });
+
+  it('rejects unsupported category and object combinations before calling vision provider', async () => {
+    const service = new BuildingDesignService({ get: (key: string) => ({ VISION_API_KEY: 'secret', VISION_MODEL: 'vision-test' } as Record<string, string>)[key] } as never);
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    await expect(service.analyzeSceneReference('water', '湖泊', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('尚未接入视觉识别 schema');
+    await expect(service.analyzeSceneReference('vegetation', '篮球架', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('对象类型与场景类别不匹配');
+  });
+
 });

@@ -20,6 +20,20 @@ export class VisualAssetsController {
     return this.service.getVisualAssetManifest();
   }
 
+  @Post('objects')
+  @UseGuards(DevIdentityGuard)
+  @ApiOperation({ summary: '保存完整结构化 3D 资产（组件树、材质和参数 Schema）' })
+  saveObject(@Req() req: Request & { user: { id: string } }, @Body() input: Record<string, unknown>) {
+    return this.service.saveObjectSculptAsset(req.user.id, input);
+  }
+
+  @Get('objects/:assetId')
+  @UseGuards(DevIdentityGuard)
+  @ApiOperation({ summary: '读取用户保存的完整结构化 3D 资产' })
+  getObject(@Req() req: Request & { user: { id: string } }, @Param('assetId') assetId: string) {
+    return this.service.getObjectSculptAsset(req.user.id, assetId);
+  }
+
   @Get(':fileId/content')
   @ApiOperation({ summary: '读取已正式入库的校园视觉素材' })
   async getContent(@Param('fileId') fileId: string, @Res({ passthrough: true }) response: Response) {

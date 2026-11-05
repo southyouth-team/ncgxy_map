@@ -273,6 +273,52 @@ function validateSimpleProfile(points, label) {
   }
 }
 
+
+function validateGeneratedGeometry(geometry, label) {
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  if (!position || position.count < 3 || !normal || normal.count !== position.count) {
+    throw new RangeError(label + ' 生成了不完整的顶点或法线数据');
+  }
+  for (let index = 0; index < position.count; index += 1) {
+    const values = [position.getX(index), position.getY(index), position.getZ(index),
+      normal.getX(index), normal.getY(index), normal.getZ(index)];
+    if (values.some(value => !Number.isFinite(value))) {
+      throw new RangeError(label + ' 包含非有限顶点或法线');
+    }
+    const normalLength = Math.hypot(values[3], values[4], values[5]);
+    if (normalLength < 0.5 || normalLength > 1.5) {
+      throw new RangeError(label + ' 包含长度异常的法线');
+    }
+  }
+  const index = geometry.getIndex();
+  const triangleCount = index ? index.count / 3 : position.count / 3;
+  if (!Number.isInteger(triangleCount) || triangleCount < 1) {
+    throw new RangeError(label + ' 没有有效三角形');
+  }
+  // Use scalar reads rather than relying on a specific typed-array implementation.
+  const readIndex = offset => index ? index.getX(offset) : offset;
+  for (let triangle = 0; triangle < triangleCount; triangle += 1) {
+    const ia = readIndex(triangle * 3), ib = readIndex(triangle * 3 + 1), ic = readIndex(triangle * 3 + 2);
+    if (ia >= position.count || ib >= position.count || ic >= position.count) {
+      throw new RangeError(label + ' 包含越界三角形索引');
+    }
+    const abx = position.getX(ib) - position.getX(ia);
+    const aby = position.getY(ib) - position.getY(ia);
+    const abz = position.getZ(ib) - position.getZ(ia);
+    const acx = position.getX(ic) - position.getX(ia);
+    const acy = position.getY(ic) - position.getY(ia);
+    const acz = position.getZ(ic) - position.getZ(ia);
+    const nx = aby * acz - abz * acy;
+    const ny = abz * acx - abx * acz;
+    const nz = abx * acy - aby * acx;
+    if (nx * nx + ny * ny + nz * nz < 1e-12) {
+      throw new RangeError(label + ' 包含退化三角形');
+    }
+  }
+  return geometry;
+}
+
 function createGeometry(THREE, node) {
   const dimensions = node.dimensions || {};
   const width = boundedNumber(dimensions.width, 1, 0.02, MAX_DIMENSION, node.id + '.width');
@@ -335,12 +381,12 @@ function createGeometry(THREE, node) {
     shape.closePath();
     const curve = new THREE.CatmullRomCurve3(pathPoints, descriptor.closed === true, 'centripetal');
     const steps = Math.round(boundedNumber(descriptor.steps, 32, 3, 128, node.id + '.geometryDescriptor.steps'));
-    return new THREE.ExtrudeGeometry(shape, {
+    return validateGeneratedGeometry(new THREE.ExtrudeGeometry(shape, {
       steps,
       bevelEnabled: false,
       extrudePath: curve,
       curveSegments: segments,
-    });
+    }), node.id + '.sweep');
   }
 
   if (String(node.primitive || '').toLowerCase() === 'loft') {
@@ -432,7 +478,7 @@ function createGeometry(THREE, node) {
     geometry.computeVertexNormals();
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
-    return geometry;
+    return validateGeneratedGeometry(geometry, node.id + '.loft');
   }
 
   switch (String(node.primitive || 'box').toLowerCase()) {

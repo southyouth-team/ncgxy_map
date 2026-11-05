@@ -86,7 +86,7 @@ describe('BuildingDesignService', () => {
     expect(result.design).toMatchObject({
       schemaVersion: 1, category: 'vegetation', objectType: '香樟树', visualStyle: 'low-poly',
       geometry: { form: 'tree', canopyShape: 'layered', trunkRatio: 0.5, crownLayers: 4, leafPalette: 'darkGreen' },
-      confidence: 0.9, reviewed: false,
+      confidence: 0.9, referenceImageSha256: expect.any(String), reviewed: false,
     });
     expect(service.consumeSceneDesignToken(result.designToken, 'vegetation', '香樟树', 'low-poly', result.design)).toBe(true);
     expect(service.consumeSceneDesignToken(result.designToken, 'vegetation', '灌木', 'low-poly', result.design)).toBe(false);
@@ -102,27 +102,21 @@ describe('BuildingDesignService', () => {
   });
 
 
-  it('analyzes spatial water parameters without claiming measured depth', async () => {
+  it('rejects spatial categories from the isolated-object recognition endpoint', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({
-        VISION_API_KEY: 'scene-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+        VISION_API_KEY: 'scene-secret', VISION_MODEL: 'vision-test',
       } as Record<string, string>)[key],
     } as never);
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
-        form: 'lake', waterColor: 'turquoise', shoreWidth: 0.8, depthEstimate: 4.5,
-        hasRipples: true, bankStyle: 'stone', confidence: 0.72,
-      }) } }] }),
-    }) as never;
     const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
     const approval = service.approveReference(imageDataUrl);
-    const result = await service.analyzeSceneReference('water', '湖泊', 'anime-painted', imageDataUrl, approval.approvalToken);
-    expect(result.design.geometry).toMatchObject({
-      form: 'lake', waterColor: 'turquoise', shoreWidth: 0.8, depthEstimate: 4.5,
-      hasRipples: true, bankStyle: 'stone',
-    });
-    expect(result.design.limitations).toContain('视觉模型未提供可核验的水深测量；depthEstimate 仅为视觉参数估计');
+    await expect(service.analyzeSceneReference('road', '道路', 'stylized', imageDataUrl, approval.approvalToken))
+      .rejects.toThrow('尚未接入视觉识别 schema');
+    await expect(service.analyzeSceneReference('water', '湖泊', 'stylized', imageDataUrl, approval.approvalToken))
+      .rejects.toThrow('尚未接入视觉识别 schema');
+    await expect(service.analyzeSceneReference('terrain', '山坡', 'stylized', imageDataUrl, approval.approvalToken))
+      .rejects.toThrow('尚未接入视觉识别 schema');
   });
+
 
 });

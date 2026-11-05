@@ -12,7 +12,7 @@ describe('scene asset generator registry', () => {
     expect(registry.supports('decoration', '景观石')).toBe(true);
     expect(registry.supports('sports', '篮球架')).toBe(true);
     expect(registry.supports('road', '校园道路')).toBe(true);
-    expect(registry.supports('indoor', '教室')).toBe(true);
+    expect(registry.supports('water', '湖泊')).toBe(true);
     expect(registry.supports('terrain', '山坡')).toBe(true);
     expect(SCENE_ASSET_GENERATOR_CATALOG).toHaveLength(8);
   });

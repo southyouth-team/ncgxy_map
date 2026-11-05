@@ -14,7 +14,7 @@ const name=ref('新场景资产模板'),prompt=ref(''),extra=ref(''),category=re
 const categoryInfo=computed(()=>getSceneAssetCategory(category.value))
 const generatorReady=computed(()=>category.value==='building'||sceneAssetGenerators.supports(category.value,objectType.value))
 const buildingRecognitionReady=computed(()=>category.value==='building'||sceneAssetGenerators.supports(category.value,objectType.value))
-const dimensions=ref({width:3,height:4,depth:3})
+const dimensions=ref({width:8,height:4,depth:6})
 const defaultObjectTypes={vegetation:'香樟树',structure:'拱桥',facility:'长椅',decoration:'景观石',sports:'篮球架',road:'校园道路',water:'湖泊',terrain:'山坡',building:'教学楼'}
 const defaultDimensions={building:{width:8,height:4,depth:6},road:{width:24,height:0.3,depth:6},water:{width:16,height:1,depth:12},terrain:{width:16,height:3,depth:16}}
 const image=ref(null),glb=ref(null),imageUrl=ref(''),glbUrl=ref(''),approved=ref(false),approvalToken=ref(''),design=ref(null),designToken=ref(''),model=ref('')

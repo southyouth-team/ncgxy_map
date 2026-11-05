@@ -70,6 +70,7 @@ function createVegetationGenerator(THREE, input, materials) {
     const crownLayers = Math.max(1, Math.min(6, Math.round(Number(geometry.crownLayers) || 1)));
     for (let layer = 0; layer < crownLayers; layer += 1) {
       const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(crownRadius * (1 - layer * 0.1), 1), layer % 2 ? materials.secondary : materials.leaf);
+      crown.name = 'vegetation-crown-' + layer;
       crown.position.y = trunkHeight + height * 0.18 + layer * height * 0.1;
       crown.scale.y = Math.max(0.55, height / Math.max(width, depth) * 0.7);
       crown.castShadow = true;

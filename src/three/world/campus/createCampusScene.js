@@ -2,7 +2,7 @@ import {
   CAMPUS_PLAN_REFERENCE, CAMPUS_PLAYER_SPAWN_PIXEL, getCampusFootprintBounds, mapPixelToWorld, mapRectToWorld,
 } from '../../../data/campus/campusLayout.js'
 import { createCampusSceneRenderData } from './campusSceneData.js'
-import { resolveCampusVisualAsset } from '../../../data/campus/campusAssetManifest.js'
+import { resolveCampusBuildingDesign, resolveCampusVisualAsset } from '../../../data/campus/campusAssetManifest.js'
 import { createCampusPlayer } from './createCampusPlayer.js'
 
 import {
@@ -248,7 +248,9 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
     const bounds = mapRectToWorld(footprintBounds)
     const width = Math.max(4.2, bounds.width)
     const depth = Math.max(2.4, bounds.depth)
-    const template = item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4]
+    const buildingDesign = resolveCampusBuildingDesign(visualAssets.manifest, item.id)
+    const template = buildingDesign?.template || item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4]
+    const buildingWallMaterial = buildingDesign ? (mats[buildingDesign.wallPalette] || mats.wallCream) : wallPalette[index % wallPalette.length]
     const localFootprint = item.polygon
       ? new THREE.Shape(item.polygon.map(([px, py]) => new THREE.Vector2(
         (px - (footprintBounds[0] + footprintBounds[2]) / 2) * (CAMPUS_PLAN_REFERENCE.worldWidth / (CAMPUS_PLAN_REFERENCE.mapBounds.right - CAMPUS_PLAN_REFERENCE.mapBounds.left)),
@@ -256,18 +258,18 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
       )))
       : undefined
     const group = createPixelBuilding(THREE, {
-      width, depth, footprint: localFootprint, height: item.height, template, materials: mats,
-      wallMaterial: wallPalette[index % wallPalette.length],
+      width, depth, footprint: localFootprint, height: buildingDesign?.height ?? item.height, template, materials: mats,
+      wallMaterial: buildingWallMaterial,
       label: item.label || item.id,
       confidence: item.confidence || 'unverified',
       entranceEdgeIndex: item.entranceEdgeIndex,
-      floors: item.floors,
-      roofStyle: item.roofStyle,
-      roofRise: item.roofRise,
-      windowDensity: item.windowDensity,
-      windowWidth: item.windowWidth,
-      windowHeight: item.windowHeight,
-      doorWidth: item.doorWidth,
+      floors: buildingDesign?.floors ?? item.floors,
+      roofStyle: buildingDesign?.roofStyle ?? item.roofStyle,
+      roofRise: buildingDesign?.roofRise ?? item.roofRise,
+      windowDensity: buildingDesign?.windowDensity ?? item.windowDensity,
+      windowWidth: buildingDesign?.windowWidth ?? item.windowWidth,
+      windowHeight: buildingDesign?.windowHeight ?? item.windowHeight,
+      doorWidth: buildingDesign?.doorWidth ?? item.doorWidth,
     })
     const buildingHeight = group.userData.buildingHeight || 3.8
     let foundation
@@ -287,6 +289,7 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
     foundation.receiveShadow = true
     root.add(foundation)
     group.position.set(bounds.x, 0.16, bounds.z)
+    if (buildingDesign) group.userData.buildingDesign = buildingDesign
     group.userData.buildingId = item.id
     group.userData.featureId = item.id
     group.userData.featureCategory = 'buildings'

@@ -12,6 +12,18 @@ export class BuildingDesignService {
   private readonly logger = new Logger(BuildingDesignService.name);
 
   private readonly approvedReferences = new Map<string, { digest: string; expiresAt: number }>();
+  private readonly approvedDesigns = new Map<string, { digest: string; expiresAt: number }>();
+
+  /** 校验结构参数确实来自已确认图片的服务端识别结果。 */
+  consumeDesignToken(tokenInput: unknown, designInput: unknown) {
+    if (typeof tokenInput !== 'string' || !tokenInput || !designInput || typeof designInput !== 'object') return false;
+    const approval = this.approvedDesigns.get(tokenInput);
+    if (!approval || approval.expiresAt < Date.now()) { this.approvedDesigns.delete(tokenInput); return false; }
+    const digest = createHash('sha256').update(JSON.stringify(designInput)).digest('hex');
+    if (digest !== approval.digest) return false;
+    this.approvedDesigns.delete(tokenInput);
+    return true;
+  }
 
   constructor(private readonly config: ConfigService) {}
 
@@ -131,6 +143,9 @@ export class BuildingDesignService {
       limitations: Array.isArray(parsed?.limitations) ? parsed.limitations.filter((item: unknown) => typeof item === 'string').slice(0, 6).map((item: string) => item.slice(0, 180)) : [],
       reviewed: false,
     };
-    return { provider: baseUrl, model, design };
+    const designToken = randomUUID();
+    const designDigest = createHash('sha256').update(JSON.stringify(design)).digest('hex');
+    this.approvedDesigns.set(designToken, { digest: designDigest, expiresAt: Date.now() + 15 * 60 * 1000 });
+    return { provider: baseUrl, model, design, designToken, designTokenExpiresInSeconds: 900 };
   }
 }

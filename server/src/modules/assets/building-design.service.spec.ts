@@ -360,7 +360,7 @@ describe('BuildingDesignService', () => {
       ],
       parameterSchema: [],
     };
-    const updated = structuredClone(current);
+    const updated: any = structuredClone(current);
     updated.componentTree[1].primitive = 'arch';
     updated.componentTree[1].geometryDescriptor = { inset: 0.12 };
     global.fetch = jest.fn().mockResolvedValue({
@@ -368,7 +368,7 @@ describe('BuildingDesignService', () => {
       json: async () => ({ choices: [{ message: { content: JSON.stringify({ objectSculptSpec: updated }) } }] }),
     }) as never;
     const result = await service.modifyObjectDesign(current, ['window'], '把选中的窗户改成拱形');
-    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'window').primitive).toBe('arch');
+    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'window')?.primitive).toBe('arch');
     expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'body')).toEqual(current.componentTree[0]);
     const illegal = structuredClone(updated);
     illegal.componentTree[0].dimensions.width = 10;

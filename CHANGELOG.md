@@ -1,3 +1,10 @@
+## 2026-11-05 — ObjectSculptSpec 任意受限轮廓拉伸
+
+- 新增 `polygon` primitive：视觉模型可输出 3-32 个归一化二维轮廓点，Three.js 使用 Shape + ExtrudeGeometry 构造真实拉伸 Mesh。
+- 服务端对点数、坐标范围、数值类型和轮廓面积执行校验；运行时再次校验，拒绝越界坐标与退化轮廓。
+- 新增不规则山墙/屋顶轮廓生成与非法坐标拒绝测试。
+- 当前 polygon 是单一简单外轮廓，不支持自交轮廓、孔洞或任意布尔运算；复杂开口继续使用 arch，后续再扩展受控 holes。
+
 ## 2026-11-05 — ObjectSculptSpec 轮廓几何扩展
 
 - Three.js 受控适配器新增 `arch` 拱形开口几何：通过带内孔的 Shape + ExtrudeGeometry 构造真实拱门/拱窗轮廓，支持独立深度与 `geometryDescriptor.inset`。

@@ -164,6 +164,37 @@ export function validateObjectSculptSpec(spec) {
       parent = nodes.get(parent)?.parent;
     }
   }
+  const parameterIds = new Set();
+  if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) {
+    throw new RangeError('parameterSchema 最多允许 100 个参数');
+  }
+  for (const parameter of spec.parameterSchema || []) {
+    if (!parameter || typeof parameter !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(parameter.id || '') || parameterIds.has(parameter.id)) {
+      throw new TypeError('参数 ID 无效或重复');
+    }
+    parameterIds.add(parameter.id);
+    if (!['number','color','boolean','select'].includes(parameter.type)) throw new TypeError('参数类型不受支持：' + parameter.type);
+    if (parameter.type === 'number') {
+      if (!Number.isFinite(parameter.value) || !Number.isFinite(parameter.min) || !Number.isFinite(parameter.max) || parameter.min > parameter.max || parameter.value < parameter.min || parameter.value > parameter.max) {
+        throw new RangeError('参数数值或范围无效：' + parameter.id);
+      }
+    } else if (parameter.type === 'color' && (typeof parameter.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(parameter.value))) {
+      throw new TypeError('颜色参数无效：' + parameter.id);
+    } else if (parameter.type === 'boolean' && typeof parameter.value !== 'boolean') {
+      throw new TypeError('布尔参数无效：' + parameter.id);
+    } else if (parameter.type === 'select' && (!Array.isArray(parameter.options) || !parameter.options.some(option => option.value === parameter.value))) {
+      throw new TypeError('枚举参数无效：' + parameter.id);
+    }
+    if (!Array.isArray(parameter.targets) || parameter.targets.length > 100) throw new TypeError('参数目标无效：' + parameter.id);
+    for (const target of parameter.targets) {
+      if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
+      if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity'].includes(target.property)) {
+        throw new TypeError('参数目标属性不受支持：' + target.property);
+      }
+      if (!['set','multiply','add'].includes(target.mode || 'set')) throw new TypeError('参数目标运算不受支持：' + target.mode);
+      if (target.property.startsWith('material.') && ['multiply','add'].includes(target.mode)) throw new TypeError('材质参数仅支持 set');
+    }
+  }
   return { nodes, componentCount: nodes.size };
 }
 
@@ -223,6 +254,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   }
   root.userData.componentGroups = groups;
   root.userData.objectSculptSpec = JSON.parse(JSON.stringify(spec));
+  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(spec));
   root.userData.objectSculpt = {
     schemaVersion: spec.schemaVersion,
     targetName: root.name,
@@ -230,4 +262,80 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     source: options.source || 'object-sculpt-spec',
   };
   return root;
+}
+
+
+/**
+ * Apply one AI-declared parameter through a bounded property binding list.
+ * Every edit starts from the immutable baseline spec to avoid cumulative drift.
+ */
+export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) {
+  if (!root?.userData?.parameterBaseSpec || !root.userData?.componentGroups) throw new TypeError('目标不是可编辑的 ObjectSculpt 资产');
+  const baseline = root.userData.parameterBaseSpec;
+  const parameter = (baseline.parameterSchema || []).find(item => item.id === parameterId);
+  if (!parameter) throw new TypeError('未声明可编辑参数：' + parameterId);
+  let value = nextValue;
+  if (parameter.type === 'number') {
+    value = Number(value);
+    if (!Number.isFinite(value) || value < parameter.min || value > parameter.max) throw new RangeError('参数值超出范围：' + parameterId);
+  } else if (parameter.type === 'color') {
+    if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) throw new TypeError('颜色参数格式无效：' + parameterId);
+  } else if (parameter.type === 'boolean') {
+    if (typeof value !== 'boolean') throw new TypeError('布尔参数格式无效：' + parameterId);
+  } else if (parameter.type === 'select' && !parameter.options.some(option => option.value === value)) {
+    throw new TypeError('枚举参数值无效：' + parameterId);
+  }
+  const spec = JSON.parse(JSON.stringify(baseline));
+  const findNode = id => spec.componentTree.find(node => node.id === id);
+  for (const target of parameter.targets) {
+    const node = findNode(target.nodeId);
+    const mode = target.mode || 'set';
+    const read = () => {
+      const [section, field] = target.property.split('.');
+      if (section === 'material') return spec.materials[node.material]?.[field];
+      if (section === 'transform' && field.startsWith('position.') || section === 'transform' && field.startsWith('scale.')) {
+        const [vector, axis] = field.split('.');
+        return node.transform?.[vector]?.['xyz'.indexOf(axis)] ?? 0;
+      }
+      return node[section]?.[field];
+    };
+    const current = read();
+    const resolved = mode === 'multiply' ? Number(current) * Number(value) : mode === 'add' ? Number(current) + Number(value) : value;
+    if (target.property.startsWith('material.')) {
+      const field = target.property.split('.')[1];
+      if (field === 'color') spec.materials[node.material].color = resolved;
+      else spec.materials[node.material][field] = Math.max(0, Math.min(field === 'opacity' ? 1 : 1, Number(resolved)));
+    } else if (target.property.startsWith('transform.position.') || target.property.startsWith('transform.scale.')) {
+      const [, vector, axis] = target.property.split('.');
+      const index = 'xyz'.indexOf(axis);
+      node.transform = node.transform || {};
+      node.transform[vector] = node.transform[vector] || (vector === 'scale' ? [1,1,1] : [0,0,0]);
+      node.transform[vector][index] = resolved;
+    } else {
+      const [section, field] = target.property.split('.');
+      node[section][field] = Math.max(0.02, Math.min(100, Number(resolved)));
+    }
+  }
+  const materialSpecs = spec.materials || {};
+  for (const node of spec.componentTree) {
+    const group = root.userData.componentGroups.get(node.id);
+    if (!group) continue;
+    group.position.set(...finiteVector(node.transform?.position, [0,0,0], node.id + '.position'));
+    group.rotation.set(...finiteVector(node.transform?.rotation, [0,0,0], node.id + '.rotation'));
+    group.scale.set(...finiteVector(node.transform?.scale, [1,1,1], node.id + '.scale'));
+    group.visible = node.hidden !== true;
+    const mesh = group.children.find(child => child.isMesh);
+    if (!mesh) continue;
+    mesh.geometry?.dispose?.();
+    mesh.geometry = createGeometry(THREE, node);
+    const material = materialSpecs[node.material] || DEFAULT_MATERIAL;
+    mesh.material.color.set(material.color || DEFAULT_MATERIAL.color);
+    mesh.material.roughness = Number(material.roughness ?? DEFAULT_MATERIAL.roughness);
+    mesh.material.metalness = Number(material.metalness ?? DEFAULT_MATERIAL.metalness);
+    mesh.material.opacity = Number(material.opacity ?? 1);
+    mesh.material.transparent = mesh.material.opacity < 1;
+    mesh.material.needsUpdate = true;
+  }
+  root.userData.objectSculptSpec = spec;
+  return spec;
 }

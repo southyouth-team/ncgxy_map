@@ -190,7 +190,7 @@ async function generateModel() {
     selectedInstanceId.value = id
     selectedComponentId.value = spec.componentTree?.[0]?.id || ''
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
-    generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI ObjectSculptSpec → Three.js Mesh'
+    generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n参考图分析：' + (result.referenceAnalysis ? (result.referenceAnalysis.silhouette || '已完成') + '；识别组件：' + (result.referenceAnalysis.components?.length || 0) : '未执行') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI 视觉分析 → ObjectSculptSpec → Three.js Mesh'
     status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
     wizardStep.value = 2
   } catch (e) {

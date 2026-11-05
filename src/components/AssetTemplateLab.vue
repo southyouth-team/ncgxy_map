@@ -196,9 +196,14 @@ function updateSelectedComponentColor(color) {
   if (!node || !/^#[0-9a-f]{6}$/i.test(color)) return
   const spec = objects.get(selectedInstanceId.value)?.userData?.objectSculptSpec
   if (!spec) return
-  const key = typeof node.material === 'string' ? node.material : 'default'
+  const previousKey = typeof node.material === 'string' ? node.material : 'default'
   if (!spec.materials) spec.materials = {}
-  if (!spec.materials[key]) spec.materials[key] = { color: '#b8b8b8', roughness: 0.82, metalness: 0 }
+  const previousMaterial = spec.materials[previousKey] || { color: '#b8b8b8', roughness: 0.82, metalness: 0 }
+  const key = 'component-' + node.id
+  if (node.material !== key) {
+    spec.materials[key] = { ...previousMaterial }
+    node.material = key
+  }
   spec.materials[key].color = color
   editorRevision.value += 1
   const group = getComponentGroup(selectedInstanceId.value, node.id)

@@ -409,6 +409,21 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     });
   });
 
+  it('rejects cyclic attach dependencies before building the model', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'a', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'b', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+      constraints: [
+        { id: 'a-to-b', type: 'attach', sourceNodeId: 'a', targetNodeId: 'b', axis: 'x', sourceSide: 1, targetSide: -1 },
+        { id: 'b-to-a', type: 'attach', sourceNodeId: 'b', targetNodeId: 'a', axis: 'x', sourceSide: 1, targetSide: -1 },
+      ],
+    };
+    expect(() => validateObjectSculptSpec(spec)).toThrow('attach 关系存在循环依赖');
+  });
+
   it('rejects attach relations across different parent groups', () => {
     const spec = {
       schemaVersion: '2.0',

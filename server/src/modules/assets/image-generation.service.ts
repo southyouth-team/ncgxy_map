@@ -28,6 +28,39 @@ function validateGeneratedParameterSchema(input: unknown, componentTree: any[], 
   return input;
 }
 
+/**
+ * 生成器模板必须以 Group 为根。模型有时会把单个 Mesh 直接声明为模板根，
+ * 这里自动补一层无几何 Group，保留原节点及其局部变换，避免把可修复的结构偏差升级为 503。
+ */
+function normalizeGeneratorTemplateRoots(componentTree: any[], generators: any[]) {
+  const byId = new Map(componentTree.map(node => [node.id, node]));
+  const usedIds = new Set(byId.keys());
+  for (const generator of generators) {
+    const root = byId.get(generator?.templateRootId);
+    if (!root) continue; // 后续 validator 会给出明确的引用错误
+    if (String(root.kind || 'mesh').toLowerCase() === 'group') {
+      root.kind = 'group';
+      continue;
+    }
+    const originalParent = root.parent;
+    const baseId = String(generator.id || 'generator') + '-template-group';
+    let groupId = baseId, suffix = 2;
+    while (usedIds.has(groupId)) groupId = baseId + '-' + suffix++;
+    usedIds.add(groupId);
+    const wrapper = {
+      id: groupId,
+      kind: 'group',
+      name: (root.name || generator.id || '生成器模板') + '（结构组）',
+      ...(originalParent ? { parent: originalParent } : {}),
+      transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    };
+    root.parent = groupId;
+    componentTree.push(wrapper);
+    byId.set(groupId, wrapper);
+    generator.templateRootId = groupId;
+  }
+}
+
 function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
   if (input == null) return { generators: [], parameterIds: new Set<string>() };
   if (!Array.isArray(input) || input.length > 30) throw new ServiceUnavailableException('AI generators 必须是最多 30 项的数组');
@@ -281,6 +314,7 @@ export class ImageGenerationService {
                 'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
                 'componentTree 按对象复杂度包含 1-100 个有意义的独立组件；简单对象可以只有一个组件，复杂对象应按真实结构拆分，不得为了凑数量拆出无意义零件。节点字段：id（唯一英文 ID）、name、role、kind（group 或 mesh，省略时为 mesh）、parent（唯一根节点省略，其余组件必填）、primitive、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。mesh primitive 必须从引擎支持集合中按几何形态选择：box/cuboid、polygon、wedge、arch、cylinder、cone、sphere、ellipsoid、torus、tube、lathe、sweep、loft；不得把所有曲面或异形物体都近似成 box。',
                 '复杂几何描述符必须按 primitive 输出：polygon 使用 geometryDescriptor.points（3-32 个归一化二维轮廓点）；tube 使用 path（2-32 个归一化三维点）及 radius/tubularSegments/radialSegments；lathe 使用 profile（2-32 个 [半径,高度] 归一化点）；sweep 使用 path（2-32 个归一化三维点）、profile（3-24 个归一化二维截面点）及 steps；loft 使用 sections（2-12 个截面，每个截面含严格递增的 height 与相同数量的 points）。这些坐标范围为 [-0.5,0.5]，半径按引擎约束；不需要复杂几何时使用基础 primitive。',
+                '每个 generator.templateRootId 必须指向 componentTree 中 kind="group" 的节点；重复模板即使只有一个 Mesh，也必须先创建一个无几何 Group 作为模板容器，再把 Mesh 作为该 Group 的子节点。不得让 generator 直接引用 Mesh。',
                 '当对象存在规则重复结构时，必须优先用声明式 generators，而不是手工复制大量相同节点。generators 允许 repeat 或 grid。repeat 字段：id、type=repeat、templateRootId、axis(x/y/z)、spacing、defaultCount、maxCount、countParameterId；grid 字段：id、type=grid、templateRootId、spacingX、spacingZ、defaultRows、defaultColumns、maxRows、maxColumns、rowParameterId、columnParameterId；可选 centered=true 让网格围绕模板根节点居中展开。对应数量参数必须存在于 parameterSchema，type=number，min/value/max 为整数且从 1 开始，maxCount/maxRows/maxColumns 不超过 100；模板子树只允许被一个 generator 使用，不得嵌套。repeat 可用 followers 将主体/底座等非重复节点按数量变化联动，字段为 nodeId、axis、offset。栏杆立柱、车轮组、窗户阵列、树冠层/叶簇、椅子重复横档等可按实际结构判断是否适用；不要为了使用生成器而强行重复。',
                 'constraints 可选用于部件联动，支持引擎已实现的 follow、span、attach、adjacency、cutout；仅在能准确表达几何依赖时使用，引用必须指向真实节点或生成器。',
                 '单个资产的装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表该对象的核心主体（例如建筑主体、树干/主枝、车身、人体躯干、家具主框架或机械机架）；其余组件必须通过 parent 连接到该根节点，形成一棵连通树。不要把单个资产拆成互不关联的多个根对象。',
@@ -342,6 +376,7 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('组件未连接到主体根节点：' + String(node.id || 'unknown'));
       }
     }
+    if (Array.isArray(spec.generators)) normalizeGeneratorTemplateRoots(spec.componentTree, spec.generators);
     const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
     spec.generators = generatorValidation.generators;
     spec.parameterSchema = validateGeneratedParameterSchema(spec.parameterSchema, spec.componentTree, generatorValidation.parameterIds);

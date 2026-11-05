@@ -93,6 +93,7 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('简单对象可以只有一个组件');
     expect(systemPrompt).toContain('tube、lathe、sweep、loft');
     expect(systemPrompt).toContain('generators');
+    expect(systemPrompt).toContain('generator.templateRootId 必须指向 componentTree 中 kind="group" 的节点');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
     expect(systemPrompt).toContain('loft 使用 sections');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
@@ -146,8 +147,11 @@ describe('ImageGenerationService', () => {
     meshTemplate.componentTree[1] = { id: 'crown-prototype', kind: 'mesh', parent: 'tree-root', primitive: 'sphere',
       dimensions: { width: 1, height: 1, depth: 1 }, material: 'leaf' };
     respond(meshTemplate);
-    await expect(service.generateObjectFromPrompt('树木', '树木', 'low-poly'))
-      .rejects.toThrow('模板根节点必须是 Group');
+    const normalized = await service.generateObjectFromPrompt('树木', '树木', 'low-poly');
+    const normalizedGenerator = normalized.objectSculptSpec.generators[0];
+    const normalizedGroup = normalized.objectSculptSpec.componentTree.find((node: any) => node.id === normalizedGenerator.templateRootId);
+    expect(normalizedGroup.kind).toBe('group');
+    expect(normalized.objectSculptSpec.componentTree.find((node: any) => node.id === 'crown-mesh').parent).toBe(normalizedGroup.id);
 
     const mismatched = structuredClone(base);
     mismatched.parameterSchema[0].value = 4;

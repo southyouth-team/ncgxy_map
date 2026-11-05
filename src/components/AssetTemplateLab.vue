@@ -507,32 +507,22 @@ onBeforeUnmount(() => {
         <span>{{ index+1 }}</span><b>{{ label }}</b>
       </div>
     </nav>
-    <div v-show="wizardStep>=2" class="shared-viewport"><section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">全局视角</button><button :disabled="!selectedInstanceId" @click="frameSelectedInstance">聚焦选中</button><button @click="setCameraView('iso')">等轴测</button><button @click="setCameraView('top')">俯视</button><button @click="setCameraView('front')">正视</button><button @click="setCameraView('side')">侧视</button></div><div class="hint status">{{ status }}</div></section></div>
+    <div v-show="wizardStep>=2" class="shared-viewport">
+      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">全局视角</button><button :disabled="!selectedInstanceId" @click="frameSelectedInstance">聚焦选中</button><button @click="setCameraView('iso')">等轴测</button><button @click="setCameraView('top')">俯视</button><button @click="setCameraView('front')">正视</button><button @click="setCameraView('side')">侧视</button></div><div class="hint status">{{ status }}</div></section>
+    </div>
 
     <section v-if="wizardStep===1" class="wizard-card create-step">
       <div class="step-heading"><div><small>STEP 01</small><h2>定义模板内容</h2><p>模板基础信息与生成素材在同一步完成，图片和提示词可任选其一，也可以同时提供。</p></div></div>
       <div class="create-grid">
         <div class="form-column">
-          <label>模板名称 <em>*</em></label>
-          <input v-model="templateName" placeholder="例如：奇幻学院主城堡">
-          <label>模板分类 <em>*</em></label>
-          <input v-model="templateCategory" list="asset-category-options" placeholder="输入新分类，或从已有分类中选择">
-          <datalist id="asset-category-options">
-            <option value="building">建筑</option><option value="vegetation">植被</option><option value="structure">构筑物</option><option value="facility">设施</option><option value="decoration">装饰</option><option value="sports">运动设施</option><option value="road">道路</option><option value="water">水域</option><option value="terrain">地形</option>
-          </datalist>
-          <label>物体名称 / 类型</label>
-          <input v-model="objectType" placeholder="例如：城堡、香樟树、拱桥、长椅">
-          <label>生成提示词</label>
-          <textarea v-model="prompt" rows="6" placeholder="描述外形轮廓、组成部件、比例、颜色、材质和视觉风格"></textarea>
+          <label>模板名称 <em>*</em></label><input v-model="templateName" placeholder="例如：奇幻学院主城堡">
+          <label>模板分类 <em>*</em></label><input v-model="templateCategory" list="asset-category-options" placeholder="输入新分类，或从已有分类中选择">
+          <datalist id="asset-category-options"><option value="building">建筑</option><option value="vegetation">植被</option><option value="structure">构筑物</option><option value="facility">设施</option><option value="decoration">装饰</option><option value="sports">运动设施</option><option value="road">道路</option><option value="water">水域</option><option value="terrain">地形</option></datalist>
+          <label>物体名称 / 类型</label><input v-model="objectType" placeholder="例如：城堡、香樟树、拱桥、长椅">
+          <label>生成提示词</label><textarea v-model="prompt" rows="6" placeholder="描述外形轮廓、组成部件、比例、颜色、材质和视觉风格"></textarea>
         </div>
         <div class="reference-column">
-          <label>参考素材（可选）</label>
-          <div class="upload-drop">
-            <input type="file" accept="image/png,image/jpeg,image/webp" @change="onImageChange">
-            <p>支持 PNG / JPG / WebP，最大 10 MB</p>
-            <img v-if="referencePreview" class="reference" :src="referencePreview" alt="模板参考图">
-            <p v-else class="upload-empty">上传图片作为结构与外观参考</p>
-          </div>
+          <label>参考素材（可选）</label><div class="upload-drop"><input type="file" accept="image/png,image/jpeg,image/webp" @change="onImageChange"><p>支持 PNG / JPG / WebP，最大 10 MB</p><img v-if="referencePreview" class="reference" :src="referencePreview" alt="模板参考图"><p v-else class="upload-empty">上传图片作为结构与外观参考</p></div>
           <p class="input-rule">支持三种输入方式：仅提示词、仅图片、图片 + 提示词。至少提供一种。</p>
         </div>
       </div>
@@ -542,7 +532,6 @@ onBeforeUnmount(() => {
 
     <section v-show="wizardStep===2" class="wizard-preview">
       <div class="preview-heading"><div><small>STEP 02</small><h2>检查整体生成效果</h2><p>先判断整体轮廓、比例和主要部件是否符合预期；暂时不展示复杂参数。</p></div><div class="preview-meta"><b>{{ templateName }}</b><span>{{ templateCategory }}</span></div></div>
-      
       <div v-if="error" class="error">{{ error }}</div><div v-if="generationLog" class="log">{{ generationLog }}</div>
       <div class="step-actions"><button class="secondary" @click="wizardStep=1">返回修改输入</button><button class="secondary" :disabled="generating" @click="generateModel">重新生成</button><button class="generate" :disabled="!selectedSpec" @click="wizardStep=3">整体符合预期，进入微调</button></div>
     </section>
@@ -550,22 +539,26 @@ onBeforeUnmount(() => {
     <section v-if="wizardStep===3" class="wizard-editor">
       <div class="preview-heading"><div><small>STEP 03</small><h2>微调结构与参数</h2><p>选中部件后调整局部属性，也可以通过 AI 修改部件或新增可调参数。</p></div><div class="preview-meta"><b>{{ templateName }}</b><span>{{ templateCategory }}</span></div></div>
       <div class="editor-workspace">
-        
         <aside class="panel inspector">
           <section v-if="selectedSpec" class="component-editor">
             <h3>模型结构 <span>{{ selectedSpec.componentTree.length }} 个部件</span></h3>
             <div class="component-tree"><button v-for="node in componentTree" :key="node.id" class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8+node.depth*15)+'px'}" @click="selectComponent(node.id)"><span>{{ node.name || node.id }}</span><small>{{ node.kind==='group'?'结构分组':(node.role||node.primitive||'Mesh') }}</small></button></div>
             <div v-if="selectedParameters.length" class="asset-parameters"><h4>可调参数 <small>{{ selectedParameters.length }} 项</small></h4>
-              <div v-for="parameter in selectedParameters" :key="parameter.id" class="parameter-row"><label>{{ parameter.label }}</label>
-                <input v-if="parameter.type==='number'" type="range" :min="parameter.min" :max="parameter.max" :step="parameter.step||0.1" :value="parameter.value" @input="updateAssetParameter(parameter.id,Number($event.target.value))">
-                <div v-if="parameter.type==='number'" class="parameter-value">{{ parameter.value }} {{ parameter.unit||'' }}</div>
-                <input v-else-if="parameter.type==='color'" type="color" :value="parameter.value" @input="updateAssetParameter(parameter.id,$event.target.value)">
-                <input v-else-if="parameter.type==='boolean'" type="checkbox" :checked="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.checked)">
-                <select v-else-if="parameter.type==='select'" :value="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.value)"><option v-for="option in parameter.options" :key="option.value" :value="option.value">{{ option.label }}</option></select>
-              </div>
+              <div v-for="parameter in selectedParameters" :key="parameter.id" class="parameter-row"><label>{{ parameter.label }}</label><input v-if="parameter.type==='number'" type="range" :min="parameter.min" :max="parameter.max" :step="parameter.step||0.1" :value="parameter.value" @input="updateAssetParameter(parameter.id,Number($event.target.value))"><div v-if="parameter.type==='number'" class="parameter-value">{{ parameter.value }} {{ parameter.unit||'' }}</div><input v-else-if="parameter.type==='color'" type="color" :value="parameter.value" @input="updateAssetParameter(parameter.id,$event.target.value)"><input v-else-if="parameter.type==='boolean'" type="checkbox" :checked="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.checked)"><select v-else-if="parameter.type==='select'" :value="parameter.value" @change="updateAssetParameter(parameter.id,$event.target.value)"><option v-for="option in parameter.options" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
             </div>
-            <div v-if="selectedComponent" class="component-properties"><b>{{ selectedComponent.name||selectedComponent.id }}</b>
-              <template v-if="(selectedComponent.kind||'mesh')==='mesh'"><label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)"></template>
+            <div v-if="selectedComponent" class="component-properties"><b>{{ selectedComponent.name||selectedComponent.id }}</b><template v-if="(selectedComponent.kind||'mesh')==='mesh'"><label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)"></template><small v-else>逻辑分组节点：变换和显隐作用于整个子树。</small><label>局部位置 X / Y / Z</label><div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div><button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible?'隐藏此部件':'显示此部件' }}</button></div>
+          </section>
+          <section v-if="selectedSpec" class="ai-local-editor"><label>AI 新增可调参数</label><textarea v-model="parameterInstruction" rows="3" placeholder="例如：给建筑增加楼层数参数，默认 3 层、最高 8 层"></textarea><button class="generate" :disabled="parameterizing||!parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing?'AI 正在设计参数…':'根据描述新增参数' }}</button></section>
+          <section v-if="selectedComponent" class="ai-local-editor"><label>AI 修改当前部件：{{ selectedComponent.name||selectedComponent.id }}</label><textarea v-model="modifyInstruction" rows="3" placeholder="例如：把窗户改成拱形，保留原位置和周围墙体"></textarea><button class="generate" :disabled="modifying||!modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying?'AI 修改中…':'修改选中部件' }}</button></section>
+        </aside>
+      </div>
+      <div v-if="error" class="error">{{ error }}</div>
+      <div class="save-panel"><div><b>保存模板</b><p>保存当前结构、材质和参数定义，后续可在素材模板库中复用。</p><small v-if="savedAssetId">已保存 ID：{{ savedAssetId }}</small></div><button class="generate" :disabled="!selectedSpec" @click="saveSelectedAsset">保存模板</button></div>
+      <div class="step-actions"><button class="secondary" @click="wizardStep=2">返回整体预览</button><button class="secondary" @click="wizardStep=1">返回模板信息</button></div>
+    </section>
+    <footer>独立素材模板实验环境 · AI 输出 ObjectSculptSpec，由 Three.js Runtime 转换为真实 Mesh。</footer>
+  </main>
+</template>
 
 <style scoped>
 .lab{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;padding:20px 24px;background:#edf1ed;color:#243329;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}

@@ -155,8 +155,10 @@ export class ImageGenerationService {
                 '你是专业的 Three.js 独立物体建模工程师。根据用户提示词输出 ObjectSculptSpec JSON，不要输出 JavaScript、Markdown 或解释。',
                 '根对象字段：schemaVersion 固定为字符串 2.0，targetName，materials，componentTree。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
-                'componentTree 必须包含 12-40 个有意义的独立组件。节点字段：id（唯一英文 ID）、name、role、parent（可选）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。',
-                '必须按真实结构拆分对象，不能用单个大盒子代表整体。屋顶、塔楼、塔顶、门窗、装饰等可识别部件分别建模。模型应具有明确体积、可从多个方向观察。',
+                'componentTree 必须包含 12-40 个有意义的独立组件。节点字段：id（唯一英文 ID）、name、role、parent、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。',
+                '装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表主体承重结构；其余全部组件必须通过 parent 连接到该根节点，形成一棵连通树。禁止多个根节点、漂浮零件或分散陈列。',
+                '所有子组件 position 必须是相对直接 parent 的局部坐标。先定义主体中心和尺寸，再把屋顶、塔楼、塔尖、门窗、装饰等放在实际连接位置。屋顶底部贴合墙顶、塔尖底部贴合塔身顶部、门窗贴合外立面；相邻结构应接触、嵌入或合理搭接，不能留出明显空气间隙。',
+                'parent 只定义层级，不会自动吸附几何体。必须根据每个 Mesh 的 dimensions 计算局部 position，确保组件实际接合，不能仅仅把组件挂在同一父节点下。',
                 '坐标约定：Y 轴向上，主体中心接近 X/Z 原点，地面约为 Y=0，rotation 使用弧度。整体尺寸建议在 2-20 个场景单位。',
                 '材质颜色必须贴合提示词，不允许全部白色或灰色。禁止重复 ID、缺失父节点、循环层级和未知 primitive。',
                 '目标对象类型：' + objectType + '；视觉风格：' + visualStyle + '；用户要求：' + prompt,
@@ -186,6 +188,16 @@ export class ImageGenerationService {
       || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
       || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
       throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 结构无效');
+    }
+    const roots = spec.componentTree.filter((node: any) => !node?.parent);
+    if (roots.length !== 1) {
+      throw new ServiceUnavailableException('ObjectSculptSpec 必须只有一个主体根节点；检测到 ' + roots.length + ' 个根节点，组件没有组成完整对象');
+    }
+    const ids = new Set(spec.componentTree.map((node: any) => node?.id).filter((id: unknown) => typeof id === 'string'));
+    for (const node of spec.componentTree) {
+      if (node?.parent && !ids.has(node.parent)) {
+        throw new ServiceUnavailableException('组件父节点不存在：' + String(node.id || 'unknown'));
+      }
     }
     return { provider: baseUrl, model, objectType, visualStyle, objectSculptSpec: spec };
   }

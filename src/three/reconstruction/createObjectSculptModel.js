@@ -114,8 +114,46 @@ function expandObjectSculptSpec(spec) {
     }
   }
   const constraints = Array.isArray(spec.constraints) ? spec.constraints : [];
-  const constrainedNodes = new Set();
+  // 先处理生成器派生的 follow/span，再按依赖深度处理 Attach，确保上游位置先稳定。
+  // graph[target] = sources；target 的深度越大，说明它依赖的上游链越长。
+  const attachSources = new Map();
   for (const constraint of constraints) {
+    if (constraint.type !== 'attach') continue;
+    const sources = attachSources.get(constraint.targetNodeId) || new Set();
+    sources.add(constraint.sourceNodeId);
+    attachSources.set(constraint.targetNodeId, sources);
+  }
+  const attachDepths = new Map();
+  const getAttachDepth = (nodeId, visiting = new Set()) => {
+    if (attachDepths.has(nodeId)) return attachDepths.get(nodeId);
+    if (visiting.has(nodeId)) throw new TypeError('attach 关系存在循环依赖：' + nodeId);
+    visiting.add(nodeId);
+    let depth = 0;
+    for (const sourceId of attachSources.get(nodeId) || []) {
+      depth = Math.max(depth, getAttachDepth(sourceId, visiting) + 1);
+    }
+    visiting.delete(nodeId);
+    attachDepths.set(nodeId, depth);
+    return depth;
+  };
+  for (const constraint of constraints) {
+    if (constraint.type === 'attach') getAttachDepth(constraint.sourceNodeId);
+    if (constraint.type === 'attach') getAttachDepth(constraint.targetNodeId);
+  }
+  const constraintPriority = type => type === 'follow' || type === 'span' ? 0 : type === 'attach' ? 1 : 2;
+  const orderedConstraints = constraints.map((constraint, index) => ({ constraint, index }))
+    .sort((a, b) => {
+      const priorityDiff = constraintPriority(a.constraint.type) - constraintPriority(b.constraint.type);
+      if (priorityDiff) return priorityDiff;
+      if (a.constraint.type === 'attach' && b.constraint.type === 'attach') {
+        const depthDiff = getAttachDepth(a.constraint.targetNodeId) - getAttachDepth(b.constraint.targetNodeId);
+        if (depthDiff) return depthDiff;
+      }
+      return a.index - b.index;
+    })
+    .map(item => item.constraint);
+  const constrainedNodes = new Set();
+  for (const constraint of orderedConstraints) {
     const metric = generatorMetrics.get(constraint.sourceGeneratorId);
     const target = expanded.find(node => node.id === constraint.targetNodeId);
     if ((constraint.type === 'follow' || constraint.type === 'span') && (!metric || !target)) {

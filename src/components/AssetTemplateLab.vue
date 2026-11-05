@@ -312,14 +312,29 @@ async function addParametersFromConversation() {
       objectSculptSpec: selectedSpec.value,
       instruction: parameterInstruction.value.trim(),
     })
-    root.userData.objectSculptSpec = result.objectSculptSpec
-    root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(result.objectSculptSpec))
+    const position = root.position.clone(), rotation = root.rotation.clone(), objectScale = root.scale.clone()
+    const assetInstanceId = root.userData.assetInstanceId
+    const assetTemplate = root.userData.assetTemplate
+    clearComponentHighlight()
+    scene.remove(root)
+    root.traverse(child => {
+      child.geometry?.dispose?.()
+      if (Array.isArray(child.material)) child.material.forEach(material => material.dispose?.())
+      else child.material?.dispose?.()
+    })
+    const nextRoot = createObjectSculptModel(THREE, result.objectSculptSpec, { source: 'ai-parameterized-template' })
+    nextRoot.position.copy(position); nextRoot.rotation.copy(rotation); nextRoot.scale.copy(objectScale)
+    nextRoot.userData.assetInstanceId = assetInstanceId
+    nextRoot.userData.assetTemplate = assetTemplate
+    scene.add(nextRoot)
+    objects.set(selectedInstanceId.value, nextRoot)
     editorRevision.value += 1
     parameterInstruction.value = ''
     const added = (result.addedParameters || []).map(item => item.label).join('、')
     const unsupported = (result.unsupported || []).join('；')
     const generators = (result.addedGenerators || []).map(item => item.id).join('、')
     status.value = added ? '已新增模板参数：' + added + (generators ? '；结构生成规则：' + generators : '') : '参数设计完成，未新增参数'
+    if (selectedComponentId.value) selectComponent(selectedComponentId.value)
     if (unsupported) error.value = '当前结构暂不支持：' + unsupported
   } catch (e) {
     error.value = e?.message || 'AI 参数设计失败'

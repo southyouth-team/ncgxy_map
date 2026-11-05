@@ -172,7 +172,7 @@ function resetCamera() {
   const object = objects.get(selectedInstanceId.value)
   if (object) return centerObjectAtOverview(object)
   controls.target.set(0, 0, 0)
-  camera.position.set(190, 165, 190)
+  camera.position.set(145, 205, 175)
   camera.up.set(0, 1, 0)
   camera.near = 0.1; camera.far = 3000
   camera.lookAt(0, 0, 0)
@@ -200,7 +200,8 @@ onMounted(() => {
     centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, -3), new THREE.Vector3(0, 0.05, 3)]), markerMaterial))
     scene.add(centerMarker)
     camera = new THREE.PerspectiveCamera(48, 1, 0.1, 3000)
-    camera.position.set(190, 165, 190)
+    // 初始镜头更靠近并提高俯角，让 180×140 的三维沙盒地面完整进入画面。
+    camera.position.set(145, 205, 175)
     camera.up.set(0, 1, 0)
     camera.lookAt(0, 0, 0)
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })

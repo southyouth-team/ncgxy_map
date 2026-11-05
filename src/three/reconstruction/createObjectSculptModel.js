@@ -237,6 +237,42 @@ function normalizeMaterial(THREE, source = {}) {
 }
 
 export function createPolygonOutlineGeometry(THREE,points,width,height,depth,segments=16){if(!Array.isArray(points)||points.length<3||points.length>32)throw new RangeError('polygon points 必须包含 3 到 32 个轮廓点');points.forEach((point,index)=>{if(!Array.isArray(point)||point.length!==2||point.some(value=>!Number.isFinite(Number(value))||Number(value)<-.5||Number(value)>.5))throw new TypeError('polygon points['+index+'] 必须位于 [-0.5,0.5]')});const area=points.reduce((sum,point,index)=>{const next=points[(index+1)%points.length];return sum+Number(point[0])*Number(next[1])-Number(next[0])*Number(point[1])},0)/2;if(Math.abs(area)<.0001)throw new RangeError('polygon 轮廓面积不能为零');const shape=new THREE.Shape();shape.moveTo(Number(points[0][0])*width,Number(points[0][1])*height);for(const point of points.slice(1))shape.lineTo(Number(point[0])*width,Number(point[1])*height);shape.closePath();const geometry=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false,curveSegments:segments});geometry.translate(0,0,-depth/2);return geometry}
+function validateSimpleProfile(points, label) {
+  if (!Array.isArray(points) || points.length < 3) throw new RangeError(label + ' 至少需要 3 个轮廓点');
+  const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const onSegment = (a, b, p) => Math.abs(cross(a, b, p)) < 0.000001
+    && p[0] >= Math.min(a[0], b[0]) - 0.000001 && p[0] <= Math.max(a[0], b[0]) + 0.000001
+    && p[1] >= Math.min(a[1], b[1]) - 0.000001 && p[1] <= Math.max(a[1], b[1]) + 0.000001;
+  const intersects = (a, b, c, d) => {
+    const abC = cross(a, b, c), abD = cross(a, b, d);
+    const cdA = cross(c, d, a), cdB = cross(c, d, b);
+    if (((abC > 0 && abD < 0) || (abC < 0 && abD > 0))
+      && ((cdA > 0 && cdB < 0) || (cdA < 0 && cdB > 0))) return true;
+    return (Math.abs(abC) < 0.000001 && onSegment(a, b, c))
+      || (Math.abs(abD) < 0.000001 && onSegment(a, b, d))
+      || (Math.abs(cdA) < 0.000001 && onSegment(c, d, a))
+      || (Math.abs(cdB) < 0.000001 && onSegment(c, d, b));
+  };
+  let area = 0;
+  for (let i = 0; i < points.length; i += 1) {
+    const next = points[(i + 1) % points.length];
+    if (Math.hypot(points[i][0] - next[0], points[i][1] - next[1]) < 0.0001) {
+      throw new RangeError(label + ' 存在重复或零长度边');
+    }
+    area += points[i][0] * next[1] - next[0] * points[i][1];
+  }
+  if (Math.abs(area) < 0.0001) throw new RangeError(label + ' 轮廓面积不能为零');
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    for (let j = i + 1; j < points.length; j += 1) {
+      if (j === i || j === (i + 1) % points.length || i === (j + 1) % points.length) continue;
+      if (intersects(a, b, points[j], points[(j + 1) % points.length])) {
+        throw new RangeError(label + ' 存在自相交边');
+      }
+    }
+  }
+}
+
 function createGeometry(THREE, node) {
   const dimensions = node.dimensions || {};
   const width = boundedNumber(dimensions.width, 1, 0.02, MAX_DIMENSION, node.id + '.width');
@@ -289,6 +325,7 @@ function createGeometry(THREE, node) {
       }
       return [Number(point[0]) * width, Number(point[1]) * height];
     });
+    validateSimpleProfile(profilePoints, node.id + '.geometryDescriptor.profile');
     const shape = new THREE.Shape();
     shape.moveTo(profilePoints[0][0], profilePoints[0][1]);
     for (const point of profilePoints.slice(1)) shape.lineTo(point[0], point[1]);
@@ -333,6 +370,9 @@ function createGeometry(THREE, node) {
         throw new RangeError(node.id + '.geometryDescriptor.sections 的 height 必须严格递增');
       }
     }
+    normalizedSections.forEach((section, index) => {
+      validateSimpleProfile(section.points.map(point => [point.x, point.y]), node.id + '.geometryDescriptor.sections[' + index + ']');
+    });
     const geometry = new THREE.BufferGeometry();
     const positions = [];
     const indices = [];

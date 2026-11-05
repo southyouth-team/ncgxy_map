@@ -323,6 +323,7 @@ export class AssetsService {
           }
         }
         if (String(node.primitive).toLowerCase() === 'sweep') {
+          if (node.geometryDescriptor?.closed === true) throw new BadRequestException('资产 sweep 暂不支持闭合路径：' + node.id);
           const path = node.geometryDescriptor?.path;
           const profile = node.geometryDescriptor?.profile;
           if (!Array.isArray(path) || path.length < 2 || path.length > 32

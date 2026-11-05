@@ -69,6 +69,7 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('结构生成器 ID 无效或重复：' + id);
     ids.add(id);
     if (!['repeat','grid'].includes(raw.type) || !nodeIds.has(raw.templateRootId)) throw new ServiceUnavailableException('结构生成器类型或模板节点无效：' + id);
+    if ((byId.get(raw.templateRootId)?.kind || 'mesh') !== 'group') throw new ServiceUnavailableException('结构生成器模板根节点必须是 Group：' + id);
     const descendants = componentTree.filter(node => {
       let parent = node.id;
       while (parent) {
@@ -627,6 +628,23 @@ export class BuildingDesignService {
     const generators = normalizeObjectGenerators(parsed.generators, componentTree);
     const generatorParameterIds = new Set(generators.flatMap((generator: any) => generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId]));
     const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, materials, generatorParameterIds);
+    for (const generator of generators) {
+      const parameterIds = generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId];
+      const defaults = generator.type === 'grid' ? [generator.defaultRows, generator.defaultColumns] : [generator.defaultCount];
+      const maximums = generator.type === 'grid' ? [generator.maxRows, generator.maxColumns] : [generator.maxCount];
+      for (let index = 0; index < parameterIds.length; index += 1) {
+        const parameter = parameterSchema.find((item: any) => item.id === parameterIds[index]);
+        const defaultValue = Number(defaults[index]);
+        const maximum = Number(maximums[index]);
+        if (!parameter || parameter.type !== 'number'
+          || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max) || !Number.isInteger(parameter.value)
+          || !Number.isInteger(defaultValue) || !Number.isInteger(maximum)
+          || parameter.min < 1 || parameter.max > maximum
+          || defaultValue < parameter.min || defaultValue > parameter.max || parameter.value !== defaultValue) {
+          throw new ServiceUnavailableException('结构生成器必须绑定默认值一致的有效整数数量参数：' + generator.id);
+        }
+      }
+    }
     const constraints = normalizeObjectConstraints(parsed.constraints, generators, componentTree);
     const objectSculptSpec = {
       schemaVersion: '2.0',

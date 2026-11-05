@@ -202,6 +202,57 @@ describe('BuildingDesignService', () => {
     expect(service.consumeDesignToken(result.designToken, result.design)).toBe(true);
   });
 
+  it('requires Group generator templates and matching integer default parameters during image reconstruction', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'generator-contract-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const componentTree = [
+      { id: 'object-root', kind: 'group', name: '树木主体' },
+      { id: 'crown-prototype', kind: 'group', name: '树冠层', parent: 'object-root' },
+      { id: 'crown-mesh', kind: 'mesh', name: '树冠', parent: 'crown-prototype', primitive: 'sphere',
+        dimensions: { width: 2, height: 1, depth: 2 }, material: 'leaf' },
+      { id: 'trunk', kind: 'mesh', name: '树干', parent: 'object-root', primitive: 'cylinder',
+        dimensions: { width: 0.5, height: 3, depth: 0.5 }, material: 'bark' },
+    ];
+    const parameterSchema = [{
+      id: 'crown-layer-count', label: '树冠层数', type: 'number', value: 3, min: 1, max: 6, step: 1, unit: '层', targets: [],
+    }];
+    const generators = [{
+      id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-prototype', countParameterId: 'crown-layer-count',
+      axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6,
+    }];
+    const respond = (tree: any[], parameters: any[], generatorList: any[]) => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          componentTree: tree, materials: { leaf: { color: '#287a38' }, bark: { color: '#79502f' } },
+          parameterSchema: parameters, generators: generatorList,
+        }) } }] }),
+      }) as never;
+    };
+
+    respond(componentTree, parameterSchema, generators);
+    const valid = await service.reconstructObjectReference('vegetation', '树木', 'low-poly', imageDataUrl, approval.approvalToken);
+    expect(valid.design.objectSculptSpec.generators).toMatchObject([{ id: 'crown-repeat', templateRootId: 'crown-prototype', defaultCount: 3 }]);
+    expect(valid.design.objectSculptSpec.parameterSchema[0]).toMatchObject({ value: 3, targets: [] });
+
+    const meshTemplate = structuredClone(componentTree);
+    meshTemplate[1] = { ...meshTemplate[1], kind: 'mesh', primitive: 'sphere', dimensions: { width: 1, height: 1, depth: 1 }, material: 'leaf' };
+    respond(meshTemplate, parameterSchema, generators);
+    await expect(service.reconstructObjectReference('vegetation', '树木', 'low-poly', imageDataUrl, approval.approvalToken))
+      .rejects.toThrow('结构生成器模板根节点必须是 Group');
+
+    const mismatchedDefault = structuredClone(parameterSchema);
+    mismatchedDefault[0].value = 4;
+    respond(componentTree, mismatchedDefault, generators);
+    await expect(service.reconstructObjectReference('vegetation', '树木', 'low-poly', imageDataUrl, approval.approvalToken))
+      .rejects.toThrow('默认值一致的有效整数数量参数');
+  });
+
   it('validates and preserves bounded polygon outline coordinates', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({

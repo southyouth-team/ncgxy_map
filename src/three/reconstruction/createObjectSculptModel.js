@@ -244,6 +244,24 @@ function createGeometry(THREE, node) {
   const depth = boundedNumber(dimensions.depth, 1, 0.02, MAX_DIMENSION, node.id + '.depth');
   const descriptor = node.geometryDescriptor || {};
   const segments = Math.round(boundedNumber(descriptor.segments, 16, 3, MAX_SEGMENTS, node.id + '.segments'));
+  if (String(node.primitive || '').toLowerCase() === 'tube') {
+    const points = descriptor.path;
+    if (!Array.isArray(points) || points.length < 2 || points.length > 32) {
+      throw new RangeError(node.id + '.geometryDescriptor.path 必须包含 2 到 32 个路径点');
+    }
+    const vectors = points.map((point, index) => {
+      if (!Array.isArray(point) || point.length !== 3
+        || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {
+        throw new TypeError(node.id + '.geometryDescriptor.path[' + index + '] 必须是 [-0.5,0.5] 范围内的三维坐标');
+      }
+      return new THREE.Vector3(Number(point[0]) * width, Number(point[1]) * height, Number(point[2]) * depth);
+    });
+    const radius = boundedNumber(descriptor.radius, 0.08, 0.01, 10, node.id + '.geometryDescriptor.radius');
+    const tubularSegments = Math.round(boundedNumber(descriptor.tubularSegments, 32, 3, 128, node.id + '.geometryDescriptor.tubularSegments'));
+    const radialSegments = Math.round(boundedNumber(descriptor.radialSegments, 8, 3, 24, node.id + '.geometryDescriptor.radialSegments'));
+    const curve = new THREE.CatmullRomCurve3(vectors, descriptor.closed === true, 'centripetal');
+    return new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, descriptor.closed === true);
+  }
 
   switch (String(node.primitive || 'box').toLowerCase()) {
     case 'polygon': {
@@ -572,7 +590,7 @@ export function validateObjectSculptSpec(spec) {
     for (const target of parameter.targets) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
       if (nodes.get(target.nodeId).kind === 'group' && !target.property.startsWith('transform.') && target.property !== 'visibility.visible') throw new TypeError('Group 节点仅支持变换和显隐参数：' + target.nodeId);
-      if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','visibility.visible'].includes(target.property)) {
+      if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible'].includes(target.property)) {
         throw new TypeError('参数目标属性不受支持：' + target.property);
       }
       if (!['set','multiply','add','visible-from','visible-through'].includes(target.mode || 'set')) throw new TypeError('参数目标运算不受支持：' + target.mode);
@@ -712,9 +730,9 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
           : mode === 'visible-through' ? Number(parameterValue) > threshold
             : !Boolean(parameterValue);
       } else if (target.property === 'geometry.primitive') {
-        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
+        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
         node.primitive = resolved;
-      } else if (target.property === 'geometryDescriptor.inset' || target.property === 'geometryDescriptor.tube') {
+      } else if (target.property === 'geometryDescriptor.inset' || target.property === 'geometryDescriptor.tube' || target.property === 'geometryDescriptor.radius') {
         node.geometryDescriptor = node.geometryDescriptor || {};
         node.geometryDescriptor[target.property.split('.')[1]] = Number(resolved);
       } else if (target.property.startsWith('material.')) {

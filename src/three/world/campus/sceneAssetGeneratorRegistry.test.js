@@ -12,7 +12,7 @@ describe('scene asset generator registry', () => {
     expect(registry.supports('decoration', '景观石')).toBe(true);
     expect(registry.supports('sports', '篮球架')).toBe(true);
     expect(registry.supports('road', '校园道路')).toBe(true);
-    expect(registry.supports('water', '湖泊')).toBe(true);
+    expect(registry.supports('indoor', '教室')).toBe(true);
     expect(registry.supports('terrain', '山坡')).toBe(true);
     expect(SCENE_ASSET_GENERATOR_CATALOG).toHaveLength(8);
   });
@@ -54,21 +54,21 @@ describe('scene asset generator registry', () => {
   });
 
   it('allows category-specific generator plugins to be registered and removed', () => {
-    const remove = registry.register('water', ['湖泊'], (three, input, materials) => {
+    const remove = registry.register('indoor', ['教室'], (three, input, materials) => {
       const group = new three.Group();
       group.add(new three.Mesh(new three.BoxGeometry(4, 0.1, 4), materials.glass));
       return group;
     });
     expect(registry.supports('water', '湖泊')).toBe(true);
-    expect(registry.generate({ category: 'water', objectType: '湖泊' }).userData.sceneAsset.category).toBe('water');
+    expect(registry.generate({ category: 'indoor', objectType: '教室' }).userData.sceneAsset.category).toBe('indoor');
     remove();
     expect(registry.supports('water', '湖泊')).toBe(false);
   });
 
-  it('fails explicitly for spatial categories without a dedicated generator', () => {
-    expect(registry.supports('water', '湖泊')).toBe(false);
-    expect(() => registry.generate({ category: 'water', objectType: '湖泊' }))
-      .toThrow('未注册场景资产生成器：water/湖泊');
+  it('fails explicitly for categories without a dedicated generator', () => {
+    expect(registry.supports('effect', '天气粒子')).toBe(false);
+    expect(() => registry.generate({ category: 'effect', objectType: '天气粒子' }))
+      .toThrow('未注册场景资产生成器：effect/天气粒子');
   });
 
   it('applies AI-extracted geometry parameters to generated meshes', () => {

@@ -27,7 +27,47 @@ const authHeaders = () => ({ 'Content-Type': 'application/json', 'X-Dev-User-Id'
 function resize() {
   if (!renderer || !viewport.value) return
   const w = Math.max(1, viewport.value.clientWidth), h = Math.max(1, viewport.value.clientHeight)
-  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix()
+  renderer.setSize(w, h, false)
+  camera.aspect = w / h
+  camera.updateProjectionMatrix()
+}
+
+/**
+ * 根据对象真实世界包围盒自动居中并适配相机。
+ * 不假设模型原点就是几何中心，也不依赖固定模型尺寸。
+ */
+function frameObject(object, padding = 1.35) {
+  if (!object || !camera || !controls) return
+  object.updateWorldMatrix(true, true)
+  const bounds = new THREE.Box3().setFromObject(object)
+  if (bounds.isEmpty()) {
+    controls.target.copy(object.getWorldPosition(new THREE.Vector3()))
+    camera.position.set(controls.target.x + 18, controls.target.y + 14, controls.target.z + 18)
+    controls.update()
+    return
+  }
+
+  const center = bounds.getCenter(new THREE.Vector3())
+  const sphere = bounds.getBoundingSphere(new THREE.Sphere())
+  const radius = Math.max(sphere.radius, 0.5)
+  const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov * 0.5)
+  const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(camera.aspect, 0.1))
+  const limitingHalfFov = Math.max(0.05, Math.min(verticalHalfFov, horizontalHalfFov))
+  const distance = (radius / Math.sin(limitingHalfFov)) * padding
+
+  // 保留当前观察方向，只调整目标中心和距离。
+  const direction = camera.position.clone().sub(controls.target)
+  if (direction.lengthSq() < 0.0001) direction.set(1, 0.8, 1)
+  direction.normalize()
+
+  controls.target.copy(center)
+  camera.position.copy(center).addScaledVector(direction, distance)
+  camera.near = Math.max(0.01, distance / 1000)
+  camera.far = Math.max(1000, distance * 20)
+  camera.updateProjectionMatrix()
+  controls.minDistance = Math.max(0.2, radius * 0.15)
+  controls.maxDistance = Math.max(100, distance * 12)
+  controls.update()
 }
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -102,7 +142,7 @@ async function generateModel() {
     objects.set(id, model)
     instances.value.push({ id, name: spec.targetName || objectType.value || 'AI 生成模型', templateId: 'AI ObjectSculptSpec', category: 'building', source: 'AI' })
     selectedInstanceId.value = id
-    controls.target.copy(model.position); controls.update()
+    frameObject(model)
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
     generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI ObjectSculptSpec → Three.js Mesh'
     status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
@@ -138,10 +178,17 @@ function removeInstance(id) {
 function focusInstance(id) {
   selectedInstanceId.value = id
   const object = objects.get(id)
-  if (object) { controls.target.copy(object.position); controls.update() }
+  if (object) frameObject(object)
 }
 function clearScene() { [...objects.keys()].forEach(removeInstance); status.value = '场景已清空' }
-function resetCamera() { camera.position.set(30, 28, 34); controls.target.set(0, 0, 0); controls.update() }
+function resetCamera() {
+  const object = objects.get(selectedInstanceId.value)
+  if (object) return frameObject(object)
+  camera.position.set(30, 28, 34)
+  controls.target.set(0, 0, 0)
+  camera.near = 0.1; camera.far = 500; camera.updateProjectionMatrix()
+  controls.update()
+}
 
 let runtime
 onMounted(() => {

@@ -476,7 +476,6 @@ export class BuildingDesignService {
               || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
             throw new ServiceUnavailableException('tube 路径必须包含 2 到 32 个 [-0.5,0.5] 范围内的三维坐标点');
           }
-          assertSimpleAssetProfile(profile, 'sweep profile', ServiceUnavailableException);
           geometryDescriptor.path = path.map((point: number[]) => [...point]);
         }
         if (kind === 'mesh' && primitive === 'lathe') {
@@ -508,6 +507,7 @@ export class BuildingDesignService {
               || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
             throw new ServiceUnavailableException('sweep profile 必须包含 3 到 24 个 [-0.5,0.5] 范围内的二维轮廓点');
           }
+          assertSimpleAssetProfile(profile, 'sweep profile', ServiceUnavailableException);
           geometryDescriptor.path = path.map((point: number[]) => [...point]);
           geometryDescriptor.profile = profile.map((point: number[]) => [...point]);
           if (input.geometryDescriptor.steps !== undefined) geometryDescriptor.steps = Math.round(number(input.geometryDescriptor.steps, 32, 3, 128));

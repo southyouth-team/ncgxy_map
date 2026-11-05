@@ -192,6 +192,8 @@ describe('BuildingDesignService', () => {
     expect(systemPrompt).toContain('城堡');
     expect(systemPrompt).toContain('必须只有一个根节点');
     expect(systemPrompt).toContain('相对直接 parent 的局部坐标');
+    expect(systemPrompt).toContain('评估是否输出 generators');
+    expect(systemPrompt).toContain('数量参数必须放入 parameterSchema');
     expect(result.design.objectSculptSpec.componentTree).toHaveLength(12);
     expect(result.design.objectSculptSpec.componentTree.filter((node: any) => !node.parent)).toHaveLength(1);
     expect(result.design.objectSculptSpec.componentTree.find((node: any) => node.id === 'west-roof').parent).toBe('west-tower');

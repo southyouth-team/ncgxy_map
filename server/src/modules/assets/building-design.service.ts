@@ -101,10 +101,27 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
   return input.map((raw: any) => {
     const id = typeof raw?.id === 'string' ? raw.id : '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)
-      || !['follow','span'].includes(raw.type) || !generatorIds.has(raw.sourceGeneratorId)
-      || !nodeIds.has(raw.targetNodeId) || templateIds.has(raw.targetNodeId)
-      || !['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构约束 ID、类型或引用无效：' + id);
+      || !['follow','span','attach','adjacency'].includes(raw.type)) throw new ServiceUnavailableException('结构约束 ID 或类型无效：' + id);
     ids.add(id);
+    if (raw.type === 'attach' || raw.type === 'adjacency') {
+      const source = byId.get(raw.sourceNodeId), target = byId.get(raw.targetNodeId);
+      if (!source || !target || source.id === target.id || templateIds.has(source.id) || templateIds.has(target.id)) {
+        throw new ServiceUnavailableException('组件连接关系引用无效：' + id);
+      }
+      if (raw.type === 'attach') {
+        if ((source.kind || 'mesh') !== 'mesh' || (target.kind || 'mesh') !== 'mesh' || source.parent !== target.parent
+          || !['x','y','z'].includes(raw.axis) || ![-1,1].includes(Number(raw.sourceSide)) || ![-1,1].includes(Number(raw.targetSide))
+          || !Number.isFinite(Number(raw.offset ?? 0)) || Math.abs(Number(raw.offset ?? 0)) > 100) {
+          throw new ServiceUnavailableException('attach 必须连接同一父级下的 Mesh 面：' + id);
+        }
+        return { id, type: 'attach', sourceNodeId: source.id, targetNodeId: target.id, axis: raw.axis,
+          sourceSide: Number(raw.sourceSide), targetSide: Number(raw.targetSide), offset: Number(raw.offset ?? 0) };
+      }
+      if (!['adjacent','connects'].includes(raw.relation)) throw new ServiceUnavailableException('adjacency relation 无效：' + id);
+      return { id, type: 'adjacency', sourceNodeId: source.id, targetNodeId: target.id, relation: raw.relation };
+    }
+    if (!generatorIds.has(raw.sourceGeneratorId) || !nodeIds.has(raw.targetNodeId) || templateIds.has(raw.targetNodeId)
+      || !['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构约束引用无效：' + id);
     const measure = raw.measure || (generators.find(item => item.id === raw.sourceGeneratorId)?.type === 'grid' ? 'columns' : 'repeat');
     const sourceGenerator = generators.find(item => item.id === raw.sourceGeneratorId);
     const expectedAxis = ({ 'dimensions.width': 'x', 'dimensions.height': 'y', 'dimensions.depth': 'z' } as Record<string, string>)[raw.property];
@@ -747,6 +764,7 @@ export class BuildingDesignService {
               '没有可用原型时必须明确返回 unsupported，不能伪造目标或生成器。',
               '如果用户要求楼层数变量而当前楼层是多个独立重复节点，可以在 componentTree 中增加纯 Group 包装节点，把一个完整楼层整理为原型，并将其余静态重复楼层设为 hidden=true；必须保留所有原有节点 ID，不得删除原有节点，不得新增 Mesh，不得改变原有几何、材质、尺寸和 transform。无法可靠识别单层完整子树时，不得强行重构，应返回 unsupported。',
               'generators 支持安全声明式 repeat 和 grid。repeat 格式：{id,type:"repeat",templateRootId,countParameterId,axis:"x"|"y"|"z",spacing,defaultCount,maxCount,followers:[{nodeId,axis,offset}]}。grid 格式：{id,type:"grid",templateRootId,rowParameterId,columnParameterId,spacingX,spacingZ,defaultRows,defaultColumns,maxRows,maxColumns}。两者都要求 templateRootId 是完整可重复单元的现有 Group 子树，第一份实例保留原 ID，其他实例由运行时派生稳定 ID；不得把整栋建筑当作房间原型。grid 的行沿 z 轴、列沿 x 轴，spacingX/spacingZ 使用房间中心距。',
+              'constraints 支持通用 follow/span/attach/adjacency 关系。attach 格式：{id,type:"attach",sourceNodeId,targetNodeId,axis:"x"|"y"|"z",sourceSide:-1|1,targetSide:-1|1,offset}，将 target Mesh 的指定面吸附到 source Mesh 的指定面；两个 Mesh 必须属于同一父级。adjacency 格式：{id,type:"adjacency",sourceNodeId,targetNodeId,relation:"adjacent"|"connects"}，声明两个组件的邻接/连接关系并写入运行时关系元数据，不自动开洞或生成连接几何。follow/span 仍按生成器规模驱动。所有关系只能引用已有节点，不能引用生成模板内部节点。',
               'constraints 支持通用 follow/span 依赖。follow 格式：{id,type:"follow",sourceGeneratorId,targetNodeId,axis:"x"|"y"|"z",measure:"rows"|"columns"|"repeat",factor,offset}，用于独立节点按生成规模移动；span 格式：{id,type:"span",sourceGeneratorId,targetNodeId,axis:"x"|"y"|"z",measure:"rows"|"columns"|"repeat",property:"dimensions.width"|"dimensions.height"|"dimensions.depth",factor,offset}，用于独立 Mesh 尺寸延展。只可引用已有生成器和模板以外的已有节点；不得将约束绑定到生成模板内部节点；factor 默认 1，offset 默认 0。只在结构关系明确时创建约束，不要为了填字段而虚构。',
               '当用户要求楼层数时，寻找一个完整楼层 Group 子树作为模板，沿 y 轴重复，spacing 使用楼层高度；设置 defaultCount 为当前楼层数，maxCount 为允许上限，并把屋顶等结构加入 followers，沿 y 轴偏移 spacing*(楼层数-defaultCount)。屋顶等非重复结构不能放进楼层原型子树。',
               '当用户要求房间布局、房间数量或房间网格时，优先识别一个完整房间 Group 原型，创建两个整数参数（行数、列数）并使用 grid 生成器；如果用户只给出总房间数而未给行列布局，按接近正方形的合理布局推导默认行列，但必须在 evidence/limitations 中说明推导。无法识别房间原型时返回 unsupported。',

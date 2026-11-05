@@ -785,6 +785,24 @@ export class BuildingDesignService {
         if (typeof descriptor.closed !== 'boolean') throw new BadRequestException(id + '.closed 必须是布尔值');
         geometryDescriptor.closed = descriptor.closed;
       }
+      if (kind === 'mesh' && descriptor.radius !== undefined) {
+        if (typeof descriptor.radius !== 'number' || !Number.isFinite(descriptor.radius) || descriptor.radius < 0.01 || descriptor.radius > 10) {
+          throw new BadRequestException(id + '.radius 超出范围');
+        }
+        geometryDescriptor.radius = descriptor.radius;
+      }
+      if (kind === 'mesh' && descriptor.tubularSegments !== undefined) {
+        if (typeof descriptor.tubularSegments !== 'number' || !Number.isInteger(descriptor.tubularSegments) || descriptor.tubularSegments < 3 || descriptor.tubularSegments > 128) {
+          throw new BadRequestException(id + '.tubularSegments 超出范围');
+        }
+        geometryDescriptor.tubularSegments = descriptor.tubularSegments;
+      }
+      if (kind === 'mesh' && descriptor.radialSegments !== undefined) {
+        if (typeof descriptor.radialSegments !== 'number' || !Number.isInteger(descriptor.radialSegments) || descriptor.radialSegments < 3 || descriptor.radialSegments > 24) {
+          throw new BadRequestException(id + '.radialSegments 超出范围');
+        }
+        geometryDescriptor.radialSegments = descriptor.radialSegments;
+      }
       if (kind === 'mesh' && primitive === 'tube') {
         const path = descriptor.path;
         if (!Array.isArray(path) || path.length < 2 || path.length > 32

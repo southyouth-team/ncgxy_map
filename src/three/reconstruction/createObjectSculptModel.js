@@ -17,7 +17,6 @@ function stableGeneratedIdHash(value) {
 
 function expandObjectSculptSpec(spec) {
   const generators = Array.isArray(spec.generators) ? spec.generators : [];
-  if (!generators.length) return { ...spec, componentTree: [...spec.componentTree] };
   const sourceNodes = spec.componentTree;
   const byId = new Map(sourceNodes.map(node => [node.id, node]));
   const generatorParameterIds = new Set();

@@ -1,6 +1,7 @@
 // 等距像素风校园像素资产工坊：所有素材均为程序化原创占位资产，可被后续 GLB/Sprite 资源替换。
 export function createCampusMaterials(THREE) {
   const makePixelTexture = (base, accents, seed = 1) => {
+    if (typeof document === 'undefined') return null
     const canvas = document.createElement('canvas')
     canvas.width = 64
     canvas.height = 64

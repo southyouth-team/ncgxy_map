@@ -266,6 +266,8 @@ export class AssetsService {
     const generators = spec.generators === undefined ? [] : spec.generators;
     if (!Array.isArray(generators) || generators.length > 30) throw new BadRequestException('资产结构生成器数量无效');
     const generatorIds = new Set<string>();
+    const claimedTemplateNodeIds = new Set<string>();
+    let estimatedExpandedCount = spec.componentTree.length;
     for (const generator of generators) {
       if (!generator || typeof generator !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.id || '')
         || generatorIds.has(generator.id) || generator.type !== 'repeat' || !byId.has(generator.templateRootId)
@@ -294,7 +296,21 @@ export class AssetsService {
         }
         return false;
       }).length;
-      if (!subtreeCount || subtreeCount * generator.maxCount > 300) throw new BadRequestException('资产结构生成器最大展开数量超出限制：' + generator.id);
+      const subtree = spec.componentTree.filter((node: any) => {
+        let current = node.id;
+        while (current) {
+          if (current === generator.templateRootId) return true;
+          current = byId.get(current)?.parent;
+        }
+        return false;
+      });
+      if (!subtreeCount) throw new BadRequestException('资产结构生成器模板子树为空：' + generator.id);
+      for (const node of subtree) {
+        if (claimedTemplateNodeIds.has(node.id)) throw new BadRequestException('暂不支持嵌套或重叠的资产结构生成器：' + generator.id);
+        claimedTemplateNodeIds.add(node.id);
+      }
+      estimatedExpandedCount += subtreeCount * (generator.maxCount - 1);
+      if (estimatedExpandedCount > 300) throw new BadRequestException('资产结构生成器最大展开数量超过 300：' + generator.id);
     }
 
     const assetId = randomUUID();

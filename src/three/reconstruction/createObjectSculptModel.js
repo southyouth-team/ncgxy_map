@@ -101,6 +101,55 @@ function expandObjectSculptSpec(spec) {
       throw new TypeError('不支持的结构生成器类型：' + generator.type);
     }
   }
+  // 统一约束引擎：只读取生成器规模与基准节点，不执行模型提供的代码。
+  const generatorMetrics = new Map();
+  for (const generator of generators) {
+    if (generator.type === 'grid') {
+      const rows = Math.max(1, Math.min(generator.maxRows, Math.round(parameterValue(generator.rowParameterId) || generator.defaultRows)));
+      const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(parameterValue(generator.columnParameterId) || generator.defaultColumns)));
+      generatorMetrics.set(generator.id, { rows, columns, repeatCount: 1, spacingX: generator.spacingX, spacingZ: generator.spacingZ });
+    } else if (generator.type === 'repeat') {
+      const count = Math.max(1, Math.min(generator.maxCount, Math.round(parameterValue(generator.countParameterId) || generator.defaultCount)));
+      generatorMetrics.set(generator.id, { rows: 1, columns: 1, repeatCount: count, spacing: generator.spacing, axis: generator.axis });
+    }
+  }
+  const constraints = Array.isArray(spec.constraints) ? spec.constraints : [];
+  const constrainedNodes = new Set();
+  for (const constraint of constraints) {
+    const metric = generatorMetrics.get(constraint.sourceGeneratorId);
+    const target = expanded.find(node => node.id === constraint.targetNodeId);
+    if (!metric || !target) throw new TypeError('结构约束引用了不存在的生成器或组件：' + constraint.id);
+    const key = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis);
+    if (constrainedNodes.has(key)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
+    constrainedNodes.add(key);
+    target.transform = target.transform || {};
+    const position = Array.isArray(target.transform.position) ? [...target.transform.position] : [0, 0, 0];
+    const axisIndex = 'xyz'.indexOf(constraint.axis);
+    if (constraint.type === 'follow') {
+      let distance = 0;
+      if (metric.rows > 1 || metric.columns > 1) {
+        distance = constraint.measure === 'rows'
+          ? Math.max(0, metric.rows - 1) * metric.spacingZ
+          : Math.max(0, metric.columns - 1) * metric.spacingX;
+      } else if (metric.repeatCount > 1) {
+        distance = Math.max(0, metric.repeatCount - 1) * metric.spacing;
+      }
+      position[axisIndex] = Number(position[axisIndex] || 0) + distance * Number(constraint.factor ?? 1) + Number(constraint.offset ?? 0);
+      target.transform.position = position;
+    } else if (constraint.type === 'span') {
+      const dimension = constraint.property.slice('dimensions.'.length);
+      target.dimensions = target.dimensions || {};
+      let distance = 0;
+      if (metric.rows > 1 || metric.columns > 1) {
+        distance = constraint.measure === 'rows'
+          ? Math.max(0, metric.rows - 1) * metric.spacingZ
+          : Math.max(0, metric.columns - 1) * metric.spacingX;
+      } else if (metric.repeatCount > 1) {
+        distance = Math.max(0, metric.repeatCount - 1) * metric.spacing;
+      }
+      target.dimensions[dimension] = Number(target.dimensions[dimension]) + distance * Number(constraint.factor ?? 1) + Number(constraint.offset ?? 0);
+    }
+  }
   if (expanded.length > MAX_COMPONENTS) throw new RangeError('动态生成后的组件数量超过 ' + MAX_COMPONENTS);
   return { ...spec, componentTree: expanded, generators: [], parameterSchema: (spec.parameterSchema || []).map(parameter => generatorParameterIds.has(parameter.id) ? { ...parameter, generatorControl: true } : parameter) };
 }
@@ -274,6 +323,9 @@ export function validateObjectSculptSpec(spec) {
   if (spec.generators !== undefined && (!Array.isArray(spec.generators) || spec.generators.length > MAX_GENERATORS)) {
     throw new RangeError('generators 最多允许 ' + MAX_GENERATORS + ' 项');
   }
+  if (spec.constraints !== undefined && (!Array.isArray(spec.constraints) || spec.constraints.length > 60)) {
+    throw new RangeError('constraints 最多允许 60 项');
+  }
   const generatorIds = new Set();
   const generatorParameterIds = new Set();
   const generatorTemplateNodeIds = new Set();
@@ -334,6 +386,27 @@ export function validateObjectSculptSpec(spec) {
       while (parent) { if (parent === generator.templateRootId) { insideTemplate = true; break; } parent = nodes.get(parent)?.parent; }
       if (!followerNode || insideTemplate || !['x','y','z'].includes(follower.axis) || !Number.isFinite(follower.offset ?? 0)) throw new TypeError('结构生成器跟随规则无效：' + generator.id);
     }
+  }
+  const constraintIds = new Set();
+  const managedConstraintTargets = new Set();
+  for (const constraint of spec.constraints || []) {
+    if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
+      || constraintIds.has(constraint.id)) throw new TypeError('结构约束 ID 无效或重复');
+    constraintIds.add(constraint.id);
+    if (!['follow','span'].includes(constraint.type) || !generatorIds.has(constraint.sourceGeneratorId)
+      || !nodes.has(constraint.targetNodeId) || generatorTemplateNodeIds.has(constraint.targetNodeId)
+      || !['x','y','z'].includes(constraint.axis)) throw new TypeError('结构约束引用无效：' + constraint.id);
+    if (!['rows','columns','repeat'].includes(constraint.measure || 'repeat')
+      || (constraint.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(constraint.property)
+        || nodes.get(constraint.targetNodeId).kind === 'group'))
+      || (constraint.type === 'follow' && constraint.property !== undefined)
+      || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
+      || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
+      throw new TypeError('结构约束规则无效：' + constraint.id);
+    }
+    const targetKey = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis);
+    if (managedConstraintTargets.has(targetKey)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
+    managedConstraintTargets.add(targetKey);
   }
   const parameterIds = new Set();
   if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) {

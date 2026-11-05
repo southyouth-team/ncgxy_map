@@ -6,7 +6,7 @@ const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
 const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
 const ROOFS = ['flat', 'pitched', 'span', 'glass'];
 const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
-const PARAMETER_TARGETS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity']);
+const PARAMETER_TARGETS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','visibility.visible']);
 function stableSerialize(value: any): string {
   if (Array.isArray(value)) return '[' + value.map(stableSerialize).join(',') + ']';
   if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableSerialize(value[key])).join(',') + '}';
@@ -51,9 +51,18 @@ function normalizeObjectParameterSchema(input: unknown, componentTree: any[], ma
       const node = componentTree.find(item => item.id === target?.nodeId);
       if (!nodeIds.has(target?.nodeId) || !PARAMETER_TARGETS.has(target?.property)) throw new ServiceUnavailableException('参数目标无效：' + id);
       const mode = target.mode || 'set';
-      if (!['set','multiply','add'].includes(mode) || (target.property.startsWith('material.') && mode !== 'set')) throw new ServiceUnavailableException('参数目标运算无效：' + id);
+      if (!['set','multiply','add','visible-from','visible-through'].includes(mode) || (target.property.startsWith('material.') && mode !== 'set')) throw new ServiceUnavailableException('参数目标运算无效：' + id);
+      if (['visible-from','visible-through'].includes(mode) && target.property !== 'visibility.visible') throw new ServiceUnavailableException('可见性阈值运算只能用于 visibility.visible：' + id);
+      if (target.property === 'visibility.visible' && mode === 'set' && type !== 'boolean' && type !== 'number') throw new ServiceUnavailableException('可见性参数类型无效：' + id);
+      if (target.property === 'geometry.primitive' && type !== 'select') throw new ServiceUnavailableException('几何类型参数必须是 select：' + id);
       if (target.property.startsWith('material.') && !materials[node.material]) throw new ServiceUnavailableException('参数引用的材质不存在：' + id);
-      return { nodeId: target.nodeId, property: target.property, mode };
+      const normalizedTarget: Record<string, any> = { nodeId: target.nodeId, property: target.property, mode };
+      if (target.property === 'visibility.visible' && ['visible-from','visible-through'].includes(mode)) {
+        const threshold = Number(target.threshold);
+        if (!Number.isFinite(threshold) || threshold < 1 || threshold > 100) throw new ServiceUnavailableException('可见性阈值无效：' + id);
+        normalizedTarget.threshold = threshold;
+      }
+      return normalizedTarget;
     });
     return parameter;
   });
@@ -169,7 +178,7 @@ export class BuildingDesignService {
                 'componentTree 是有意义的结构节点数组。节点字段：id（稳定唯一英文 ID）、name、role、parent（唯一根节点省略，其余节点填写直接父节点 ID）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth）、transform（position/rotation/scale）、material、geometryDescriptor（可选）。',
                 '根据对象本身的真实组成自主决定组件数量和层级；不要求固定层数或固定部件数量。简单对象可以只有一个 Mesh；复杂对象必须拆分为可独立编辑的部件。',
                 '整个资产必须只有一个根节点，其他节点通过 parent 形成连通树。子节点 position 是相对直接 parent 的局部坐标。parent 只定义层级，不会自动吸附几何体，必须根据尺寸和连接关系计算位置。',
-                'parameterSchema 用于声明真正有意义的可编辑参数，而不是穷举通用参数。每项格式：id、label、type(number/color/boolean/select)、value；number 另含 min/max/step/unit；select 另含 options([{label,value}])；targets 为数组，每项含 nodeId、property、mode。property 只允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity。mode 允许 set/multiply/add，材质只允许 set。',
+                'parameterSchema 用于声明真正有意义的可编辑参数，而不是穷举通用参数。每项格式：id、label、type(number/color/boolean/select)、value；number 另含 min/max/step/unit；select 另含 options([{label,value}])；targets 为数组，每项含 nodeId、property、mode。property 只允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。mode 允许 set/multiply/add；visibility.visible 还允许 visible-from/visible-through 并提供 threshold；材质只允许 set。',
                 '只声明对当前资产有实际意义的参数。例如重复楼层、树冠层、车轮、窗户、叶片等结构的尺寸/颜色/比例；一个参数可绑定多个节点实现联动。不要凭空声明没有可控目标的参数。',
                 '参数目标必须引用真实存在的 nodeId。数值参数给出合理 min/max/current value；颜色参数使用 #RRGGBB；枚举参数提供有限 options。不要输出表达式、函数、脚本或任意属性路径。',
                 '材质颜色必须匹配参考图，不得全部白色/灰色。几何部件应合理接合，避免无理由漂浮。只推断图中可见结构，遮挡/背面不确定性写入 limitations。',

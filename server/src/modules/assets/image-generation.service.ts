@@ -193,10 +193,25 @@ export class ImageGenerationService {
     if (roots.length !== 1) {
       throw new ServiceUnavailableException('ObjectSculptSpec 必须只有一个主体根节点；检测到 ' + roots.length + ' 个根节点，组件没有组成完整对象');
     }
-    const ids = new Set(spec.componentTree.map((node: any) => node?.id).filter((id: unknown) => typeof id === 'string'));
+    const byId = new Map<string, any>(spec.componentTree
+      .filter((node: any) => typeof node?.id === 'string')
+      .map((node: any) => [node.id, node] as [string, any]));
     for (const node of spec.componentTree) {
-      if (node?.parent && !ids.has(node.parent)) {
+      if (node?.parent && !byId.has(node.parent)) {
         throw new ServiceUnavailableException('组件父节点不存在：' + String(node.id || 'unknown'));
+      }
+      const visited = new Set([node.id]);
+      let parent = node?.parent;
+      let depth = 1;
+      while (parent) {
+        if (visited.has(parent)) throw new ServiceUnavailableException('组件树存在循环引用：' + String(node.id || 'unknown'));
+        visited.add(parent);
+        depth += 1;
+        if (depth > 16) throw new ServiceUnavailableException('组件树层级超过 16 层');
+        parent = byId.get(parent)?.parent;
+      }
+      if (parent !== undefined && parent !== null) {
+        throw new ServiceUnavailableException('组件未连接到主体根节点：' + String(node.id || 'unknown'));
       }
     }
     return { provider: baseUrl, model, objectType, visualStyle, objectSculptSpec: spec };

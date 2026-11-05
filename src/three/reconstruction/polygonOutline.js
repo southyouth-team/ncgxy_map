@@ -47,3 +47,11 @@ export function removePolygonOutlinePoint(points) {
   if (points.length <= MIN_POINTS) throw new RangeError('轮廓至少保留 3 个点')
   return validatePolygonOutline(points.slice(0, -1).map(point => [...point]))
 }
+
+export function polygonOutlineNormalizedToLocal(point, width, height) {
+  return [Number(point[0]) * Number(width), Number(point[1]) * Number(height)]
+}
+export function polygonOutlineLocalToNormalized(x, y, width, height) {
+  if (![x,y,width,height].every(value=>Number.isFinite(Number(value))) || Number(width)<=0 || Number(height)<=0) throw new TypeError('Polygon 局部坐标和尺寸必须是有限数值，尺寸必须大于零')
+  return [Number(x)/Number(width),Number(y)/Number(height)]
+}

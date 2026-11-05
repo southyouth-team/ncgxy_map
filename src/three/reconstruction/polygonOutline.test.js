@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addPolygonOutlinePoint, polygonOutlineArea, removePolygonOutlinePoint, updatePolygonOutlinePoint, validatePolygonOutline } from './polygonOutline.js'
+import { addPolygonOutlinePoint, polygonOutlineArea, polygonOutlineLocalToNormalized, polygonOutlineNormalizedToLocal, removePolygonOutlinePoint, updatePolygonOutlinePoint, validatePolygonOutline } from './polygonOutline.js'
 
 const triangle = [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]]
 
@@ -24,6 +24,11 @@ describe('polygon outline editing', () => {
     expect(() => validatePolygonOutline([[0, 0], [0.5, 0], [1, 0.5]])).toThrow('二维坐标')
     expect(() => updatePolygonOutlinePoint(triangle, 0, 0, 0.8)).toThrow('二维坐标')
     expect(() => validatePolygonOutline([[0, 0], [0.2, 0.2], [0.4, 0.4]])).toThrow('面积不能为零')
+  })
+  it('converts normalized and component-local coordinates', () => {
+    expect(polygonOutlineNormalizedToLocal([0.25,-0.5],8,4)).toEqual([2,-2])
+    expect(polygonOutlineLocalToNormalized(2,-2,8,4)).toEqual([0.25,-0.5])
+    expect(()=>polygonOutlineLocalToNormalized(1,1,0,4)).toThrow('尺寸必须大于零')
   })
   it('enforces the 32-point upper bound', () => {
     const points = Array.from({ length: 32 }, (_, index) => {

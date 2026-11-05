@@ -287,6 +287,39 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(reloaded.userData.componentGroups.size).toBe(13);
   });
 
+  it('builds a continuous tube mesh from a bounded declarative 3D path', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { metal: { color: '#777777', roughness: 0.35, metalness: 0.7 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'handrail', kind: 'mesh', parent: 'root', primitive: 'tube', material: 'metal',
+          dimensions: { width: 4, height: 3, depth: 2 },
+          geometryDescriptor: {
+            path: [[-0.5, -0.3, 0], [-0.2, 0.1, 0], [0.2, 0.1, 0.2], [0.5, -0.3, 0.2]],
+            radius: 0.06, tubularSegments: 48, radialSegments: 10,
+          } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.userData.componentGroups.get('handrail').getObjectByName('handrail:mesh');
+    expect(mesh.geometry.type).toBe('TubeGeometry');
+    expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(100);
+    expect(mesh.geometry.getAttribute('normal').count).toBe(mesh.geometry.getAttribute('position').count);
+  });
+
+  it('rejects tube paths with coordinates outside the normalized bounds', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'cable', primitive: 'tube', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: { path: [[0, 0, 0], [0.8, 0, 0]] },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('必须是 [-0.5,0.5] 范围内的三维坐标');
+  });
+
   it('rejects AI parameter targets outside the renderer allowlist', () => {
     const spec = {
       schemaVersion: '2.0',

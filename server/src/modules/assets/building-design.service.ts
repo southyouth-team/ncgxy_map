@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
@@ -10,22 +11,43 @@ const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
 export class BuildingDesignService {
   private readonly logger = new Logger(BuildingDesignService.name);
 
+private readonly approvedReferences = new Map<string, { digest: string; expiresAt: number }>();
+
   constructor(private readonly config: ConfigService) {}
 
-  async analyzeReference(imageDataUrlInput: unknown) {
-    if (typeof imageDataUrlInput !== 'string') {
-      throw new BadRequestException('请提供建筑参考图');
-    }
+  /** 用户确认预览图后签发一次性短时凭证。 */
+  approveReference(imageDataUrlInput: unknown) {
+    const image = this.parseReferenceImage(imageDataUrlInput);
+    const digest = createHash('sha256').update(image).digest('hex');
+    const approvalToken = randomUUID();
+    this.approvedReferences.set(approvalToken, { digest, expiresAt: Date.now() + 15 * 60 * 1000 });
+    return { approvalToken, expiresInSeconds: 900, imageSha256: digest };
+  }
+
+  private parseReferenceImage(imageDataUrlInput: unknown) {
+    if (typeof imageDataUrlInput !== 'string') throw new BadRequestException('请提供建筑参考图');
     const match = imageDataUrlInput.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
     if (!match) throw new BadRequestException('参考图必须是 Base64 PNG、JPG 或 WebP');
     const image = Buffer.from(match[2], 'base64');
-    if (image.length < 16 || image.length > MAX_REFERENCE_BYTES) {
-      throw new BadRequestException('参考图为空或超过 10 MB（避免 Base64 请求体超过服务端 JSON 限额）');
-    }
+    if (image.length < 16 || image.length > MAX_REFERENCE_BYTES) throw new BadRequestException('参考图为空或超过 10 MB');
     const validSignature = image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
       || (image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff)
       || (image.toString('ascii', 0, 4) === 'RIFF' && image.toString('ascii', 8, 12) === 'WEBP');
     if (!validSignature) throw new BadRequestException('参考图文件签名无效');
+    return image;
+  }
+
+  async analyzeReference(imageDataUrlInput: unknown, approvalTokenInput: unknown) {
+    const image = this.parseReferenceImage(imageDataUrlInput);
+    if (typeof approvalTokenInput !== 'string' || !approvalTokenInput) {
+      throw new BadRequestException('请先确认建筑参考图片，再执行 3D 结构识别');
+    }
+    const approved = this.approvedReferences.get(approvalTokenInput);
+    this.approvedReferences.delete(approvalTokenInput);
+    const digest = createHash('sha256').update(image).digest('hex');
+    if (!approved || approved.expiresAt < Date.now() || approved.digest !== digest) {
+      throw new BadRequestException('图片确认凭证无效、已过期或与当前预览图片不一致，请重新确认');
+    }
 
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');

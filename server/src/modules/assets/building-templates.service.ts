@@ -32,7 +32,7 @@ export class BuildingTemplatesService {
     const categories = ['building', 'structure', 'vegetation', 'road', 'water', 'terrain', 'facility', 'decoration', 'sports', 'indoor', 'vehicle', 'character', 'effect'];
     const category = String(input.category || 'building');
     if (!categories.includes(category)) throw new BadRequestException('模板分类无效');
-    if (input.modelType === 'procedural' && category !== 'building' && !['vegetation', 'structure', 'facility', 'decoration', 'sports', 'road', 'water', 'terrain'].includes(category)) throw new BadRequestException('该场景类别尚未接入参数化生成与识别 schema；请使用 GLB 导入');
+    if (input.modelType === 'procedural' && category !== 'building' && !['vegetation', 'structure', 'facility', 'decoration', 'sports'].includes(category)) throw new BadRequestException('该场景类别尚未接入参数化生成与识别 schema；请使用 GLB 导入');
     const objectType = typeof input.objectType === 'string' ? input.objectType.trim() : '';
     const visualStyle = typeof input.visualStyle === 'string' ? input.visualStyle.trim() : '';
     const design = (input.design || input.buildingDesign) as Record<string, unknown> | undefined;
@@ -79,13 +79,20 @@ export class BuildingTemplatesService {
     if (role === 'model' && (item.modelType !== 'glb' || !glb)) throw new BadRequestException('GLB 模板必须上传有效 GLB 文件');
     if (role === 'reference' && !(png || jpg || webp)) throw new BadRequestException('参考文件必须为 PNG/JPG/WebP');
     const ext = role === 'model' ? '.glb' : jpg ? '.jpg' : webp ? '.webp' : '.png';
+    const checksumSha256 = createHash('sha256').update(b).digest('hex');
+    if (role === 'reference' && item.modelType === 'procedural' && item.category !== 'building') {
+      const expected = item.design?.referenceImageSha256;
+      if (typeof expected !== 'string' || !/^[a-f0-9]{64}$/.test(expected) || expected !== checksumSha256) {
+        throw new BadRequestException('参考图片与签发结构参数时使用的图片不一致；请重新确认图片并识别');
+      }
+    }
     const fileId = randomUUID();
     await mkdir(resolve(this.root, 'files'), { recursive: true });
     const storageName = fileId + ext;
     await writeFile(resolve(this.root, 'files', storageName), b, { flag: 'wx' });
     const metadata = { fileId, storageName, fileName: String(file.originalname || 'asset').slice(0,180),
       mimeType: role === 'model' ? 'model/gltf-binary' : jpg ? 'image/jpeg' : webp ? 'image/webp' : 'image/png',
-      sizeBytes: file.size, url: '/api/v1/assets/building-templates/' + id + '/files/' + role };
+      sizeBytes: file.size, sha256: checksumSha256, url: '/api/v1/assets/building-templates/' + id + '/files/' + role };
     await this.enqueue(async () => {
       const m = await this.readManifest(); const target = m.templates.find((x: any) => x.templateId === id);
       if (!target) throw new NotFoundException('场景资产模板不存在');
@@ -108,6 +115,7 @@ export class BuildingTemplatesService {
       if (item.modelType === 'glb' && !item.modelFile) throw new BadRequestException('请先上传 GLB 模型');
       if (item.modelType === 'procedural' && !item.design && !item.buildingDesign) throw new BadRequestException('程序化模板缺少结构参数');
       if (item.modelType === 'procedural' && !item.referenceImage) throw new BadRequestException('程序化模板必须保留已确认的参考图片');
+      if (item.modelType === 'procedural' && item.category !== 'building' && item.referenceImage.sha256 !== item.design?.referenceImageSha256) throw new BadRequestException('模板参考图片与 AI 结构识别凭证不匹配');
       item.status = 'ready'; item.updatedAt = new Date().toISOString(); result = item; await this.writeManifest(m);
     });
     return result;

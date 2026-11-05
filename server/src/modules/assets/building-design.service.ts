@@ -95,7 +95,7 @@ export class BuildingDesignService {
 
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
-    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
     if (!apiKey || !model) throw new ServiceUnavailableException('结构化重建未配置视觉模型，请检查 VISION_API_KEY、VISION_MODEL 和 VISION_API_BASE_URL');
     const userPrompt = typeof promptInput === 'string' ? promptInput.trim().slice(0, 4000) : '';
     let response: Response;

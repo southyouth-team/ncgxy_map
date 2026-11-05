@@ -354,10 +354,10 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('outer-wall').getObjectByName('outer-wall:mesh').geometry.parameters.width).toBeCloseTo(20);
     applyObjectSculptParameter(THREE, model, 'columns', 2);
     expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(7);
-    expect(model.userData.componentGroups.get('outer-wall').userData.componentSpec.dimensions.width).toBeCloseTo(13);
+    expect(model.userData.componentGroups.get('outer-wall').getObjectByName('outer-wall:mesh').geometry.parameters.width).toBeCloseTo(13);
     applyObjectSculptParameter(THREE, model, 'columns', 4);
     expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(21);
-    expect(model.userData.componentGroups.get('outer-wall').userData.componentSpec.dimensions.width).toBeCloseTo(27);
+    expect(model.userData.componentGroups.get('outer-wall').getObjectByName('outer-wall:mesh').geometry.parameters.width).toBeCloseTo(27);
     expect(model.userData.componentGroups.get('decoration').position.toArray()).toEqual([3, 2, 1]);
   });
 

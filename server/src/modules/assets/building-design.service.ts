@@ -668,7 +668,7 @@ export class BuildingDesignService {
               'targets 只能引用当前 componentTree 中真实存在的 nodeId。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。',
               '结构数量参数可以 targets=[]，但必须同时创建一个 generators 项并绑定 countParameterId。禁止把楼层数只映射到预生成节点显隐。',
               '没有可用原型时必须明确返回 unsupported，不能伪造目标或生成器。',
-              '如果用户要求楼层数变量而当前楼层是多个独立重复节点，可以在 componentTree 中把一个完整楼层整理为 Group 原型，并只在确认其余楼层是相同重复实例时将其从静态树中移除；必须保持该原型的几何、材质和局部结构不变。无法可靠识别单层完整子树时，不得强行重构，应返回 unsupported。',
+              '如果用户要求楼层数变量而当前楼层是多个独立重复节点，可以在 componentTree 中增加纯 Group 包装节点，把一个完整楼层整理为原型，并将其余静态重复楼层设为 hidden=true；必须保留所有原有节点 ID，不得删除原有节点，不得新增 Mesh，不得改变原有几何、材质、尺寸和 transform。无法可靠识别单层完整子树时，不得强行重构，应返回 unsupported。',
               'generators 只支持安全声明式 repeat：{id,type:"repeat",templateRootId,countParameterId,axis:"x"|"y"|"z",spacing,defaultCount,maxCount,followers:[{nodeId,axis,offset}]}。templateRootId 必须是当前 componentTree 中代表一个完整可重复单元的现有节点；其子树会作为原型复制。第一份保留原节点 ID，后续实例由运行时派生稳定 ID。defaultCount 必须等于数量参数默认 value；followers 用于在数量变化时同步移动屋顶等非重复节点。',
               '当用户要求楼层数时，寻找一个完整楼层 Group 子树作为模板，沿 y 轴重复，spacing 使用楼层高度；设置 defaultCount 为当前楼层数，maxCount 为允许上限，并把屋顶等结构加入 followers，沿 y 轴偏移 spacing*(楼层数-defaultCount)。屋顶等非重复结构不能放进楼层原型子树。',
               '当用户要求房间数时，只有能识别完整房间原型和合理排列轴/间距时才创建 repeat；否则说明当前模型缺少可重复房间结构，不能假装参数已生效。',
@@ -693,6 +693,25 @@ export class BuildingDesignService {
     }
     if (!Array.isArray(parsed?.parameterSchema)) throw new ServiceUnavailableException('AI 参数设计结果缺少 parameterSchema');
     const componentTree = Array.isArray(parsed.componentTree) ? parsed.componentTree : current.componentTree;
+    if (!Array.isArray(componentTree) || componentTree.length > 100) throw new ServiceUnavailableException('参数化结构树超出组件数量限制');
+    const currentNodes = new Map(current.componentTree.map((node: any) => [node.id, node]));
+    const nextNodes = new Map(componentTree.map((node: any) => [node.id, node]));
+    for (const [id, before] of currentNodes) {
+      const after = nextNodes.get(id);
+      if (!after) throw new ServiceUnavailableException('参数化不能删除现有组件：' + id);
+      const protectedFields = ['primitive','dimensions','material','geometryDescriptor','transform','name','role','locked'];
+      for (const field of protectedFields) {
+        if (stableSerialize(after[field]) !== stableSerialize(before[field])) {
+          throw new ServiceUnavailableException('参数化不能改变现有组件的几何或外观字段：' + id + '.' + field);
+        }
+      }
+      if ((after.kind || 'mesh') !== (before.kind || 'mesh')) throw new ServiceUnavailableException('参数化不能改变现有组件类型：' + id);
+    }
+    for (const [id, node] of nextNodes) {
+      if (!currentNodes.has(id) && (node.kind || 'mesh') !== 'group') {
+        throw new ServiceUnavailableException('参数化只允许新增逻辑 Group，不允许新增 Mesh：' + id);
+      }
+    }
     const generators = normalizeObjectGenerators(parsed.generators ?? current.generators ?? [], componentTree);
     const generatorParameterIds = new Set(generators.map((generator: any) => generator.countParameterId));
     const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, current.materials, generatorParameterIds);

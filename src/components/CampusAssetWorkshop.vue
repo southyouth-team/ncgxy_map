@@ -123,7 +123,7 @@ function buildPrompt() {
     extraPrompt.value.trim() ? 'Additional requirements: ' + extraPrompt.value.trim() : '',
   ].filter(Boolean).join('\n\n')
   buildingDesign.value = null
-  message.value = '提示词已生成。图片用于建筑外观参考和 2.5D 展示；识别参数后由 Three.js 代码生成可旋转 3D 几何。'
+  message.value = '提示词已生成。图片仅作为建筑外观参考和识别输入；识别参数由 Three.js 代码生成统一 3D 几何，供 2.5D 与 3D 两种视角共用。'
 }
 
 async function copyPrompt() {
@@ -486,7 +486,7 @@ onBeforeUnmount(resetPreview)
         <label>AI 生成提示词
           <textarea v-model="generatedPrompt" rows="10" placeholder="生成提示词后可在此修改、复制到你使用的 AI 工具"></textarea>
         </label>
-        <p class="hint">AI 图片是建筑外观参考图，同时可用于 2.5D 展示。识图模型提取楼层、屋顶、窗户、门和墙面配色参数；3D 模式由 Three.js 参数化几何生成器直接构建实体，不要求先制作 GLB。识别结果是视觉估算，不是实测数据。</p>
+        <p class="hint">AI 图片只作为建筑外观参考，不直接显示在校园地图中。识图模型提取楼层、屋顶、窗户、门和墙面配色参数；Three.js 参数化几何生成器据此构建统一 3D 实体，2.5D 与 3D 共用该实体，仅相机和交互方式不同。识别结果是视觉估算，不是实测数据。</p>
         <div v-if="buildingDesign" class="design-result">
           <strong>3D 结构参数已提取 · 置信度 {{ Math.round(buildingDesign.confidence * 100) }}%</strong>
           <span>{{ buildingDesign.template }} · {{ buildingDesign.floors }} 层 · {{ buildingDesign.roofStyle }} 屋顶 · {{ buildingDesign.wallPalette }}</span>
@@ -550,7 +550,7 @@ onBeforeUnmount(resetPreview)
 
     <footer class="workshop-footer">
       <strong>数据边界</strong>
-      <span>AI 图片作为建筑外观参考，也用于 2.5D 展示；deepseek-flash 从参考图提取参数，Three.js 代码据此生成 3D 墙体、楼层、屋顶、窗户和门。建筑位置、footprint、碰撞、walkable 仍由校园空间 FeatureCollection 管理。人工 GLB 导入继续作为可选兼容路径。识别参数属于视觉估算，不是测绘事实。</span>
+      <span>AI 图片只作为建筑外观参考和识别资料，不作为地图中的平面贴图；deepseek-flash 从参考图提取参数，Three.js 代码据此生成统一 3D 墙体、楼层、屋顶、窗户和门，供 2.5D/3D 共用。建筑位置、footprint、碰撞、walkable 仍由校园空间 FeatureCollection 管理。人工 GLB 导入继续作为可选兼容路径。识别参数属于视觉估算，不是测绘事实。</span>
     </footer>
   </main>
 </template>

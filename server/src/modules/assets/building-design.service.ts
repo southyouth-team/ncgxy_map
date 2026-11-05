@@ -7,6 +7,11 @@ const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教�
 const ROOFS = ['flat', 'pitched', 'span', 'glass'];
 const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
 const PARAMETER_TARGETS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity']);
+function stableSerialize(value: any): string {
+  if (Array.isArray(value)) return '[' + value.map(stableSerialize).join(',') + ']';
+  if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableSerialize(value[key])).join(',') + '}';
+  return JSON.stringify(value);
+}
 function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>) {
   if (input == null) return [];
   if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('parameterSchema 必须是最多 100 项的数组');
@@ -535,10 +540,20 @@ export class BuildingDesignService {
     for (const node of current.componentTree) {
       const after = updatedById.get(node.id);
       if (!after) throw new ServiceUnavailableException('局部修改结果丢失组件：' + node.id);
-      if (!allowedIds.has(node.id) && JSON.stringify(after) !== JSON.stringify(node)) {
+      if (!allowedIds.has(node.id) && stableSerialize(after) !== stableSerialize(node)) {
         throw new ServiceUnavailableException('局部修改越界：AI 修改了未选中的组件 ' + node.id);
       }
       if (after.parent !== node.parent) throw new ServiceUnavailableException('局部修改不得改变组件父子关系：' + node.id);
+    }
+    if (stableSerialize(updated.parameterSchema || []) !== stableSerialize(current.parameterSchema || [])) {
+      throw new ServiceUnavailableException('局部修改不得擅自改变资产参数 Schema');
+    }
+    const protectedMaterials = new Set<string>();
+    for (const node of current.componentTree) if (!allowedIds.has(node.id) && typeof node.material === 'string') protectedMaterials.add(node.material);
+    for (const key of protectedMaterials) {
+      if (stableSerialize(updated.materials?.[key]) !== stableSerialize(current.materials?.[key])) {
+        throw new ServiceUnavailableException('局部修改不得改变未选中组件共用的材质：' + key);
+      }
     }
     const design = {
       source: 'ai-vision-object-sculpt',

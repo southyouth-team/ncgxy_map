@@ -80,6 +80,47 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
   });
   return normalized;
 }
+function normalizeObjectConstraints(input: unknown, generators: any[], componentTree: any[]) {
+  if (input == null) return [];
+  if (!Array.isArray(input) || input.length > 60) throw new ServiceUnavailableException('constraints 必须是最多 60 项的数组');
+  const generatorIds = new Set(generators.map(item => item.id));
+  const nodeIds = new Set(componentTree.map(item => item.id));
+  const templateIds = new Set<string>();
+  const byId = new Map(componentTree.map(item => [item.id, item]));
+  for (const generator of generators) {
+    for (const node of componentTree) {
+      let parent = node.id;
+      while (parent) {
+        if (parent === generator.templateRootId) { templateIds.add(node.id); break; }
+        parent = byId.get(parent)?.parent;
+      }
+    }
+  }
+  const ids = new Set<string>();
+  const targets = new Set<string>();
+  return input.map((raw: any) => {
+    const id = typeof raw?.id === 'string' ? raw.id : '';
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)
+      || !['follow','span'].includes(raw.type) || !generatorIds.has(raw.sourceGeneratorId)
+      || !nodeIds.has(raw.targetNodeId) || templateIds.has(raw.targetNodeId)
+      || !['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构约束 ID、类型或引用无效：' + id);
+    ids.add(id);
+    const measure = raw.measure || (generators.find(item => item.id === raw.sourceGeneratorId)?.type === 'grid' ? 'columns' : 'repeat');
+    if (!['rows','columns','repeat'].includes(measure)) throw new ServiceUnavailableException('结构约束 measure 无效：' + id);
+    if (raw.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(raw.property)
+      || byId.get(raw.targetNodeId)?.kind === 'group')) throw new ServiceUnavailableException('span 约束只能调整 Mesh 尺寸：' + id);
+    if (raw.type === 'follow' && raw.property !== undefined) throw new ServiceUnavailableException('follow 约束不能声明 property：' + id);
+    const factor = Number(raw.factor ?? 1), offset = Number(raw.offset ?? 0);
+    if (!Number.isFinite(factor) || Math.abs(factor) > 10 || !Number.isFinite(offset) || Math.abs(offset) > 100) {
+      throw new ServiceUnavailableException('结构约束计算系数超出范围：' + id);
+    }
+    const targetKey = raw.targetNodeId + ':' + raw.type + ':' + (raw.property || raw.axis);
+    if (targets.has(targetKey)) throw new ServiceUnavailableException('结构约束重复管理同一目标：' + id);
+    targets.add(targetKey);
+    return { id, type: raw.type, sourceGeneratorId: raw.sourceGeneratorId, targetNodeId: raw.targetNodeId, axis: raw.axis, measure, factor, offset,
+      ...(raw.type === 'span' ? { property: raw.property } : {}) };
+  });
+}
 function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>, generatorParameterIds = new Set<string>()) {
   if (input == null) return [];
   if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('parameterSchema 必须是最多 100 项的数组');
@@ -538,6 +579,7 @@ export class BuildingDesignService {
     const rootNodes = componentTree.filter((node: any) => !node.parent);
     if (rootNodes.length !== 1) throw new BadRequestException('资产组件必须连接到唯一主体根节点，不能拆成多个独立物体');
     const generators = normalizeObjectGenerators(input.generators ?? original.objectSculptSpec?.generators, componentTree);
+    const constraints = normalizeObjectConstraints(input.constraints ?? original.objectSculptSpec?.constraints, generators, componentTree);
     const generatorParameterIds = new Set(generators.flatMap((generator: any) => generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId]));
     const parameterSchema = normalizeObjectParameterSchema(input.parameterSchema ?? original.objectSculptSpec?.parameterSchema, componentTree, materials, generatorParameterIds);
     for (const generator of generators) {
@@ -562,6 +604,7 @@ export class BuildingDesignService {
         componentTree,
         parameterSchema,
         generators,
+        constraints,
       },
       reviewed: true,
       reviewedAt: new Date().toISOString(),

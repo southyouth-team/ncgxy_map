@@ -364,6 +364,7 @@ export class ImageGenerationService {
     // 参考图采用两阶段视觉链路：先独立提取可见结构证据，再将分析结果交给结构生成阶段。
     // 这样可避免模型一边猜测图片结构、一边直接编写几何协议，导致比例和部件关系漂移。
     let visualAnalysis = '';
+    let referenceAnalysis: any = null;
     if (imageDataUrl) {
       let analysisResponse: Response;
       try {
@@ -417,6 +418,7 @@ export class ImageGenerationService {
         || !Array.isArray(analysisObject.spatialRelations)) {
         throw new ServiceUnavailableException('参考图片视觉分析结果缺少轮廓、组件或空间关系信息');
       }
+      referenceAnalysis = analysisObject;
       visualAnalysis = JSON.stringify(analysisObject).slice(0, 16000);
       this.logger.log('参考图片视觉分析完成：' + model + '，识别组件 ' + analysisObject.components.length + ' 项');
     }
@@ -561,7 +563,7 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('AI 结构约束引用无效：' + constraint.id);
       }
     }
-    return { provider: baseUrl, model, objectType, visualStyle, objectSculptSpec: spec };
+    return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };
   }
 
 }

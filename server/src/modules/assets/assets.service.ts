@@ -361,6 +361,8 @@ export class AssetsService {
           || target.parent !== cutter.parent || constraint.operation !== 'subtract' || constraint.axis !== 'z'
           || (target.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
           || (cutter.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
+        || (target.transform?.scale || [1,1,1]).some((value: unknown) => Math.abs(Number(value) - 1) > 0.0001)
+        || (cutter.transform?.scale || [1,1,1]).some((value: unknown) => Math.abs(Number(value) - 1) > 0.0001)
           || Number(cutter.dimensions?.depth) < Number(target.dimensions?.depth) + 0.02) {
           throw new BadRequestException('资产 cutout 目前仅支持同级、未旋转盒体沿 Z 轴贯穿的矩形减法：' + constraint.id);
         }

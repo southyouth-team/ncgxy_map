@@ -166,7 +166,7 @@ async function generateModel() {
     model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
     model.scale.setScalar(scale.value)
     model.userData.assetInstanceId = id
-    model.userData.assetTemplate = { id: 'ai-generated:' + id, version: 1, category: 'building', objectType: objectType.value }
+    model.userData.assetTemplate = { id: 'ai-generated:' + id, version: 1, category: spec.category || 'other', objectType: spec.objectType || objectType.value }
     scene.add(model)
     objects.set(id, model)
     instances.value.push({ id, name: spec.targetName || objectType.value || 'AI 生成模型', templateId: 'AI ObjectSculptSpec', category: spec.category || 'other', source: 'AI' })
@@ -286,6 +286,7 @@ async function modifySelectedAsset() {
     })
     const nextSpec = result.objectSculptSpec
     const position = root.position.clone(), rotation = root.rotation.clone(), objectScale = root.scale.clone()
+    clearComponentHighlight()
     scene.remove(root)
     root.traverse(child => { child.geometry?.dispose?.(); if (child.material && !Array.isArray(child.material)) child.material.dispose?.() })
     const nextRoot = createObjectSculptModel(THREE, nextSpec, { source: 'ai-local-edit' })

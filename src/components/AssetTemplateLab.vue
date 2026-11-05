@@ -334,7 +334,8 @@ onBeforeUnmount(() => {
             <button v-for="node in componentTree" :key="node.id" class="component-node" :class="{active:selectedComponentId===node.id}" :style="{paddingLeft:(8 + node.depth * 15)+'px'}" @click="selectComponent(node.id)">
               <span>{{ node.name || node.id }}</span><small>{{ node.role || node.primitive || '组件' }}</small>
             </button>
-       <div v-if="selectedComponent" class="component-properties">
+          </div>
+          <div v-if="selectedComponent" class="component-properties">
             <b>{{ selectedComponent.name || selectedComponent.id }}</b>
             <label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)">
             <label>局部位置 X / Y / Z</label>

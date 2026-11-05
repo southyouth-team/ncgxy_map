@@ -464,6 +464,40 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('door-opening-volume').children).toHaveLength(0);
   });
 
+  it('rebuilds cutout geometry from baseline when opening width and position parameters change', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'wall', kind: 'mesh', parent: 'root', primitive: 'box', material: 'wall',
+          dimensions: { width: 4, height: 3, depth: 0.3 } },
+        { id: 'opening-volume', kind: 'mesh', parent: 'root', primitive: 'box', material: 'wall',
+          dimensions: { width: 1, height: 2, depth: 0.5 }, transform: { position: [0, -0.2, 0] } },
+      ],
+      parameterSchema: [
+        { id: 'opening-width', label: '开口宽度', type: 'number', value: 1, min: 0.5, max: 2, step: 0.1, unit: 'm',
+          targets: [{ nodeId: 'opening-volume', property: 'dimensions.width', mode: 'set' }] },
+        { id: 'opening-offset-x', label: '开口水平位置', type: 'number', value: 0, min: -1, max: 1, step: 0.1, unit: 'm',
+          targets: [{ nodeId: 'opening-volume', property: 'transform.position.x', mode: 'set' }] },
+      ],
+      constraints: [{ id: 'wall-opening', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening-volume', axis: 'z', operation: 'subtract' }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const getWall = () => model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
+    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
+    expect(model.userData.componentGroups.get('opening-volume').children).toHaveLength(0);
+    applyObjectSculptParameter(THREE, model, 'opening-width', 1.6);
+    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
+    expect(getWall().geometry.parameters.shapes.holes[0].getPoints().length).toBeGreaterThan(0);
+    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening-volume').dimensions.width).toBe(1.6);
+    applyObjectSculptParameter(THREE, model, 'opening-offset-x', 0.5);
+    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening-volume').transform.position[0]).toBe(0.5);
+    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
+    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
+    expect(reloaded.userData.componentGroups.get('wall').getObjectByName('wall:mesh').geometry.parameters.shapes.holes).toHaveLength(1);
+  });
+
   it('rejects cutouts that exceed the target mesh bounds', () => {
     const spec = {
       schemaVersion: '2.0',

@@ -20,4 +20,18 @@ export class BuildingDesignController {
   analyze(@Body('imageDataUrl') imageDataUrl: string, @Body('approvalToken') approvalToken: string, @Body('prompt') prompt?: string) {
     return this.service.analyzeReference(imageDataUrl, approvalToken, prompt);
   }
+
+  @Post('analyze-scene')
+  @ApiOperation({ summary: '识别已确认的通用场景资产参考图并提取分类结构参数' })
+  analyzeScene(
+    @Body('category') category: string,
+    @Body('objectType') objectType: string,
+    @Body('visualStyle') visualStyle: string,
+    @Body('imageDataUrl') imageDataUrl: string,
+    @Body('approvalToken') approvalToken: string,
+    @Body('prompt') prompt?: string,
+  ) {
+    return this.service.analyzeSceneReference(category, objectType, visualStyle, imageDataUrl, approvalToken, prompt);
+  }
+
 }

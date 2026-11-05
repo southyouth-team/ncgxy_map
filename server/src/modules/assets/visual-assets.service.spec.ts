@@ -43,6 +43,15 @@ describe('AssetsService visual asset persistence', () => {
     expect(await readFile(stored.absolutePath)).toEqual(bytes);
   });
 
+
+  it('persists AI-derived 3D building parameters alongside the 2.5D reference image', async () => {
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const design = { schemaVersion: 1, template: '教学楼', floors: 4, height: 5, roofStyle: 'pitched', roofRise: 0.8, windowDensity: 1.2, windowWidth: 0.5, windowHeight: 0.7, doorWidth: 0.9, wallPalette: 'wallCream', confidence: 0.78 };
+    await service.uploadVisualAsset('local-user', { originalname: 'reference.png', mimetype: 'image/png', size: bytes.length, buffer: bytes }, { featureId: 'building-003', viewMode: '2.5d', sourceType: 'ai_generated', name: '教学楼参考图', buildingDesign: JSON.stringify(design) });
+    const manifest = await service.getVisualAssetManifest();
+    expect(manifest.assets[0].buildingDesign).toMatchObject({ template: '教学楼', floors: 4, roofStyle: 'pitched', heightBasis: 'estimated-scene-units-not-surveyed', confidence: 0.78 });
+  });
+
   it('rejects a file whose signature does not match the selected view', async () => {
     await expect(service.uploadVisualAsset('local-user', {
       originalname: 'not-an-image.png',

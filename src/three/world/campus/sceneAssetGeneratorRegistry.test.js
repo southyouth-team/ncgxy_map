@@ -67,4 +67,32 @@ describe('scene asset generator registry', () => {
     expect(() => registry.generate({ category: 'water', objectType: '湖泊' }))
       .toThrow('未注册场景资产生成器：water/湖泊');
   });
+
+  it('applies AI-extracted geometry parameters to generated meshes', () => {
+    const tree = registry.generate({
+      category: 'vegetation', objectType: '香樟树', dimensions: { width: 3, height: 5, depth: 3 },
+      design: { geometry: { trunkRatio: 0.5, crownLayers: 4 } },
+    });
+    const treeMeshes = [];
+    tree.traverse(object => { if (object.isMesh) treeMeshes.push(object); });
+    expect(treeMeshes.filter(mesh => mesh.name === 'vegetation-crown' || mesh.name === 'vegetation-crown-highlight').length).toBeGreaterThan(0);
+    expect(treeMeshes.length).toBeGreaterThanOrEqual(6);
+
+    const bridge = registry.generate({
+      category: 'structure', objectType: '拱桥',
+      design: { geometry: { supportCount: 6 } },
+    });
+    const supports = [];
+    bridge.traverse(object => { if (object.name === 'bridge-pier') supports.push(object); });
+    expect(supports).toHaveLength(6);
+
+    const bench = registry.generate({
+      category: 'facility', objectType: '长椅',
+      design: { geometry: { seatCount: 4 } },
+    });
+    const seats = [];
+    bench.traverse(object => { if (object.name.startsWith('bench-seat-')) seats.push(object); });
+    expect(seats).toHaveLength(4);
+  });
+
 });

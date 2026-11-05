@@ -2,6 +2,37 @@ import { BadRequestException, Injectable, Logger, ServiceUnavailableException } 
 import { ConfigService } from '@nestjs/config';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+function validateGeneratedGeometryDescriptors(componentTree: any[]) {
+  const point = (value: any, size: number, min = -0.5, max = 0.5) =>
+    Array.isArray(value) && value.length === size && value.every(item => Number.isFinite(Number(item)) && Number(item) >= min && Number(item) <= max);
+  for (const node of componentTree) {
+    if ((node?.kind || 'mesh') !== 'mesh') continue;
+    const primitive = String(node?.primitive || 'box').toLowerCase(), descriptor = node?.geometryDescriptor || {};
+    const fail = (field: string, reason: string): never => { throw new Error('ObjectSculptSpec 几何协议错误：' + node.id + '.geometryDescriptor.' + field + ' ' + reason); };
+    if (primitive === 'polygon') {
+      if (!Array.isArray(descriptor.points) || descriptor.points.length < 3 || descriptor.points.length > 32 || !descriptor.points.every((v: any) => point(v, 2))) fail('points', '必须包含 3-32 个合法二维点');
+    } else if (primitive === 'tube' || primitive === 'sweep') {
+      if (!Array.isArray(descriptor.path) || descriptor.path.length < 2 || descriptor.path.length > 32 || !descriptor.path.every((v: any) => point(v, 3))) fail('path', '必须包含 2-32 个合法三维点');
+      if (primitive === 'sweep' && (!Array.isArray(descriptor.profile) || descriptor.profile.length < 3 || descriptor.profile.length > 24 || !descriptor.profile.every((v: any) => point(v, 2)))) fail('profile', '必须包含 3-24 个合法二维点');
+    } else if (primitive === 'lathe') {
+      if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 2 || descriptor.profile.length > 32 || !descriptor.profile.every((v: any) => point(v, 2, 0, 0.5))) fail('profile', '必须包含 2-32 个合法旋转截面点');
+    } else if (primitive === 'loft') {
+      const sections = descriptor.sections;
+      if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) fail('sections', '必须包含 2-12 个截面');
+      let count: number | null = null, previous = -Infinity;
+      sections.forEach((section: any, index: number) => {
+        if (!section || typeof section !== 'object' || !Number.isFinite(Number(section.height)) || Number(section.height) < -0.5 || Number(section.height) > 0.5
+          || !Array.isArray(section.points) || section.points.length < 3 || section.points.length > 24 || !section.points.every((v: any) => point(v, 2))) {
+          throw new Error('ObjectSculptSpec 几何协议错误：' + node.id + '.geometryDescriptor.sections[' + index + '] 格式无效');
+        }
+        if (count === null) count = section.points.length;
+        if (section.points.length !== count) fail('sections', '所有截面必须具有相同数量的轮廓点');
+        if (Number(section.height) <= previous) fail('sections', 'height 必须严格递增');
+        previous = Number(section.height);
+      });
+    }
+  }
+}
 const PARAMETER_BINDINGS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible']);
 function validateGeneratedParameterSchema(input: unknown, componentTree: any[], generatorParameterIds = new Set<string>()) {
   if (input == null) return [];
@@ -274,15 +305,36 @@ export class ImageGenerationService {
       sizeBytes: imageBuffer.length,
     };
   }
+  async repairObjectFromValidation(objectSculptSpecInput: unknown, validationErrorInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown) {
+    if (!objectSculptSpecInput || typeof objectSculptSpecInput !== 'object' || Array.isArray(objectSculptSpecInput)) throw new BadRequestException('待修复的 ObjectSculptSpec 无效');
+    const validationError = typeof validationErrorInput === 'string' ? validationErrorInput.trim().slice(0, 2000) : '';
+    if (!validationError) throw new BadRequestException('缺少 Runtime 校验错误信息');
+    const original = objectSculptSpecInput as any;
+    const serialized = JSON.stringify(original);
+    if (serialized.length > 30000) throw new BadRequestException('待修复模型数据超过 30 KB');
+    const repairPrompt = [
+      '这是针对现有 ObjectSculptSpec 的定向结构修复，不是重新设计或重新生成整个物体。',
+      '必须保留 targetName、category、objectType、visualStyle、materials、所有节点 ID、parent 层级、非错误节点几何、transform、parameterSchema、generators 和 constraints。',
+      '只允许修改错误明确涉及的节点及其必要几何字段。不要删除组件，不要把复杂几何降级为 box，不要改变参考物体轮廓。',
+      'Runtime 错误：' + validationError,
+      '原始 ObjectSculptSpec JSON：' + serialized,
+      '输出完整修复后的 ObjectSculptSpec JSON。',
+    ].join('\n');
+    const result = await this.generateObjectFromPrompt(repairPrompt,
+      typeof objectTypeInput === 'string' && objectTypeInput.trim() ? objectTypeInput : (original.objectType || '独立 3D 物体'),
+      typeof visualStyleInput === 'string' && visualStyleInput.trim() ? visualStyleInput : (original.visualStyle || 'stylized'), false);
+    return { ...result, repair: { strategy: 'targeted-structure-repair', validationError } };
+  }
+
   /**
    * Prompt-to-3D POC: ask the configured vision/chat model for a bounded ObjectSculptSpec.
    * The model returns JSON data only; no generated JavaScript is evaluated in the server.
    */
-  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown) {
+  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, allowGeometryRepair = true) {
     if (typeof promptInput !== 'string' || !promptInput.trim()) {
       throw new BadRequestException('Three.js 模型生成提示词不能为空');
     }
-    const prompt = promptInput.trim().slice(0, 4000);
+    const prompt = promptInput.trim().slice(0, 40000);
     const objectType = typeof objectTypeInput === 'string' && objectTypeInput.trim()
       ? objectTypeInput.trim().slice(0, 80) : '独立 3D 物体';
     const visualStyle = typeof visualStyleInput === 'string' && visualStyleInput.trim()
@@ -377,6 +429,13 @@ export class ImageGenerationService {
       }
     }
     if (Array.isArray(spec.generators)) normalizeGeneratorTemplateRoots(spec.componentTree, spec.generators);
+    try {
+      validateGeneratedGeometryDescriptors(spec.componentTree);
+    } catch (error) {
+      if (!allowGeometryRepair || !(error instanceof Error)) throw error;
+      this.logger.warn('ObjectSculptSpec 几何校验失败，执行一次定向修复：' + error.message);
+      return this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
+    }
     const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
     spec.generators = generatorValidation.generators;
     spec.parameterSchema = validateGeneratedParameterSchema(spec.parameterSchema, spec.componentTree, generatorValidation.parameterIds);

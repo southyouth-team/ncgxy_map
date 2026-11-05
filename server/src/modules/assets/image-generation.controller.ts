@@ -15,6 +15,17 @@ export class ImageGenerationController {
     return this.service.generate(prompt);
   }
 
+  @Post('repair-object')
+  @ApiOperation({ summary: '根据 Runtime 校验反馈定向修复 ObjectSculptSpec' })
+  repairObject(
+    @Body('objectSculptSpec') objectSculptSpec: unknown,
+    @Body('validationError') validationError: string,
+    @Body('objectType') objectType: string,
+    @Body('visualStyle') visualStyle: string,
+  ) {
+    return this.service.repairObjectFromValidation(objectSculptSpec, validationError, objectType, visualStyle);
+  }
+
   @Post('generate-object')
   @ApiOperation({ summary: '根据提示词直接生成受控 Three.js ObjectSculptSpec' })
   generateObject(

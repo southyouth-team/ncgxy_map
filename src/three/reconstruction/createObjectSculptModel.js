@@ -150,7 +150,6 @@ export function validateObjectSculptSpec(spec) {
     if (kind === 'mesh') {
       if (typeof node.primitive !== 'string' || !node.primitive) throw new TypeError('Mesh 组件缺少 primitive：' + node.id);
       if (!node.dimensions || typeof node.dimensions !== 'object') throw new TypeError('Mesh 组件缺少 dimensions：' + node.id);
-      if (typeof node.material !== 'string') throw new TypeError('Mesh 组件缺少 material：' + node.id);
     }
     finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
     finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');

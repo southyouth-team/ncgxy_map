@@ -277,7 +277,7 @@ export class BuildingDesignService {
       decoration: { rockCount: [3, 1, 8], flowerCount: [12, 0, 40], layerCount: [2, 1, 5], ornamentLevel: [1, 0, 3] },
       sports: { braceCount: [2, 0, 6] },
     };
-    const decimalFields = new Set(['trunkRatio', 'branchSpread', 'spanRatio', 'spanRatio']);
+    const decimalFields = new Set(['trunkRatio', 'branchSpread', 'spanRatio']);
     for (const [key, [fallback, min, max]] of Object.entries(numberFields[category])) {
       const value = bounded(parsed[key], fallback, min, max);
       geometry[key] = decimalFields.has(key) ? value : Math.round(value);

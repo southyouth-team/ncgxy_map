@@ -48,6 +48,7 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
       return false;
     });
     if (!descendants.length) throw new ServiceUnavailableException('结构生成器模板子树为空：' + id);
+    if (followers.some((follower: any) => descendants.some((node: any) => node.id === follower.nodeId))) throw new ServiceUnavailableException('结构生成器跟随节点不能位于重复原型子树内：' + id);
     for (const node of descendants) {
       if (claimedTemplateNodeIds.has(node.id)) throw new ServiceUnavailableException('暂不支持嵌套或重叠的结构生成器模板：' + id);
       claimedTemplateNodeIds.add(node.id);

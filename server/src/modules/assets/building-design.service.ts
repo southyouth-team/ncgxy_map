@@ -579,6 +579,81 @@ export class BuildingDesignService {
     return { objectSculptSpec: reviewed.design.objectSculptSpec, affectedNodeIds: [...allowedIds] };
   }
 
+
+  /** 根据自然语言为现有模型新增可调参数；只允许绑定当前真实存在的组件，不生成或执行脚本。 */
+  async addObjectParameters(objectSculptSpecInput: unknown, instructionInput: unknown) {
+    const current = objectSculptSpecInput as Record<string, any> | undefined;
+    const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 3000) : '';
+    if (!current || current.schemaVersion !== '2.0' || !Array.isArray(current.componentTree)
+      || !current.materials || typeof current.materials !== 'object') {
+      throw new BadRequestException('当前 ObjectSculptSpec 无效');
+    }
+    if (!instruction) throw new BadRequestException('请描述希望新增的模型参数');
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+    if (!apiKey || !model) throw new ServiceUnavailableException('AI 参数设计未配置视觉模型');
+    let response: Response;
+    try {
+      response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(180000),
+        body: JSON.stringify({
+          model, temperature: 0.1, response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: [
+              '你是参数化 3D 模型的参数设计器。根据用户要求和当前 ObjectSculptSpec，为现有模型设计可编辑参数。',
+              '只返回 JSON：{ "parameterSchema": [...] }。parameterSchema 必须是完整数组，包含原有参数并追加新参数；原有参数必须逐字段保持不变。',
+              '每个参数包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options。',
+              'targets 只能引用当前 componentTree 中真实存在的 nodeId。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。',
+              'mode 仅允许 set/multiply/add/visible-from/visible-through。visible-from/visible-through 只能用于 visibility.visible，必须提供 threshold。材质只允许 set。不得输出表达式、函数、脚本或任意属性路径。',
+              '参数必须真正对应现有节点。如果用户要求控制楼层数、房间数等结构数量，只有当前结构中存在足够的对应节点时，才能用 visibility.visible + visible-from/visible-through 将数量映射到节点显隐；如果当前没有可控制的重复节点，不得伪造目标，也不得声称已实现动态生成，应返回 { "parameterSchema": [...], "unsupported": ["说明缺少哪些结构节点"] }。',
+              '不要通过把整个模型整体缩放来冒充房间数或楼层数控制。整体尺寸参数应合理联动相关部件，不能只绑定一个无关节点。',
+              '所有参数 ID 唯一；新增参数不得与现有 ID 冲突。最多 100 个参数，每项最多 100 个目标。',
+              '禁止返回 JavaScript/TypeScript。AI 只声明参数数据，服务端会再次校验所有字段与目标。',
+            ].join('\\n') },
+            { role: 'user', content: JSON.stringify({ instruction, objectSculptSpec: current }) },
+          ],
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('AI 参数设计连接失败：' + message);
+      throw new ServiceUnavailableException('无法连接 AI 参数设计服务');
+    }
+    if (!response.ok) throw new ServiceUnavailableException('AI 参数设计失败（HTTP ' + response.status + '）');
+    const payload = await response.json() as any;
+    let parsed: any;
+    try { parsed = JSON.parse(payload?.choices?.[0]?.message?.content || ''); } catch {
+      throw new ServiceUnavailableException('AI 参数设计未返回有效 JSON');
+    }
+    if (!Array.isArray(parsed?.parameterSchema)) throw new ServiceUnavailableException('AI 参数设计结果缺少 parameterSchema');
+    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, current.componentTree, current.materials);
+    const previous = current.parameterSchema || [];
+    const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));
+    for (const item of previous) {
+      if (stableSerialize(nextById.get(item.id)) !== stableSerialize(item)) {
+        throw new ServiceUnavailableException('AI 参数设计不得修改或删除已有参数：' + item.id);
+      }
+    }
+    const design = {
+      source: 'ai-vision-object-sculpt',
+      category: String(current.category || 'other'),
+      objectType: String(current.objectType || current.targetName || '3D 资产'),
+      visualStyle: String(current.visualStyle || 'stylized'),
+      reviewed: false,
+      objectSculptSpec: current,
+    };
+    const token = this.signToken('design', createHash('sha256').update(JSON.stringify(design)).digest('hex'));
+    const reviewed = this.reviewObjectDesign(design, token, { ...current, parameterSchema });
+    return {
+      objectSculptSpec: reviewed.design.objectSculptSpec,
+      addedParameters: parameterSchema.filter((item: any) => !previous.some((old: any) => old.id === item.id)),
+      unsupported: Array.isArray(parsed.unsupported) ? parsed.unsupported.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
+    };
+  }
+
   async analyzeReference(imageDataUrlInput: unknown, approvalTokenInput: unknown, promptInput?: unknown) {
     const image = this.parseReferenceImage(imageDataUrlInput);
     const promptContext = typeof promptInput === 'string' ? promptInput.trim().slice(0, 4000) : '';

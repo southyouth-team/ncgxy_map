@@ -297,6 +297,7 @@ export function validateObjectSculptSpec(spec) {
         || !parameterIsValid(generator.countParameterId, generator.maxCount)) throw new TypeError('结构生成器排列规则或数量参数无效：' + generator.id);
       generatorParameterIds.add(generator.countParameterId);
     } else {
+      if (generator.rowParameterId === generator.columnParameterId) throw new TypeError('网格生成器行列参数不能相同：' + generator.id);
       if (![generator.spacingX, generator.spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
         || !Number.isInteger(generator.maxRows) || generator.maxRows < 1 || generator.maxRows > 100
         || !Number.isInteger(generator.maxColumns) || generator.maxColumns < 1 || generator.maxColumns > 100

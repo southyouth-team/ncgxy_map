@@ -7,6 +7,20 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 
+
+function assertStableSweepPath(path: number[][], label: string, ErrorType: new (message?: string) => Error) {
+  const maxTurnRadians = Math.PI * (150 / 180);
+  for (let index = 1; index < path.length - 1; index += 1) {
+    const incoming = [path[index][0] - path[index - 1][0], path[index][1] - path[index - 1][1], path[index][2] - path[index - 1][2]];
+    const outgoing = [path[index + 1][0] - path[index][0], path[index + 1][1] - path[index][1], path[index + 1][2] - path[index][2]];
+    const incomingLength = Math.hypot(...incoming);
+    const outgoingLength = Math.hypot(...outgoing);
+    const dot = incoming.reduce((sum, value, axis) => sum + value * outgoing[axis], 0);
+    const turnRadians = Math.acos(Math.max(-1, Math.min(1, dot / (incomingLength * outgoingLength))));
+    if (turnRadians > maxTurnRadians) throw new ErrorType(label + ' 存在超过 150° 的急转弯，可能导致扫掠截面翻转或自相交');
+  }
+}
+
 function assertSimpleAssetProfile(points: number[][], label: string, ErrorType: new (message?: string) => Error) {
   const cross = (a: number[], b: number[], c: number[]) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
   const onSegment = (a: number[], b: number[], p: number[]) => Math.abs(cross(a, b, p)) < 0.000001
@@ -320,6 +334,7 @@ export class AssetsService {
             && Math.hypot(Number(point[0]) - Number(path[index - 1][0]), Number(point[1]) - Number(path[index - 1][1]), Number(point[2]) - Number(path[index - 1][2])) < 0.0001)) {
             throw new BadRequestException('资产 sweep path 不能包含重复或零长度路径段：' + node.id);
           }
+          assertStableSweepPath(path.map((point: any[]) => point.map(Number)), '资产 sweep path：' + node.id, BadRequestException);
           if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24
             || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
               || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {

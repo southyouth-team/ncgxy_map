@@ -175,7 +175,7 @@ export class BuildingDesignService {
                 '只返回 ObjectSculptSpec JSON，不要输出 JavaScript、TypeScript、Markdown 或解释。',
                 '根对象字段：schemaVersion 固定为字符串 2.0，targetName，category（你判断的开放式分类标签），objectType（你判断的具体物体名称），visualStyle，materials，componentTree，parameterSchema，confidence，evidence，limitations。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
-                'componentTree 是有意义的结构节点数组。节点字段：id（稳定唯一英文 ID）、name、role、parent（唯一根节点省略，其余节点填写直接父节点 ID）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth）、transform（position/rotation/scale）、material、geometryDescriptor（可选）。',
+                'componentTree 是有意义的结构节点数组。节点字段：id（稳定唯一英文 ID）、kind（group 或 mesh，默认 mesh）、name、role、parent（唯一根节点省略，其余节点填写直接父节点 ID）、transform（position/rotation/scale）。group 是纯逻辑分组，不带 primitive/dimensions/material，可包含子节点；mesh 必须声明 primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth）、material、geometryDescriptor（可选）。',
                 '根据对象本身的真实组成自主决定组件数量和层级；不要求固定层数或固定部件数量。简单对象可以只有一个 Mesh；复杂对象必须拆分为可独立编辑的部件。',
                 '整个资产必须只有一个根节点，其他节点通过 parent 形成连通树。子节点 position 是相对直接 parent 的局部坐标。parent 只定义层级，不会自动吸附几何体，必须根据尺寸和连接关系计算位置。',
                 'parameterSchema 用于声明真正有意义的可编辑参数，而不是穷举通用参数。每项格式：id、label、type(number/color/boolean/select)、value；number 另含 min/max/step/unit；select 另含 options([{label,value}])；targets 为数组，每项含 nodeId、property、mode。property 只允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。mode 允许 set/multiply/add；visibility.visible 还允许 visible-from/visible-through 并提供 threshold；材质只允许 set。',
@@ -239,8 +239,9 @@ export class BuildingDesignService {
       const id = typeof input.id === 'string' ? input.id : '';
       if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('组件 ID 无效或重复：' + id);
       ids.add(id);
+      const kind = input.kind === 'group' ? 'group' : 'mesh';
       const primitive = String(input.primitive || '').toLowerCase();
-      if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
+      if (kind === 'mesh' && !['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
       const number = (value: unknown, fallback: number, min: number, max: number) => {
         const n = Number(value);
         if (!Number.isFinite(n)) return fallback;
@@ -254,7 +255,7 @@ export class BuildingDesignService {
       const scale = vector(transform.scale, [1, 1, 1]).map((value: number) => Math.abs(value) < 0.001 ? 1 : Math.max(-20, Math.min(20, value)));
       const material = typeof input.material === 'string' && materials[input.material] ? input.material : Object.keys(materials)[0];
       const geometryDescriptor: Record<string, number | number[][]> = {};
-      if (input.geometryDescriptor && typeof input.geometryDescriptor === 'object') {
+      if (kind === 'mesh' && input.geometryDescriptor && typeof input.geometryDescriptor === 'object') {
         if (input.geometryDescriptor.segments !== undefined) geometryDescriptor.segments = Math.round(number(input.geometryDescriptor.segments, 16, 3, 48));
         if (input.geometryDescriptor.tube !== undefined) geometryDescriptor.tube = number(input.geometryDescriptor.tube, 0.1, 0.01, 10);
         if (input.geometryDescriptor.inset !== undefined) geometryDescriptor.inset = number(input.geometryDescriptor.inset, 0.2, 0.02, 20);
@@ -273,24 +274,23 @@ export class BuildingDesignService {
       }
       return {
         id,
+        kind,
         name: String(input.name || id).slice(0, 120),
         role: String(input.role || 'component').slice(0, 80),
         hidden: input.hidden === true,
         locked: input.locked === true,
         ...(typeof input.parent === 'string' && input.parent ? { parent: input.parent } : {}),
-        primitive,
-        dimensions: {
+        ...(kind === 'mesh' ? { primitive, dimensions: {
           width: number(dimensions.width, 1, 0.02, 100),
           height: number(dimensions.height, 1, 0.02, 100),
           depth: number(dimensions.depth, 1, 0.02, 100),
-        },
+        }, material } : {}),
         transform: {
           position: vector(transform.position, [0, 0, 0]),
           rotation: vector(transform.rotation, [0, 0, 0]),
           scale,
         },
-        material,
-        ...(Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),
+        ...(kind === 'mesh' && Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),
       };
     });
     const byId = new Map<string, any>(componentTree.map((node: any) => [node.id, node] as [string, any]));

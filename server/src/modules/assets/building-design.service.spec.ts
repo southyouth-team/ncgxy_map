@@ -148,4 +148,78 @@ describe('BuildingDesignService', () => {
   });
 
 
+  it('reconstructs a confirmed castle reference into a signed hierarchical ObjectSculptSpec', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'sculpt-secret',
+        VISION_MODEL: 'vision-test',
+        VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const componentTree = [
+      { id: 'keep', name: '主城楼', role: 'main-massing', primitive: 'box', dimensions: { width: 7, height: 5, depth: 5 }, transform: { position: [0, 2.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
+      { id: 'west-tower', name: '西侧塔楼', role: 'tower', parent: 'keep', primitive: 'cylinder', dimensions: { width: 2, height: 7, depth: 2 }, transform: { position: [-2.8, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
+      { id: 'west-roof', name: '西塔尖顶', role: 'tower-roof', parent: 'west-tower', primitive: 'cone', dimensions: { width: 2.8, height: 2.2, depth: 2.8 }, transform: { position: [0, 4.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'roof' },
+      { id: 'east-tower', name: '东侧塔楼', role: 'tower', parent: 'keep', primitive: 'cylinder', dimensions: { width: 2, height: 7, depth: 2 }, transform: { position: [2.8, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
+      { id: 'east-roof', name: '东塔尖顶', role: 'tower-roof', parent: 'east-tower', primitive: 'cone', dimensions: { width: 2.8, height: 2.2, depth: 2.8 }, transform: { position: [0, 4.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'roof' },
+      { id: 'main-roof', name: '主楼屋顶', role: 'main-roof', parent: 'keep', primitive: 'cone', dimensions: { width: 7.8, height: 2, depth: 5.8 }, transform: { position: [0, 3.4, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'roof' },
+      { id: 'gate', name: '入口', role: 'entrance', parent: 'keep', primitive: 'box', dimensions: { width: 1.6, height: 2.4, depth: 0.35 }, transform: { position: [0, -0.6, 2.55], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'dark' },
+      { id: 'window-a', name: '左窗', role: 'window', parent: 'keep', primitive: 'box', dimensions: { width: 0.6, height: 1, depth: 0.1 }, transform: { position: [-1.4, 1.2, 2.55], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'glass' },
+      { id: 'window-b', name: '右窗', role: 'window', parent: 'keep', primitive: 'box', dimensions: { width: 0.6, height: 1, depth: 0.1 }, transform: { position: [1.4, 1.2, 2.55], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'glass' },
+      { id: 'flag-pole', name: '旗杆', role: 'decoration', parent: 'keep', primitive: 'cylinder', dimensions: { width: 0.08, height: 1.8, depth: 0.08 }, transform: { position: [0, 5.8, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'dark' },
+      { id: 'west-battlement', name: '西侧城垛', role: 'battlement', parent: 'keep', primitive: 'box', dimensions: { width: 2, height: 0.5, depth: 0.5 }, transform: { position: [-2.4, 5.2, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
+      { id: 'east-battlement', name: '东侧城垛', role: 'battlement', parent: 'keep', primitive: 'box', dimensions: { width: 2, height: 0.5, depth: 0.5 }, transform: { position: [2.4, 5.2, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
+    ];
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        schemaVersion: '2.0', targetName: 'anime-painted-castle',
+        materials: {
+          stone: { color: '#ead9ad', roughness: 0.9 },
+          roof: { color: '#b84b3d', roughness: 0.78 },
+          dark: { color: '#493b37', roughness: 0.8 },
+          glass: { color: '#79b8c4', roughness: 0.25, metalness: 0.08 },
+        },
+        componentTree, confidence: 0.86, evidence: ['双侧塔楼', '红色尖顶'], limitations: ['背面结构不可见'],
+      }) } }] }),
+    });
+    global.fetch = fetchMock as never;
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const result = await service.reconstructObjectReference('building', '城堡', 'anime-painted', imageDataUrl, approval.approvalToken, '保留双塔和红色尖顶');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content.join(' ')).toContain('城堡');
+    expect(result.design.objectSculptSpec.componentTree).toHaveLength(12);
+    expect(result.design.objectSculptSpec.componentTree.find((node: any) => node.id === 'west-roof').parent).toBe('west-tower');
+    expect(result.design.objectSculptSpec.materials.roof.color).toBe('#b84b3d');
+    expect(result.design.reviewed).toBe(false);
+    expect(service.consumeDesignToken(result.designToken, result.design)).toBe(true);
+  });
+
+  it('rejects malformed ObjectSculptSpec parent references and cycles', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'sculpt-secret', VISION_MODEL: 'vision-test',
+      } as Record<string, string>)[key],
+    } as never);
+    const invalidTrees = [
+      [{ id: 'root', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'missing' }],
+      [
+        { id: 'a', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'b' },
+        { id: 'b', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'a' },
+      ],
+    ];
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    for (const componentTree of invalidTrees) {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ componentTree, materials: { default: { color: '#aaaaaa' } } }) } }] }),
+      }) as never;
+      await expect(service.reconstructObjectReference('building', '城堡', 'anime-painted', imageDataUrl, approval.approvalToken))
+        .rejects.toBeInstanceOf(ServiceUnavailableException);
+    }
+  });
+
+
 });

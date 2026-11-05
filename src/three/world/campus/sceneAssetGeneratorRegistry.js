@@ -452,9 +452,14 @@ export function createSceneAssetGeneratorRegistry(THREE) {
     keys.forEach(objectType => generators.set(normalizedCategory + ':' + objectType, generator));
     if (!categories.has(normalizedCategory)) categories.set(normalizedCategory, new Set());
     keys.forEach(objectType => categories.get(normalizedCategory).add(objectType));
+    // 注销时只移除当前仍由本注册句柄持有的生成器，避免旧插件句柄误删后续 replace 注册的新实现。
     return () => keys.forEach(objectType => {
-      generators.delete(normalizedCategory + ':' + objectType);
-      categories.get(normalizedCategory)?.delete(objectType);
+      const key = normalizedCategory + ':' + objectType;
+      if (generators.get(key) !== generator) return;
+      generators.delete(key);
+      const registeredTypes = categories.get(normalizedCategory);
+      registeredTypes?.delete(objectType);
+      if (registeredTypes?.size === 0) categories.delete(normalizedCategory);
     });
   };
   const handlers = {

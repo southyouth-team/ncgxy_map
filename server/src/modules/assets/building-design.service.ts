@@ -101,8 +101,29 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
   const normalized = input.map((raw: any) => {
     const id = typeof raw?.id === 'string' ? raw.id : '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)
-      || !['follow','span','attach','adjacency'].includes(raw.type)) throw new ServiceUnavailableException('结构约束 ID 或类型无效：' + id);
+      || !['follow','span','attach','adjacency','cutout'].includes(raw.type)) throw new ServiceUnavailableException('结构约束 ID 或类型无效：' + id);
     ids.add(id);
+    if (raw.type === 'cutout') {
+      const target = byId.get(raw.targetNodeId), cutter = byId.get(raw.cutterNodeId);
+      if (!target || !cutter || target.id === cutter.id || templateIds.has(target.id) || templateIds.has(cutter.id)
+        || (target.kind || 'mesh') !== 'mesh' || (cutter.kind || 'mesh') !== 'mesh'
+        || !['box','cuboid'].includes(String(target.primitive).toLowerCase())
+        || !['box','cuboid'].includes(String(cutter.primitive).toLowerCase())
+        || target.parent !== cutter.parent || raw.operation !== 'subtract' || raw.axis !== 'z'
+        || (target.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
+        || (cutter.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
+        || Number(cutter.dimensions?.depth) < Number(target.dimensions?.depth) + 0.02) {
+        throw new ServiceUnavailableException('cutout 目前仅支持同级、未旋转盒体沿 Z 轴贯穿的矩形减法：' + id);
+      }
+      const centerX = Number(cutter.transform?.position?.[0] || 0) - Number(target.transform?.position?.[0] || 0);
+      const centerY = Number(cutter.transform?.position?.[1] || 0) - Number(target.transform?.position?.[1] || 0);
+      if (!Number.isFinite(centerX) || !Number.isFinite(centerY)
+        || Math.abs(centerX) + Number(cutter.dimensions.width) / 2 > Number(target.dimensions.width) / 2
+        || Math.abs(centerY) + Number(cutter.dimensions.height) / 2 > Number(target.dimensions.height) / 2) {
+        throw new ServiceUnavailableException('cutout 开口必须完整位于目标 Mesh 边界内：' + id);
+      }
+      return { id, type: 'cutout', targetNodeId: target.id, cutterNodeId: cutter.id, axis: 'z', operation: 'subtract' };
+    }
     if (raw.type === 'attach' || raw.type === 'adjacency') {
       const source = byId.get(raw.sourceNodeId), target = byId.get(raw.targetNodeId);
       if (!source || !target || source.id === target.id || templateIds.has(source.id) || templateIds.has(target.id)) {

@@ -1296,6 +1296,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       expect(initialMeshes.length).toBeGreaterThan(0);
       for (const mesh of initialMeshes) {
         expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(0);
+        mesh.geometry.computeBoundingSphere();
         expect(mesh.geometry.boundingSphere).not.toBeNull();
       }
 

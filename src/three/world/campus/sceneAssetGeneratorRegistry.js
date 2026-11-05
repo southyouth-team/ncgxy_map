@@ -246,12 +246,143 @@ function createSportsGenerator(THREE, input, materials) {
   return group;
 }
 
+
+function createRoadGenerator(THREE, input, materials) {
+  const group = new THREE.Group();
+  const { width, height, depth } = dimensionsOf(input);
+  const design = input.design?.geometry || {};
+  const roadWidth = Math.max(1, Math.min(40, Number(design.roadWidth) || width));
+  const coordinates = input.spatialGeometry?.coordinates;
+  const points = Array.isArray(coordinates) && coordinates.length >= 2
+    ? coordinates.map(point => [Number(point[0]) || 0, Number(point[1]) || 0])
+    : [[-width / 2, 0], [width / 2, 0]];
+  const positions = [];
+  const indices = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const [x1, z1] = points[index];
+    const [x2, z2] = points[index + 1];
+    const dx = x2 - x1;
+    const dz = z2 - z1;
+    const length = Math.hypot(dx, dz);
+    if (length < 0.001) continue;
+    const nx = -dz / length * roadWidth / 2;
+    const nz = dx / length * roadWidth / 2;
+    const base = positions.length / 3;
+    positions.push(x1 + nx, 0, z1 + nz, x1 - nx, 0, z1 - nz, x2 + nx, 0, z2 + nz, x2 - nx, 0, z2 - nz);
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+  }
+  if (!positions.length) throw new Error('道路模板至少需要两个不同的中心线坐标点');
+  const roadGeometry = new THREE.BufferGeometry();
+  roadGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  roadGeometry.setIndex(indices);
+  roadGeometry.computeVertexNormals();
+  createMesh(THREE, roadGeometry, materials.primary, 'road-surface', group, [0, 0.025, 0]);
+  const curbHeight = Math.max(0.02, Math.min(0.5, Number(design.curbHeight) || 0.12));
+  const sidewalkWidth = Math.max(0, Math.min(8, Number(design.sidewalkWidth) || 0));
+  if (sidewalkWidth > 0) {
+    for (const side of [-1, 1]) {
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(roadWidth + sidewalkWidth * 2, curbHeight, sidewalkWidth), materials.secondary);
+      edge.name = 'road-sidewalk';
+      edge.position.set(0, curbHeight / 2, side * (roadWidth / 2 + sidewalkWidth / 2));
+      edge.receiveShadow = true;
+      group.add(edge);
+    }
+  }
+  if (design.markingType && design.markingType !== 'none') {
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const [x1, z1] = points[index];
+      const [x2, z2] = points[index + 1];
+      const dx = x2 - x1, dz = z2 - z1, length = Math.hypot(dx, dz);
+      if (length < 0.001) continue;
+      const dash = new THREE.Mesh(new THREE.BoxGeometry(length * 0.7, 0.025, 0.07), materials.accent);
+      dash.name = 'road-marking';
+      dash.position.set((x1 + x2) / 2, 0.06, (z1 + z2) / 2);
+      dash.rotation.y = -Math.atan2(dz, dx);
+      group.add(dash);
+    }
+  }
+  return group;
+}
+
+function createWaterGenerator(THREE, input, materials) {
+  const group = new THREE.Group();
+  const { width, depth } = dimensionsOf(input);
+  const design = input.design?.geometry || {};
+  const outer = input.spatialGeometry?.outer || [[-width / 2, -depth / 2], [width / 2, -depth / 2], [width / 2, depth / 2], [-width / 2, depth / 2]];
+  const holes = Array.isArray(input.spatialGeometry?.holes) ? input.spatialGeometry.holes : [];
+  if (!Array.isArray(outer) || outer.length < 3) throw new Error('水体模板需要至少三个点的外边界多边形');
+  const shape = new THREE.Shape();
+  outer.forEach(([x, z], index) => index === 0 ? shape.moveTo(x, z) : shape.lineTo(x, z));
+  shape.closePath();
+  holes.forEach(ring => {
+    if (!Array.isArray(ring) || ring.length < 3) return;
+    const hole = new THREE.Path();
+    ring.forEach(([x, z], index) => index === 0 ? hole.moveTo(x, z) : hole.lineTo(x, z));
+    hole.closePath();
+    shape.holes.push(hole);
+  });
+  const waterGeometry = new THREE.ShapeGeometry(shape, 2);
+  waterGeometry.rotateX(-Math.PI / 2);
+  const waterColor = ({ blue: '#5b9fc1', green: '#6caa91', turquoise: '#56b9b0' })[design.waterColor] || materials.secondary.color;
+  const waterMaterial = new THREE.MeshStandardMaterial({ color: waterColor, roughness: 0.24, metalness: 0.06, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
+  createMesh(THREE, waterGeometry, waterMaterial, 'water-surface', group, [0, 0.08, 0]);
+  const shoreWidth = Math.max(0.1, Math.min(4, Number(design.shoreWidth) || 0.35));
+  const shoreMaterial = materials.accent;
+  const shorePoints = outer.map(([x, z]) => new THREE.Vector3(x, 0.045, z));
+  shorePoints.push(shorePoints[0].clone());
+  const shoreGeometry = new THREE.BufferGeometry().setFromPoints(shorePoints);
+  const shore = new THREE.Line(shoreGeometry, new THREE.LineBasicMaterial({ color: shoreMaterial.color, linewidth: Math.max(1, shoreWidth) }));
+  shore.name = 'water-shoreline';
+  group.add(shore);
+  return group;
+}
+
+function createTerrainGenerator(THREE, input, materials) {
+  const group = new THREE.Group();
+  const { width, height, depth } = dimensionsOf(input);
+  const design = input.design?.geometry || {};
+  const gridSize = Math.max(3, Math.min(32, Math.round(Number(input.spatialGeometry?.gridSize) || 12)));
+  const relief = Math.max(0, Math.min(10, Number(design.relief) || height * 0.25));
+  const slope = Math.max(0, Math.min(1, Number(design.slope) || 0.25));
+  const supplied = input.spatialGeometry?.heights;
+  const vertices = [];
+  const indices = [];
+  for (let row = 0; row <= gridSize; row += 1) {
+    for (let col = 0; col <= gridSize; col += 1) {
+      const u = col / gridSize;
+      const v = row / gridSize;
+      const x = (u - 0.5) * width;
+      const z = (v - 0.5) * depth;
+      const providedHeight = Array.isArray(supplied?.[row]) ? Number(supplied[row][col]) : NaN;
+      const mound = Math.max(0, 1 - Math.hypot((u - 0.5) * 2, (v - 0.5) * 2));
+      const y = Number.isFinite(providedHeight) ? providedHeight : relief * Math.pow(mound, 1 + slope * 3);
+      vertices.push(x, y, z);
+      if (row < gridSize && col < gridSize) {
+        const a = row * (gridSize + 1) + col;
+        const b = a + 1;
+        const d = (row + 1) * (gridSize + 1) + col;
+        const e = d + 1;
+        indices.push(a, d, b, b, d, e);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  createMesh(THREE, geometry, materials.leaf, 'terrain-surface', group);
+  return group;
+}
+
 export const SCENE_ASSET_GENERATOR_CATALOG = Object.freeze([
   { category: 'vegetation', objectTypes: ['tree', '乔木', '香樟树', '树木', '大树', 'shrub', '灌木', '绿篱', '灌木丛', 'flower', '花卉', '花坛', '花丛'] },
   { category: 'structure', objectTypes: ['bridge', '拱桥', '桥梁', '人行桥', '廊架', 'pergola', '亭子', 'pavilion'] },
   { category: 'facility', objectTypes: ['bench', '长椅', '座椅', 'lamp', '路灯', '庭院灯', 'bin', '垃圾桶', 'sign', '指示牌', '公告栏'] },
   { category: 'decoration', objectTypes: ['rock', '景观石', '假山', 'flowerbed', '花坛'] },
   { category: 'sports', objectTypes: ['basketball-hoop', '篮球架', '篮球框'] },
+  { category: 'road', objectTypes: ['road', '道路', '校园道路', '人行道', '步道'] },
+  { category: 'water', objectTypes: ['lake', '湖泊', '池塘', '河流', '水渠', '喷泉'] },
+  { category: 'terrain', objectTypes: ['terrain', '地面', '山坡', '台地', '草坡', '岩石地形'] },
 ]);
 
 export function createSceneAssetGeneratorRegistry(THREE) {
@@ -285,6 +416,9 @@ export function createSceneAssetGeneratorRegistry(THREE) {
     facility: createFacilityGenerator,
     decoration: createDecorationGenerator,
     sports: createSportsGenerator,
+    road: createRoadGenerator,
+    water: createWaterGenerator,
+    terrain: createTerrainGenerator,
   };
 
   for (const definition of SCENE_ASSET_GENERATOR_CATALOG) {

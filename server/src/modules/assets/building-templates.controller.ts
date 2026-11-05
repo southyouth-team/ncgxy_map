@@ -16,7 +16,7 @@ export class BuildingTemplatesController {
   @ApiOperation({ summary: '获取独立建筑模板库' })
   list() { return this.service.list(); }
   @Get(':templateId')
-  get(@Param('templateId') id: string) { return this.service.get(id); }
+  get(@Param('templateId') id: string) { return this.service.getPublished(id); }
   @Post()
   @UseGuards(DevIdentityGuard)
   @ApiOperation({ summary: '创建独立建筑模板草稿，不关联校园 Feature' })

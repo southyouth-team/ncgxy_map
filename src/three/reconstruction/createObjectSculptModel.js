@@ -35,7 +35,18 @@ function expandObjectSculptSpec(spec) {
     const count = Math.max(1, Math.min(generator.maxCount, Math.round(
       Number((spec.parameterSchema || []).find(item => item.id === generator.countParameterId)?.value ?? generator.defaultCount),
     )));
+    const baseCount = Number(generator.defaultCount ?? count);
     const axisIndex = 'xyz'.indexOf(generator.axis);
+    for (const follower of generator.followers || []) {
+      const followerNode = expanded.find(node => node.id === follower.nodeId);
+      if (!followerNode) throw new TypeError('结构生成器跟随节点不存在：' + follower.nodeId);
+      followerNode.transform = followerNode.transform || {};
+      const followerPosition = Array.isArray(followerNode.transform.position) ? [...followerNode.transform.position] : [0, 0, 0];
+      const followerAxisIndex = 'xyz'.indexOf(follower.axis);
+      followerPosition[followerAxisIndex] = Number(followerPosition[followerAxisIndex] || 0)
+        + generator.spacing * (count - baseCount) + Number(follower.offset || 0);
+      followerNode.transform.position = followerPosition;
+    }
     for (let index = 0; index < count; index += 1) {
       const idMap = new Map(subtree.map(node => [node.id, index === 0 ? node.id : generator.id + '-' + index + '-' + node.id]));
       for (const source of subtree) {
@@ -252,6 +263,11 @@ export function validateObjectSculptSpec(spec) {
     });
     if (!descendants.length || descendants.length * generator.maxCount > MAX_COMPONENTS) throw new RangeError('结构生成器最大展开数量超出限制：' + generator.id);
     if (!Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100) throw new RangeError('结构生成器 maxCount 必须在 1 到 100 之间：' + generator.id);
+    if (!Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount) throw new RangeError('结构生成器 defaultCount 无效：' + generator.id);
+    if (generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30)) throw new TypeError('结构生成器 followers 无效：' + generator.id);
+    for (const follower of generator.followers || []) {
+      if (!nodes.has(follower.nodeId) || !['x','y','z'].includes(follower.axis) || !Number.isFinite(follower.offset ?? 0)) throw new TypeError('结构生成器跟随规则无效：' + generator.id);
+    }
   }
   const parameterIds = new Set();
   if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) {

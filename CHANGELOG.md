@@ -1,3 +1,13 @@
+## 2026-11-05 — 视觉模型驱动 ObjectSculptSpec 城堡重建链路
+
+- 新增 `POST /assets/ai-image/reconstruct-object`，要求先通过 `approve-reference` 确认图片；请求绑定 category、objectType、visualStyle、图片摘要凭证和用户补充提示词。
+- 复用现有 `VISION_API_KEY`、`VISION_MODEL`、`VISION_API_BASE_URL`，要求视觉模型输出 ObjectSculptSpec JSON：材质表、独立组件树、parent 层级、基础几何、尺寸、位置/旋转/缩放、置信度、证据和限制项。
+- 服务端对白名单 primitive、材质、组件 ID、组件数量、尺寸、变换、父节点引用和循环层级执行归一化/校验；building 城堡要求至少 12 个组件，避免单个整体 Mesh 冒充结构重建。AI 只返回 JSON，不执行其生成代码。
+- 工坊建筑类别改为调用结构化重建接口，双视角预览优先消费 `design.objectSculptSpec`，并展示组件名称/角色/几何清单。2.5D 与 3D 继续共享同一份 Three.js Mesh。
+- 建筑结构化重建设计携带 `referenceImageSha256`；模板上传参考图和最终发布时均校验归档图片与识别输入一致。旧建筑识别设计没有摘要字段时保持兼容。
+- 新增服务端单测覆盖有效城堡组件树、材质/父子层级、签名和非法父节点/循环引用。
+- 当前完成代码级端到端链路，真实第三方视觉模型与浏览器相似度验收仍待使用目标城堡图片执行；CI 通过不代表视觉质量验收通过。
+
 ## 2026-11-05 — img2threejs 风格结构化重建 POC 基础适配器
 
 - 新增 `src/three/reconstruction/createObjectSculptModel.js`，将受控 ObjectSculptSpec componentTree 转换为真实 Three.js Group/Mesh，保留独立组件层级、材质和变换。

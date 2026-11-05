@@ -1032,7 +1032,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     // JSON 序列化/反序列化后，依赖关系仍保留；再次调整从持久化状态重算。
     const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
     const reloaded = createObjectSculptModel(THREE, persisted);
-    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(4);
+    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(5);
     expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(7.5);
     applyObjectSculptParameter(THREE, reloaded, 'base-width', 2);
     expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(2);

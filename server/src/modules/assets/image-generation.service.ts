@@ -385,10 +385,61 @@ export class ImageGenerationService {
       '当前 ObjectSculptSpec：' + serialized,
     ].join('\n');
     const result = await this.generateObjectFromPrompt(editPrompt, original.objectType || original.targetName || '独立 3D 物体', original.visualStyle || 'stylized', false);
+    if (selectedNodeIds.length) {
+      // 局部微调采用服务端结构合并：AI 只能提交选中节点子树的变化，
+      // 其余节点直接沿用原始数据，避免仅靠 Prompt 约束导致整棵模型被重写。
+      const originalById = new Map<string, any>(original.componentTree.map((node: any) => [node.id, node]));
+      const generatedById = new Map<string, any>((result.objectSculptSpec.componentTree || []).map((node: any) => [node.id, node]));
+      const allowedIds = new Set<string>();
+      for (const selectedId of selectedNodeIds) {
+        allowedIds.add(selectedId);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const node of original.componentTree) {
+            if (node.parent && allowedIds.has(node.parent) && !allowedIds.has(node.id)) {
+              allowedIds.add(node.id);
+              changed = true;
+            }
+          }
+        }
+      }
+      for (const selectedId of selectedNodeIds) {
+        if (!generatedById.has(selectedId)) throw new ServiceUnavailableException('AI 局部微调结果缺少目标部件：' + selectedId);
+      }
+      // 允许 AI 在选中子树内新增节点，但新增节点必须挂接到已允许的节点上。
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const node of result.objectSculptSpec.componentTree || []) {
+          if (node.parent && allowedIds.has(node.parent) && !allowedIds.has(node.id)) {
+            allowedIds.add(node.id);
+            expanded = true;
+          }
+        }
+      }
+      const preservedNodes = original.componentTree.filter((node: any) => !allowedIds.has(node.id));
+      const editedNodes = (result.objectSculptSpec.componentTree || []).filter((node: any) => allowedIds.has(node.id));
+      const mergedSpec = {
+        ...original,
+        materials: { ...(original.materials || {}), ...(result.objectSculptSpec.materials || {}) },
+        componentTree: [...preservedNodes, ...editedNodes],
+        // 局部编辑不允许重写全局参数/生成器/约束；避免选中部件之外的联动被意外改变。
+        parameterSchema: original.parameterSchema || [],
+        generators: original.generators || [],
+        constraints: original.constraints || [],
+      };
+      return {
+        ...result,
+        objectSculptSpec: mergedSpec,
+        affectedNodeIds: [...allowedIds],
+        editScope: 'component',
+      };
+    }
     return {
       ...result,
-      affectedNodeIds: selectedNodeIds.length ? selectedNodeIds : original.componentTree.map((node: any) => node.id),
-      editScope: selectedNodeIds.length ? 'component' : 'whole-object',
+      affectedNodeIds: original.componentTree.map((node: any) => node.id),
+      editScope: 'whole-object',
     };
   }
 

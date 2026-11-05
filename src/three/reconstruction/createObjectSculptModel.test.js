@@ -226,7 +226,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       }],
       generators: [{
         id: 'floor-repeat', type: 'repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count',
-        axis: 'y', spacing: 3.2, maxCount: 8,
+        axis: 'y', spacing: 3.2, defaultCount: 3, maxCount: 8, followers: [{ nodeId: 'roof', axis: 'y', offset: 0 }],
       }],
     };
     const model = createObjectSculptModel(THREE, spec);
@@ -237,8 +237,10 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.generators).toHaveLength(1);
     expect(model.userData.componentGroups.size).toBe(12);
     expect(model.userData.componentGroups.get('floor-repeat-4-floor-prototype').position.y).toBeCloseTo(12.8);
+    expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(17.4);
     applyObjectSculptParameter(THREE, model, 'floor-count', 2);
     expect(model.userData.componentGroups.size).toBe(6);
+    expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(7.8);
     expect(model.userData.componentGroups.has('floor-repeat-2-floor-prototype')).toBe(false);
   });
 

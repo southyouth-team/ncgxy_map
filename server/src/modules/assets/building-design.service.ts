@@ -114,9 +114,9 @@ export class BuildingDesignService {
               content: [
                 '你是专业的 Three.js 结构化物体重建工程师。根据单张参考图输出 ObjectSculptSpec JSON，不要输出代码、Markdown 或解释。',
                 '输出根对象字段：schemaVersion（固定字符串 2.0）、targetName（字符串）、materials（对象，键为材质 ID，每项含 color=#RRGGBB、roughness 0-1、metalness 0-1、opacity 0.05-1）、componentTree（数组）。',
-                '每个 componentTree 节点字段：id（唯一英文 ID）、name（中文部件名）、role（部件角色）、parent（父节点 ID，可省略或 null）、primitive（box/cuboid/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth，均为正数）、transform（position/rotation/scale 三个长度为 3 的数字数组）、material（materials 中的键）、geometryDescriptor（可选 segments 3-48、tube 正数）。',
+                '每个 componentTree 节点字段：id（唯一英文 ID）、name（中文部件名）、role（部件角色）、parent（父节点 ID，可省略或 null）、primitive（box/cuboid/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth，均为正数）、transform（position/rotation/scale 三个长度为 3 的数字数组）、material（materials 中的键）、geometryDescriptor（可选 segments 3-48、tube 正数、arch inset 正数）。',
                 '必须输出 12-40 个有意义的独立组件，不能只输出一个整体 Mesh。组件按真实结构拆分；主结构、附属结构、装饰件应有清晰 parent 关系。禁止重复 ID、缺失 parent、循环层级、未知 primitive。',
-                '根据图片推断可见部件的相对比例、空间位置、颜色分区和层级。不要用单个大盒子代表整个对象。窗户、门、塔楼、屋顶、栏杆、檐口等明显结构应拆分为独立 Mesh。',
+                '根据图片推断可见部件的相对比例、空间位置、颜色分区和层级。不要用单个大盒子代表整个对象。窗户、门、塔楼、屋顶、栏杆、檐口等明显结构应拆分为独立 Mesh。拱形门窗使用 arch，三角山墙/屋顶剖面使用 wedge；不要把拱门简化为矩形盒子。',
                 '如果对象是城堡，优先识别主城楼、左右塔楼、各自塔顶、主屋顶、城垛/女儿墙、入口拱门、窗洞/窗框、旗杆、装饰边线等可见部件；塔楼与塔顶必须独立，左右结构不得错误合并。根据参考图实际内容决定数量，不要机械补全不可见部件。',
                 '坐标约定：Y 轴向上；主体中心在 X/Z 原点附近；地面约为 Y=0；position 使用相对父节点坐标；rotation 使用弧度；scale 通常为 [1,1,1]。组件尺寸与场景单位无关，但整体建议落在 2-20 单位范围。',
                 '风格必须匹配：' + visualStyle + '。材质颜色和粗糙度应反映图片的色彩分区；禁止把所有部件都输出为白色/灰色。',
@@ -183,7 +183,7 @@ export class BuildingDesignService {
       if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('组件 ID 无效或重复：' + id);
       ids.add(id);
       const primitive = String(input.primitive || '').toLowerCase();
-      if (!['box','cuboid','cylinder','cone','sphere','ellipsoid','torus'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
+      if (!['box','cuboid','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
       const number = (value: unknown, fallback: number, min: number, max: number) => {
         const n = Number(value);
         if (!Number.isFinite(n)) return fallback;
@@ -200,6 +200,7 @@ export class BuildingDesignService {
       if (input.geometryDescriptor && typeof input.geometryDescriptor === 'object') {
         if (input.geometryDescriptor.segments !== undefined) geometryDescriptor.segments = Math.round(number(input.geometryDescriptor.segments, 16, 3, 48));
         if (input.geometryDescriptor.tube !== undefined) geometryDescriptor.tube = number(input.geometryDescriptor.tube, 0.1, 0.01, 10);
+        if (input.geometryDescriptor.inset !== undefined) geometryDescriptor.inset = number(input.geometryDescriptor.inset, 0.2, 0.02, 20);
       }
       return {
         id,

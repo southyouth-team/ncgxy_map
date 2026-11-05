@@ -538,12 +538,15 @@ export class BuildingDesignService {
     const rootNodes = componentTree.filter((node: any) => !node.parent);
     if (rootNodes.length !== 1) throw new BadRequestException('资产组件必须连接到唯一主体根节点，不能拆成多个独立物体');
     const generators = normalizeObjectGenerators(input.generators ?? original.objectSculptSpec?.generators, componentTree);
-    const generatorParameterIds = new Set(generators.map((generator: any) => generator.countParameterId));
+    const generatorParameterIds = new Set(generators.flatMap((generator: any) => generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId]));
     const parameterSchema = normalizeObjectParameterSchema(input.parameterSchema ?? original.objectSculptSpec?.parameterSchema, componentTree, materials, generatorParameterIds);
     for (const generator of generators) {
-      const parameter = parameterSchema.find((item: any) => item.id === generator.countParameterId);
-      if (!parameter || parameter.type !== 'number' || parameter.min < 1 || parameter.max > generator.maxCount || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max) || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) {
-        throw new BadRequestException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
+      const parameterIds = generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId];
+      const maximums = generator.type === 'grid' ? [generator.maxRows, generator.maxColumns] : [generator.maxCount];
+      for (let index = 0; index < parameterIds.length; index += 1) {
+        const parameter = parameterSchema.find((item: any) => item.id === parameterIds[index]);
+        if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+          || parameter.min < 1 || parameter.max > maximums[index]) throw new BadRequestException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
       }
     }
     const design = {
@@ -734,13 +737,15 @@ export class BuildingDesignService {
       }
     }
     const generators = normalizeObjectGenerators(parsed.generators ?? current.generators ?? [], componentTree);
-    const generatorParameterIds = new Set(generators.map((generator: any) => generator.countParameterId));
+    const generatorParameterIds = new Set(generators.flatMap((generator: any) => generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId]));
     const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, current.materials, generatorParameterIds);
     for (const generator of generators) {
-      const parameter = parameterSchema.find((item: any) => item.id === generator.countParameterId);
-      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
-        || parameter.min < 1 || parameter.max > generator.maxCount || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) {
-        throw new ServiceUnavailableException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
+      const parameterIds = generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId];
+      const maximums = generator.type === 'grid' ? [generator.maxRows, generator.maxColumns] : [generator.maxCount];
+      for (let index = 0; index < parameterIds.length; index += 1) {
+        const parameter = parameterSchema.find((item: any) => item.id === parameterIds[index]);
+        if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+          || parameter.min < 1 || parameter.max > maximums[index]) throw new ServiceUnavailableException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
       }
     }
     const previousGenerators = current.generators || [];

@@ -218,7 +218,8 @@ describe('ImageGenerationService', () => {
     const normalizedGenerator = normalized.objectSculptSpec.generators[0];
     const normalizedGroup = normalized.objectSculptSpec.componentTree.find((node: any) => node.id === normalizedGenerator.templateRootId);
     expect(normalizedGroup.kind).toBe('group');
-    expect(normalized.objectSculptSpec.componentTree.find((node: any) => node.id === 'crown-mesh').parent).toBe(normalizedGroup.id);
+    expect(normalized.objectSculptSpec.componentTree.find((node: any) => node.id === 'crown-prototype').parent).toBe(normalizedGroup.id);
+    expect(normalized.objectSculptSpec.componentTree.find((node: any) => node.id === 'crown-mesh').parent).toBe('crown-prototype');
 
     const mismatched = structuredClone(base);
     mismatched.parameterSchema[0].value = 4;

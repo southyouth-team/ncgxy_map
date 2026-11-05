@@ -1326,9 +1326,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         const expandedWheelGroups = [...model.userData.componentGroups.values()]
           .filter(group => group.userData.componentSourceId === 'wheel-pair');
         expect(expandedWheelGroups).toHaveLength(6);
-        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.x.toFixed(2)))].sort((a, b) => a - b))
+        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b))
           .toEqual([0, 2.6, 5.2]);
-        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.z.toFixed(2)))].sort((a, b) => a - b))
+        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.z.toFixed(2))))].sort((a, b) => a - b))
           .toEqual([0, 1.5]);
       }
 

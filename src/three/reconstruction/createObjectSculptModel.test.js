@@ -440,4 +440,40 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => validateObjectSculptSpec(spec)).toThrow('attach 必须连接同一父级下的 Mesh 面');
   });
 
+  it('cuts a real rectangular through-opening into a box mesh and hides its cutter volume', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc' } },
+      componentTree: [
+        { id: 'building', kind: 'group' },
+        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
+          dimensions: { width: 4, height: 3, depth: 0.3 } },
+        { id: 'door-opening-volume', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
+          dimensions: { width: 1, height: 2, depth: 0.5 }, transform: { position: [0.5, -0.2, 0] } },
+      ],
+      constraints: [{
+        id: 'door-opening', type: 'cutout', targetNodeId: 'wall',
+        cutterNodeId: 'door-opening-volume', axis: 'z', operation: 'subtract',
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const wall = model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
+    expect(wall.geometry.type).toBe('ExtrudeGeometry');
+    expect(wall.geometry.parameters.shapes.holes).toHaveLength(1);
+    expect(wall.geometry.getAttribute('position').count).toBeGreaterThan(0);
+    expect(model.userData.componentGroups.get('door-opening-volume').children).toHaveLength(0);
+  });
+
+  it('rejects cutouts that exceed the target mesh bounds', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'wall', primitive: 'box', dimensions: { width: 2, height: 2, depth: 0.3 } },
+        { id: 'opening', primitive: 'box', dimensions: { width: 1.5, height: 1, depth: 0.5 }, transform: { position: [0.8, 0, 0] } },
+      ],
+      constraints: [{ id: 'out-of-bounds', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening', axis: 'z', operation: 'subtract' }],
+    };
+    expect(() => validateObjectSculptSpec(spec)).toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
+  });
+
 });

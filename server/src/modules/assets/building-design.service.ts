@@ -106,9 +106,13 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
       || !['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构约束 ID、类型或引用无效：' + id);
     ids.add(id);
     const measure = raw.measure || (generators.find(item => item.id === raw.sourceGeneratorId)?.type === 'grid' ? 'columns' : 'repeat');
-    if (!['rows','columns','repeat'].includes(measure)) throw new ServiceUnavailableException('结构约束 measure 无效：' + id);
+    const sourceGenerator = generators.find(item => item.id === raw.sourceGeneratorId);
+    const expectedAxis = ({ 'dimensions.width': 'x', 'dimensions.height': 'y', 'dimensions.depth': 'z' } as Record<string, string>)[raw.property];
+    if (!['rows','columns','repeat'].includes(measure)
+      || (sourceGenerator?.type === 'grid' && !['rows','columns'].includes(measure))
+      || (sourceGenerator?.type === 'repeat' && measure !== 'repeat')) throw new ServiceUnavailableException('结构约束 measure 与生成器类型不匹配：' + id);
     if (raw.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(raw.property)
-      || byId.get(raw.targetNodeId)?.kind === 'group')) throw new ServiceUnavailableException('span 约束只能调整 Mesh 尺寸：' + id);
+      || expectedAxis !== raw.axis || byId.get(raw.targetNodeId)?.kind === 'group')) throw new ServiceUnavailableException('span 约束只能调整匹配轴向的 Mesh 尺寸：' + id);
     if (raw.type === 'follow' && raw.property !== undefined) throw new ServiceUnavailableException('follow 约束不能声明 property：' + id);
     const factor = Number(raw.factor ?? 1), offset = Number(raw.offset ?? 0);
     if (!Number.isFinite(factor) || Math.abs(factor) > 10 || !Number.isFinite(offset) || Math.abs(offset) > 100) {

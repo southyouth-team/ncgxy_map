@@ -566,51 +566,6 @@ onBeforeUnmount(() => {
             </div>
             <div v-if="selectedComponent" class="component-properties"><b>{{ selectedComponent.name||selectedComponent.id }}</b>
               <template v-if="(selectedComponent.kind||'mesh')==='mesh'"><label>部件颜色</label><input type="color" :value="selectedComponentColor" @input="updateSelectedComponentColor($event.target.value)"></template>
-              <small v-else>逻辑分组节点：变换和显隐作用于整个子树。</small>
-              <label>局部位置 X / Y / Z</label><div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div>
-              <button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible?'隐藏此部件':'显示此部件' }}</button>
-            </div>
-          </section>
-          <section v-if="selectedSpec" class="ai-local-editor"><label>AI 新增可调参数</label><textarea v-model="parameterInstruction" rows="3" placeholder="例如：给建筑增加楼层数参数，默认 3 层、最高 8 层"></textarea><button class="generate" :disabled="parameterizing||!parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing?'AI 正在设计参数…':'根据描述新增参数' }}</button></section>
-          <section v-if="selectedComponent" class="ai-local-editor"><label>AI 修改当前部件：{{ selectedComponent.name||selectedComponent.id }}</label><textarea v-model="modifyInstruction" rows="3" placeholder="例如：把窗户改成拱形，保留原位置和周围墙体"></textarea><button class="generate" :disabled="modifying||!modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying?'AI 修改中…':'修改选中部件' }}</button></section>
-        </aside>
-      </div>
-      <div v-if="error" class="error">{{ error }}</div>
-      <div class="save-panel"><div><b>保存模板</b><p>保存当前结构、材质和参数定义，后续可在素材模板库中复用。</p><small v-if="savedAssetId">已保存 ID：{{ savedAssetId }}</small></div><button class="generate" :disabled="!selectedSpec" @click="saveSelectedAsset">保存模板</button></div>
-      <div class="step-actions"><button class="secondary" @click="wizardStep=2">返回整体预览</button><button class="secondary" @click="wizardStep=1">返回模板信息</button></div>
-    </section>
-    <footer>独立素材模板实验环境 · AI 输出 ObjectSculptSpec，由 Three.js Runtime 转换为真实 Mesh。</footer>
-  </main>
-</template>
-            <small v-else>这是逻辑分组节点，不直接承载几何体或材质；其变换和显隐会作用于整个子树。</small>
-            <label>局部位置 X / Y / Z</label>
-            <div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div>
-            <button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible ? '隐藏此部件' : '显示此部件' }}</button>
-          </div>
-        </section>
-        <section v-if="selectedSpec" class="ai-local-editor">
-          <label>对话式新增参数 · 描述希望以后可调整的属性</label>
-          <textarea v-model="parameterInstruction" rows="3" placeholder="例如：给这个大门增加长度、宽度和高度变量；给教学楼增加楼层数变量，默认 3 层、最高 8 层"></textarea>
-          <button class="generate" :disabled="parameterizing || !parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing ? 'AI 正在设计参数…' : '根据对话新增参数' }}</button>
-          <p class="hint">AI 在模板阶段声明参数和安全的 repeat 结构规则；保存后，正式场景可直接调节变量，不需要再次调用 AI。若当前模型缺少可重复的楼层/房间原型，会明确提示结构缺口。</p>
-        </section>
-        <section v-if="selectedSpec" class="asset-actions">
-          <h4>③ 素材模板保存与复用</h4>
-          <button class="secondary" @click="saveSelectedAsset">保存完整资产</button>
-          <label>已保存资产 ID</label><input v-model="savedAssetId" placeholder="保存后自动填入，也可粘贴 ID">
-          <button class="secondary" @click="loadSavedAsset">加载资产</button>
-        </section>
-        <section v-if="selectedComponent" class="ai-local-editor">
-          <label>AI 局部修改 · 当前部件：{{ selectedComponent.name || selectedComponent.id }}</label>
-          <textarea v-model="modifyInstruction" rows="3" placeholder="例如：把这个窗户改成拱形，保留原位置和周围墙体"></textarea>
-          <button class="generate" :disabled="modifying || !modifyInstruction.trim()" @click="modifySelectedAsset">{{ modifying ? 'AI 修改中…' : '修改选中部件' }}</button>
-        </section>
-        <p class="hint">AI 生成对象与预置模板共用同一个 Scene。每个模型作为独立 THREE.Group 管理，可单独聚焦、缩放和删除。</p>
-      </aside>
-    </section>
-    <footer>本页面为独立技术验证环境，不写入正式校园地图数据。当前 AI 输出为受控 ObjectSculptSpec，由 Three.js 运行时生成 Mesh；尚未验证任意 JavaScript Factory 代码执行。</footer>
-  </main>
-</template>
 
 <style scoped>
 .lab{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;padding:20px 24px;background:#edf1ed;color:#243329;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}

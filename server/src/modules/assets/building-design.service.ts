@@ -220,7 +220,7 @@ export class BuildingDesignService {
         ...(Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),
       };
     });
-    const byId = new Map(componentTree.map((node: any) => [node.id, node]));
+    const byId = new Map<string, any>(componentTree.map((node: any) => [node.id, node] as [string, any]));
     for (const node of componentTree) {
       if (node.parent && !byId.has(node.parent)) throw new ServiceUnavailableException('组件父节点不存在：' + node.id);
       const visited = new Set([node.id]);

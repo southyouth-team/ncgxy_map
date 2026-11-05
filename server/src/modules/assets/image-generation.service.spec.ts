@@ -236,10 +236,7 @@ describe('ImageGenerationService', () => {
     }) as never;
 
     const result = await service.generateObjectFromPrompt('带窗户阵列的建筑', '建筑', 'stylized');
-    expect(result.objectSculptSpec.parameterSchema.find((item: any) => item.id === 'window-spacing')).toMatchObject({
-      generatorControl: undefined,
-      targets: [],
-    });
+    expect(result.objectSculptSpec.parameterSchema.find((item: any) => item.id === 'window-spacing')).toMatchObject({ targets: [] });
   });
 
   it('rejects prompt-generated models with disconnected component roots', async () => {

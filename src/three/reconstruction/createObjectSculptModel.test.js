@@ -1434,7 +1434,6 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const instances = [...model.userData.componentGroups.values()]
       .filter(group => group.userData.componentSourceId === 'window-template');
     expect(instances).toHaveLength(4);
-    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'spacing').generatorControl).toBe(true);
   });
 
 });

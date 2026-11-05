@@ -144,7 +144,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     container.appendChild(renderer.domElement)
 
     // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
-    campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE, options.featureCollection || null, { manifest: options.assetManifest || null, baseUrl: options.assetBaseUrl || '', viewMode: options.viewMode, getViewMode: () => cameraRig?.viewMode || options.viewMode })
+    campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE, options.featureCollection || null, { manifest: options.assetManifest || null })
     // 碰撞与渲染必须读取同一份规范化空间数据；不能让已移动/删除的旧湖泊继续留在碰撞层。
     const spatialLayers = isRpgSample ? null : createCampusSceneRenderData(options.featureCollection || undefined).layers
     // 基础空间图层已为校园建筑注册精确墙段/footprint 碰撞；GLB 仅替换视觉模型，
@@ -1820,13 +1820,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function setViewMode(mode) {
     cameraRig?.setViewMode(mode)
-    campus?.traverse((node) => {
-      const visual = node.userData?.visualAsset2d
-      if (!visual) return
-      visual.sprite.visible = mode === '2.5d'
-      visual.fallbackObjects.forEach(({ object, visible }) => { object.visible = mode === '2.5d' ? false : visible })
-      if (visual.foundation) visual.foundation.visible = mode !== '2.5d'
-    })
     syncRenderQuality()
     requestFrame()
     if (mode === '3d' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()

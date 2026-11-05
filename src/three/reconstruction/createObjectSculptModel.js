@@ -221,6 +221,8 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     parent.add(group);
     groups.set(node.id, group);
   }
+  root.userData.componentGroups = groups;
+  root.userData.objectSculptSpec = JSON.parse(JSON.stringify(spec));
   root.userData.objectSculpt = {
     schemaVersion: spec.schemaVersion,
     targetName: root.name,

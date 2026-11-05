@@ -1193,4 +1193,129 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => validateObjectSculptSpec(spec)).toThrow('结构生成器跟随规则无效');
   });
 
+
+  it('reconstructs tree, vehicle, and furniture fixtures with editable generated structures', () => {
+    const fixtures = [
+      {
+        name: 'tree',
+        spec: {
+          schemaVersion: '2.0',
+          componentTree: [
+            { id: 'tree-root', kind: 'group', name: '树木' },
+            { id: 'trunk', kind: 'mesh', parent: 'tree-root', primitive: 'cylinder',
+              dimensions: { width: 0.45, height: 3, depth: 0.45 } },
+            { id: 'crown-layer', kind: 'group', parent: 'tree-root', name: '树冠层模板' },
+            { id: 'crown-mesh', kind: 'mesh', parent: 'crown-layer', primitive: 'sphere',
+              dimensions: { width: 2.4, height: 1.3, depth: 2.4 } },
+          ],
+          parameterSchema: [
+            { id: 'crown-count', type: 'number', value: 3, min: 1, max: 6, step: 1, targets: [] },
+            { id: 'trunk-height', type: 'number', value: 3, min: 2, max: 5, step: 0.5,
+              targets: [{ nodeId: 'trunk', property: 'dimensions.height', mode: 'set' }] },
+          ],
+          generators: [{ id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-layer',
+            countParameterId: 'crown-count', axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6 }],
+        },
+        countParameter: 'crown-count',
+        nextCount: 5,
+        expectedComponents: 12,
+        dimensionParameter: 'trunk-height',
+        nextDimension: 4.5,
+        dimensionNode: 'trunk',
+        dimension: 'height',
+      },
+      {
+        name: 'vehicle',
+        spec: {
+          schemaVersion: '2.0',
+          componentTree: [
+            { id: 'car-root', kind: 'group', name: '汽车' },
+            { id: 'car-body', kind: 'mesh', parent: 'car-root', primitive: 'box',
+              dimensions: { width: 4.2, height: 1.1, depth: 1.9 } },
+            { id: 'wheel-pair', kind: 'group', parent: 'car-root', name: '车轮模板' },
+            { id: 'wheel', kind: 'mesh', parent: 'wheel-pair', primitive: 'cylinder',
+              dimensions: { width: 0.7, height: 0.28, depth: 0.7 },
+              transform: { rotation: [Math.PI / 2, 0, 0] } },
+          ],
+          parameterSchema: [
+            { id: 'axle-rows', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
+            { id: 'wheel-columns', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
+            { id: 'body-width', type: 'number', value: 4.2, min: 3, max: 5, step: 0.1,
+              targets: [{ nodeId: 'car-body', property: 'dimensions.width', mode: 'set' }] },
+          ],
+          generators: [{ id: 'wheel-grid', type: 'grid', templateRootId: 'wheel-pair',
+            rowParameterId: 'axle-rows', columnParameterId: 'wheel-columns',
+            spacingX: 2.6, spacingZ: 1.5, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
+        },
+        countParameter: 'wheel-columns',
+        nextCount: 3,
+        expectedComponents: 14,
+        dimensionParameter: 'body-width',
+        nextDimension: 4.8,
+        dimensionNode: 'car-body',
+        dimension: 'width',
+      },
+      {
+        name: 'furniture',
+        spec: {
+          schemaVersion: '2.0',
+          componentTree: [
+            { id: 'table-root', kind: 'group', name: '桌子' },
+            { id: 'table-top', kind: 'mesh', parent: 'table-root', primitive: 'box',
+              dimensions: { width: 2.2, height: 0.16, depth: 1.4 }, transform: { position: [0, 1.5, 0] } },
+            { id: 'leg-pair', kind: 'group', parent: 'table-root', name: '桌腿模板' },
+            { id: 'leg', kind: 'mesh', parent: 'leg-pair', primitive: 'box',
+              dimensions: { width: 0.12, height: 1.45, depth: 0.12 }, transform: { position: [0, 0.72, 0] } },
+          ],
+          parameterSchema: [
+            { id: 'leg-rows', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
+            { id: 'leg-columns', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
+            { id: 'table-width', type: 'number', value: 2.2, min: 1.5, max: 3, step: 0.1,
+              targets: [{ nodeId: 'table-top', property: 'dimensions.width', mode: 'set' }] },
+          ],
+          generators: [{ id: 'leg-grid', type: 'grid', templateRootId: 'leg-pair',
+            rowParameterId: 'leg-rows', columnParameterId: 'leg-columns',
+            spacingX: 1.8, spacingZ: 1.0, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
+        },
+        countParameter: 'leg-columns',
+        nextCount: 3,
+        expectedComponents: 14,
+        dimensionParameter: 'table-width',
+        nextDimension: 2.8,
+        dimensionNode: 'table-top',
+        dimension: 'width',
+      },
+    ];
+
+    for (const fixture of fixtures) {
+      const model = createObjectSculptModel(THREE, structuredClone(fixture.spec));
+      expect(model.userData.componentGroups.size).toBeGreaterThan(0);
+      const initialMeshes = [...model.userData.componentGroups.values()]
+        .flatMap(group => group.children)
+        .filter(child => child.isMesh);
+      expect(initialMeshes.length).toBeGreaterThan(0);
+      for (const mesh of initialMeshes) {
+        expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(0);
+        expect(mesh.geometry.boundingSphere).not.toBeNull();
+      }
+
+      applyObjectSculptParameter(THREE, model, fixture.countParameter, fixture.nextCount);
+      expect(model.userData.componentGroups.size).toBe(fixture.expectedComponents);
+
+      applyObjectSculptParameter(THREE, model, fixture.dimensionParameter, fixture.nextDimension);
+      const node = model.userData.componentGroups.get(fixture.dimensionNode);
+      const mesh = node.getObjectByName(fixture.dimensionNode + ':mesh');
+      expect(mesh.geometry.parameters[fixture.dimension]).toBeCloseTo(fixture.nextDimension);
+      expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === fixture.dimensionParameter).value)
+        .toBe(fixture.nextDimension);
+
+      const persisted = structuredClone(model.userData.objectSculptSpec);
+      const reloaded = createObjectSculptModel(THREE, persisted);
+      expect(reloaded.userData.componentGroups.size).toBe(fixture.expectedComponents);
+      const reloadedNode = reloaded.userData.componentGroups.get(fixture.dimensionNode);
+      expect(reloadedNode.getObjectByName(fixture.dimensionNode + ':mesh').geometry.parameters[fixture.dimension])
+        .toBeCloseTo(fixture.nextDimension);
+    }
+  });
+
 });

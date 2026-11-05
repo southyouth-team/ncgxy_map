@@ -19,7 +19,7 @@ const props = defineProps({
   apiBase: { type: String, default: 'http://localhost:3001/api/v1' },
   devUserId: { type: String, default: 'map-editor-local' },
 })
-const emit = defineEmits(['close', 'preview'])
+const emit = defineEmits(['close', 'preview', 'templatesLoaded'])
 const documentRevision = ref(0)
 const persistenceBusy = ref(false)
 const persistenceMessage = ref('')
@@ -631,6 +631,7 @@ async function loadPublishedBuildingTemplates() {
   try {
     const result = await apiRequest('/assets/building-templates')
     publishedBuildingTemplates.value = (result.templates || []).filter(item => item.status === 'ready')
+    emit('templatesLoaded', publishedBuildingTemplates.value)
   } catch (error) {
     persistenceMessage.value = '独立建筑模板库暂不可用，仍可使用内置模板：' + (error.message || '请求失败')
   }

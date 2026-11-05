@@ -34,6 +34,27 @@ function validateGeneratedGeometryDescriptors(componentTree: any[]) {
   }
 }
 const PARAMETER_BINDINGS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible']);
+/**
+ * AI 有时会把材质参数写成语义化别名（如 lattice_color），但 Runtime 协议
+ * 只接受标准材质绑定。将明确的材质字段别名收敛为统一协议，避免整次生成失败。
+ */
+function normalizeGeneratedParameterBindings(input: unknown) {
+  if (!Array.isArray(input)) return input;
+  const materialAliases: Record<string, string> = {
+    lattice_color: 'material.color',
+    lattice_roughness: 'material.roughness',
+    lattice_metalness: 'material.metalness',
+    lattice_opacity: 'material.opacity',
+  };
+  return input.map((parameter: any) => ({
+    ...parameter,
+    targets: Array.isArray(parameter?.targets) ? parameter.targets.map((target: any) => ({
+      ...target,
+      property: materialAliases[target?.property] || target?.property,
+    })) : parameter?.targets,
+  }));
+}
+
 function validateGeneratedParameterSchema(input: unknown, componentTree: any[], generatorParameterIds = new Set<string>()) {
   if (input == null) return [];
   if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('视觉模型返回的 parameterSchema 无效或超出 100 项');
@@ -441,7 +462,7 @@ export class ImageGenerationService {
                 '当提供参考图片时，图片是几何外形和比例的第一依据，提示词只能补充图片中不可见的信息。不得把图片简单当成贴图，不得忽略图片主体轮廓；应使用足够的分段、曲线和截面描述可见结构。',
                 '根对象字段：schemaVersion 固定为字符串 2.0，targetName，category（AI 自行判断的开放分类）、objectType（AI 自行判断的具体物体）、visualStyle、materials、componentTree、parameterSchema。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
-                'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
+                'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 必须严格使用标准路径 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible，禁止输出 lattice_color、body_color 等自定义别名；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
                 'componentTree 按对象复杂度包含 1-100 个有意义的独立组件；简单对象可以只有一个组件，复杂对象应按真实结构拆分，不得为了凑数量拆出无意义零件。节点字段：id（唯一英文 ID）、name、role、kind（group 或 mesh，省略时为 mesh）、parent（唯一根节点省略，其余组件必填）、primitive、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。mesh primitive 必须从引擎支持集合中按几何形态选择：box/cuboid、polygon、wedge、arch、cylinder、cone、sphere、ellipsoid、torus、tube、lathe、sweep、loft；不得把所有曲面或异形物体都近似成 box。',
                 '复杂几何描述符必须按 primitive 输出：polygon 使用 geometryDescriptor.points（3-32 个归一化二维轮廓点）；tube 使用 path（2-32 个归一化三维点）及 radius/tubularSegments/radialSegments；lathe 使用 profile（2-32 个 [半径,高度] 归一化点）；sweep 使用 path（2-32 个归一化三维点）、profile（3-24 个归一化二维截面点）及 steps；loft 使用 sections（2-12 个截面，每个截面含严格递增的 height 与相同数量的 points）。这些坐标范围为 [-0.5,0.5]，半径按引擎约束；不需要复杂几何时使用基础 primitive。',
                 '每个 generator.templateRootId 必须指向 componentTree 中 kind="group" 的节点；重复模板即使只有一个 Mesh，也必须先创建一个无几何 Group 作为模板容器，再把 Mesh 作为该 Group 的子节点。不得让 generator 直接引用 Mesh。',
@@ -534,7 +555,7 @@ export class ImageGenerationService {
     }
     const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
     spec.generators = generatorValidation.generators;
-    spec.parameterSchema = validateGeneratedParameterSchema(spec.parameterSchema, spec.componentTree, generatorValidation.parameterIds);
+    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, generatorValidation.parameterIds);
     validateGeneratorParameterBindings(spec.generators, spec.parameterSchema);
 
     // Validate constraint identities and references at the generation boundary too.

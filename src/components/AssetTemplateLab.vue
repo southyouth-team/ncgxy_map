@@ -181,13 +181,30 @@ async function generateModel() {
 function getComponentGroup(instanceId, componentId) {
   return objects.get(instanceId)?.userData?.componentGroups?.get(componentId) || null
 }
+let highlightedComponentGroup = null
+function clearComponentHighlight() {
+  highlightedComponentGroup?.traverse(child => {
+    if (child.isMesh && child.material?.emissive && child.userData.editorOriginalEmissive) {
+      child.material.emissive.copy(child.userData.editorOriginalEmissive)
+      child.material.emissiveIntensity = child.userData.editorOriginalEmissiveIntensity ?? 0
+    }
+  })
+  highlightedComponentGroup = null
+}
 function selectComponent(componentId) {
   if (!selectedSpec.value?.componentTree?.some(node => node.id === componentId)) return
+  clearComponentHighlight()
   selectedComponentId.value = componentId
   const group = getComponentGroup(selectedInstanceId.value, componentId)
   if (group) {
+    highlightedComponentGroup = group
     group.traverse(child => {
-      if (child.isMesh) child.userData.editorSelected = true
+      if (child.isMesh && child.material?.emissive) {
+        child.userData.editorOriginalEmissive = child.material.emissive.clone()
+        child.userData.editorOriginalEmissiveIntensity = child.material.emissiveIntensity
+        child.material.emissive.set('#d6a33b')
+        child.material.emissiveIntensity = 0.28
+      }
     })
   }
 }
@@ -230,7 +247,7 @@ function onViewportPointerUp(event) {
   if (!hit) return
   const componentId = hit.object.userData.componentId
   for (const [instanceId, root] of objects) {
-    if (root.userData?.componentGroups?.has(componentId)) { selectedInstanceId.value = instanceId; selectedComponentId.value = componentId; break }
+    if (root.userData?.componentGroups?.has(componentId)) { selectedInstanceId.value = instanceId; selectComponent(componentId); break }
   }
 }
 function updateSelectedComponentTransform(axis, value) {
@@ -270,9 +287,11 @@ function removeInstance(id) {
   if (selectedInstanceId.value === id) selectedInstanceId.value = instances.value.at(-1)?.id || ''
 }
 function focusInstance(id) {
+  clearComponentHighlight()
   selectedInstanceId.value = id
   const spec = objects.get(id)?.userData?.objectSculptSpec
   selectedComponentId.value = spec?.componentTree?.[0]?.id || ''
+  if (selectedComponentId.value) selectComponent(selectedComponentId.value)
   const object = objects.get(id)
   if (object) { controls.target.copy(object.position); controls.update() }
 }
@@ -307,6 +326,7 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(frame); observer?.disconnect()
   renderer?.domElement?.removeEventListener('pointerdown', onViewportPointerDown)
   renderer?.domElement?.removeEventListener('pointerup', onViewportPointerUp)
+  clearComponentHighlight()
   controls?.dispose()
   scene?.traverse(o => { o.geometry?.dispose?.(); if (Array.isArray(o.material)) o.material.forEach(m => m.dispose?.()); else o.material?.dispose?.() })
   renderer?.dispose()

@@ -240,7 +240,7 @@ export class AssetsService {
       if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id) || ids.has(node.id)) throw new BadRequestException('资产组件 ID 无效或重复');
       ids.add(node.id);
     }
-    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube']);
+    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe']);
     const byId = new Map<string, any>(spec.componentTree.map((node: any) => [node.id, node] as [string, any]));
     for (const node of spec.componentTree) {
       if (node.parent && !ids.has(node.parent)) throw new BadRequestException('资产组件父节点不存在：' + node.id);
@@ -265,6 +265,18 @@ export class AssetsService {
             || !Number.isInteger(radialSegments) || radialSegments < 3 || radialSegments > 24
             || (node.geometryDescriptor?.closed !== undefined && typeof node.geometryDescriptor.closed !== 'boolean')) {
             throw new BadRequestException('资产 tube 几何参数无效：' + node.id);
+          }
+        }
+        if (String(node.primitive).toLowerCase() === 'lathe') {
+          const profile = node.geometryDescriptor?.profile;
+          if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32
+            || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
+              || !Number.isFinite(Number(point[0])) || Number(point[0]) < 0 || Number(point[0]) > 0.5
+              || !Number.isFinite(Number(point[1])) || Number(point[1]) < -0.5 || Number(point[1]) > 0.5)
+            || profile.every((point: number[], index: number) => index === 0
+              || (Math.abs(Number(point[0]) - Number(profile[index - 1][0])) < 0.0001
+                && Math.abs(Number(point[1]) - Number(profile[index - 1][1])) < 0.0001))) {
+            throw new BadRequestException('资产 lathe profile 必须包含 2 到 32 个有效的 [半径,高度] 归一化截面点：' + node.id);
           }
         }
       }

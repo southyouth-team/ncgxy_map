@@ -535,7 +535,7 @@ export class BuildingDesignService {
     }
     const updated = parsed?.objectSculptSpec;
     if (!updated || !Array.isArray(updated.componentTree)) throw new ServiceUnavailableException('AI 局部修改结果缺少 ObjectSculptSpec');
-    const updatedById = new Map(updated.componentTree.map((node: any) => [node.id, node]));
+    const updatedById = new Map<string, any>(updated.componentTree.map((node: any) => [node.id, node] as [string, any]));
     if (updated.componentTree.length !== current.componentTree.length) throw new ServiceUnavailableException('局部修改不能新增或删除组件；请先通过结构树建立目标组件');
     for (const node of current.componentTree) {
       const after = updatedById.get(node.id);

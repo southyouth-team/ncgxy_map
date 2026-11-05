@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const PARAMETER_BINDINGS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','visibility.visible']);
-function validateGeneratedParameterSchema(input: unknown, componentTree: any[]) {
+function validateGeneratedParameterSchema(input: unknown, componentTree: any[], generatorParameterIds = new Set<string>()) {
   if (input == null) return [];
   if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('视觉模型返回的 parameterSchema 无效或超出 100 项');
   const ids = new Set<string>(), nodes = new Set(componentTree.map(node => node.id));
@@ -15,7 +15,7 @@ function validateGeneratedParameterSchema(input: unknown, componentTree: any[]) 
     if (item.type === 'color' && (typeof item.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(item.value))) throw new ServiceUnavailableException('AI 颜色参数无效：' + item.id);
     if (item.type === 'boolean' && typeof item.value !== 'boolean') throw new ServiceUnavailableException('AI 布尔参数无效：' + item.id);
     if (item.type === 'select' && (!Array.isArray(item.options) || !item.options.some((option: any) => option?.value === item.value))) throw new ServiceUnavailableException('AI 枚举参数无效：' + item.id);
-    if (!Array.isArray(item.targets) || !item.targets.length || item.targets.length > 100) throw new ServiceUnavailableException('AI 参数目标无效：' + item.id);
+    if (!Array.isArray(item.targets) || item.targets.length > 100 || (!item.targets.length && !generatorParameterIds.has(item.id))) throw new ServiceUnavailableException('AI 参数目标无效：' + item.id);
     for (const target of item.targets) {
       if (!nodes.has(target?.nodeId) || !PARAMETER_BINDINGS.has(target?.property)) throw new ServiceUnavailableException('AI 参数目标引用无效：' + item.id);
       const mode = target.mode || 'set';
@@ -26,6 +26,92 @@ function validateGeneratedParameterSchema(input: unknown, componentTree: any[]) 
     }
   }
   return input;
+}
+
+function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
+  if (input == null) return [];
+  if (!Array.isArray(input) || input.length > 30) throw new ServiceUnavailableException('AI generators 必须是最多 30 项的数组');
+  const byId = new Map(componentTree.map(node => [node.id, node]));
+  const ids = new Set<string>(), parameterIds = new Set<string>(), claimedNodes = new Set<string>();
+  let expandedCount = componentTree.length;
+  const getSubtree = (rootId: string) => componentTree.filter(node => {
+    let parent = node.id;
+    while (parent) {
+      if (parent === rootId) return true;
+      parent = byId.get(parent)?.parent;
+    }
+    return false;
+  });
+  const generators = input.map((raw: any) => {
+    const id = typeof raw?.id === 'string' ? raw.id : '';
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)
+      || !['repeat','grid'].includes(raw?.type)) throw new ServiceUnavailableException('AI 结构生成器 ID 或类型无效：' + id);
+    ids.add(id);
+    const root = byId.get(raw.templateRootId);
+    if (!root || (root.kind || 'mesh') !== 'group') throw new ServiceUnavailableException('AI 结构生成器模板根节点必须是 Group：' + id);
+    const subtree = getSubtree(root.id);
+    if (!subtree.length) throw new ServiceUnavailableException('AI 结构生成器模板子树为空：' + id);
+    for (const node of subtree) {
+      if (claimedNodes.has(node.id)) throw new ServiceUnavailableException('AI 结构生成器模板不能嵌套或重叠：' + id);
+      claimedNodes.add(node.id);
+    }
+    const parameterId = value => {
+      if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value) || parameterIds.has(value)) {
+        throw new ServiceUnavailableException('AI 结构生成器数量参数 ID 无效或重复：' + id);
+      }
+      parameterIds.add(value);
+      return value;
+    };
+    if (raw.type === 'repeat') {
+      const countParameterId = parameterId(raw.countParameterId);
+      const spacing = Number(raw.spacing), defaultCount = Number(raw.defaultCount), maxCount = Number(raw.maxCount);
+      if (!['x','y','z'].includes(raw.axis) || !Number.isFinite(spacing) || Math.abs(spacing) > 100
+        || !Number.isInteger(defaultCount) || !Number.isInteger(maxCount) || defaultCount < 1 || defaultCount > maxCount || maxCount > 100
+        || (raw.followers !== undefined && (!Array.isArray(raw.followers) || raw.followers.length > 30))) {
+        throw new ServiceUnavailableException('AI repeat 生成器间距、轴向或数量范围无效：' + id);
+      }
+      const followers = (raw.followers || []).map((follower: any) => {
+        if (!byId.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis)
+          || subtree.some(node => node.id === follower.nodeId) || !Number.isFinite(Number(follower.offset ?? 0))
+          || Math.abs(Number(follower.offset ?? 0)) > 100) throw new ServiceUnavailableException('AI repeat followers 无效：' + id);
+        return follower;
+      });
+      expandedCount += subtree.length * (maxCount - 1);
+      if (expandedCount > 300) throw new ServiceUnavailableException('AI 生成器最大展开组件数超过 300：' + id);
+      return { ...raw, id, countParameterId, spacing, defaultCount, maxCount, followers };
+    }
+    const rowParameterId = parameterId(raw.rowParameterId), columnParameterId = parameterId(raw.columnParameterId);
+    const spacingX = Number(raw.spacingX), spacingZ = Number(raw.spacingZ);
+    const defaultRows = Number(raw.defaultRows), defaultColumns = Number(raw.defaultColumns);
+    const maxRows = Number(raw.maxRows), maxColumns = Number(raw.maxColumns);
+    if (rowParameterId === columnParameterId || ![spacingX,spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
+      || ![defaultRows,defaultColumns,maxRows,maxColumns].every(Number.isInteger)
+      || defaultRows < 1 || defaultColumns < 1 || defaultRows > maxRows || defaultColumns > maxColumns
+      || maxRows > 100 || maxColumns > 100 || maxRows * maxColumns * subtree.length > 300) {
+      throw new ServiceUnavailableException('AI grid 生成器行列、间距或最大展开数量无效：' + id);
+    }
+    expandedCount += subtree.length * (maxRows * maxColumns - 1);
+    if (expandedCount > 300) throw new ServiceUnavailableException('AI 生成器最大展开组件数超过 300：' + id);
+    return { ...raw, id, rowParameterId, columnParameterId, spacingX, spacingZ, defaultRows, defaultColumns, maxRows, maxColumns };
+  });
+  return { generators, parameterIds };
+}
+
+function validateGeneratorParameterBindings(generators: any[], parameterSchema: any[]) {
+  for (const generator of generators) {
+    const ids = generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId];
+    const defaults = generator.type === 'grid' ? [generator.defaultRows, generator.defaultColumns] : [generator.defaultCount];
+    const maximums = generator.type === 'grid' ? [generator.maxRows, generator.maxColumns] : [generator.maxCount];
+    for (let index = 0; index < ids.length; index += 1) {
+      const parameter = parameterSchema.find(item => item.id === ids[index]);
+      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min)
+        || !Number.isInteger(parameter.max) || !Number.isInteger(parameter.value)
+        || parameter.min < 1 || parameter.max > maximums[index]
+        || parameter.value !== defaults[index] || parameter.value < parameter.min || parameter.value > parameter.max) {
+        throw new ServiceUnavailableException('AI 生成器必须绑定默认值一致的有效整数数量参数：' + generator.id);
+      }
+    }
+  }
 }
 
 @Injectable()
@@ -244,7 +330,10 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('组件未连接到主体根节点：' + String(node.id || 'unknown'));
       }
     }
-    spec.parameterSchema = validateGeneratedParameterSchema(spec.parameterSchema, spec.componentTree);
+    const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
+    spec.generators = generatorValidation.generators;
+    spec.parameterSchema = validateGeneratedParameterSchema(spec.parameterSchema, spec.componentTree, generatorValidation.parameterIds);
+    validateGeneratorParameterBindings(spec.generators, spec.parameterSchema);
     return { provider: baseUrl, model, objectType, visualStyle, objectSculptSpec: spec };
   }
 

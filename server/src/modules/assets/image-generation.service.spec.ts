@@ -98,6 +98,64 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 
+  it('accepts validated repeat controls with empty component targets in prompt generation', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      targetName: 'layered-tree',
+      materials: { leaf: { color: '#287a38' }, bark: { color: '#79502f' } },
+      componentTree: [
+        { id: 'tree-root', kind: 'group', name: '树木主体' },
+        { id: 'crown-prototype', kind: 'group', name: '树冠层', parent: 'tree-root' },
+        { id: 'crown-mesh', parent: 'crown-prototype', primitive: 'sphere', dimensions: { width: 2, height: 1, depth: 2 }, material: 'leaf' },
+        { id: 'trunk', parent: 'tree-root', primitive: 'cylinder', dimensions: { width: 0.5, height: 3, depth: 0.5 }, material: 'bark' },
+      ],
+      parameterSchema: [{ id: 'crown-count', label: '树冠层数', type: 'number', value: 3, min: 1, max: 6, step: 1, targets: [] }],
+      generators: [{ id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-prototype', countParameterId: 'crown-count',
+        axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6 }],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(objectSculptSpec) } }] }),
+    }) as never;
+
+    const result = await service.generateObjectFromPrompt('一棵有三层树冠的树', '树木', 'low-poly');
+    expect(result.objectSculptSpec.generators).toMatchObject([{ id: 'crown-repeat', defaultCount: 3, maxCount: 6 }]);
+    expect(result.objectSculptSpec.parameterSchema[0]).toMatchObject({ id: 'crown-count', value: 3, targets: [] });
+  });
+
+  it('rejects invalid generator template roots and mismatched default parameter values', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const base = {
+      schemaVersion: '2.0', materials: { leaf: { color: '#287a38' } },
+      componentTree: [
+        { id: 'tree-root', kind: 'group' },
+        { id: 'crown-prototype', kind: 'group', parent: 'tree-root' },
+        { id: 'crown-mesh', parent: 'crown-prototype', primitive: 'sphere', dimensions: { width: 2, height: 1, depth: 2 }, material: 'leaf' },
+      ],
+      parameterSchema: [{ id: 'crown-count', label: '树冠层数', type: 'number', value: 3, min: 1, max: 6, targets: [] }],
+      generators: [{ id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-prototype', countParameterId: 'crown-count',
+        axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6 }],
+    };
+    const respond = (value: any) => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(value) } }] }),
+      }) as never;
+    };
+    const meshTemplate = structuredClone(base);
+    meshTemplate.componentTree[1] = { id: 'crown-prototype', kind: 'mesh', parent: 'tree-root', primitive: 'sphere',
+      dimensions: { width: 1, height: 1, depth: 1 }, material: 'leaf' };
+    respond(meshTemplate);
+    await expect(service.generateObjectFromPrompt('树木', '树木', 'low-poly'))
+      .rejects.toThrow('模板根节点必须是 Group');
+
+    const mismatched = structuredClone(base);
+    mismatched.parameterSchema[0].value = 4;
+    respond(mismatched);
+    await expect(service.generateObjectFromPrompt('树木', '树木', 'low-poly'))
+      .rejects.toThrow('默认值一致的有效整数数量参数');
+  });
+
   it('rejects prompt-generated models with disconnected component roots', async () => {
     const service = createService({
       VISION_API_KEY: 'vision-key',

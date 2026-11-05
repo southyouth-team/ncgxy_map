@@ -929,6 +929,31 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(reloaded.userData.componentGroups.get('wall').getObjectByName('wall:mesh').geometry.parameters.shapes.holes).toHaveLength(1);
   });
 
+  it('supports multiple independent cutouts on the same target mesh', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'building', kind: 'group' },
+        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 4, height: 3, depth: 0.3 } },
+        { id: 'left-opening', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 0.8, height: 1.8, depth: 0.5 }, transform: { position: [-1, 0, 0] } },
+        { id: 'right-opening', kind: 'mesh', parent: 'building', primitive: 'box',
+          dimensions: { width: 0.8, height: 1.8, depth: 0.5 }, transform: { position: [1, 0, 0] } },
+      ],
+      constraints: [
+        { id: 'left-window-cutout', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'left-opening', axis: 'z', operation: 'subtract' },
+        { id: 'right-window-cutout', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'right-opening', axis: 'z', operation: 'subtract' },
+      ],
+    };
+    expect(() => validateObjectSculptSpec(spec)).not.toThrow();
+    const model = createObjectSculptModel(THREE, spec);
+    const wall = model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
+    expect(wall.geometry.parameters.shapes.holes).toHaveLength(2);
+    expect(model.userData.componentGroups.get('left-opening').children).toHaveLength(0);
+    expect(model.userData.componentGroups.get('right-opening').children).toHaveLength(0);
+  });
+
   it('rejects cutouts that exceed the target mesh bounds', () => {
     const spec = {
       schemaVersion: '2.0',

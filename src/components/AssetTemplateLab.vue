@@ -15,6 +15,15 @@ const prompt = ref('')
 const objectType = ref('')
 const imageFile = ref(null), imageDataUrl = ref(''), referencePreview = ref('')
 const generating = ref(false), generationLog = ref('')
+const generationStage = ref(0), generationElapsed = ref(0)
+let generationTimer = null
+const generationStages = computed(() => [
+  { title: '提交生成任务', detail: '正在整理输入内容并连接 AI 服务' },
+  { title: imageDataUrl.value ? '视觉分析与结构生成' : 'AI 结构生成', detail: imageDataUrl.value ? 'AI 正在分析参考图，并据此生成组件、比例和空间关系' : 'AI 正在理解物体并生成组件层级、几何与参数定义' },
+  { title: 'Three.js 模型构建', detail: '正在校验结构描述并创建真实 3D 几何体' },
+  { title: '结构定向修复', detail: '检测到 Runtime 校验问题，正在修复模型结构' },
+  { title: '加入场景沙盒', detail: '正在注册模型并更新预览场景' },
+])
 const modifying = ref(false), modifyInstruction = ref('')
 const parameterizing = ref(false), parameterInstruction = ref('')
 const savedAssetId = ref('')
@@ -139,6 +148,9 @@ async function generateModel() {
     error.value = '请填写生成提示词或上传参考图片'; return
   }
   generating.value = true; error.value = ''; generationLog.value = ''; status.value = '正在请求 AI 生成模型…'
+  generationStage.value = 0; generationElapsed.value = 0
+  if (generationTimer) clearInterval(generationTimer)
+  generationTimer = setInterval(() => { generationElapsed.value += 1 }, 1000)
   const startedAt = performance.now()
   try {
     let result
@@ -157,11 +169,14 @@ async function generateModel() {
         objectType: objectType.value.trim() || '独立 3D 物体', visualStyle: 'realistic', prompt: prompt.value.trim(),
       })
     }
+    generationStage.value = 2
+    status.value = 'AI 结构已返回，正在构建 Three.js 模型…'
     spec = result?.design?.objectSculptSpec || result?.objectSculptSpec
     if (!spec) throw new Error('AI 返回结果缺少 ObjectSculptSpec')
     try {
       model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
     } catch (runtimeError) {
+      generationStage.value = 3
       status.value = 'Runtime 校验未通过，正在定向修复当前模型结构…'
       const repaired = await requestJson('/assets/ai-image/repair-object', {
         objectSculptSpec: spec, validationError: runtimeError?.message || String(runtimeError),
@@ -174,6 +189,8 @@ async function generateModel() {
       spec = repairedSpec
       result = repaired
     }
+    generationStage.value = 4
+    status.value = '模型构建完成，正在加入场景沙盒…'
     result.__runtimeModel = model
     const id = 'ai-instance-' + (++serial)
     const index = instances.value.length
@@ -196,7 +213,11 @@ async function generateModel() {
   } catch (e) {
     error.value = e?.message || 'AI 模型生成失败'
     status.value = '生成失败'
-  } finally { generating.value = false }
+  } finally {
+    if (generationTimer) clearInterval(generationTimer)
+    generationTimer = null
+    generating.value = false
+  }
 }
 function getComponentGroup(instanceId, componentId) {
   return objects.get(instanceId)?.userData?.componentGroups?.get(componentId) || null
@@ -522,6 +543,26 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="lab wizard-lab">
+    <div v-if="generating" class="ai-generation-overlay" role="status" aria-live="polite">
+      <section class="ai-generation-card">
+        <div class="ai-generation-spinner" aria-hidden="true"></div>
+        <small>AI ASSET GENERATION</small>
+        <h2>正在生成 3D 素材</h2>
+        <p class="ai-generation-current">{{ generationStages[generationStage]?.title }}</p>
+        <p class="ai-generation-detail">{{ generationStages[generationStage]?.detail }}</p>
+        <div class="ai-generation-track"><span></span></div>
+        <ol class="ai-generation-steps">
+          <li v-for="(item,index) in generationStages" :key="item.title" :class="{done:index<generationStage,active:index===generationStage,upcoming:index>generationStage}">
+            <span class="step-mark">{{ index<generationStage ? '✓' : index+1 }}</span>
+            <span>{{ item.title }}</span>
+            <b v-if="index===generationStage">进行中</b>
+            <b v-else-if="index<generationStage">已完成</b>
+          </li>
+        </ol>
+        <div class="ai-generation-footer"><span>已等待 {{ generationElapsed }} 秒</span><span>请保持页面开启</span></div>
+        <p class="ai-generation-note">复杂物体或参考图分析可能需要较长时间，生成完成后会自动进入预览。</p>
+      </section>
+    </div>
     <header class="wizard-header">
       <div><small>NCGXY / ASSET TEMPLATE WORKSHOP</small><h1>创建 3D 素材模板</h1><p>先定义模板并生成预览，确认整体结构后再进入微调。</p></div>
       <a href="/">返回校园</a>
@@ -693,6 +734,28 @@ footer{flex:0 0 auto;width:100%;max-width:1600px;margin:10px auto 0;text-align:r
 @media(max-width:1180px) and (min-width:701px){.lab{padding:16px}.layout{grid-template-columns:minmax(270px,300px) minmax(320px,1fr);grid-template-rows:minmax(360px,1fr) minmax(260px,.75fr);overflow-y:auto}.viewport-panel{grid-column:2;grid-row:1}.generator{grid-column:1;grid-row:1}.inspector{grid-column:1/-1;grid-row:2}.panel{overflow:visible}.inspector{overflow-y:visible}.instances{max-height:180px}.component-tree{max-height:180px}}
 @media(max-width:1100px){.editor-step .editor-workspace{grid-template-columns:minmax(280px,360px) minmax(0,1fr)}.editor-step .viewport-panel{min-height:560px}}@media(max-width:900px){.create-grid{grid-template-columns:1fr}.editor-step .editor-workspace{display:flex;flex-direction:column-reverse;min-height:0}.editor-step .inspector{max-height:none;overflow:visible}.editor-step .viewport-panel{min-height:480px;flex:0 0 60vh}}
 @media(max-width:700px){.wizard-progress{gap:5px}.wizard-progress>div{padding:8px 5px;gap:5px;font-size:10px}.wizard-card,.wizard-preview,.wizard-editor{padding:14px}.step-heading,.preview-heading{flex-direction:column}.step-actions{align-items:stretch;flex-wrap:wrap}.step-actions .generate,.step-actions .secondary{flex:1;min-width:120px}.save-panel{align-items:stretch;flex-direction:column}.save-panel .generate{width:100%}.shared-viewport .viewport-panel{min-height:380px;height:55vh}.wizard-editor .viewport-panel{min-height:380px}.lab{height:auto;min-height:100dvh;overflow:visible;padding:12px}header{align-items:flex-start;flex-direction:column;gap:8px}.layout{display:flex;flex:initial;min-height:0;overflow:visible;flex-direction:column}.panel{max-height:none;overflow:visible}.templates,.instances{max-height:180px}.viewport-panel{height:min(65vh,560px);min-height:420px;flex:0 0 auto}.toolbar{right:8px;left:8px;gap:4px}.toolbar button{font-size:10px;padding:6px 7px}.toolbar span{display:none}footer{text-align:left}}
+/* AI generation feedback: an explicit blocking state with honest stage-level progress. */
+.ai-generation-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:rgba(24,36,28,.48);backdrop-filter:blur(3px)}
+.ai-generation-card{width:min(100%,480px);box-sizing:border-box;padding:28px;border:1px solid #dce7dc;border-radius:16px;background:#fff;box-shadow:0 24px 80px rgba(20,40,25,.22);color:#26392c}
+.ai-generation-spinner{width:30px;height:30px;margin-bottom:16px;border:3px solid #e5eee5;border-top-color:#3d7950;border-radius:50%;animation:ai-generation-spin .8s linear infinite}
+@keyframes ai-generation-spin{to{transform:rotate(360deg)}}
+.ai-generation-card>small{font-size:9px;letter-spacing:.16em;font-weight:800;color:#66816b}
+.ai-generation-card h2{margin:7px 0 18px;font-size:21px}
+.ai-generation-current{margin:0;font-size:15px;font-weight:800;color:#315f3e}
+.ai-generation-detail{min-height:36px;margin:7px 0 15px;font-size:12px;line-height:1.6;color:#7a887d}
+.ai-generation-track{height:5px;overflow:hidden;border-radius:10px;background:#edf2ed}
+.ai-generation-track span{display:block;width:34%;height:100%;border-radius:10px;background:#4d895d;animation:ai-generation-progress 1.5s ease-in-out infinite}
+@keyframes ai-generation-progress{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}
+.ai-generation-steps{display:flex;flex-direction:column;gap:11px;margin:20px 0;padding:0;list-style:none}
+.ai-generation-steps li{display:flex;align-items:center;gap:10px;font-size:12px;color:#a0aaa1}
+.ai-generation-steps li.done{color:#4d7955}.ai-generation-steps li.active{color:#315f3e;font-weight:800}
+.ai-generation-steps .step-mark{display:grid;place-items:center;width:23px;height:23px;flex:0 0 23px;border-radius:50%;background:#f0f3f0;font-size:11px}
+.ai-generation-steps li.done .step-mark{background:#e7f2e8;color:#3d7950}.ai-generation-steps li.active .step-mark{background:#3d7950;color:#fff}
+.ai-generation-steps li b{margin-left:auto;font-size:10px;font-weight:600}
+.ai-generation-footer{display:flex;justify-content:space-between;padding-top:13px;border-top:1px solid #edf0ed;font-size:11px;color:#596d5d}
+.ai-generation-note{margin:12px 0 0;font-size:10px;line-height:1.6;color:#89968b}
+@media(max-width:520px){.ai-generation-card{padding:22px 18px}.ai-generation-card h2{font-size:19px}}
+
 /* Wizard scroll ownership: the editor shell itself must scroll, independent of app-level overflow rules. */
 .wizard-lab.lab{
   display:block!important;

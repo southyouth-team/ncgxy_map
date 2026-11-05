@@ -196,6 +196,9 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     group.name = String(node.name || node.id).slice(0, 120);
     group.userData.componentId = node.id;
     group.userData.componentRole = String(node.role || 'component').slice(0, 80);
+    group.userData.componentHidden = node.hidden === true;
+    group.userData.componentLocked = node.locked === true;
+    group.visible = node.hidden !== true;
     const geometry = createGeometry(THREE, node);
     const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
     mesh.name = node.id + ':mesh';

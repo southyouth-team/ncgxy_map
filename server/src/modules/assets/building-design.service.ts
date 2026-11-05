@@ -98,7 +98,7 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
   }
   const ids = new Set<string>();
   const targets = new Set<string>();
-  return input.map((raw: any) => {
+  const normalized = input.map((raw: any) => {
     const id = typeof raw?.id === 'string' ? raw.id : '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)
       || !['follow','span','attach','adjacency'].includes(raw.type)) throw new ServiceUnavailableException('结构约束 ID 或类型无效：' + id);
@@ -141,6 +141,23 @@ function normalizeObjectConstraints(input: unknown, generators: any[], component
     return { id, type: raw.type, sourceGeneratorId: raw.sourceGeneratorId, targetNodeId: raw.targetNodeId, axis: raw.axis, measure, factor, offset,
       ...(raw.type === 'span' ? { property: raw.property } : {}) };
   });
+  const graph = new Map<string, Set<string>>();
+  for (const constraint of normalized) if (constraint.type === 'attach') {
+    const sources = graph.get(constraint.targetNodeId) || new Set<string>();
+    sources.add(constraint.sourceNodeId);
+    graph.set(constraint.targetNodeId, sources);
+  }
+  const visiting = new Set<string>(), visited = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (visiting.has(nodeId)) throw new ServiceUnavailableException('attach 关系存在循环依赖：' + nodeId);
+    if (visited.has(nodeId)) return;
+    visiting.add(nodeId);
+    for (const sourceId of graph.get(nodeId) || []) visit(sourceId);
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+  };
+  for (const nodeId of graph.keys()) visit(nodeId);
+  return normalized;
 }
 function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>, generatorParameterIds = new Set<string>()) {
   if (input == null) return [];

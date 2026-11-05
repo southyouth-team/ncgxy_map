@@ -354,6 +354,7 @@ export class AssetsService {
           }
           const pointCount = Array.isArray(sections[0]?.points) ? sections[0].points.length : 0;
           let previousHeight = -Infinity;
+          let contourOrientation = 0;
           if (pointCount < 3 || pointCount > 24
             || sections.some((section: any) => {
               const invalid = !section || typeof section !== 'object'
@@ -363,7 +364,17 @@ export class AssetsService {
                 || section.points.some((point: any) => !Array.isArray(point) || point.length !== 2
                   || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5));
               if (!invalid) {
-                assertSimpleAssetProfile(section.points.map((point: any) => [Number(point[0]), Number(point[1])]), '资产 loft section', BadRequestException);
+                const profile = section.points.map((point: any) => [Number(point[0]), Number(point[1])]);
+                assertSimpleAssetProfile(profile, '资产 loft section', BadRequestException);
+                const signedArea = profile.reduce((sum: number, point: number[], index: number) => {
+                  const next = profile[(index + 1) % profile.length];
+                  return sum + point[0] * next[1] - next[0] * point[1];
+                }, 0);
+                const orientation = Math.sign(signedArea);
+                if (contourOrientation && orientation !== contourOrientation) {
+                  throw new BadRequestException('资产 loft 截面必须保持一致的轮廓绕序：' + node.id);
+                }
+                contourOrientation = orientation;
                 previousHeight = Number(section.height);
               }
               return invalid;

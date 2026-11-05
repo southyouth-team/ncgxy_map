@@ -246,10 +246,10 @@ describe('ImageGenerationService', () => {
 
     const result = await service.generateObjectFromPrompt(fixture.prompt, fixture.objectType, 'low-poly');
     const spec = result.objectSculptSpec;
-    expect(spec.componentTree.filter(node => !node.parent)).toHaveLength(1);
+    expect(spec.componentTree.filter((node: { parent?: string }) => !node.parent)).toHaveLength(1);
     expect(spec.generators).toMatchObject([fixture.expectedGenerator]);
-    expect(spec.parameterSchema.map(parameter => parameter.id)).toEqual(fixture.expectedParameters);
-    expect(spec.parameterSchema.find(parameter => parameter.targets.length)?.targets[0].property).toBe('dimensions.width');
+    expect(spec.parameterSchema.map((parameter: { id: string }) => parameter.id)).toEqual(fixture.expectedParameters);
+    expect(spec.parameterSchema.find((parameter: { targets: Array<{ property: string }> }) => parameter.targets.length)?.targets[0].property).toBe('dimensions.width');
   });
 
 });

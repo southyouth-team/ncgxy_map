@@ -315,6 +315,86 @@ export class BuildingDesignService {
     return { provider: baseUrl, model, category, objectType, visualStyle, design, designToken, designTokenExpiresInSeconds: 900 };
   }
 
+  /**
+   * 人工审核 AI 识别参数。原始识别凭证必须有效；只允许编辑当前分类 schema
+   * 中已声明的字段，并对数值/枚举/布尔值重新做服务端校验。
+   * 返回的新凭证绑定审核后的完整参数，原始 AI 凭证不能直接用于模板发布。
+   */
+  reviewSceneDesign(categoryInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, originalDesignInput: unknown, originalTokenInput: unknown, geometryInput: unknown) {
+    const category = String(categoryInput || '');
+    const objectType = String(objectTypeInput || '').trim();
+    const visualStyle = String(visualStyleInput || '').trim();
+    const original = originalDesignInput as Record<string, any> | undefined;
+    const supported = ['vegetation', 'structure', 'facility', 'decoration', 'sports'];
+    if (!supported.includes(category) || !objectType || !visualStyle || !original || typeof original !== 'object') {
+      throw new BadRequestException('仅支持审核已接入的五类对象识别结果');
+    }
+    if (original.category !== category || original.objectType !== objectType || original.visualStyle !== visualStyle) {
+      throw new BadRequestException('原始识别结果与当前分类、对象类型或视觉风格不一致');
+    }
+    if (original.reviewed === true || !this.consumeSceneDesignToken(originalTokenInput, category, objectType, visualStyle, original)) {
+      throw new BadRequestException('原始 AI 识别凭证无效、已审核或已过期，请重新识别');
+    }
+    const rules: Record<string, { numbers: Record<string, [number, number]>; enums: Record<string, string[]>; booleans: string[] }> = {
+      vegetation: {
+        numbers: { trunkRatio: [0.15, 0.7], crownLayers: [1, 6], branchSpread: [0.2, 1], flowerCount: [0, 24] },
+        enums: { form: ['tree','shrub','flower'], canopyShape: ['round','conical','layered','irregular'], leafPalette: ['green','darkGreen','yellowGreen','red','autumn'] }, booleans: [],
+      },
+      structure: {
+        numbers: { supportCount: [2, 16], spanRatio: [0.3, 8], ornamentLevel: [0, 3] },
+        enums: { form: ['bridge','pergola','pavilion'], bridgeForm: ['arch','beam','suspension'], roofProfile: ['flat','pitched','curved'] }, booleans: ['hasRailing','hasRoof'],
+      },
+      facility: {
+        numbers: { seatCount: [1, 5], poleCount: [1, 4], detailLevel: [0, 3] },
+        enums: { form: ['bench','lamp','bin','sign'], fixtureShape: ['box','round','lantern'], boardShape: ['rectangle','round','arrow'] }, booleans: ['hasBackrest','hasArmrest'],
+      },
+      decoration: {
+        numbers: { rockCount: [1, 8], flowerCount: [0, 40], layerCount: [1, 5], ornamentLevel: [0, 3] },
+        enums: { form: ['rock','flowerbed'], rockShape: ['boulder','rugged','stacked'], borderShape: ['rectangle','round','organic'] }, booleans: [],
+      },
+      sports: {
+        numbers: { braceCount: [0, 6] },
+        enums: { form: ['basketball-hoop'], supportType: ['single','dual','wall'], backboardShape: ['rectangle','fan'], baseType: ['fixed','mobile'] }, booleans: ['rimVisible'],
+      },
+    };
+    const schema = rules[category];
+    const originalGeometry = original.geometry;
+    if (!originalGeometry || typeof originalGeometry !== 'object' || Array.isArray(originalGeometry)
+      || !geometryInput || typeof geometryInput !== 'object' || Array.isArray(geometryInput)) {
+      throw new BadRequestException('待审核几何参数格式无效');
+    }
+    const beforeKeys = Object.keys(originalGeometry).sort();
+    const afterKeys = Object.keys(geometryInput as object).sort();
+    if (JSON.stringify(beforeKeys) !== JSON.stringify(afterKeys)) {
+      throw new BadRequestException('审核参数字段与当前类别 Schema 不一致，不允许新增或删除字段');
+    }
+    const geometry: Record<string, unknown> = {};
+    for (const key of beforeKeys) {
+      const value = (geometryInput as Record<string, unknown>)[key];
+      if (Object.prototype.hasOwnProperty.call(schema.numbers, key)) {
+        const [min, max] = schema.numbers[key];
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+          throw new BadRequestException('参数 ' + key + ' 超出允许范围 ' + min + '–' + max);
+        }
+        geometry[key] = Number.isInteger(Number(originalGeometry[key])) && !['trunkRatio','branchSpread','spanRatio'].includes(key)
+          ? Math.round(value) : value;
+      } else if (Object.prototype.hasOwnProperty.call(schema.enums, key)) {
+        if (typeof value !== 'string' || !schema.enums[key].includes(value)) throw new BadRequestException('参数 ' + key + ' 不属于允许的枚举值');
+        if (key === 'form' && value !== originalGeometry.form) throw new BadRequestException('对象结构主类型不可在参数审核阶段变更');
+        geometry[key] = value;
+      } else if (schema.booleans.includes(key)) {
+        if (typeof value !== 'boolean') throw new BadRequestException('参数 ' + key + ' 必须为布尔值');
+        geometry[key] = value;
+      } else {
+        throw new BadRequestException('参数 ' + key + ' 不属于当前类别 Schema');
+      }
+    }
+    const design = { ...original, geometry, reviewed: true, reviewedAt: new Date().toISOString() };
+    const digest = createHash('sha256').update(JSON.stringify({ category, objectType, visualStyle, design })).digest('hex');
+    const designToken = this.signToken('design', digest);
+    return { category, objectType, visualStyle, design, designToken, designTokenExpiresInSeconds: 900 };
+  }
+
   /** 验证通用场景设计凭证，签名同时绑定分类、对象类型、风格和完整结构参数。 */
   consumeSceneDesignToken(tokenInput: unknown, category: string, objectType: string, visualStyle: string, designInput: unknown) {
     if (!designInput || typeof designInput !== 'object') return false;

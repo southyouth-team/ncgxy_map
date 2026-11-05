@@ -184,9 +184,9 @@ onMounted(() => {
     selectedId.value = templates.value.find(x => x.category === 'building')?.id || templates.value[0]?.id || ''
     scene = runtime.createSandboxScene()
     scene.background = new THREE.Color('#dfe8e0')
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshStandardMaterial({ color: '#9eae8d', roughness: 1 }))
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshBasicMaterial({ color: '#78b96b' }))
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.08; ground.receiveShadow = true; ground.name = 'sandbox-ground'; scene.add(ground)
-    const grid = new THREE.GridHelper(180, 36, '#71836e', '#c2cdbb'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
+    const grid = new THREE.GridHelper(180, 36, '#477b43', '#a3d197'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
     camera = new THREE.OrthographicCamera(-90, 90, 70, -70, 0.1, 1000); camera.position.set(0, 200, 0.001); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0)
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap

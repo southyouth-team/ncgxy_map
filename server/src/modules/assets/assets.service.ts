@@ -139,6 +139,40 @@ export class AssetsService {
     await writeFile(objectKey, file.buffer, { flag: 'wx' });
     const checksum = createHash('sha256').update(file.buffer).digest('hex');
     const url = '/api/v1/assets/visual-assets/' + fileId + '/content';
+    let buildingDesign: Record<string, unknown> | null = null;
+    if (viewMode === '2.5d' && typeof metadata.buildingDesign === 'string' && metadata.buildingDesign.trim()) {
+      let candidate: any;
+      try { candidate = JSON.parse(metadata.buildingDesign); } catch { throw new BadRequestException('建筑结构参数 JSON 无效'); }
+      const roofs = ['flat', 'pitched', 'span', 'glass'];
+      const templates = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
+      const walls = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
+      const read = (key: string, min: number, max: number) => {
+        const value = Number(candidate?.[key]);
+        if (!Number.isFinite(value)) throw new BadRequestException('建筑结构参数缺少有效字段：' + key);
+        return Math.min(max, Math.max(min, value));
+      };
+      const floors = Math.round(read('floors', 1, 30));
+      buildingDesign = {
+        schemaVersion: 1,
+        source: 'ai-vision-estimate',
+        template: templates.includes(candidate?.template) ? candidate.template : '教学楼',
+        floors,
+        height: read('height', 1, 80),
+        heightBasis: 'estimated-scene-units-not-surveyed',
+        roofStyle: roofs.includes(candidate?.roofStyle) ? candidate.roofStyle : 'flat',
+        roofRise: read('roofRise', 0, 3),
+        windowDensity: read('windowDensity', 0.1, 3),
+        windowWidth: read('windowWidth', 0.28, 2),
+        windowHeight: read('windowHeight', 0.2, 2),
+        doorWidth: read('doorWidth', 0.5, 3),
+        wallPalette: walls.includes(candidate?.wallPalette) ? candidate.wallPalette : 'wallCream',
+        confidence: read('confidence', 0, 1),
+        evidence: Array.isArray(candidate?.evidence) ? candidate.evidence.filter((item: unknown) => typeof item === 'string').slice(0, 6).map((item: string) => item.slice(0, 180)) : [],
+        limitations: Array.isArray(candidate?.limitations) ? candidate.limitations.filter((item: unknown) => typeof item === 'string').slice(0, 6).map((item: string) => item.slice(0, 180)) : [],
+        reviewed: false,
+      };
+    }
+
     const manifest = await this.enqueueVisualManifestUpdate(async () => {
       const current = await this.readVisualManifest();
       const assetId = 'campus-' + featureId;
@@ -160,6 +194,7 @@ export class AssetsService {
         };
         current.assets.push(asset);
       }
+      if (buildingDesign) asset.buildingDesign = buildingDesign;
       asset.name = name;
       asset.sourceType = sourceType;
       asset.status = 'ready';

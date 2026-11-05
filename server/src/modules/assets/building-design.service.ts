@@ -473,6 +473,86 @@ export class BuildingDesignService {
     return { design, designToken, designTokenExpiresInSeconds: 900 };
   }
 
+  /** 对选中节点及其子树执行 AI 局部修改；未选中节点由服务端强制保持不变。 */
+  async modifyObjectDesign(objectSculptSpecInput: unknown, selectedNodeIdsInput: unknown, instructionInput: unknown) {
+    const current = objectSculptSpecInput as Record<string, any> | undefined;
+    const selectedIds = Array.isArray(selectedNodeIdsInput) ? selectedNodeIdsInput.filter((id: unknown) => typeof id === 'string') : [];
+    const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 3000) : '';
+    if (!current || current.schemaVersion !== '2.0' || !Array.isArray(current.componentTree) || !current.materials || typeof current.materials !== 'object') {
+      throw new BadRequestException('当前 ObjectSculptSpec 无效');
+    }
+    if (!selectedIds.length || selectedIds.length > 30 || !instruction) throw new BadRequestException('请选择一个或多个部件并填写修改要求');
+    const byId = new Map(current.componentTree.map((node: any) => [node.id, node]));
+    if (selectedIds.some((id: string) => !byId.has(id))) throw new BadRequestException('选中的组件 ID 不存在');
+    const allowedIds = new Set<string>(selectedIds);
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const node of current.componentTree) {
+        if (node.parent && allowedIds.has(node.parent) && !allowedIds.has(node.id)) { allowedIds.add(node.id); expanded = true; }
+      }
+    }
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    if (!apiKey || !model) throw new ServiceUnavailableException('AI 局部修改未配置视觉模型');
+    let response: Response;
+    try {
+      response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(180000),
+        body: JSON.stringify({
+          model, temperature: 0.15, response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: [
+              '你是结构化 3D 资产局部编辑器。输入为当前 ObjectSculptSpec、允许修改的节点 ID 和用户指令。',
+              '只返回 JSON：{ "objectSculptSpec": <完整更新后的 ObjectSculptSpec> }。不要输出代码、Markdown、解释。',
+              '只允许修改 allowedNodeIds 中的节点及其 geometry/material/transform/hidden/locked 属性。其他节点必须逐字段保持完全不变；不允许删除或新增节点，不允许修改未授权节点。',
+              '允许修改目标节点 primitive、dimensions、geometryDescriptor、transform、material；materials 可新增材质或修改仅被授权节点使用的材质。若共享材质会影响未授权节点，必须创建独立材质并只重新绑定授权节点。',
+              '保留所有节点 ID、parent 关系、未授权节点和 parameterSchema；若原参数目标因修改失效，删除或修正对应参数定义。组件仍需保持唯一根节点、无循环和完整父级引用。',
+              'AI 仅返回结构化 JSON，不得生成或执行 JavaScript。',
+            ].join('\n') },
+            { role: 'user', content: JSON.stringify({ instruction, allowedNodeIds: [...allowedIds], objectSculptSpec: current }) },
+          ],
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('AI 局部修改连接失败：' + message);
+      throw new ServiceUnavailableException('无法连接 AI 局部修改服务');
+    }
+    if (!response.ok) throw new ServiceUnavailableException('AI 局部修改失败（HTTP ' + response.status + '）');
+    const payload = await response.json() as any;
+    let parsed: any;
+    try { parsed = JSON.parse(payload?.choices?.[0]?.message?.content || ''); } catch {
+      throw new ServiceUnavailableException('AI 局部修改未返回有效 JSON');
+    }
+    const updated = parsed?.objectSculptSpec;
+    if (!updated || !Array.isArray(updated.componentTree)) throw new ServiceUnavailableException('AI 局部修改结果缺少 ObjectSculptSpec');
+    const updatedById = new Map(updated.componentTree.map((node: any) => [node.id, node]));
+    if (updated.componentTree.length !== current.componentTree.length) throw new ServiceUnavailableException('局部修改不能新增或删除组件；请先通过结构树建立目标组件');
+    for (const node of current.componentTree) {
+      const after = updatedById.get(node.id);
+      if (!after) throw new ServiceUnavailableException('局部修改结果丢失组件：' + node.id);
+      if (!allowedIds.has(node.id) && JSON.stringify(after) !== JSON.stringify(node)) {
+        throw new ServiceUnavailableException('局部修改越界：AI 修改了未选中的组件 ' + node.id);
+      }
+      if (after.parent !== node.parent) throw new ServiceUnavailableException('局部修改不得改变组件父子关系：' + node.id);
+    }
+    const design = {
+      source: 'ai-vision-object-sculpt',
+      category: String(current.category || 'other'),
+      objectType: String(current.objectType || current.targetName || '3D 资产'),
+      visualStyle: String(current.visualStyle || 'stylized'),
+      reviewed: false,
+      objectSculptSpec: current,
+    };
+    const token = this.signToken('design', createHash('sha256').update(JSON.stringify(design)).digest('hex'));
+    const reviewed = this.reviewObjectDesign(design, token, updated);
+    return { objectSculptSpec: reviewed.design.objectSculptSpec, affectedNodeIds: [...allowedIds] };
+  }
+
   async analyzeReference(imageDataUrlInput: unknown, approvalTokenInput: unknown, promptInput?: unknown) {
     const image = this.parseReferenceImage(imageDataUrlInput);
     const promptContext = typeof promptInput === 'string' ? promptInput.trim().slice(0, 4000) : '';

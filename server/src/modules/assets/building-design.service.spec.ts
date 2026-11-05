@@ -294,7 +294,7 @@ describe('BuildingDesignService', () => {
 
     const reviewed = service.reviewObjectDesign(identified.design, identified.designToken, edited);
     expect(reviewed.design.reviewed).toBe(true);
-    expect(reviewed.design.objectSculptSpec.componentTree[0].dimensions.width).toBe(9.5);
+    expect(reviewed.design.objectSculptSpec.componentTree[0].dimensions?.width).toBe(9.5);
     expect(reviewed.design.objectSculptSpec.materials.wall.color).toBe('#aa8866');
     edited.componentTree[0].hidden = true;
     edited.componentTree[1].locked = true;

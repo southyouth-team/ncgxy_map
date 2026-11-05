@@ -348,10 +348,31 @@ export class AssetsService {
     const constraintIds = new Set<string>();
     for (const constraint of constraints) {
       if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
-        || constraintIds.has(constraint.id) || !['follow','span','attach','adjacency'].includes(constraint.type)) {
+        || constraintIds.has(constraint.id) || !['follow','span','attach','adjacency','cutout'].includes(constraint.type)) {
         throw new BadRequestException('资产结构约束 ID 或类型无效');
       }
       constraintIds.add(constraint.id);
+      if (constraint.type === 'cutout') {
+        const target = byId.get(constraint.targetNodeId), cutter = byId.get(constraint.cutterNodeId);
+        if (!target || !cutter || target.id === cutter.id || templateNodeIds.has(target.id) || templateNodeIds.has(cutter.id)
+          || (target.kind || 'mesh') !== 'mesh' || (cutter.kind || 'mesh') !== 'mesh'
+          || !['box','cuboid'].includes(String(target.primitive).toLowerCase())
+          || !['box','cuboid'].includes(String(cutter.primitive).toLowerCase())
+          || target.parent !== cutter.parent || constraint.operation !== 'subtract' || constraint.axis !== 'z'
+          || (target.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
+          || (cutter.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
+          || Number(cutter.dimensions?.depth) < Number(target.dimensions?.depth) + 0.02) {
+          throw new BadRequestException('资产 cutout 目前仅支持同级、未旋转盒体沿 Z 轴贯穿的矩形减法：' + constraint.id);
+        }
+        const centerX = Number(cutter.transform?.position?.[0] || 0) - Number(target.transform?.position?.[0] || 0);
+        const centerY = Number(cutter.transform?.position?.[1] || 0) - Number(target.transform?.position?.[1] || 0);
+        if (!Number.isFinite(centerX) || !Number.isFinite(centerY)
+          || Math.abs(centerX) + Number(cutter.dimensions.width) / 2 > Number(target.dimensions.width) / 2
+          || Math.abs(centerY) + Number(cutter.dimensions.height) / 2 > Number(target.dimensions.height) / 2) {
+          throw new BadRequestException('资产 cutout 开口必须完整位于目标 Mesh 边界内：' + constraint.id);
+        }
+        continue;
+      }
       if (constraint.type === 'attach' || constraint.type === 'adjacency') {
         const sourceNode = byId.get(constraint.sourceNodeId), targetNode = byId.get(constraint.targetNodeId);
         if (!sourceNode || !targetNode || sourceNode.id === targetNode.id || templateNodeIds.has(sourceNode.id) || templateNodeIds.has(targetNode.id)) {

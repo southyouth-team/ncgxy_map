@@ -8,7 +8,7 @@ describe('BuildingDesignService', () => {
 
   it('rejects invalid reference image data before calling the provider', async () => {
     const service = new BuildingDesignService({ get: (key: string) => ({ VISION_API_KEY: 'key', VISION_MODEL: 'deepseek-flash' } as any)[key] } as never);
-    await expect(service.analyzeReference('not-a-data-url')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.analyzeReference('not-a-data-url', 'missing-token')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('uses the configured vision model and returns bounded procedural building parameters', async () => {
@@ -32,7 +32,9 @@ describe('BuildingDesignService', () => {
     });
     global.fetch = fetchMock as never;
 
-    const result = await service.analyzeReference('data:image/png;base64,' + png.toString('base64'));
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const result = await service.analyzeReference(imageDataUrl, approval.approvalToken);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe('http://vision.local/v1/chat/completions');
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('deepseek-flash');
@@ -41,6 +43,17 @@ describe('BuildingDesignService', () => {
       heightBasis: 'estimated-scene-units-not-surveyed',
       roofStyle: 'flat', wallPalette: 'wallPeach', reviewed: false,
     });
+  });
+
+
+  it('requires approval of the exact preview image and consumes the token once', async () => {
+    const service = new BuildingDesignService({ get: () => undefined } as never);
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    await expect(service.analyzeReference(imageDataUrl, undefined)).rejects.toThrow('请先确认建筑参考图片');
+    const approval = service.approveReference(imageDataUrl);
+    await expect(service.analyzeReference(imageDataUrl, 'wrong-token')).rejects.toThrow('图片确认凭证无效');
+    await expect(service.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toThrow('图片确认凭证无效');
   });
 
   it('fails clearly when vision configuration is absent', async () => {

@@ -9,9 +9,15 @@ import { BuildingDesignService } from './building-design.service';
 export class BuildingDesignController {
   constructor(private readonly service: BuildingDesignService) {}
 
+  @Post('approve-reference')
+  @ApiOperation({ summary: '用户确认建筑参考图预览并签发一次性识别凭证' })
+  approve(@Body('imageDataUrl') imageDataUrl: string) {
+    return this.service.approveReference(imageDataUrl);
+  }
+
   @Post('analyze-building')
   @ApiOperation({ summary: '识别建筑参考图并提取参数化 3D 建模参数' })
-  analyze(@Body('imageDataUrl') imageDataUrl: string) {
-    return this.service.analyzeReference(imageDataUrl);
+  analyze(@Body('imageDataUrl') imageDataUrl: string, @Body('approvalToken') approvalToken: string) {
+    return this.service.analyzeReference(imageDataUrl, approvalToken);
   }
 }

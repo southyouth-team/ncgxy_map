@@ -34,6 +34,8 @@ const activeAssetId = ref('')
 const saving = ref(false)
 const generating = ref(false)
 const analyzingDesign = ref(false)
+const imageApproved = ref(false)
+const imageApprovalToken = ref('')
 const buildingDesign = ref(null)
 const generationModel = ref('')
 const preview25d = ref(null)
@@ -247,6 +249,8 @@ async function generateImage() {
     const file = new File([blob], fileName, { type: payload.mimeType || blob.type || 'image/png' })
 
     resetPreview()
+    imageApproved.value = false
+    imageApprovalToken.value = ''
     selectedFile.value = file
     previewUrl.value = URL.createObjectURL(file)
     sourceType.value = 'ai_generated'
@@ -263,8 +267,32 @@ async function generateImage() {
 }
 
 
+async function approveReferenceImage() {
+  if (analyzingDesign.value || !selectedFile.value) return
+  try {
+    const imageDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(new Error('读取参考图片失败'))
+      reader.readAsDataURL(selectedFile.value)
+    })
+    const response = await fetch(API_BASE + '/assets/ai-image/approve-reference', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({ imageDataUrl, approvalToken: imageApprovalToken.value }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || !payload.approvalToken) throw new Error(payload.message || '图片确认失败')
+    imageApprovalToken.value = payload.approvalToken
+    imageApproved.value = true
+    message.value = '参考图片已确认。现在可以基于这张图片提取 3D 结构参数。'
+  } catch (error) {
+    fileError.value = error.message || '图片确认失败'
+  }
+}
+
 async function analyzeBuildingReference() {
-  if (analyzingDesign.value) return
+  if (analyzingDesign.value || !imageApproved.value || !imageApprovalToken.value) return
   try {
     let blob = selectedFile.value
     if (!blob && previewUrl.value) {
@@ -310,6 +338,8 @@ function resetPreview() {
 
 async function onFileChange(event) {
   buildingDesign.value = null
+  imageApproved.value = false
+  imageApprovalToken.value = ''
   fileError.value = ''
   resetPreview()
   const file = event.target.files?.[0]
@@ -562,7 +592,8 @@ onBeforeUnmount(() => { resetPreview(); disposeBuildingPreviews() })
           <button class="primary-button" @click="buildPrompt">生成提示词</button>
           <button class="secondary-button" :disabled="!generatedPrompt" @click="copyPrompt">复制提示词</button>
           <button class="primary-button" :disabled="viewMode !== '2.5d' || generating" @click="generateImage">{{ generating ? 'AI 生成中…' : '生成建筑参考图' }}</button>
-          <button class="secondary-button" :disabled="viewMode !== '2.5d' || analyzingDesign || (!selectedFile && !previewUrl)" @click="analyzeBuildingReference">{{ analyzingDesign ? '结构识别中…' : '识别参考图并生成3D参数' }}</button>
+          <button class="secondary-button" :disabled="viewMode !== '2.5d' || !selectedFile || analyzingDesign || imageApproved" @click="approveReferenceImage">{{ imageApproved ? '图片已确认' : '确认图片预览' }}</button>
+          <button class="secondary-button" :disabled="!imageApproved || analyzingDesign" @click="analyzeBuildingReference">{{ analyzingDesign ? '结构识别中…' : '确认后识别并生成3D参数' }}</button>
         </div>
         <label>AI 生成提示词
           <textarea v-model="generatedPrompt" rows="10" placeholder="生成提示词后可在此修改、复制到你使用的 AI 工具"></textarea>

@@ -89,3 +89,28 @@
 ## 任意受限轮廓拉伸（2026-11-05）
 
 新增 `polygon` primitive：`geometryDescriptor.points` 接收 3-32 个归一化二维点（每个坐标位于 -0.5 至 0.5），`dimensions.width/height` 将轮廓映射到实际宽高，`dimensions.depth` 控制拉伸厚度。服务端和 Three.js 运行时双重校验点数、坐标、退化面积。该版本只接受单一简单外轮廓，暂不支持自交、多轮廓孔洞及布尔运算；不规则山墙、屋顶剖面可使用该能力，拱门仍使用 `arch`。
+
+
+## 组件级编辑与服务端二次审核（2026-11-05）
+
+### 编辑器交互
+
+- 组件清单中的条目可选中；在任一预览视口点击 Mesh，会沿父级 Group 查找 componentId，并同步选中同一组件。
+- 选中状态在 2.5D 与 3D 视口同步高亮。
+- 属性检查器允许编辑 dimensions（width/height/depth）、transform（position/rotation/scale）和当前材质（color/roughness/metalness/opacity）。
+- 所有修改直接写入当前 design.objectSculptSpec；两个视口继续由同一份 JSON 构建 Mesh，不存在 2.5D/3D 两套模型副本。
+- 每个 Mesh 持有独立材质实例，避免共享材质编辑产生跨组件副作用。
+
+### 凭证和发布门禁
+
+- 编辑操作立即将 design.reviewed 设为 false，并清空最终 designToken；原始识别结果和原始 AI token 仅用于发起重新审核。
+- 新增 `POST /assets/ai-image/review-object-design`。服务端验证原始设计 token，重新校验完整组件树与材质表，规范化后签发绑定审核后完整 design 的 HMAC token。
+- 校验范围包括组件数量、ID 唯一性、primitive 白名单、材质引用、材质颜色与物理参数、尺寸范围、位置/旋转/缩放范围、polygon 轮廓点、父节点引用和循环/深度限制。
+- 程序化模板创建和发布统一要求人工审核标记及当前设计凭证；旧 AI token 不能用于审核后的设计，旧最终 token 不能用于修改后的设计。
+- 原始 AI token 有效期仍为 15 分钟。编辑耗时超过有效期时，应重新执行识别获取新原始凭证后再审核；不会静默延长凭证有效期。
+
+### 测试与验收边界
+
+- 服务端测试覆盖新凭证签发、旧凭证失效、篡改原始设计、越界尺寸、无效父节点和非法材质。
+- Three.js 适配器测试覆盖组件身份元数据与材质实例隔离。
+- CI 通过只证明构建和自动化测试，不替代浏览器中的点击选中、数值编辑、双视口同步和重新发布验收。

@@ -23,7 +23,7 @@ describe('BuildingDesignService', () => {
       ok: true,
       json: async () => ({
         choices: [{ message: { content: JSON.stringify({
-          template: '宿舍楼', floors: 6, roofStyle: 'flat', roofRise: 0.2,
+          template: '宿舍楼', floors: 6, roofStyle: 'flat', roofRise: 0.2, massing: 'U-shaped', facadeStyle: 'classical', facadeSections: 4, windowRows: 6, windowColumns: 8, hasBalconies: true, balconyFloors: [2,3,4], columnCount: 6, hasArcade: true, entrancePosition: 'front', podiumFloors: 1, roofColor: 'roofGray',
           windowDensity: 1.8, windowWidth: 0.42, windowHeight: 0.58,
           doorWidth: 0.9, wallPalette: 'wallPeach', confidence: 0.82,
           evidence: ['重复窗格'], limitations: ['背面不可见'],
@@ -41,7 +41,7 @@ describe('BuildingDesignService', () => {
     expect(result.design).toMatchObject({
       template: '宿舍楼', floors: 6, height: 7.5,
       heightBasis: 'estimated-scene-units-not-surveyed',
-      roofStyle: 'flat', wallPalette: 'wallPeach', reviewed: false,
+      roofStyle: 'flat', wallPalette: 'wallPeach', massing: 'U-shaped', facadeStyle: 'classical', hasBalconies: true, columnCount: 6, roofColor: 'roofGray', reviewed: false,
     });
     expect(result.designToken).toBeTruthy();
     expect(service.consumeDesignToken(result.designToken, result.design)).toBe(true);

@@ -509,6 +509,16 @@ onMounted(async () => {
       deletedFeatureIds: [...new Set([...(editorCollection.deletedFeatureIds || []), ...(planDocument?.deletedFeatureIds || [])].map(String))],
     })
     let assetManifest = null
+    let buildingTemplates = []
+    try {
+      const templateResponse = await fetch(API_BASE + '/assets/building-templates')
+      if (templateResponse.ok) {
+        const templatePayload = await templateResponse.json()
+        buildingTemplates = (templatePayload.templates || []).filter(item => item.status === 'ready')
+      }
+    } catch (templateError) {
+      console.warn('[BuildingTemplates] 独立模板库暂不可用，使用内置模板回退', templateError)
+    }
     try {
       const assetResponse = await fetch(API_BASE + '/assets/visual-assets/manifest')
       if (assetResponse.ok) assetManifest = await assetResponse.json()
@@ -546,7 +556,7 @@ onMounted(async () => {
         errorMessage.value = error?.message || '三维场景初始化失败'
         loading.value = false
       },
-    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: Boolean(requestedBuildingId), featureCollection: campusFeatureCollection, assetManifest, assetBaseUrl: API_BASE })
+    }, { sceneType: 'campus', isometricRpg: true, viewMode: viewMode.value, initialPlayerPosition: returnWorldPosition, deferInitialFocus: Boolean(requestedBuildingId), featureCollection: campusFeatureCollection, assetManifest, buildingTemplates, assetBaseUrl: API_BASE })
     await engine.init()
     if (requestedBuildingId && CAMPUS_BUILDING_FOOTPRINTS.some(item => item.id === requestedBuildingId)) await enterSelectedBuilding()
   } catch (error) {

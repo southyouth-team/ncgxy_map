@@ -415,7 +415,7 @@ export class BuildingDesignService {
       ids.add(id);
       const kind = input.kind === 'group' ? 'group' : 'mesh';
       const primitive = String(input.primitive || '').toLowerCase();
-      if (kind === 'mesh' && !['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
+      if (kind === 'mesh' && !['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
       const number = (value: unknown, fallback: number, min: number, max: number) => {
         const n = Number(value);
         if (!Number.isFinite(n)) return fallback;
@@ -428,11 +428,27 @@ export class BuildingDesignService {
       const transform = input.transform && typeof input.transform === 'object' ? input.transform : {};
       const scale = vector(transform.scale, [1, 1, 1]).map((value: number) => Math.abs(value) < 0.001 ? 1 : Math.max(-20, Math.min(20, value)));
       const material = typeof input.material === 'string' && materials[input.material] ? input.material : Object.keys(materials)[0];
-      const geometryDescriptor: Record<string, number | number[][]> = {};
+      const geometryDescriptor: Record<string, any> = {};
       if (kind === 'mesh' && input.geometryDescriptor && typeof input.geometryDescriptor === 'object') {
         if (input.geometryDescriptor.segments !== undefined) geometryDescriptor.segments = Math.round(number(input.geometryDescriptor.segments, 16, 3, 48));
         if (input.geometryDescriptor.tube !== undefined) geometryDescriptor.tube = number(input.geometryDescriptor.tube, 0.1, 0.01, 10);
         if (input.geometryDescriptor.inset !== undefined) geometryDescriptor.inset = number(input.geometryDescriptor.inset, 0.2, 0.02, 20);
+        if (input.geometryDescriptor.radius !== undefined) geometryDescriptor.radius = number(input.geometryDescriptor.radius, 0.08, 0.01, 10);
+        if (input.geometryDescriptor.tubularSegments !== undefined) geometryDescriptor.tubularSegments = Math.round(number(input.geometryDescriptor.tubularSegments, 32, 3, 128));
+        if (input.geometryDescriptor.radialSegments !== undefined) geometryDescriptor.radialSegments = Math.round(number(input.geometryDescriptor.radialSegments, 8, 3, 24));
+        if (input.geometryDescriptor.closed !== undefined) {
+          if (typeof input.geometryDescriptor.closed !== 'boolean') throw new ServiceUnavailableException('tube closed 必须是布尔值');
+          geometryDescriptor.closed = input.geometryDescriptor.closed;
+        }
+        if (kind === 'mesh' && primitive === 'tube') {
+          const path = input.geometryDescriptor.path;
+          if (!Array.isArray(path) || path.length < 2 || path.length > 32
+            || path.some((point: any) => !Array.isArray(point) || point.length !== 3
+              || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
+            throw new ServiceUnavailableException('tube 路径必须包含 2 到 32 个 [-0.5,0.5] 范围内的三维坐标点');
+          }
+          geometryDescriptor.path = path.map((point: number[]) => [...point]);
+        }
         if (kind === 'mesh' && primitive === 'polygon') {
           const points = input.geometryDescriptor.points;
           if (!Array.isArray(points) || points.length < 3 || points.length > 32 || points.some((point: any) => !Array.isArray(point) || point.length !== 2 || point.some((v: unknown) => typeof v !== 'number' || !Number.isFinite(v) || v < -0.5 || v > 0.5))) {

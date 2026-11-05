@@ -63,6 +63,32 @@ describe('ImageGenerationService', () => {
     expect(result.model).toBe('gpt-image-2');
   });
 
+  it('normalizes semantic material color aliases such as lattice_color', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      materials: { lattice: { color: '#8a623d', roughness: 0.8 } },
+      componentTree: [
+        { id: 'asset-root', kind: 'group' },
+        { id: 'lattice-panel', parent: 'asset-root', primitive: 'box',
+          dimensions: { width: 2, height: 1, depth: 0.1 }, material: 'lattice' },
+      ],
+      parameterSchema: [{
+        id: 'lattice-color', label: '格栅颜色', type: 'color', value: '#aabbcc',
+        targets: [{ nodeId: 'lattice-panel', property: 'lattice_color' }],
+      }],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(objectSculptSpec) } }] }),
+    }) as never;
+
+    const result = await service.generateObjectFromPrompt('一个格栅物体', '格栅', 'stylized');
+    expect(result.objectSculptSpec.parameterSchema[0].targets).toEqual([
+      { nodeId: 'lattice-panel', property: 'material.color' },
+    ]);
+  });
+
   it('generates a prompt-based model with one connected component root', async () => {
     const service = createService({
       VISION_API_KEY: 'vision-key',

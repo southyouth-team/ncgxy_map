@@ -230,15 +230,15 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       }],
     };
     const model = createObjectSculptModel(THREE, spec);
-    expect(model.userData.componentGroups.size).toBe(7);
+    expect(model.userData.componentGroups.size).toBe(8);
     expect(model.userData.componentGroups.has('floor-repeat-2-floor-prototype')).toBe(true);
     applyObjectSculptParameter(THREE, model, 'floor-count', 5);
     expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(5);
     expect(model.userData.objectSculptSpec.generators).toHaveLength(1);
-    expect(model.userData.componentGroups.size).toBe(11);
+    expect(model.userData.componentGroups.size).toBe(12);
     expect(model.userData.componentGroups.get('floor-repeat-4-floor-prototype').position.y).toBeCloseTo(12.8);
     applyObjectSculptParameter(THREE, model, 'floor-count', 2);
-    expect(model.userData.componentGroups.size).toBe(5);
+    expect(model.userData.componentGroups.size).toBe(6);
     expect(model.userData.componentGroups.has('floor-repeat-2-floor-prototype')).toBe(false);
   });
 

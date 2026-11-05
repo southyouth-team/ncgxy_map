@@ -15,6 +15,7 @@ const objectType = ref('城堡')
 const imageFile = ref(null), imageDataUrl = ref(''), referencePreview = ref('')
 const generating = ref(false), generationLog = ref('')
 const modifying = ref(false), modifyInstruction = ref('')
+const parameterizing = ref(false), parameterInstruction = ref('')
 const savedAssetId = ref('')
 const categories = computed(() => [...new Set(templates.value.map(x => x.category))])
 const visibleTemplates = computed(() => templates.value.filter(x => selectedCategory.value === 'all' || x.category === selectedCategory.value))
@@ -302,6 +303,27 @@ async function modifySelectedAsset() {
     status.value = '局部修改失败'
   } finally { modifying.value = false }
 }
+async function addParametersFromConversation() {
+  const root = objects.get(selectedInstanceId.value)
+  if (!root || !selectedSpec.value || !parameterInstruction.value.trim() || parameterizing.value) return
+  parameterizing.value = true; error.value = ''; status.value = 'AI 正在分析模型结构并设计参数…'
+  try {
+    const result = await requestJson('/assets/ai-image/add-object-parameters', {
+      objectSculptSpec: selectedSpec.value,
+      instruction: parameterInstruction.value.trim(),
+    })
+    root.userData.objectSculptSpec = result.objectSculptSpec
+    editorRevision.value += 1
+    parameterInstruction.value = ''
+    const added = (result.addedParameters || []).map(item => item.label).join('、')
+    const unsupported = (result.unsupported || []).join('；')
+    status.value = added ? '已新增模型参数：' + added : '参数设计完成，未新增参数'
+    if (unsupported) error.value = '当前结构暂不支持：' + unsupported
+  } catch (e) {
+    error.value = e?.message || 'AI 参数设计失败'
+    status.value = '参数设计失败'
+  } finally { parameterizing.value = false }
+}
 async function saveSelectedAsset() {
   if (!selectedSpec.value) return
   try {
@@ -451,6 +473,12 @@ onBeforeUnmount(() => {
             <div class="axis-inputs"><input v-for="(value,index) in selectedComponentTransform.position" :key="index" type="number" step="0.1" :value="value" @change="updateSelectedComponentTransform(['x','y','z'][index],$event.target.value)"></div>
             <button class="secondary" @click="toggleSelectedComponentVisibility">{{ selectedComponentVisible ? '隐藏此部件' : '显示此部件' }}</button>
           </div>
+        </section>
+        <section v-if="selectedSpec" class="ai-local-editor">
+          <label>对话式新增参数 · 描述希望以后可调整的属性</label>
+          <textarea v-model="parameterInstruction" rows="3" placeholder="例如：给这个大门增加长度、宽度和高度三个参数；或者让现有楼层组件支持楼层数调整"></textarea>
+          <button class="generate" :disabled="parameterizing || !parameterInstruction.trim()" @click="addParametersFromConversation">{{ parameterizing ? 'AI 正在设计参数…' : '根据对话新增参数' }}</button>
+          <p class="hint">AI 会检查当前结构，只能为真实存在的组件创建参数绑定；当前没有对应重复组件时，会明确提示结构缺口，不会伪造动态生成能力。</p>
         </section>
         <section v-if="selectedSpec" class="asset-actions">
           <button class="secondary" @click="saveSelectedAsset">保存完整资产</button>

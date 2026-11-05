@@ -274,6 +274,19 @@ function validateSimpleProfile(points, label) {
 }
 
 
+
+function validateSweepPathCurvature(points, label) {
+  const maxTurnRadians = Math.PI * (150 / 180);
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const incoming = points[index].clone().sub(points[index - 1]).normalize();
+    const outgoing = points[index + 1].clone().sub(points[index]).normalize();
+    const turnRadians = Math.acos(Math.max(-1, Math.min(1, incoming.dot(outgoing))));
+    if (turnRadians > maxTurnRadians) {
+      throw new RangeError(label + ' 存在超过 150° 的急转弯，可能导致扫掠截面翻转或自相交');
+    }
+  }
+}
+
 function validateGeneratedGeometry(geometry, label) {
   const position = geometry.getAttribute('position');
   const normal = geometry.getAttribute('normal');
@@ -367,6 +380,7 @@ function createGeometry(THREE, node) {
     if (pathPoints.some((point, index) => index > 0 && point.distanceTo(pathPoints[index - 1]) < 0.0001)) {
       throw new RangeError(node.id + '.geometryDescriptor.path 存在重复或零长度路径段');
     }
+    validateSweepPathCurvature(pathPoints, node.id + '.geometryDescriptor.path');
     const profilePoints = profile.map((point, index) => {
       if (!Array.isArray(point) || point.length !== 2
         || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {

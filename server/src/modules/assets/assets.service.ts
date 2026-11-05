@@ -313,10 +313,12 @@ export class AssetsService {
           || generator.maxColumns < generator.defaultColumns || generator.maxRows > 100 || generator.maxColumns > 100) {
           throw new BadRequestException('资产 grid 生成器行列或间距无效：' + generator.id);
         }
-        for (const [parameterId, maxValue, defaultValue] of [
+        if (generator.rowParameterId === generator.columnParameterId) throw new BadRequestException('资产 grid 生成器行列参数不能相同：' + generator.id);
+        const gridParameters: Array<[string, number, number]> = [
           [generator.rowParameterId, generator.maxRows, generator.defaultRows],
           [generator.columnParameterId, generator.maxColumns, generator.defaultColumns],
-        ]) {
+        ];
+        for (const [parameterId, maxValue, defaultValue] of gridParameters) {
           const parameter = (spec.parameterSchema || []).find((item: any) => item.id === parameterId);
           if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
             || parameter.min < 1 || parameter.max > maxValue || defaultValue < parameter.min || defaultValue > parameter.max) {

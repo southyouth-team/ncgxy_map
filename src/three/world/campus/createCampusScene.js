@@ -355,6 +355,11 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
         const center = fittedBounds.getCenter(new THREE.Vector3())
         model.position.set(-center.x, -fittedBounds.min.y, -center.z)
         model.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true } })
+        group.traverse(node => {
+          if (node === group) return
+          if (node.geometry) node.geometry.dispose()
+          if (node.material) (Array.isArray(node.material) ? node.material : [node.material]).forEach(material => material.dispose())
+        })
         group.clear()
         group.add(model)
         group.userData.visualAssetSource = 'published-glb-template'

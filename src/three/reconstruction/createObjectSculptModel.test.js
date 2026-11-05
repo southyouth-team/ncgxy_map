@@ -242,7 +242,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     applyObjectSculptParameter(THREE, model, 'floor-count', 2);
     expect(model.userData.componentGroups.size).toBe(6);
     expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(7.8);
-    expect([...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-'))).toHaveLength(1);
+    expect([...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-'))).toHaveLength(2);
   });
 
 

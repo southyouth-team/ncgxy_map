@@ -545,8 +545,9 @@ export class BuildingDesignService {
       const maximums = generator.type === 'grid' ? [generator.maxRows, generator.maxColumns] : [generator.maxCount];
       for (let index = 0; index < parameterIds.length; index += 1) {
         const parameter = parameterSchema.find((item: any) => item.id === parameterIds[index]);
+        const maximum = Number(maximums[index]);
         if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
-          || parameter.min < 1 || parameter.max > maximums[index]) throw new BadRequestException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
+          || !Number.isFinite(maximum) || parameter.min < 1 || parameter.max > maximum) throw new BadRequestException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
       }
     }
     const design = {
@@ -744,8 +745,9 @@ export class BuildingDesignService {
       const maximums = generator.type === 'grid' ? [generator.maxRows, generator.maxColumns] : [generator.maxCount];
       for (let index = 0; index < parameterIds.length; index += 1) {
         const parameter = parameterSchema.find((item: any) => item.id === parameterIds[index]);
+        const maximum = Number(maximums[index]);
         if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
-          || parameter.min < 1 || parameter.max > maximums[index]) throw new ServiceUnavailableException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
+          || !Number.isFinite(maximum) || parameter.min < 1 || parameter.max > maximum) throw new ServiceUnavailableException('结构生成器必须绑定有效的整数数量参数：' + generator.id);
       }
     }
     const previousGenerators = current.generators || [];

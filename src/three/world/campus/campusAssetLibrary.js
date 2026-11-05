@@ -734,7 +734,7 @@ export function createPixelBuilding(THREE, options = {}) {
     })
   })
   // 立面柱廊按识图结果生成，优先布置在入口立面，不改变建筑 footprint。
-  if (Number(columnCount) > 0 && wallEntrance?.length > 1) {
+  if ((Number(columnCount) > 0 || hasArcade) && wallEntrance?.length > 1) {
     const count = Math.min(20, Math.max(1, Math.floor(Number(columnCount) || (hasArcade ? 4 : 0))));
     const normalX = wallArea >= 0 ? wallEntrance.dy / wallEntrance.length : -wallEntrance.dy / wallEntrance.length;
     const normalZ = wallArea >= 0 ? wallEntrance.dx / wallEntrance.length : -wallEntrance.dx / wallEntrance.length;

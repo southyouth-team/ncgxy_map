@@ -361,6 +361,47 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(mesh.geometry.getAttribute('normal').count).toBe(mesh.geometry.getAttribute('position').count);
   });
 
+  it('builds a loft mesh between ordered cross-sections and closes both ends', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { stone: { color: '#b9b4a8', roughness: 0.85, metalness: 0 } },
+      componentTree: [{
+        id: 'tapered-pillar', primitive: 'loft', material: 'stone',
+        dimensions: { width: 3, height: 4, depth: 3 },
+        geometryDescriptor: {
+          sections: [
+            { height: -0.5, points: [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]] },
+            { height: 0, points: [[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]] },
+            { height: 0.5, points: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]] },
+          ],
+        },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.userData.componentGroups.get('tapered-pillar').getObjectByName('tapered-pillar:mesh');
+    expect(mesh.geometry.type).toBe('BufferGeometry');
+    expect(mesh.geometry.getAttribute('position').count).toBe(12);
+    expect(mesh.geometry.getIndex().count).toBeGreaterThan(36);
+    expect(mesh.geometry.getAttribute('normal').count).toBe(12);
+  });
+
+  it('rejects loft sections that do not share the same profile topology', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'loft', primitive: 'loft', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          sections: [
+            { height: -0.5, points: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]] },
+            { height: 0.5, points: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]] },
+          ],
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('必须具有相同数量的轮廓点');
+  });
+
   it('rejects sweep profiles with invalid normalized cross-section coordinates', () => {
     const spec = {
       schemaVersion: '2.0',

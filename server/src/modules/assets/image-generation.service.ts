@@ -354,6 +354,44 @@ export class ImageGenerationService {
   }
 
 
+
+  /**
+   * 对当前 ObjectSculptSpec 执行 AI 微调。selectedNodeIds 为空表示整体模型；
+   * 非空时明确告知模型只修改选中部件及其必要关联结构。
+   */
+  async modifyObjectFromInstruction(objectSculptSpecInput: unknown, selectedNodeIdsInput: unknown, instructionInput: unknown): Promise<any> {
+    if (!objectSculptSpecInput || typeof objectSculptSpecInput !== 'object' || Array.isArray(objectSculptSpecInput)) {
+      throw new BadRequestException('当前模型结构无效，无法执行微调');
+    }
+    const original = objectSculptSpecInput as any;
+    const serialized = JSON.stringify(original);
+    if (serialized.length > 30000 || !Array.isArray(original.componentTree) || !original.componentTree.length) {
+      throw new BadRequestException('当前模型结构缺失或超过 30 KB');
+    }
+    const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 4000) : '';
+    if (!instruction) throw new BadRequestException('请输入微调要求');
+    const selectedNodeIds = Array.isArray(selectedNodeIdsInput) ? selectedNodeIdsInput.filter((id: unknown) => typeof id === 'string') : [];
+    const knownIds = new Set(original.componentTree.map((node: any) => node?.id));
+    if (selectedNodeIds.some((id: string) => !knownIds.has(id))) throw new BadRequestException('微调目标部件不存在，请重新选择');
+    const targetDescription = selectedNodeIds.length
+      ? '本次目标是选中的部件：' + selectedNodeIds.join('、') + '。只允许调整这些节点及其必要的直接关联结构；其他部件的 ID、几何、材质、变换、父子关系和参数必须保持不变。'
+      : '本次没有选中任何部件，目标是整个模型。允许根据要求调整模型整体及相关部件，但必须保持对象身份、合理层级和结构完整性。';
+    const editPrompt = [
+      '这是对现有 Three.js ObjectSculptSpec 的微调任务，不是从零创建新物体。',
+      targetDescription,
+      '必须返回完整 ObjectSculptSpec JSON。尽可能保留原有节点 ID、层级、未涉及几何、材质、参数、generators 和 constraints。',
+      '不得把复杂几何降级成简单方盒，不得无故删除部件或改变整体风格。',
+      '用户微调要求：' + instruction,
+      '当前 ObjectSculptSpec：' + serialized,
+    ].join('\n');
+    const result = await this.generateObjectFromPrompt(editPrompt, original.objectType || original.targetName || '独立 3D 物体', original.visualStyle || 'stylized', false);
+    return {
+      ...result,
+      affectedNodeIds: selectedNodeIds.length ? selectedNodeIds : original.componentTree.map((node: any) => node.id),
+      editScope: selectedNodeIds.length ? 'component' : 'whole-object',
+    };
+  }
+
   async reconstructObjectFromImage(imageDataUrl: unknown, prompt: unknown, objectType: unknown, visualStyle: unknown): Promise<any> {
     if (typeof imageDataUrl !== 'string' || !imageDataUrl) throw new BadRequestException('请上传参考图片');
     return this.generateObjectFromPrompt(prompt, objectType, visualStyle, true, imageDataUrl);

@@ -119,8 +119,10 @@ function expandObjectSculptSpec(spec) {
   for (const constraint of constraints) {
     const metric = generatorMetrics.get(constraint.sourceGeneratorId);
     const target = expanded.find(node => node.id === constraint.targetNodeId);
-    if (!metric || !target) throw new TypeError('结构约束引用了不存在的生成器或组件：' + constraint.id);
-    const key = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis);
+    if ((constraint.type === 'follow' || constraint.type === 'span') && (!metric || !target)) {
+      throw new TypeError('结构约束引用了不存在的生成器或组件：' + constraint.id);
+    }
+    const key = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis || constraint.sourceNodeId);
     if (constrainedNodes.has(key)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
     constrainedNodes.add(key);
     if (constraint.type === 'adjacency') {

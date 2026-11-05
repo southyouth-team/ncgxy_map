@@ -124,6 +124,27 @@ function expandObjectSculptSpec(spec) {
     const key = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis || constraint.sourceNodeId);
     if (constrainedNodes.has(key)) throw new TypeError('结构约束重复管理同一目标：' + constraint.id);
     constrainedNodes.add(key);
+    if (constraint.type === 'cutout') {
+      const targetNode = expanded.find(node => node.id === constraint.targetNodeId);
+      const cutterNode = expanded.find(node => node.id === constraint.cutterNodeId);
+      if (!targetNode || !cutterNode) throw new TypeError('开口约束引用了不存在的组件：' + constraint.id);
+      targetNode.geometryDescriptor = targetNode.geometryDescriptor || {};
+      targetNode.geometryDescriptor.openings = [
+        ...(targetNode.geometryDescriptor.openings || []),
+        {
+          id: constraint.id,
+          center: [
+            Number(cutterNode.transform?.position?.[0] || 0) - Number(targetNode.transform?.position?.[0] || 0),
+            Number(cutterNode.transform?.position?.[1] || 0) - Number(targetNode.transform?.position?.[1] || 0),
+          ],
+          width: Number(cutterNode.dimensions.width),
+          height: Number(cutterNode.dimensions.height),
+        },
+      ];
+      cutterNode.structuralCutter = true;
+      cutterNode.hidden = true;
+      continue;
+    }
     if (constraint.type === 'adjacency') {
       const sourceNode = expanded.find(node => node.id === constraint.sourceNodeId);
       const targetNode = expanded.find(node => node.id === constraint.targetNodeId);
@@ -280,8 +301,37 @@ function createGeometry(THREE, node) {
       return geometry;
     }
     case 'box':
-    case 'cuboid':
-      return new THREE.BoxGeometry(width, height, depth);
+    case 'cuboid': {
+      const openings = Array.isArray(descriptor.openings) ? descriptor.openings : [];
+      if (!openings.length) return new THREE.BoxGeometry(width, height, depth);
+      // 轴对齐盒体沿 Z 轴贯穿的矩形开口：使用真实 ExtrudeGeometry 洞口拓扑。
+      const shape = new THREE.Shape();
+      shape.moveTo(-width / 2, -height / 2);
+      shape.lineTo(width / 2, -height / 2);
+      shape.lineTo(width / 2, height / 2);
+      shape.lineTo(-width / 2, height / 2);
+      shape.closePath();
+      for (const opening of openings) {
+        const openingWidth = boundedNumber(opening.width, 0, 0.02, width, node.id + '.opening.width');
+        const openingHeight = boundedNumber(opening.height, 0, 0.02, height, node.id + '.opening.height');
+        const centerX = boundedNumber(opening.center?.[0], 0, -width / 2, width / 2, node.id + '.opening.centerX');
+        const centerY = boundedNumber(opening.center?.[1], 0, -height / 2, height / 2, node.id + '.opening.centerY');
+        if (Math.abs(centerX) + openingWidth / 2 > width / 2 + 0.0001
+          || Math.abs(centerY) + openingHeight / 2 > height / 2 + 0.0001) {
+          throw new RangeError(node.id + '.opening 超出目标 Mesh 边界');
+        }
+        const hole = new THREE.Path();
+        hole.moveTo(centerX - openingWidth / 2, centerY - openingHeight / 2);
+        hole.lineTo(centerX - openingWidth / 2, centerY + openingHeight / 2);
+        hole.lineTo(centerX + openingWidth / 2, centerY + openingHeight / 2);
+        hole.lineTo(centerX + openingWidth / 2, centerY - openingHeight / 2);
+        hole.closePath();
+        shape.holes.push(hole);
+      }
+      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
+      geometry.translate(0, 0, -depth / 2);
+      return geometry;
+    }
     case 'cylinder':
       return new THREE.CylinderGeometry(width / 2, depth / 2, height, segments);
     case 'cone':
@@ -420,7 +470,7 @@ export function validateObjectSculptSpec(spec) {
     if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
       || constraintIds.has(constraint.id)) throw new TypeError('结构约束 ID 无效或重复');
     constraintIds.add(constraint.id);
-    if (!['follow','span','attach','adjacency'].includes(constraint.type)) throw new TypeError('结构约束类型无效：' + constraint.id);
+    if (!['follow','span','attach','adjacency','cutout'].includes(constraint.type)) throw new TypeError('结构约束类型无效：' + constraint.id);
     if (constraint.type === 'follow' || constraint.type === 'span') {
       if (!generatorIds.has(constraint.sourceGeneratorId) || !nodes.has(constraint.targetNodeId)
         || generatorTemplateNodeIds.has(constraint.targetNodeId) || !['x','y','z'].includes(constraint.axis)) {
@@ -437,6 +487,25 @@ export function validateObjectSculptSpec(spec) {
         || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
         || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
         throw new TypeError('结构约束规则无效：' + constraint.id);
+      }
+    } else if (constraint.type === 'cutout') {
+      const target = nodes.get(constraint.targetNodeId), cutter = nodes.get(constraint.cutterNodeId);
+      if (!target || !cutter || target.id === cutter.id || generatorTemplateNodeIds.has(target.id) || generatorTemplateNodeIds.has(cutter.id)
+        || (target.kind || 'mesh') !== 'mesh' || (cutter.kind || 'mesh') !== 'mesh'
+        || !['box','cuboid'].includes(String(target.primitive).toLowerCase())
+        || !['box','cuboid'].includes(String(cutter.primitive).toLowerCase())
+        || target.parent !== cutter.parent || constraint.operation !== 'subtract' || constraint.axis !== 'z'
+        || (target.transform?.rotation || [0,0,0]).some(value => Math.abs(Number(value)) > 0.0001)
+        || (cutter.transform?.rotation || [0,0,0]).some(value => Math.abs(Number(value)) > 0.0001)
+        || Number(cutter.dimensions?.depth) < Number(target.dimensions?.depth) + 0.02) {
+        throw new TypeError('cutout 目前仅支持同级、未旋转盒体之间沿 Z 轴贯穿的矩形减法：' + constraint.id);
+      }
+      const centerX = Number(cutter.transform?.position?.[0] || 0) - Number(target.transform?.position?.[0] || 0);
+      const centerY = Number(cutter.transform?.position?.[1] || 0) - Number(target.transform?.position?.[1] || 0);
+      if (!Number.isFinite(centerX) || !Number.isFinite(centerY)
+        || Math.abs(centerX) + Number(cutter.dimensions.width) / 2 > Number(target.dimensions.width) / 2
+        || Math.abs(centerY) + Number(cutter.dimensions.height) / 2 > Number(target.dimensions.height) / 2) {
+        throw new TypeError('cutout 开口必须完整位于目标 Mesh 边界内：' + constraint.id);
       }
     } else {
       const source = nodes.get(constraint.sourceNodeId), target = nodes.get(constraint.targetNodeId);
@@ -551,7 +620,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     group.userData.componentHidden = node.hidden === true;
     group.userData.componentLocked = node.locked === true;
     group.visible = node.hidden !== true;
-    if ((node.kind || 'mesh') === 'mesh') {
+    if ((node.kind || 'mesh') === 'mesh' && !node.structuralCutter) {
       const geometry = createGeometry(THREE, node);
       const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
       mesh.name = node.id + ':mesh';

@@ -118,4 +118,76 @@ export class ImageGenerationService {
       sizeBytes: imageBuffer.length,
     };
   }
+  /**
+   * Prompt-to-3D POC: ask the configured vision/chat model for a bounded ObjectSculptSpec.
+   * The model returns JSON data only; no generated JavaScript is evaluated in the server.
+   */
+  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown) {
+    if (typeof promptInput !== 'string' || !promptInput.trim()) {
+      throw new BadRequestException('Three.js 模型生成提示词不能为空');
+    }
+    const prompt = promptInput.trim().slice(0, 4000);
+    const objectType = typeof objectTypeInput === 'string' && objectTypeInput.trim()
+      ? objectTypeInput.trim().slice(0, 80) : '独立 3D 物体';
+    const visualStyle = typeof visualStyleInput === 'string' && visualStyleInput.trim()
+      ? visualStyleInput.trim().slice(0, 80) : 'stylized';
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+    if (!apiKey || !model) {
+      throw new ServiceUnavailableException('提示词模型生成未配置视觉模型，请检查 VISION_API_KEY、VISION_MODEL 和 VISION_API_BASE_URL');
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(180000),
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content: [
+                '你是专业的 Three.js 独立物体建模工程师。根据用户提示词输出 ObjectSculptSpec JSON，不要输出 JavaScript、Markdown 或解释。',
+                '根对象字段：schemaVersion 固定为字符串 2.0，targetName，materials，componentTree。',
+                'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
+                'componentTree 必须包含 12-40 个有意义的独立组件。节点字段：id（唯一英文 ID）、name、role、parent（可选）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。',
+                '必须按真实结构拆分对象，不能用单个大盒子代表整体。屋顶、塔楼、塔顶、门窗、装饰等可识别部件分别建模。模型应具有明确体积、可从多个方向观察。',
+                '坐标约定：Y 轴向上，主体中心接近 X/Z 原点，地面约为 Y=0，rotation 使用弧度。整体尺寸建议在 2-20 个场景单位。',
+                '材质颜色必须贴合提示词，不允许全部白色或灰色。禁止重复 ID、缺失父节点、循环层级和未知 primitive。',
+                '目标对象类型：' + objectType + '；视觉风格：' + visualStyle + '；用户要求：' + prompt,
+              ].join('\\n'),
+            },
+            { role: 'user', content: '请直接构建可转换为真实 Three.js Mesh 的独立物体结构，优先保证外轮廓、部件层级、比例和材质。只返回 JSON。' },
+          ],
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('提示词 3D 模型生成连接失败：' + message);
+      throw new ServiceUnavailableException('无法连接视觉模型，请检查后端网络连接');
+    }
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 1000);
+      this.logger.warn('提示词 3D 模型生成 API HTTP ' + response.status + '：' + detail);
+      throw new ServiceUnavailableException('提示词 3D 模型生成失败（HTTP ' + response.status + '）');
+    }
+    const payload = await response.json() as any;
+    const raw = payload?.choices?.[0]?.message?.content;
+    let spec: any;
+    try { spec = typeof raw === 'string' ? JSON.parse(raw) : null; } catch {
+      throw new ServiceUnavailableException('视觉模型未返回有效 ObjectSculptSpec JSON');
+    }
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)
+      || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
+      || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
+      throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 结构无效');
+    }
+    return { provider: baseUrl, model, objectType, visualStyle, objectSculptSpec: spec };
+  }
+
 }

@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="lab">
-    <header><div><small>NCGXY CAMPUS / THREE.JS GENERATION POC</small><h1>AI Three.js 模型实验沙盒</h1><p>输入提示词或参考图片，生成独立三维对象，并验证其能否加入统一 Three.js Scene。</p></div><a href="/">返回校园</a></header>
+    <header><div><small>NCGXY CAMPUS / STRUCTURED 3D ASSET WORKSHOP</small><h1>AI Three.js 模型实验沙盒</h1><p>输入提示词或参考图片，生成独立三维对象，并验证其能否加入统一 Three.js Scene。</p></div><a href="/">返回校园</a></header>
     <section class="layout">
       <aside class="panel generator">
         <h3>AI 模型生成 <span>POC</span></h3>
@@ -537,6 +537,7 @@ onBeforeUnmount(() => {
           <p class="hint">AI 在模板阶段声明参数和安全的 repeat 结构规则；保存后，正式场景可直接调节变量，不需要再次调用 AI。若当前模型缺少可重复的楼层/房间原型，会明确提示结构缺口。</p>
         </section>
         <section v-if="selectedSpec" class="asset-actions">
+          <h4>③ 素材模板保存与复用</h4>
           <button class="secondary" @click="saveSelectedAsset">保存完整资产</button>
           <label>已保存资产 ID</label><input v-model="savedAssetId" placeholder="保存后自动填入，也可粘贴 ID">
           <button class="secondary" @click="loadSavedAsset">加载资产</button>

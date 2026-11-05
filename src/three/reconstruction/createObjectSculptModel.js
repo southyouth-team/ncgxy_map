@@ -27,6 +27,7 @@ function boundedNumber(value, fallback, min, max, label) {
 }
 
 function normalizeMaterial(THREE, source = {}) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) source = DEFAULT_MATERIAL;
   const color = typeof source.color === 'string' && /^#[0-9a-f]{6}$/i.test(source.color)
     ? source.color : DEFAULT_MATERIAL.color;
   const roughness = boundedNumber(source.roughness, DEFAULT_MATERIAL.roughness, 0, 1, '材质 roughness');
@@ -127,7 +128,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   const materialSpecs = spec.materials && typeof spec.materials === 'object' ? spec.materials : {};
   const resolveMaterial = key => {
     const materialKey = typeof key === 'string' ? key : 'default';
-    if (!materials.has(materialKey)) materials.set(materialKey, normalizeMaterial(THREE, materialSpecs[materialKey] || DEFAULT_MATERIAL));
+    if (!materials.has(materialKey)) materials.set(materialKey, normalizeMaterial(THREE, Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL));
     return materials.get(materialKey);
   };
   const ordered = [...spec.componentTree].sort((a, b) => {

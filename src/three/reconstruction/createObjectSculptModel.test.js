@@ -1094,4 +1094,74 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       .toHaveLength(1);
   });
 
+
+
+  it('keeps attached cutout assemblies aligned through repeated edits and JSON reloads', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'base', parent: 'root', primitive: 'box', dimensions: { width: 4, height: 1, depth: 1 } },
+        { id: 'wall', parent: 'root', primitive: 'box', dimensions: { width: 2, height: 4, depth: 0.3 } },
+        { id: 'opening', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 0.5 } },
+      ],
+      parameterSchema: [
+        { id: 'base-width', type: 'number', value: 4, min: 2, max: 8, targets: [
+          { nodeId: 'base', property: 'dimensions.width', mode: 'set' },
+        ] },
+        { id: 'opening-width', type: 'number', value: 1, min: 0.5, max: 2.5, targets: [
+          { nodeId: 'opening', property: 'dimensions.width', mode: 'set' },
+        ] },
+      ],
+      // 故意把 Cutout 放在 Attach 前面，验证展开阶段会先稳定全部吸附位置。
+      constraints: [
+        { id: 'wall-opening-cut', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening',
+          axis: 'z', operation: 'subtract' },
+        { id: 'wall-opening-top', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'opening',
+          axis: 'y', sourceSide: 1, targetSide: 1, offset: 0 },
+        { id: 'wall-opening-center', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'opening',
+          axis: 'x', sourceSide: 0, targetSide: 0, offset: 0 },
+        { id: 'base-wall', type: 'attach', sourceNodeId: 'base', targetNodeId: 'wall',
+          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
+      ],
+    };
+
+    const model = createObjectSculptModel(THREE, spec);
+    const group = (instance, id) => instance.userData.componentGroups.get(id);
+    const wallMesh = instance => group(instance, 'wall').getObjectByName('wall:mesh');
+    const expectAligned = (instance, wallX) => {
+      expect(group(instance, 'wall').position.x).toBeCloseTo(wallX);
+      expect(group(instance, 'opening').position.x).toBeCloseTo(wallX);
+      expect(group(instance, 'opening').position.y).toBeCloseTo(1.5);
+      expect(wallMesh(instance).geometry.parameters.shapes.holes).toHaveLength(1);
+    };
+
+    expectAligned(model, 3);
+
+    // 上游尺寸连续变化时，墙体和开口组件必须整体平移，不允许累计偏移。
+    applyObjectSculptParameter(THREE, model, 'base-width', 6);
+    expectAligned(model, 4);
+    applyObjectSculptParameter(THREE, model, 'base-width', 2);
+    expectAligned(model, 2);
+    applyObjectSculptParameter(THREE, model, 'base-width', 8);
+    expectAligned(model, 5);
+
+    // 开口尺寸变化后重新生成 Cutout；非法尺寸必须保留上一份有效模型。
+    applyObjectSculptParameter(THREE, model, 'opening-width', 1.5);
+    expect(wallMesh(model).geometry.parameters.shapes.holes).toHaveLength(1);
+    expect(() => applyObjectSculptParameter(THREE, model, 'opening-width', 2.1))
+      .toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
+    expect(group(model, 'opening').position.x).toBeCloseTo(5);
+    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'opening-width').value).toBe(1.5);
+    expectAligned(model, 5);
+
+    // 通过实际持久化载荷重建后，Attach 与 Cutout 关系均可再次参与参数重算。
+    const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
+    const reloaded = createObjectSculptModel(THREE, persisted);
+    expectAligned(reloaded, 5);
+    applyObjectSculptParameter(THREE, reloaded, 'base-width', 4);
+    expectAligned(reloaded, 3);
+    expect(reloaded.userData.objectSculptSpec.constraints).toHaveLength(4);
+  });
+
 });

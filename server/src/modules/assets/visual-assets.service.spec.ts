@@ -85,4 +85,24 @@ describe('AssetsService visual asset persistence', () => {
     expect(manifest.assets[0].files.map((file: any) => file.viewMode).sort()).toEqual(['2.5d', '3d']);
     expect(manifest.bindings).toHaveLength(1);
   });
+  it('persists and owner-scopes a complete structured ObjectSculptSpec', async () => {
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      targetName: '参数化教学楼',
+      category: 'building',
+      objectType: '教学楼',
+      visualStyle: 'anime-painted',
+      materials: { wall: { color: '#e7d2a5', roughness: 0.8, metalness: 0, opacity: 1 } },
+      componentTree: [
+        { id: 'body', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 10, depth: 6 }, transform: { position: [0,5,0] } },
+      ],
+      parameterSchema: [{ id: 'height', label: '整体高度', type: 'number', value: 10, min: 5, max: 20, targets: [{ nodeId: 'body', property: 'dimensions.height', mode: 'set' }] }],
+    };
+    const saved = await service.saveObjectSculptAsset('owner-1', { name: '教学楼', objectSculptSpec });
+    expect(saved.assetId).toMatch(/^[a-f0-9-]{36}$/i);
+    const loaded = await service.getObjectSculptAsset('owner-1', saved.assetId);
+    expect(loaded.spec).toEqual(objectSculptSpec);
+    await expect(service.getObjectSculptAsset('owner-2', saved.assetId)).rejects.toThrow('无权读取');
+  });
+
 });

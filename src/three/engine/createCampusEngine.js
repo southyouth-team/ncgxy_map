@@ -772,6 +772,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         facadeSections: design.facadeSections ?? building.facadeSections,
         hasArcade: design.hasArcade ?? building.hasArcade,
         podiumFloors: design.podiumFloors ?? building.podiumFloors,
+        windowColumns: design.windowColumns ?? building.windowColumns,
         entranceEdgeIndex: building.entranceEdgeIndex,
         template: design.template || building.template || building.label,
         materials: buildingMaterials,

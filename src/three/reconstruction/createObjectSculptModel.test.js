@@ -98,6 +98,19 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => createObjectSculptModel(THREE, invalid)).toThrow('二维坐标');
   });
 
+  it('applies hidden visibility and preserves locked metadata on component groups', () => {
+    const spec = castleSpec();
+    spec.componentTree[0].hidden = true;
+    spec.componentTree[1].locked = true;
+    const model = createObjectSculptModel(THREE, spec);
+    const keep = model.getObjectByName('keep');
+    const tower = model.getObjectByName('west-tower');
+    expect(keep.visible).toBe(false);
+    expect(keep.userData.componentHidden).toBe(true);
+    expect(tower.userData.componentLocked).toBe(true);
+    expect(tower.visible).toBe(true);
+  });
+
   it('accepts an upstream-style component tree independent of renderer objects', () => {
     const result = validateObjectSculptSpec(castleSpec());
     expect(result.componentCount).toBe(8);

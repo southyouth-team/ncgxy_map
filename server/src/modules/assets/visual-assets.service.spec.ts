@@ -85,6 +85,28 @@ describe('AssetsService visual asset persistence', () => {
     expect(manifest.assets[0].files.map((file: any) => file.viewMode).sort()).toEqual(['2.5d', '3d']);
     expect(manifest.bindings).toHaveLength(1);
   });
+  it('rejects loft assets whose section contours use inconsistent winding', async () => {
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
+      componentTree: [{
+        id: 'loft-body',
+        primitive: 'loft',
+        material: 'wall',
+        dimensions: { width: 2, height: 3, depth: 2 },
+        geometryDescriptor: {
+          sections: [
+            { height: -0.5, points: [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]] },
+            { height: 0.5, points: [[-0.3, -0.3], [-0.3, 0.3], [0.3, 0.3], [0.3, -0.3]] },
+          ],
+        },
+      }],
+    };
+
+    await expect(service.saveObjectSculptAsset('owner-1', { name: 'invalid loft', objectSculptSpec }))
+      .rejects.toThrow('资产 loft 截面必须保持一致的轮廓绕序');
+  });
+
   it('persists and owner-scopes a complete structured ObjectSculptSpec', async () => {
     const objectSculptSpec = {
       schemaVersion: '2.0',

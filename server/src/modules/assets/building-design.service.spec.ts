@@ -119,4 +119,33 @@ describe('BuildingDesignService', () => {
   });
 
 
+  it('issues a new signed credential only after category-bounded manual geometry review', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'review-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        form: 'tree', canopyShape: 'layered', trunkRatio: 0.5, crownLayers: 4, branchSpread: 0.8,
+        leafPalette: 'darkGreen', flowerCount: 0, confidence: 0.9, evidence: ['分层树冠'], limitations: [],
+      }) } }] }),
+    }) as never;
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const identified = await service.analyzeSceneReference('vegetation', '香樟树', 'low-poly', imageDataUrl, approval.approvalToken);
+    expect(identified.design.reviewed).toBe(false);
+    const geometry = { ...identified.design.geometry, crownLayers: 5, trunkRatio: 0.46 };
+    const reviewed = service.reviewSceneDesign('vegetation', '香樟树', 'low-poly', identified.design, identified.designToken, geometry);
+    expect(reviewed.design).toMatchObject({ reviewed: true, geometry: { crownLayers: 5, trunkRatio: 0.46 } });
+    expect(service.consumeSceneDesignToken(reviewed.designToken, 'vegetation', '香樟树', 'low-poly', reviewed.design)).toBe(true);
+    expect(service.consumeSceneDesignToken(identified.designToken, 'vegetation', '香樟树', 'low-poly', reviewed.design)).toBe(false);
+    expect(() => service.reviewSceneDesign('vegetation', '香樟树', 'low-poly', identified.design, identified.designToken, { ...geometry, crownLayers: 99 }))
+      .toThrow('超出允许范围');
+    expect(() => service.reviewSceneDesign('vegetation', '香樟树', 'low-poly', identified.design, identified.designToken, { ...geometry, arbitrary: true }))
+      .toThrow('字段与当前类别 Schema 不一致');
+  });
+
+
 });

@@ -29,16 +29,21 @@ export class BuildingTemplatesService {
     return item;
   }
   async create(input: Record<string, unknown>) {
+    const categories = ['building', 'structure', 'vegetation', 'road', 'water', 'terrain', 'facility', 'decoration', 'sports', 'indoor', 'vehicle', 'character', 'effect'];
+    const category = String(input.category || 'building');
+    if (!categories.includes(category)) throw new BadRequestException('模板分类无效');
+    const objectType = typeof input.objectType === 'string' ? input.objectType.trim().slice(0, 80) : '';
+    const visualStyle = typeof input.visualStyle === 'string' ? input.visualStyle.trim().slice(0, 80) : '';
+    const design = (input.design || input.buildingDesign) as Record<string, unknown> | undefined;
     const name = typeof input.name === 'string' ? input.name.trim().slice(0, 120) : '';
     if (!name) throw new BadRequestException('模板名称不能为空');
     if (!['ai_generated','manual_model','procedural','external'].includes(String(input.sourceType))) throw new BadRequestException('模板来源无效');
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
     if (!['building', 'facility', 'decoration', 'vegetation'].includes(String(input.category || 'building'))) throw new BadRequestException('模板分类无效');
-    const design = input.buildingDesign as Record<string, unknown> | undefined;
     if (input.modelType === 'procedural' && (!design || typeof design !== 'object')) throw new BadRequestException('程序化模板缺少结构参数');
     if (input.modelType === 'procedural' && !this.buildingDesign.consumeDesignToken(input.designToken, design)) throw new BadRequestException('程序化模板必须使用已确认图片生成的有效结构参数；请重新确认图片并识别');
     const now = new Date().toISOString();
-    const item = { templateId: 'bldtpl-' + randomUUID(), version: 1, name, category: String(input.category || 'building'), sourceType: input.sourceType, modelType: input.modelType, status: 'review', buildingDesign: design || null, prompt: String(input.prompt || '').slice(0,12000), generationModel: input.generationModel || null, referenceImage: null, modelFile: null, createdAt: now, updatedAt: now };
+    const item = { templateId: 'astpl-' + randomUUID(), version: 1, name, category, objectType: objectType || null, visualStyle: visualStyle || null, sourceType: input.sourceType, modelType: input.modelType, status: 'review', design: design || null, prompt: String(input.prompt || '').slice(0,12000), generationModel: input.generationModel || null, referenceImage: null, modelFile: null, createdAt: now, updatedAt: now };
     await this.enqueue(async () => { const m = await this.readManifest(); m.templates.unshift(item); await this.writeManifest(m); });
     return item;
   }
@@ -82,7 +87,7 @@ export class BuildingTemplatesService {
       const m = await this.readManifest(); const item = m.templates.find((x: any) => x.templateId === id);
       if (!item) throw new NotFoundException('建筑模板不存在');
       if (item.modelType === 'glb' && !item.modelFile) throw new BadRequestException('请先上传 GLB 模型');
-      if (item.modelType === 'procedural' && !item.buildingDesign) throw new BadRequestException('程序化模板缺少结构参数');
+      if (item.modelType === 'procedural' && !item.design && !item.buildingDesign) throw new BadRequestException('程序化模板缺少结构参数');
       if (item.modelType === 'procedural' && !item.referenceImage) throw new BadRequestException('程序化模板必须保留已确认的参考图片');
       item.status = 'ready'; item.updatedAt = new Date().toISOString(); result = item; await this.writeManifest(m);
     });

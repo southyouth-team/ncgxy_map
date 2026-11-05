@@ -451,6 +451,44 @@ describe('BuildingDesignService', () => {
   });
 
 
+  it('creates a grid generator with independent row and column controls', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'grid-parameter-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const current = {
+      schemaVersion: '2.0', targetName: 'school', category: 'building', objectType: '教学楼', visualStyle: 'stylized',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
+      componentTree: [
+        { id: 'school-root', kind: 'group', name: '教学楼主体', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
+        { id: 'room-prototype', kind: 'group', name: '标准教室', parent: 'school-root', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
+        { id: 'room-shell', kind: 'mesh', name: '教室主体', parent: 'room-prototype', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 5 }, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
+      ],
+      parameterSchema: [], generators: [],
+    };
+    const parameterSchema = [
+      { id: 'room-rows', label: '房间行数', type: 'number', value: 2, min: 1, max: 4, step: 1, targets: [] },
+      { id: 'room-columns', label: '房间列数', type: 'number', value: 3, min: 1, max: 5, step: 1, targets: [] },
+    ];
+    const generators = [{
+      id: 'room-grid', type: 'grid', templateRootId: 'room-prototype',
+      rowParameterId: 'room-rows', columnParameterId: 'room-columns',
+      spacingX: 7, spacingZ: 6, defaultRows: 2, defaultColumns: 3, maxRows: 4, maxColumns: 5,
+    }];
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema, generators }) } }] }),
+    });
+    global.fetch = fetchMock as never;
+    const result = await service.addObjectParameters(current, '给教学楼增加房间行数和列数调整变量');
+    expect(result.objectSculptSpec.generators).toMatchObject([{ id: 'room-grid', type: 'grid', rowParameterId: 'room-rows', columnParameterId: 'room-columns' }]);
+    expect(result.addedParameters.map((item: any) => item.id)).toEqual(['room-rows', 'room-columns']);
+    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(systemPrompt).toContain('type:"grid"');
+    expect(systemPrompt).toContain('行沿 z 轴、列沿 x 轴');
+  });
+
   it('rejects conversational parameters that target components outside the current model', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({

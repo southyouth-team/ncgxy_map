@@ -385,6 +385,53 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(mesh.geometry.getAttribute('normal').count).toBe(12);
   });
 
+  it('rejects self-intersecting sweep cross-sections before mesh construction', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'crossed-sweep', primitive: 'sweep', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          path: [[-0.5, 0, 0], [0.5, 0, 0]],
+          profile: [[-0.4, -0.4], [0.4, 0.4], [-0.4, 0.4], [0.4, -0.4]],
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('存在自相交边');
+  });
+
+  it('rejects duplicate adjacent points in sweep paths', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'zero-path', primitive: 'sweep', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          path: [[-0.5, 0, 0], [-0.5, 0, 0], [0.5, 0, 0]],
+          profile: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]],
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('重复或零长度路径段');
+  });
+
+  it('rejects self-intersecting loft section contours', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [{
+        id: 'crossed-loft', primitive: 'loft', material: 'default',
+        dimensions: { width: 1, height: 1, depth: 1 },
+        geometryDescriptor: {
+          sections: [
+            { height: -0.5, points: [[-0.4, -0.4], [0.4, 0.4], [-0.4, 0.4], [0.4, -0.4]] },
+            { height: 0.5, points: [[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]] },
+          ],
+        },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('存在自相交边');
+  });
+
   it('rejects loft sections that do not share the same profile topology', () => {
     const spec = {
       schemaVersion: '2.0',

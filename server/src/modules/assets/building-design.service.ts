@@ -321,7 +321,7 @@ export class BuildingDesignService {
       schemaVersion: 1, source: 'ai-vision-estimate', category, objectType, visualStyle, geometry,
       confidence: bounded(parsed.confidence, 0.35, 0, 1),
       evidence: Array.isArray(parsed.evidence) ? parsed.evidence.filter((x: unknown) => typeof x === 'string').slice(0, 6).map((x: string) => x.slice(0, 180)) : [],
-      limitations: Array.isArray(parsed.limitations) ? parsed.limitations.filter((x: unknown) => typeof x === 'string').slice(0, 8).map((x: string) => x.slice(0, 180)) : [],
+      limitations: (Array.isArray(parsed.limitations) ? parsed.limitations.filter((x: unknown) => typeof x === 'string').slice(0, 6).map((x: string) => x.slice(0, 180)) : []).concat(({ road: ['道路宽度与断面为视觉估计，实际路线和宽度须由地图空间几何确认'], water: ['视觉模型未提供可核验的水深测量；depthEstimate 仅为视觉参数估计'], terrain: ['地形起伏和坡度为视觉参数估计，不是高程测绘成果'] } as Record<string, string[]>)[category] || []).slice(0, 8),
       reviewed: false,
     };
     const tokenPayload = { category, objectType, visualStyle, design };

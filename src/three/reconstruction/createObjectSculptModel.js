@@ -848,7 +848,7 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
           : mode === 'visible-through' ? Number(parameterValue) > threshold
             : !Boolean(parameterValue);
       } else if (target.property === 'geometry.primitive') {
-        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
+        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
         node.primitive = resolved;
       } else if (target.property === 'geometryDescriptor.inset' || target.property === 'geometryDescriptor.tube' || target.property === 'geometryDescriptor.radius') {
         node.geometryDescriptor = node.geometryDescriptor || {};

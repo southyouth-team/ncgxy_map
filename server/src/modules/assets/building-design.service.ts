@@ -67,6 +67,196 @@ export class BuildingDesignService {
     return image;
   }
 
+  /**
+   * 结构化物体重建：从用户已确认的参考图提取 ObjectSculptSpec 组件树。
+   * 只接受 JSON 描述，不生成或执行 JavaScript/TypeScript。
+   */
+  async reconstructObjectReference(
+    categoryInput: unknown,
+    objectTypeInput: unknown,
+    visualStyleInput: unknown,
+    imageDataUrlInput: unknown,
+    approvalTokenInput: unknown,
+    promptInput?: unknown,
+  ) {
+    const category = typeof categoryInput === 'string' ? categoryInput.trim().toLowerCase() : '';
+    const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.trim().slice(0, 80) : '';
+    const visualStyle = typeof visualStyleInput === 'string' ? visualStyleInput.trim() : '';
+    const supportedCategories = ['building', 'structure', 'vegetation', 'facility', 'decoration', 'sports'];
+    const styles = ['anime-painted', 'hand-painted', 'low-poly', 'realistic', 'pixel-art', 'stylized', 'toon', 'chinese-traditional', 'european-classical', 'futuristic'];
+    if (!supportedCategories.includes(category)) throw new BadRequestException('该分类尚未接入孤立物体结构重建');
+    if (!objectType || !styles.includes(visualStyle)) throw new BadRequestException('对象类型或视觉风格无效');
+    const image = this.parseReferenceImage(imageDataUrlInput);
+    if (typeof approvalTokenInput !== 'string' || !approvalTokenInput) throw new BadRequestException('请先确认参考图片，再执行结构化重建');
+    const referenceImageSha256 = createHash('sha256').update(image).digest('hex');
+    let approved = false;
+    try { approved = this.verifyToken(approvalTokenInput, 'reference', referenceImageSha256); } catch { approved = false; }
+    if (!approved) throw new BadRequestException('图片确认凭证无效、已过期或与当前预览图片不一致，请重新确认图片预览');
+
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+    if (!apiKey || !model) throw new ServiceUnavailableException('结构化重建未配置视觉模型，请检查 VISION_API_KEY、VISION_MODEL 和 VISION_API_BASE_URL');
+    const userPrompt = typeof promptInput === 'string' ? promptInput.trim().slice(0, 4000) : '';
+    let response: Response;
+    try {
+      response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(180000),
+        body: JSON.stringify({
+          model,
+          temperature: 0.15,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content: [
+                '你是专业的 Three.js 结构化物体重建工程师。根据单张参考图输出 ObjectSculptSpec JSON，不要输出代码、Markdown 或解释。',
+                '输出根对象字段：schemaVersion（固定字符串 2.0）、targetName（字符串）、materials（对象，键为材质 ID，每项含 color=#RRGGBB、roughness 0-1、metalness 0-1、opacity 0.05-1）、componentTree（数组）。',
+                '每个 componentTree 节点字段：id（唯一英文 ID）、name（中文部件名）、role（部件角色）、parent（父节点 ID，可省略或 null）、primitive（box/cuboid/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth，均为正数）、transform（position/rotation/scale 三个长度为 3 的数字数组）、material（materials 中的键）、geometryDescriptor（可选 segments 3-48、tube 正数）。',
+                '必须输出 12-40 个有意义的独立组件，不能只输出一个整体 Mesh。组件按真实结构拆分；主结构、附属结构、装饰件应有清晰 parent 关系。禁止重复 ID、缺失 parent、循环层级、未知 primitive。',
+                '根据图片推断可见部件的相对比例、空间位置、颜色分区和层级。不要用单个大盒子代表整个对象。窗户、门、塔楼、屋顶、栏杆、檐口等明显结构应拆分为独立 Mesh。',
+                '如果对象是城堡，优先识别主城楼、左右塔楼、各自塔顶、主屋顶、城垛/女儿墙、入口拱门、窗洞/窗框、旗杆、装饰边线等可见部件；塔楼与塔顶必须独立，左右结构不得错误合并。根据参考图实际内容决定数量，不要机械补全不可见部件。',
+                '坐标约定：Y 轴向上；主体中心在 X/Z 原点附近；地面约为 Y=0；position 使用相对父节点坐标；rotation 使用弧度；scale 通常为 [1,1,1]。组件尺寸与场景单位无关，但整体建议落在 2-20 单位范围。',
+                '风格必须匹配：' + visualStyle + '。材质颜色和粗糙度应反映图片的色彩分区；禁止把所有部件都输出为白色/灰色。',
+                '只描述单张图可见的内容。背面、内部和遮挡部分不可确知，采用结构上合理的保守推断，并在 limitations 中明确说明。',
+                '另返回 confidence（0-1）、evidence（最多 8 条字符串）、limitations（最多 8 条字符串）。',
+                '分类：' + category + '；对象类型：' + objectType + '。用户补充要求：' + (userPrompt || '按参考图忠实重建可见结构。'),
+              ].join('\\n'),
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: '请重建图片中的完整独立资产，优先保证轮廓、组件数量、相对位置、屋顶/顶部结构、开口和主要颜色分区。输出满足约束的 ObjectSculptSpec。' },
+                { type: 'image_url', image_url: { url: imageDataUrlInput, detail: 'high' } },
+              ],
+            },
+          ],
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('结构化重建视觉模型连接失败：' + message);
+      throw new ServiceUnavailableException('无法连接结构化重建视觉模型，请检查后端网络连接');
+    }
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 1000);
+      this.logger.warn('结构化重建 API HTTP ' + response.status + '：' + detail);
+      throw new ServiceUnavailableException('结构化重建失败（HTTP ' + response.status + '）');
+    }
+    const payload = await response.json() as any;
+    const raw = payload?.choices?.[0]?.message?.content;
+    let parsed: any;
+    try { parsed = typeof raw === 'string' ? JSON.parse(raw) : null; } catch {
+      throw new ServiceUnavailableException('视觉模型未返回有效 ObjectSculptSpec JSON');
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.componentTree)) {
+      throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 格式无效');
+    }
+    if (parsed.componentTree.length < 1 || parsed.componentTree.length > 100) {
+      throw new ServiceUnavailableException('ObjectSculptSpec 组件数量必须在 1 到 100 之间');
+    }
+    const materialsInput = parsed.materials && typeof parsed.materials === 'object' && !Array.isArray(parsed.materials) ? parsed.materials : {};
+    const materials: Record<string, any> = {};
+    for (const [key, value] of Object.entries(materialsInput).slice(0, 40)) {
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/.test(key) || !value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const item = value as Record<string, unknown>;
+      const color = typeof item.color === 'string' && /^#[0-9a-f]{6}$/i.test(item.color) ? item.color : '#b8b8b8';
+      const clamp = (v: unknown, fallback: number, min: number, max: number) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+      };
+      materials[key] = {
+        color,
+        roughness: clamp(item.roughness, 0.82, 0, 1),
+        metalness: clamp(item.metalness, 0, 0, 1),
+        opacity: clamp(item.opacity, 1, 0.05, 1),
+      };
+    }
+    if (!Object.keys(materials).length) materials.default = { color: '#b8b8b8', roughness: 0.82, metalness: 0, opacity: 1 };
+    const ids = new Set<string>();
+    const componentTree = parsed.componentTree.map((input: any, index: number) => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ServiceUnavailableException('组件节点格式无效：' + index);
+      const id = typeof input.id === 'string' ? input.id : '';
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('组件 ID 无效或重复：' + id);
+      ids.add(id);
+      const primitive = String(input.primitive || '').toLowerCase();
+      if (!['box','cuboid','cylinder','cone','sphere','ellipsoid','torus'].includes(primitive)) throw new ServiceUnavailableException('组件几何类型不受支持：' + primitive);
+      const number = (value: unknown, fallback: number, min: number, max: number) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+      };
+      const vector = (value: unknown, fallback: number[]) => Array.isArray(value) && value.length === 3
+        ? value.map((v: unknown, i: number) => number(v, fallback[i], -100, 100))
+        : fallback;
+      const dimensions = input.dimensions && typeof input.dimensions === 'object' ? input.dimensions : {};
+      const transform = input.transform && typeof input.transform === 'object' ? input.transform : {};
+      const material = typeof input.material === 'string' && materials[input.material] ? input.material : Object.keys(materials)[0];
+      const geometryDescriptor: Record<string, number> = {};
+      if (input.geometryDescriptor && typeof input.geometryDescriptor === 'object') {
+        if (input.geometryDescriptor.segments !== undefined) geometryDescriptor.segments = Math.round(number(input.geometryDescriptor.segments, 16, 3, 48));
+        if (input.geometryDescriptor.tube !== undefined) geometryDescriptor.tube = number(input.geometryDescriptor.tube, 0.1, 0.01, 10);
+      }
+      return {
+        id,
+        name: String(input.name || id).slice(0, 120),
+        role: String(input.role || 'component').slice(0, 80),
+        ...(typeof input.parent === 'string' && input.parent ? { parent: input.parent } : {}),
+        primitive,
+        dimensions: {
+          width: number(dimensions.width, 1, 0.02, 100),
+          height: number(dimensions.height, 1, 0.02, 100),
+          depth: number(dimensions.depth, 1, 0.02, 100),
+        },
+        transform: {
+          position: vector(transform.position, [0, 0, 0]),
+          rotation: vector(transform.rotation, [0, 0, 0]),
+          scale: vector(transform.scale, [1, 1, 1]),
+        },
+        material,
+        ...(Object.keys(geometryDescriptor).length ? { geometryDescriptor } : {}),
+      };
+    });
+    const byId = new Map(componentTree.map((node: any) => [node.id, node]));
+    for (const node of componentTree) {
+      if (node.parent && !byId.has(node.parent)) throw new ServiceUnavailableException('组件父节点不存在：' + node.id);
+      const visited = new Set([node.id]);
+      let parent = node.parent;
+      let depth = 1;
+      while (parent) {
+        if (visited.has(parent)) throw new ServiceUnavailableException('组件树存在循环引用：' + node.id);
+        visited.add(parent);
+        depth += 1;
+        if (depth > 16) throw new ServiceUnavailableException('组件树层级超过 16 层');
+        parent = byId.get(parent)?.parent;
+      }
+    }
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      targetName: String(parsed.targetName || objectType).slice(0, 120),
+      materials,
+      componentTree,
+    };
+    const design = {
+      schemaVersion: 1,
+      source: 'ai-vision-object-sculpt',
+      category,
+      objectType,
+      visualStyle,
+      referenceImageSha256,
+      objectSculptSpec,
+      confidence: Number.isFinite(Number(parsed.confidence)) ? Math.max(0, Math.min(1, Number(parsed.confidence))) : 0.35,
+      evidence: Array.isArray(parsed.evidence) ? parsed.evidence.filter((x: unknown) => typeof x === 'string').slice(0, 8).map((x: string) => x.slice(0, 180)) : [],
+      limitations: Array.isArray(parsed.limitations) ? parsed.limitations.filter((x: unknown) => typeof x === 'string').slice(0, 8).map((x: string) => x.slice(0, 180)) : [],
+      reviewed: false,
+    };
+    const designDigest = createHash('sha256').update(JSON.stringify(design)).digest('hex');
+    const designToken = this.signToken('design', designDigest);
+    return { provider: baseUrl, model, category, objectType, visualStyle, design, designToken, designTokenExpiresInSeconds: 900 };
+  }
+
   async analyzeReference(imageDataUrlInput: unknown, approvalTokenInput: unknown, promptInput?: unknown) {
     const image = this.parseReferenceImage(imageDataUrlInput);
     const promptContext = typeof promptInput === 'string' ? promptInput.trim().slice(0, 4000) : '';

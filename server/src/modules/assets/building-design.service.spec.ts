@@ -188,8 +188,12 @@ describe('BuildingDesignService', () => {
     const approval = service.approveReference(imageDataUrl);
     const result = await service.reconstructObjectReference('building', '城堡', 'anime-painted', imageDataUrl, approval.approvalToken, '保留双塔和红色尖顶');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content).toContain('城堡');
+    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(systemPrompt).toContain('城堡');
+    expect(systemPrompt).toContain('恰好只有一个根节点');
+    expect(systemPrompt).toContain('相对直接 parent 的局部坐标');
     expect(result.design.objectSculptSpec.componentTree).toHaveLength(12);
+    expect(result.design.objectSculptSpec.componentTree.filter((node: any) => !node.parent)).toHaveLength(1);
     expect(result.design.objectSculptSpec.componentTree.find((node: any) => node.id === 'west-roof').parent).toBe('west-tower');
     expect(result.design.objectSculptSpec.materials.roof.color).toBe('#b84b3d');
     expect(result.design.reviewed).toBe(false);
@@ -242,6 +246,10 @@ describe('BuildingDesignService', () => {
         { id: 'a', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'b' },
         { id: 'b', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'a' },
       ],
+      [
+        { id: 'root-a', primitive: 'box', dimensions: {}, transform: {}, material: 'default' },
+        { id: 'root-b', primitive: 'box', dimensions: {}, transform: {}, material: 'default' },
+      ],
     ];
     const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
     const approval = service.approveReference(imageDataUrl);
@@ -269,9 +277,10 @@ describe('BuildingDesignService', () => {
         targetName: 'test-building',
         materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
         componentTree: Array.from({ length: 6 }, (_, index) => ({
-          id: 'part-' + index, name: '主体部件 ' + index, role: 'main', primitive: 'box',
+          id: 'part-' + index, name: '主体部件 ' + index, role: index === 0 ? 'main-massing' : 'attached-part', primitive: 'box',
+          ...(index > 0 ? { parent: 'part-0' } : {}),
           dimensions: { width: 8, height: 6, depth: 7 },
-          transform: { position: [index, 3, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          transform: { position: [index === 0 ? 0 : (index - 1) * 0.2, index === 0 ? 3 : 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
           material: 'wall',
         })),
       }) } }] }),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addPolygonOutlinePoint, polygonOutlineArea, polygonOutlineLocalToNormalized, polygonOutlineNormalizedToLocal, removePolygonOutlinePoint, updatePolygonOutlinePoint, validatePolygonOutline } from './polygonOutline.js'
+import { addPolygonOutlinePoint, polygonOutlineArea, polygonOutlineLocalToNormalized, polygonOutlineNormalizedToLocal, removePolygonOutlinePoint, updatePolygonOutlinePoint, updatePolygonOutlineVertex, validatePolygonOutline } from './polygonOutline.js'
 
 const triangle = [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]]
 
@@ -8,6 +8,13 @@ describe('polygon outline editing', () => {
     const result = updatePolygonOutlinePoint(triangle, 2, 1, 0.4)
     expect(result[2]).toEqual([0, 0.4])
     expect(triangle[2]).toEqual([0, 0.5])
+  })
+  it('updates both vertex coordinates atomically when an intermediate coordinate would be degenerate', () => {
+    const points = [[-0.5, 0], [0, 0], [0.5, 0.5]]
+    expect(() => updatePolygonOutlinePoint(points, 0, 0, 0)).toThrow('面积不能为零')
+    const result = updatePolygonOutlineVertex(points, 0, 0, 0.4)
+    expect(result[0]).toEqual([0, 0.4])
+    expect(Math.abs(polygonOutlineArea(result))).toBeGreaterThan(0)
   })
   it('inserts a midpoint on the longest edge', () => {
     const result = addPolygonOutlinePoint(triangle)

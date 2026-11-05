@@ -55,3 +55,10 @@ export function polygonOutlineLocalToNormalized(x, y, width, height) {
   if (![x,y,width,height].every(value=>Number.isFinite(Number(value))) || Number(width)<=0 || Number(height)<=0) throw new TypeError('Polygon 局部坐标和尺寸必须是有限数值，尺寸必须大于零')
   return [Number(x)/Number(width),Number(y)/Number(height)]
 }
+
+export function updatePolygonOutlineVertex(points, index, x, y) {
+  const next = points.map(point => [...point])
+  if (!Number.isInteger(index) || index < 0 || index >= next.length) throw new RangeError('轮廓点索引无效')
+  next[index] = [Number(x), Number(y)]
+  return validatePolygonOutline(next)
+}

@@ -393,7 +393,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         dimensions: { width: 1, height: 1, depth: 1 },
         geometryDescriptor: {
           path: [[-0.5, 0, 0], [0.5, 0, 0]],
-          profile: [[-0.4, -0.4], [0.4, 0.4], [-0.4, 0.4], [0.4, -0.4]],
+          profile: [[-0.4, -0.4], [0.4, 0.4], [-0.4, 0.5], [0.5, -0.4]],
         },
       }],
     };
@@ -423,7 +423,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         dimensions: { width: 1, height: 1, depth: 1 },
         geometryDescriptor: {
           sections: [
-            { height: -0.5, points: [[-0.4, -0.4], [0.4, 0.4], [-0.4, 0.4], [0.4, -0.4]] },
+            { height: -0.5, points: [[-0.4, -0.4], [0.4, 0.4], [-0.4, 0.5], [0.5, -0.4]] },
             { height: 0.5, points: [[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]] },
           ],
         },

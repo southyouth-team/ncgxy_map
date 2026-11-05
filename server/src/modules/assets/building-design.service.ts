@@ -499,6 +499,10 @@ export class BuildingDesignService {
               || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {
             throw new ServiceUnavailableException('sweep path 必须包含 2 到 32 个 [-0.5,0.5] 范围内的三维点');
           }
+          if (path.some((point: number[], index: number) => index > 0
+            && Math.hypot(point[0] - path[index - 1][0], point[1] - path[index - 1][1], point[2] - path[index - 1][2]) < 0.0001)) {
+            throw new ServiceUnavailableException('sweep path 不能包含重复或零长度路径段');
+          }
           if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24
             || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
               || point.some((value: unknown) => typeof value !== 'number' || !Number.isFinite(value) || value < -0.5 || value > 0.5))) {

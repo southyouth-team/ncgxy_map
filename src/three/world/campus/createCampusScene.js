@@ -250,7 +250,7 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
     const depth = Math.max(2.4, bounds.depth)
     const buildingDesign = resolveCampusBuildingDesign(visualAssets.manifest, item.id)
     const template = buildingDesign?.template || item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4]
-    const buildingWallMaterial = buildingDesign ? (mats[buildingDesign.wallPalette] || mats.wallCream) : wallPalette[index % wallPalette.length]
+    const buildingWallMaterial = buildingDesign ? (mats[buildingDesign.wallPalette] || mats.wallCream) : (mats[item.wall] || wallPalette[index % wallPalette.length])
     const localFootprint = item.polygon
       ? new THREE.Shape(item.polygon.map(([px, py]) => new THREE.Vector2(
         (px - (footprintBounds[0] + footprintBounds[2]) / 2) * (CAMPUS_PLAN_REFERENCE.worldWidth / (CAMPUS_PLAN_REFERENCE.mapBounds.right - CAMPUS_PLAN_REFERENCE.mapBounds.left)),

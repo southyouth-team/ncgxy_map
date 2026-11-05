@@ -14,7 +14,15 @@ export class BuildingTemplatesService {
     this.root = resolve(config.get<string>('ASSET_STORAGE_DIR', './uploads'), 'campus-building-templates');
     this.manifestPath = resolve(this.root, 'manifest.json');
   }
-  async list() { return this.readManifest(); }
+  async list() {
+    const manifest = await this.readManifest();
+    return { schemaVersion: manifest.schemaVersion, templates: manifest.templates.filter((item: any) => item.status === 'ready') };
+  }
+  async getPublished(id: string) {
+    const item = await this.get(id);
+    if (item.status !== 'ready') throw new NotFoundException('已发布建筑模板不存在');
+    return item;
+  }
   async get(id: string) {
     const item = (await this.readManifest()).templates.find((x: any) => x.templateId === id);
     if (!item) throw new NotFoundException('建筑模板不存在');
@@ -64,7 +72,7 @@ export class BuildingTemplatesService {
     return publicMetadata;
   }
   async getFile(id: string, role: string) {
-    const item = await this.get(id); const file = role === 'model' ? item.modelFile : item.referenceImage;
+    const item = await this.getPublished(id); const file = role === 'model' ? item.modelFile : item.referenceImage;
     if (!file?.storageName) throw new NotFoundException('模板文件不存在');
     return { absolutePath: resolve(this.root, 'files', file.storageName), mimeType: file.mimeType, size: file.sizeBytes };
   }

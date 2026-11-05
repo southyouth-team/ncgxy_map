@@ -821,6 +821,7 @@ export function validateObjectSculptSpec(spec) {
   }
   const constraintIds = new Set();
   const managedConstraintTargets = new Set();
+  const cutoutRegions = new Map();
   for (const constraint of spec.constraints || []) {
     if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
       || constraintIds.has(constraint.id)) throw new TypeError('结构约束 ID 无效或重复');
@@ -864,6 +865,15 @@ export function validateObjectSculptSpec(spec) {
         || Math.abs(centerY) + Number(cutter.dimensions.height) / 2 > Number(target.dimensions.height) / 2) {
         throw new TypeError('cutout 开口必须完整位于目标 Mesh 边界内：' + constraint.id);
       }
+      const regions = cutoutRegions.get(target.id) || [];
+      const width = Number(cutter.dimensions.width), height = Number(cutter.dimensions.height);
+      for (const region of regions) {
+        const overlapsX = Math.abs(centerX - region.centerX) <= (width + region.width) / 2 + 0.0001;
+        const overlapsY = Math.abs(centerY - region.centerY) <= (height + region.height) / 2 + 0.0001;
+        if (overlapsX && overlapsY) throw new TypeError('cutout 开口不能重叠或边界接触：' + constraint.id);
+      }
+      regions.push({ centerX, centerY, width, height });
+      cutoutRegions.set(target.id, regions);
     } else {
       const source = nodes.get(constraint.sourceNodeId), target = nodes.get(constraint.targetNodeId);
       if (!source || !target || source.id === target.id || generatorTemplateNodeIds.has(source.id) || generatorTemplateNodeIds.has(target.id)) {

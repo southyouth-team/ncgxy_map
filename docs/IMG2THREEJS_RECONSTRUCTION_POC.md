@@ -163,3 +163,5 @@
 ## Polygon 顶点视口拖拽（2026-11-05）
 
 Polygon 顶点拖动通过屏幕坐标拾取顶点，再将相机射线与组件局部 XY 平面求交，经 group.worldToLocal 和组件宽高换算回归一化坐标。拖动期间仅替换目标 Mesh geometry，不重建整场景；pointerup 只生成一条撤销记录，pointercancel 回滚。真实浏览器交互仍需单独验收。
+
+- 补充 lostpointercapture 取消回滚、法线矩阵及隐藏祖先拾取边界；预览 canvas 禁止浏览器触控滚动抢占拖动指针。

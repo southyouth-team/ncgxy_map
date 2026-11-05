@@ -1185,3 +1185,5 @@
 - 拖动射线与组件局部轮廓平面求交，经 worldToLocal 和 dimensions 宽高转换为归一化坐标；拖动期间禁用当前视口 OrbitControls。
 - pointerup 仅记录一次撤销快照，pointercancel 回滚；非法坐标或零面积轮廓不会写入。拖动结束使旧审核凭证失效。
 - 真实浏览器中的命中容差、触控和两视口同步仍待人工验收。
+
+- 拖拽清理补强：增加 lostpointercapture 回滚处理；组件平面法线使用 normal matrix，兼容非均匀缩放与父级变换；隐藏祖先节点不响应顶点拖拽。

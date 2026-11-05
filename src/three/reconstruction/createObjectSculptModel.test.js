@@ -1270,18 +1270,18 @@ describe('ObjectSculptSpec Three.js adapter', () => {
           parameterSchema: [
             { id: 'leg-rows', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
             { id: 'leg-columns', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
-            { id: 'table-width', type: 'number', value: 2.2, min: 1.5, max: 3, step: 0.1,
+            { id: 'table-width', type: 'number', value: 2.2, min: 1.5, max: 5, step: 0.1,
               targets: [{ nodeId: 'table-top', property: 'dimensions.width', mode: 'set' }] },
           ],
           generators: [{ id: 'leg-grid', type: 'grid', templateRootId: 'leg-pair',
             rowParameterId: 'leg-rows', columnParameterId: 'leg-columns',
-            spacingX: 1.8, spacingZ: 1.0, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
+            spacingX: 1.8, spacingZ: 1.0, centered: true, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
         },
         countParameter: 'leg-columns',
         nextCount: 3,
         expectedComponents: 14,
         dimensionParameter: 'table-width',
-        nextDimension: 2.8,
+        nextDimension: 4.2,
         dimensionNode: 'table-top',
         dimension: 'width',
       },
@@ -1300,6 +1300,17 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         expect(mesh.geometry.boundingSphere).not.toBeNull();
       }
 
+      if (fixture.name === 'tree') {
+        const crownGroups = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'crown-layer');
+        expect(crownGroups).toHaveLength(3);
+        expect(crownGroups.map(group => Number(group.position.y.toFixed(2))).sort((a, b) => a - b)).toEqual([0, 0.7, 1.4]);
+      }
+      if (fixture.name === 'furniture') {
+        const legGroups = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
+        expect(legGroups).toHaveLength(4);
+        expect(legGroups.map(group => [Number(group.position.x.toFixed(2)), Number(group.position.z.toFixed(2))])
+          .sort((a, b) => a[0] - b[0] || a[1] - b[1])).toEqual([[-0.9, -0.5], [-0.9, 0.5], [0.9, -0.5], [0.9, 0.5]]);
+      }
       if (fixture.name === 'vehicle') {
         const wheelGroups = [...model.userData.componentGroups.values()]
           .filter(group => group.userData.componentSourceId === 'wheel-pair');
@@ -1322,6 +1333,21 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
       applyObjectSculptParameter(THREE, model, fixture.countParameter, fixture.nextCount);
       expect(model.userData.componentGroups.size).toBe(fixture.expectedComponents);
+      if (fixture.name === 'tree') {
+        const expandedCrowns = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'crown-layer');
+        expect(expandedCrowns).toHaveLength(5);
+        expect(expandedCrowns.map(group => Number(group.position.y.toFixed(2))).sort((a, b) => a - b)).toEqual([0, 0.7, 1.4, 2.1, 2.8]);
+      }
+      if (fixture.name === 'furniture') {
+        const expandedLegs = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
+        expect(expandedLegs).toHaveLength(6);
+        expect([...new Set(expandedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b)).toEqual([-1.8, 0, 1.8]);
+        expect([...new Set(expandedLegs.map(group => Number(group.position.z.toFixed(2))))].sort((a, b) => a - b)).toEqual([-0.5, 0.5]);
+        const tabletop = model.userData.componentGroups.get('table-top').getObjectByName('table-top:mesh');
+        tabletop.geometry.computeBoundingBox();
+        const halfWidth = tabletop.geometry.boundingBox.getSize(new THREE.Vector3()).x / 2;
+        expect(Math.max(...expandedLegs.map(group => Math.abs(group.position.x))) + 0.06).toBeLessThanOrEqual(halfWidth);
+      }
       if (fixture.name === 'vehicle') {
         const expandedWheelGroups = [...model.userData.componentGroups.values()]
           .filter(group => group.userData.componentSourceId === 'wheel-pair');

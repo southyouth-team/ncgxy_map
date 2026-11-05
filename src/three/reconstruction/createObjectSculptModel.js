@@ -93,7 +93,9 @@ function expandObjectSculptSpec(spec) {
       const columns = Math.max(1, Math.min(generator.maxColumns, Math.round(parameterValue(generator.columnParameterId) || generator.defaultColumns)));
       for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column < columns; column += 1) {
-          materialize(row, column, generator.spacingX * column, 0, generator.spacingZ * row);
+          const offsetX = generator.spacingX * (generator.centered === true ? column - (columns - 1) / 2 : column);
+          const offsetZ = generator.spacingZ * (generator.centered === true ? row - (rows - 1) / 2 : row);
+          materialize(row, column, offsetX, 0, offsetZ);
         }
       }
     } else {
@@ -821,7 +823,8 @@ export function validateObjectSculptSpec(spec) {
       generatorParameterIds.add(generator.countParameterId);
     } else {
       if (generator.rowParameterId === generator.columnParameterId) throw new TypeError('网格生成器行列参数不能相同：' + generator.id);
-      if (![generator.spacingX, generator.spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
+      if ((generator.centered !== undefined && typeof generator.centered !== 'boolean')
+         || ![generator.spacingX, generator.spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
         || !Number.isInteger(generator.maxRows) || generator.maxRows < 1 || generator.maxRows > 100
         || !Number.isInteger(generator.maxColumns) || generator.maxColumns < 1 || generator.maxColumns > 100
         || !Number.isInteger(generator.defaultRows) || generator.defaultRows < 1 || generator.defaultRows > generator.maxRows

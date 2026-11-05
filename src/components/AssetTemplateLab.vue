@@ -25,37 +25,13 @@ const categoryLabel = value => labels[value] || value
 const authHeaders = () => ({ 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID })
 
 function resize() {
-  if (!renderer || !viewport.value || !camera) return
+  if (!renderer || !viewport.value) return
   const w = Math.max(1, viewport.value.clientWidth), h = Math.max(1, viewport.value.clientHeight)
   renderer.setSize(w, h, false)
   camera.aspect = w / h
   camera.updateProjectionMatrix()
 }
 
-/**
- * 俯视模式只移动观察中心，不改变缩放倍率，也不改变相机倾角。
- */
-function centerObjectAtOverview(object) {
-  if (!object || !camera || !controls) return
-  object.updateWorldMatrix(true, true)
-  const bounds = new THREE.Box3().setFromObject(object)
-  const center = bounds.isEmpty()
-    ? object.getWorldPosition(new THREE.Vector3())
-    : bounds.getCenter(new THREE.Vector3())
-  const size = bounds.isEmpty() ? new THREE.Vector3(8, 8, 8) : bounds.getSize(new THREE.Vector3())
-  const radius = Math.max(size.length() * 0.5, 4)
-  const direction = new THREE.Vector3(1, 0.82, 1).normalize()
-  controls.target.copy(center)
-  camera.position.copy(center).addScaledVector(direction, Math.max(28, radius * 3.2))
-  camera.up.set(0, 1, 0)
-  camera.near = 0.1
-  camera.far = Math.max(2000, radius * 30)
-  camera.updateProjectionMatrix()
-  camera.lookAt(center)
-  controls.minDistance = Math.max(5, radius * 0.35)
-  controls.maxDistance = Math.max(600, radius * 20)
-  controls.update()
-}
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -121,7 +97,7 @@ async function generateModel() {
     const model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
     const id = 'ai-instance-' + (++serial)
     const index = instances.value.length
-    model.position.set(0, 0, 0)
+    model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
     model.scale.setScalar(scale.value)
     model.userData.assetInstanceId = id
     model.userData.assetTemplate = { id: 'ai-generated:' + id, version: 1, category: 'building', objectType: objectType.value }
@@ -129,7 +105,7 @@ async function generateModel() {
     objects.set(id, model)
     instances.value.push({ id, name: spec.targetName || objectType.value || 'AI 生成模型', templateId: 'AI ObjectSculptSpec', category: 'building', source: 'AI' })
     selectedInstanceId.value = id
-    centerObjectAtOverview(model)
+    controls.target.copy(model.position); controls.update()
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1)
     generationLog.value += '视觉模型：' + (result.model || '未返回') + '\n组件数量：' + spec.componentTree.length + '\n生成耗时：' + elapsed + ' 秒\n输入方式：' + (imageDataUrl.value ? '参考图片' : '纯提示词') + '\n模型来源：AI ObjectSculptSpec → Three.js Mesh'
     status.value = '模型已生成并加入沙盒：' + (spec.targetName || objectType.value)
@@ -165,20 +141,10 @@ function removeInstance(id) {
 function focusInstance(id) {
   selectedInstanceId.value = id
   const object = objects.get(id)
-  if (object) centerObjectAtOverview(object)
+  if (object) { controls.target.copy(object.position); controls.update() }
 }
 function clearScene() { [...objects.keys()].forEach(removeInstance); status.value = '场景已清空' }
-function resetCamera() {
-  const object = objects.get(selectedInstanceId.value)
-  if (object) return centerObjectAtOverview(object)
-  controls.target.set(0, 0, 0)
-  camera.position.set(145, 205, 175)
-  camera.up.set(0, 1, 0)
-  camera.near = 0.1; camera.far = 3000
-  camera.lookAt(0, 0, 0)
-  camera.updateProjectionMatrix()
-  controls.update()
-}
+function resetCamera() { camera.position.set(30, 28, 34); controls.target.set(0, 0, 0); controls.update() }
 
 let runtime
 onMounted(() => {
@@ -187,43 +153,15 @@ onMounted(() => {
     templates.value = runtime.templates.list()
     selectedId.value = templates.value.find(x => x.category === 'building')?.id || templates.value[0]?.id || ''
     scene = runtime.createSandboxScene()
-    scene.background = null
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshBasicMaterial({ color: '#78b96b', side: THREE.DoubleSide }))
-    ground.rotation.x = -Math.PI / 2; ground.position.y = 0; ground.name = 'sandbox-ground'; scene.add(ground)
-    const grid = new THREE.GridHelper(180, 36, '#315f35', '#9bc58e'); grid.position.y = 0.025; grid.name = 'sandbox-grid'; scene.add(grid)
-    const borderPoints = [new THREE.Vector3(-90, 0.04, -70), new THREE.Vector3(90, 0.04, -70), new THREE.Vector3(90, 0.04, 70), new THREE.Vector3(-90, 0.04, 70)]
-    const border = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(borderPoints), new THREE.LineBasicMaterial({ color: '#244f2c' }))
-    border.name = 'sandbox-boundary'; scene.add(border)
-    const centerMarker = new THREE.Group(); centerMarker.name = 'sandbox-center-marker'
-    const markerMaterial = new THREE.LineBasicMaterial({ color: '#173d20' })
-    centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-3, 0.05, 0), new THREE.Vector3(3, 0.05, 0)]), markerMaterial))
-    centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, -3), new THREE.Vector3(0, 0.05, 3)]), markerMaterial))
-    scene.add(centerMarker)
-    camera = new THREE.PerspectiveCamera(48, 1, 0.1, 3000)
-    // 初始镜头更靠近并提高俯角，让 180×140 的三维沙盒地面完整进入画面。
-    camera.position.set(145, 205, 175)
-    camera.up.set(0, 1, 0)
-    camera.lookAt(0, 0, 0)
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.setClearColor(0x000000, 0); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    scene.background = new THREE.Color('#dfe8e0')
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 140), new THREE.MeshStandardMaterial({ color: '#9eae8d', roughness: 1 }))
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.08; ground.receiveShadow = true; ground.name = 'sandbox-ground'; scene.add(ground)
+    const grid = new THREE.GridHelper(180, 36, '#71836e', '#c2cdbb'); grid.position.y = -0.06; grid.name = 'sandbox-grid'; scene.add(grid)
+    camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500); camera.position.set(30, 28, 34)
+    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace; viewport.value.replaceChildren(renderer.domElement)
-    controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true
-    controls.enableRotate = true
-    controls.enablePan = true
-    controls.enableZoom = true
-    controls.screenSpacePanning = true
-    controls.rotateSpeed = 0.75
-    controls.panSpeed = 0.85
-    controls.zoomSpeed = 0.9
-    controls.minDistance = 8
-    controls.maxDistance = 1800
-    controls.maxPolarAngle = Math.PI * 0.49
-    controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE
-    controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
-    controls.mouseButtons.RIGHT = THREE.MOUSE.PAN
-    controls.target.set(0, 0, 0)
-    controls.update()
+    controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0); controls.update()
     observer = new ResizeObserver(resize); observer.observe(viewport.value); resize()
     const render = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(render) }; render()
     status.value = '沙盒已就绪；可输入提示词或上传图片生成独立模型'
@@ -256,7 +194,7 @@ onBeforeUnmount(() => {
         <div class="templates"><button v-for="item in visibleTemplates" :key="item.id" :class="{active:selectedId===item.id}" @click="selectedId=item.id"><b>{{ item.name }}</b><small>{{ categoryLabel(item.category) }} · v{{ item.version }}</small></button></div>
         <button class="secondary" :disabled="!selectedTemplate" @click="addTemplate">添加选中的预置模板（对照）</button>
       </aside>
-      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键旋转 · 右键平移 · 滚轮缩放</span></div><div class="hint status">{{ status }}</div></section>
+      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键旋转 · 滚轮缩放 · 右键平移</span></div><div class="hint status">{{ status }}</div></section>
       <aside class="panel inspector">
         <h3>沙盒实例 <span>{{ instances.length }} 个</span></h3>
         <label>选中实例缩放 {{ scale.toFixed(1) }}×</label><input v-model.number="scale" type="range" min="0.3" max="2.5" step="0.1">

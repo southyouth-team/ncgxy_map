@@ -805,7 +805,8 @@ export function validateObjectSculptSpec(spec) {
       throw new TypeError('结构生成器 ID 无效或重复');
     }
     generatorIds.add(generator.id);
-    if (!['repeat','grid'].includes(generator.type) || !nodes.has(generator.templateRootId)) throw new TypeError('结构生成器类型或模板节点无效：' + generator.id);
+    if (!['repeat','grid'].includes(generator.type) || !nodes.has(generator.templateRootId)
+      || (nodes.get(generator.templateRootId).kind || 'mesh') !== 'group') throw new TypeError('结构生成器类型或模板 Group 无效：' + generator.id);
     const parameterIsValid = (id, max) => {
       const parameter = (spec.parameterSchema || []).find(item => item.id === id);
       return parameter && parameter.type === 'number' && Number.isInteger(parameter.min) && Number.isInteger(parameter.max)
@@ -854,7 +855,8 @@ export function validateObjectSculptSpec(spec) {
       const followerNode = nodes.get(follower.nodeId);
       let parent = follower.nodeId, insideTemplate = false;
       while (parent) { if (parent === generator.templateRootId) { insideTemplate = true; break; } parent = nodes.get(parent)?.parent; }
-      if (!followerNode || insideTemplate || !['x','y','z'].includes(follower.axis) || !Number.isFinite(follower.offset ?? 0)) throw new TypeError('结构生成器跟随规则无效：' + generator.id);
+      if (!followerNode || insideTemplate || !['x','y','z'].includes(follower.axis)
+        || !Number.isFinite(follower.offset ?? 0) || Math.abs(Number(follower.offset ?? 0)) > 100) throw new TypeError('结构生成器跟随规则无效：' + generator.id);
     }
   }
   const constraintIds = new Set();

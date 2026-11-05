@@ -1163,4 +1163,34 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(reloaded.userData.objectSculptSpec.constraints).toHaveLength(3);
   });
 
+
+  it('requires generator templates to be explicit Group roots', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'prototype', kind: 'mesh', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+      parameterSchema: [{ id: 'count', type: 'number', value: 2, min: 1, max: 4, targets: [] }],
+      generators: [{ id: 'repeat-items', type: 'repeat', templateRootId: 'prototype', countParameterId: 'count',
+        axis: 'y', spacing: 1, defaultCount: 2, maxCount: 4 }],
+    };
+    expect(() => validateObjectSculptSpec(spec)).toThrow('结构生成器类型或模板 Group 无效');
+  });
+
+  it('rejects repeat followers with offsets outside the shared server/runtime bound', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'prototype', kind: 'group', parent: 'root' },
+        { id: 'part', parent: 'prototype', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'roof', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+      parameterSchema: [{ id: 'count', type: 'number', value: 2, min: 1, max: 4, targets: [] }],
+      generators: [{ id: 'repeat-items', type: 'repeat', templateRootId: 'prototype', countParameterId: 'count',
+        axis: 'y', spacing: 1, defaultCount: 2, maxCount: 4, followers: [{ nodeId: 'roof', axis: 'y', offset: 101 }] }],
+    };
+    expect(() => validateObjectSculptSpec(spec)).toThrow('结构生成器跟随规则无效');
+  });
+
 });

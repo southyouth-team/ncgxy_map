@@ -626,6 +626,15 @@ function toggleLayerLock(key) {
   }
 }
 const palette = CAMPUS_BUILDING_ASSET_CATALOG.map(item => item.template)
+const publishedBuildingTemplates = ref([])
+async function loadPublishedBuildingTemplates() {
+  try {
+    const result = await apiRequest('/assets/building-templates')
+    publishedBuildingTemplates.value = (result.templates || []).filter(item => item.status === 'ready')
+  } catch (error) {
+    persistenceMessage.value = '独立建筑模板库暂不可用，仍可使用内置模板：' + (error.message || '请求失败')
+  }
+}
 const buildingPreset = item => CAMPUS_BUILDING_TEMPLATES[item?.template] || CAMPUS_BUILDING_TEMPLATES['教学楼']
 const buildingWallColor = item => ({ wall: '#e7d2a5', wallCream: '#e7d2a5', wallPeach: '#d8a77d', wallMint: '#b8c99a' }[buildingPreset(item).wall] || '#e7d2a5')
 const areaColor = (type) => ({ water: '#6bb8b4', sports: '#b9b69f', vegetation: '#78936d', plaza: '#b8b2a0', parking: '#858b8d' }[type] || '#78936d')
@@ -766,6 +775,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleEditorKeydown)
   window.addEventListener('keydown', onWindowKeyDown)
   loadEditorDocument()
+  loadPublishedBuildingTemplates()
   window.addEventListener('keyup', onWindowKeyUp)
   if (canvasViewport.value && typeof ResizeObserver !== 'undefined') {
     canvasResizeObserver = new ResizeObserver(([entry]) => {
@@ -1058,6 +1068,24 @@ function applyBuildingTemplate(template) {
   const patch = { template: preset.template, height: preset.height, floors: preset.floors, windowDensity: preset.windowDensity, windowWidth: preset.windowWidth, windowHeight: preset.windowHeight, doorWidth: preset.doorWidth, roofRise: preset.roofRise, roofStyle: preset.roofStyle, wall: preset.wall }
   commitFeatureCollectionMutation(collection => updateCampusFeatureProperties(collection, item.id, patch))
 }
+function applyPublishedBuildingTemplate(templateId) {
+  const item = selectedBuilding.value
+  const template = publishedBuildingTemplates.value.find(entry => entry.templateId === templateId && entry.status === 'ready')
+  if (!item || !template) return
+  snapshot()
+  const design = template.buildingDesign || {}
+  const patch = { modelTemplateId: template.templateId, modelTemplateName: template.name, template: design.template || item.template }
+  if (template.modelType === 'procedural') {
+    Object.assign(patch, {
+      height: design.height ?? item.height, floors: design.floors ?? item.floors,
+      roofStyle: design.roofStyle ?? item.roofStyle, roofRise: design.roofRise ?? item.roofRise,
+      windowDensity: design.windowDensity ?? item.windowDensity, windowWidth: design.windowWidth ?? item.windowWidth,
+      windowHeight: design.windowHeight ?? item.windowHeight, doorWidth: design.doorWidth ?? item.doorWidth,
+      wall: design.wallPalette || item.wall,
+    })
+  }
+  commitFeatureCollectionMutation(collection => updateCampusFeatureProperties(collection, item.id, patch))
+}
 function updateBuildingMetric(metric, rawValue) {
   const item = selectedBuilding.value
   const value = Number(rawValue)
@@ -1321,7 +1349,7 @@ function exportDocument() {
         </template>
         <template v-if="selectedBuilding">
           <label>建筑名称</label><input  :value="selectedBuilding.label" @focus="snapshot" @change="updateSelectedFeatureProperty('name',$event.target.value)">
-          <label>建筑模板（选择后立即套用整套参数）</label><select :value="selectedBuilding.template" @change="applyBuildingTemplate($event.target.value)"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select><small class="hint property-hint">模板会覆盖高度、楼层、屋顶、门窗和墙面预设；不会修改建筑位置、占地轮廓、碰撞或通行属性。</small>
+          <label>建筑模板（选择后立即套用整套参数）</label><select :value="selectedBuilding.template" @change="applyBuildingTemplate($event.target.value)"><option v-for="item in palette" :key="item" :value="item">{{ item }}</option></select><small class="hint property-hint">模板会覆盖高度、楼层、屋顶、门窗和墙面预设；不会修改建筑位置、占地轮廓、碰撞或通行属性。</small><label>独立模板库（选择后套用）</label><select :value="selectedBuilding.modelTemplateId || ''" @change="applyPublishedBuildingTemplate($event.target.value)"><option value="">不使用独立模板</option><option v-for="item in publishedBuildingTemplates" :key="item.templateId" :value="item.templateId">{{ item.name }} · {{ item.modelType === 'glb' ? 'GLB' : '程序化' }}</option></select><small class="hint property-hint">独立模板只替换建筑视觉模型/参数，不修改位置、占地轮廓、碰撞或通行属性。GLB 加载失败时保留程序化建筑回退。</small>
           <label>三维建筑参数</label>
           <div class="property-grid">
             <label>建筑高度<input type="number" min="1" max="80" step="0.2"  :value="selectedBuilding.height" @focus="snapshot" @change="updateSelectedFeatureProperty('height',$event.target.value,{numeric:true})"></label>

@@ -172,8 +172,8 @@ function buildPrompt() {
     ? 'isometric architectural reference image, fixed three-quarter elevated camera, show front facade, side facade and roof simultaneously; make floors, windows, doors and roof geometry clearly readable for visual analysis'
     : 'complete stylized 3D game-ready architectural asset, all sides modeled, consistent scene scale, clean topology'
   const format = viewMode.value === '2.5d'
-    ? 'single isolated building reference render, transparent background, PNG or WebP with alpha channel; this image is a visual reference for code-generated 3D geometry and is also used by the 2.5D view'
-    : 'single isolated 3D building model, exportable as GLB/glTF, PBR materials, origin at footprint center, ground level at Y=0'
+    ? 'single isolated building reference render, transparent background, PNG or WebP with alpha channel; this image is used only for visual analysis and human review, never as the final 2.5D or 3D scene asset'
+    : 'optional high-detail 3D model for manual import compatibility, exportable as GLB/glTF, PBR materials, origin at footprint center, ground level at Y=0; the default AI workflow still generates shared procedural geometry'
   generatedPrompt.value = [
     'Create one original stylized low-poly campus architecture asset for a university exploration game.',
     'Asset identity: ' + feature.name + ' (' + feature.featureId + '). This is a temporary spatial label, not a verified official building name.',
@@ -235,7 +235,7 @@ async function generateImage() {
     previewUrl.value = URL.createObjectURL(file)
     sourceType.value = 'ai_generated'
     generationModel.value = payload.model || 'gpt-image-2'
-    assetName.value = (selectedFeature.value?.name || '校园素材') + ' · AI 生成 2.5D'
+    assetName.value = (selectedFeature.value?.name || '校园素材') + ' · AI 建筑参考图'
     publicPath.value = ''
     message.value = '图片生成成功。请先检查轮廓、透明背景和风格，再保存为候选素材。'
   } catch (error) {

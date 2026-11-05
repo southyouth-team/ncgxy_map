@@ -258,7 +258,7 @@ function onViewportPointerUp(event) {
   const hits = raycaster.intersectObjects([...objects.values()], true)
   const hit = hits.find(item => item.object.userData?.componentId)
   if (!hit) return
-  const componentId = hit.object.userData.componentId
+  const componentId = hit.object.userData.componentSourceId || hit.object.userData.componentId
   for (const [instanceId, root] of objects) {
     if (root.userData?.componentGroups?.has(componentId)) { selectedInstanceId.value = instanceId; selectComponent(componentId); break }
   }

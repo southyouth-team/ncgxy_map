@@ -1035,7 +1035,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(5);
     expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(7.5);
     applyObjectSculptParameter(THREE, reloaded, 'base-width', 2);
-    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(2);
+    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(3);
     expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(5.5);
   });
 

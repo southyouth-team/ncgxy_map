@@ -114,7 +114,7 @@ export class BuildingDesignService {
               content: [
                 '你是专业的 Three.js 结构化物体重建工程师。根据单张参考图输出 ObjectSculptSpec JSON，不要输出代码、Markdown 或解释。',
                 '输出根对象字段：schemaVersion（固定字符串 2.0）、targetName（字符串）、materials（对象，键为材质 ID，每项含 color=#RRGGBB、roughness 0-1、metalness 0-1、opacity 0.05-1）、componentTree（数组）。',
-                '每个 componentTree 节点字段：id（唯一英文 ID）、name（中文部件名）、role（部件角色）、parent（父节点 ID，可省略或 null）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth，均为正数）、transform（position/rotation/scale 三个长度为 3 的数字数组）、material（materials 中的键）、geometryDescriptor（可选 segments 3-48、tube 正数、arch inset 正数；polygon points 为 3-32 个 [-0.5,0.5] 归一化二维坐标点）。',
+                '每个 componentTree 节点字段：id（唯一英文 ID）、name（中文部件名）、role（部件角色）、parent（唯一主体根节点省略，其余组件必须填写直接父节点 ID）、primitive（box/cuboid/polygon/wedge/arch/cylinder/cone/sphere/ellipsoid/torus）、dimensions（width/height/depth，均为正数）、transform（position/rotation/scale 三个长度为 3 的数字数组）、material（materials 中的键）、geometryDescriptor（可选 segments 3-48、tube 正数、arch inset 正数；polygon points 为 3-32 个 [-0.5,0.5] 归一化二维坐标点）。',
                 '必须输出 12-40 个有意义的独立组件，不能只输出一个整体 Mesh。组件按真实结构拆分；主结构、附属结构、装饰件应有清晰 parent 关系。禁止重复 ID、缺失 parent、循环层级、未知 primitive。',
                 '装配完整性是最高优先级：componentTree 必须恰好只有一个根节点，该根节点代表建筑主楼/主体承重体；其余所有组件都必须设置 parent，不能存在多个互相分离的根组件。所有组件必须通过 parent 链接到唯一根节点，形成一棵连通的建筑装配树。',
                 '所有子组件的 transform.position 都是相对直接 parent 的局部坐标，不是世界坐标。先确定主体的尺寸、中心和局部坐标系，再将塔楼、翼楼、屋顶、门窗、檐口、城垛等放到主体对应的连接位置。每个部件必须与其承载部件接触、嵌入或合理搭接，禁止留出可见空气间隙，禁止把各部件分散摆放成零件陈列。',

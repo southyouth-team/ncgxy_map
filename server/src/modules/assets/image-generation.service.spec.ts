@@ -94,7 +94,7 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('tube、lathe、sweep、loft');
     expect(systemPrompt).toContain('generators');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
-    expect(systemPrompt).toContain('geometryDescriptor.sections');
+    expect(systemPrompt).toContain('loft 使用 sections');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 

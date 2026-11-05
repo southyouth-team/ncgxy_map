@@ -53,6 +53,7 @@ export class BuildingTemplatesService {
     if (!['procedural','glb'].includes(String(input.modelType))) throw new BadRequestException('模板类型无效');
     if (input.modelType === 'procedural' && (!design || typeof design !== 'object')) throw new BadRequestException('程序化模板缺少结构参数');
     if (input.modelType === 'procedural') {
+      if (category !== 'building' && (design as any).reviewed !== true) throw new BadRequestException('AI 识别参数尚未经过人工审核；请先确认参数并签发审核凭证');
       const validToken = category === 'building'
         ? this.buildingDesign.consumeDesignToken(input.designToken, design)
         : this.buildingDesign.consumeSceneDesignToken(input.designToken, category, objectType, visualStyle, design);
@@ -115,6 +116,7 @@ export class BuildingTemplatesService {
       if (item.modelType === 'glb' && !item.modelFile) throw new BadRequestException('请先上传 GLB 模型');
       if (item.modelType === 'procedural' && !item.design && !item.buildingDesign) throw new BadRequestException('程序化模板缺少结构参数');
       if (item.modelType === 'procedural' && !item.referenceImage) throw new BadRequestException('程序化模板必须保留已确认的参考图片');
+      if (item.modelType === 'procedural' && item.category !== 'building' && item.design?.reviewed !== true) throw new BadRequestException('模板参数尚未经过人工审核，不能发布');
       if (item.modelType === 'procedural' && item.category !== 'building' && item.referenceImage.sha256 !== item.design?.referenceImageSha256) throw new BadRequestException('模板参考图片与 AI 结构识别凭证不匹配');
       item.status = 'ready'; item.updatedAt = new Date().toISOString(); result = item; await this.writeManifest(m);
     });

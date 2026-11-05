@@ -348,12 +348,31 @@ export class AssetsService {
     const constraintIds = new Set<string>();
     for (const constraint of constraints) {
       if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
-        || constraintIds.has(constraint.id) || !['follow','span'].includes(constraint.type)
-        || !generatorIdSet.has(constraint.sourceGeneratorId) || !ids.has(constraint.targetNodeId)
-        || templateNodeIds.has(constraint.targetNodeId) || !['x','y','z'].includes(constraint.axis)) {
-        throw new BadRequestException('资产结构约束 ID、类型或引用无效');
+        || constraintIds.has(constraint.id) || !['follow','span','attach','adjacency'].includes(constraint.type)) {
+        throw new BadRequestException('资产结构约束 ID 或类型无效');
       }
       constraintIds.add(constraint.id);
+      if (constraint.type === 'attach' || constraint.type === 'adjacency') {
+        const sourceNode = byId.get(constraint.sourceNodeId), targetNode = byId.get(constraint.targetNodeId);
+        if (!sourceNode || !targetNode || sourceNode.id === targetNode.id || templateNodeIds.has(sourceNode.id) || templateNodeIds.has(targetNode.id)) {
+          throw new BadRequestException('资产组件连接关系引用无效：' + constraint.id);
+        }
+        if (constraint.type === 'attach') {
+          if ((sourceNode.kind || 'mesh') !== 'mesh' || (targetNode.kind || 'mesh') !== 'mesh'
+            || sourceNode.parent !== targetNode.parent || !['x','y','z'].includes(constraint.axis)
+            || ![-1,1].includes(Number(constraint.sourceSide)) || ![-1,1].includes(Number(constraint.targetSide))
+            || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
+            throw new BadRequestException('资产 attach 必须连接同一父级下的 Mesh 面：' + constraint.id);
+          }
+        } else if (!['adjacent','connects'].includes(constraint.relation)) {
+          throw new BadRequestException('资产 adjacency 关系类型无效：' + constraint.id);
+        }
+        continue;
+      }
+      if (!generatorIdSet.has(constraint.sourceGeneratorId) || !ids.has(constraint.targetNodeId)
+        || templateNodeIds.has(constraint.targetNodeId) || !['x','y','z'].includes(constraint.axis)) {
+        throw new BadRequestException('资产结构约束引用无效');
+      }
       const targetNode = byId.get(constraint.targetNodeId);
       if (constraint.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(constraint.property) || targetNode?.kind === 'group')) {
         throw new BadRequestException('资产 span 约束目标属性无效：' + constraint.id);

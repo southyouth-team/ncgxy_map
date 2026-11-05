@@ -26,6 +26,7 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
       category: 'vegetation',
       objectType: '乔木',
       visualStyle: 'low-poly',
+      dimensions: { width: 3, height: 5, depth: 2 },
       sourceType: 'manual_model',
       modelType: 'glb',
       prompt: '一棵校园香樟树',
@@ -37,6 +38,7 @@ describe('BuildingTemplatesService generic scene asset contract', () => {
       objectType: '乔木',
       visualStyle: 'low-poly',
       modelType: 'glb',
+      dimensions: { width: 3, height: 5, depth: 2 },
       status: 'review',
       design: null,
     });

@@ -97,7 +97,7 @@ describe('BuildingDesignService', () => {
     const service = new BuildingDesignService({ get: (key: string) => ({ VISION_API_KEY: 'secret', VISION_MODEL: 'vision-test' } as Record<string, string>)[key] } as never);
     const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
     const approval = service.approveReference(imageDataUrl);
-    await expect(service.analyzeSceneReference('indoor', '教室', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('尚未接入视觉识别 schema');
+    await expect(service.analyzeSceneReference('interior', '教室', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('尚未接入视觉识别 schema');
     await expect(service.analyzeSceneReference('vegetation', '篮球架', 'stylized', imageDataUrl, approval.approvalToken)).rejects.toThrow('对象类型与场景类别不匹配');
   });
 

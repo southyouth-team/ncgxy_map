@@ -11,7 +11,7 @@ const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
 export class BuildingDesignService {
   private readonly logger = new Logger(BuildingDesignService.name);
 
-private readonly approvedReferences = new Map<string, { digest: string; expiresAt: number }>();
+  private readonly approvedReferences = new Map<string, { digest: string; expiresAt: number }>();
 
   constructor(private readonly config: ConfigService) {}
 

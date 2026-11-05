@@ -279,7 +279,7 @@ async function approveReferenceImage() {
     const response = await fetch(API_BASE + '/assets/ai-image/approve-reference', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
-      body: JSON.stringify({ imageDataUrl, approvalToken: imageApprovalToken.value }),
+      body: JSON.stringify({ imageDataUrl }),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok || !payload.approvalToken) throw new Error(payload.message || '图片确认失败')
@@ -316,7 +316,7 @@ async function analyzeBuildingReference() {
     const response = await fetch(API_BASE + '/assets/ai-image/analyze-building', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
-      body: JSON.stringify({ imageDataUrl }),
+      body: JSON.stringify({ imageDataUrl, approvalToken: imageApprovalToken.value }),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(payload.message || '建筑结构识别失败：HTTP ' + response.status)

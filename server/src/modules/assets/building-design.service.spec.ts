@@ -58,6 +58,8 @@ describe('BuildingDesignService', () => {
 
   it('fails clearly when vision configuration is absent', async () => {
     const service = new BuildingDesignService({ get: () => undefined } as never);
-    await expect(service.analyzeReference('data:image/png;base64,' + png.toString('base64'))).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    await expect(service.analyzeReference(imageDataUrl, approval.approvalToken)).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });

@@ -67,12 +67,19 @@ function createVegetationGenerator(THREE, input, materials) {
     createMesh(THREE, new THREE.CylinderGeometry(width * 0.075, width * 0.1, trunkHeight, 6), materials.dark,
       'vegetation-trunk', group, [0, trunkHeight / 2, 0]);
     const crownRadius = Math.max(width, depth) * 0.34;
+    const canopyShape = normalize(geometry.canopyShape);
+    const branchSpread = Math.max(0.2, Math.min(1, Number(geometry.branchSpread) || 0.65));
+    const crownGeometry = () => canopyShape === 'conical'
+      ? new THREE.ConeGeometry(crownRadius * 0.95, crownRadius * 2, 7)
+      : canopyShape === 'irregular'
+        ? new THREE.DodecahedronGeometry(crownRadius, 1)
+        : new THREE.IcosahedronGeometry(crownRadius, 1);
     const crownLayers = Math.max(1, Math.min(6, Math.round(Number(geometry.crownLayers) || 1)));
     for (let layer = 0; layer < crownLayers; layer += 1) {
-      const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(crownRadius * (1 - layer * 0.1), 1), layer % 2 ? materials.secondary : materials.leaf);
+      const crown = new THREE.Mesh(crownGeometry(), layer % 2 ? materials.secondary : materials.leaf);
       crown.name = 'vegetation-crown-' + layer;
       crown.position.y = trunkHeight + height * 0.18 + layer * height * 0.1;
-      crown.scale.y = Math.max(0.55, height / Math.max(width, depth) * 0.7);
+      crown.scale.set(branchSpread * (1 - layer * 0.08), Math.max(0.55, height / Math.max(width, depth) * 0.7), branchSpread * (1 - layer * 0.08));
       crown.castShadow = true;
       group.add(crown);
     }
@@ -114,12 +121,14 @@ function createStructureGenerator(THREE, input, materials) {
   if (['bridge', '拱桥', '桥梁', '人行桥'].includes(type)) {
     createMesh(THREE, new THREE.BoxGeometry(width, height * 0.12, depth), materials.primary,
       'bridge-deck', group, [0, height * 0.32, 0]);
-    for (const side of [-1, 1]) {
-      createMesh(THREE, new THREE.BoxGeometry(width, height * 0.08, 0.12), materials.secondary,
-        'bridge-railing', group, [0, height * 0.62, side * depth * 0.43]);
-      for (let x = -width * 0.42; x <= width * 0.42; x += Math.max(0.5, width / 5)) {
-        createMesh(THREE, new THREE.BoxGeometry(0.1, height * 0.3, 0.1), materials.dark,
-          'bridge-baluster', group, [x, height * 0.46, side * depth * 0.43]);
+    if (geometry.hasRailing !== false) {
+      for (const side of [-1, 1]) {
+        createMesh(THREE, new THREE.BoxGeometry(width, height * 0.08, 0.12), materials.secondary,
+          'bridge-railing', group, [0, height * 0.62, side * depth * 0.43]);
+        for (let x = -width * 0.42; x <= width * 0.42; x += Math.max(0.5, width / 5)) {
+          createMesh(THREE, new THREE.BoxGeometry(0.1, height * 0.3, 0.1), materials.dark,
+            'bridge-baluster', group, [x, height * 0.46, side * depth * 0.43]);
+        }
       }
     }
     const supportCount = Math.max(2, Math.min(16, Math.round(Number(geometry.supportCount) || 2)));
@@ -156,8 +165,13 @@ function createFacilityGenerator(THREE, input, materials) {
       createMesh(THREE, new THREE.BoxGeometry(seatWidth * 0.96, height * 0.12, depth), materials.primary,
         'bench-seat-' + seat, group, [-width / 2 + seatWidth * (seat + 0.5), height * 0.38, 0]);
     }
-    createMesh(THREE, new THREE.BoxGeometry(width, height * 0.48, depth * 0.1), materials.secondary,
-      'bench-back', group, [0, height * 0.68, -depth * 0.42]);
+    if (geometry.hasBackrest !== false) {
+      createMesh(THREE, new THREE.BoxGeometry(width, height * 0.48, depth * 0.1), materials.secondary,
+        'bench-back', group, [0, height * 0.68, -depth * 0.42]);
+    }
+    if (geometry.hasArmrest === true) {
+      for (const x of [-width * 0.48, width * 0.48]) createMesh(THREE, new THREE.BoxGeometry(width * 0.06, height * 0.2, depth * 0.7), materials.dark, 'bench-armrest', group, [x, height * 0.55, 0]);
+    }
     for (const x of [-width * 0.34, width * 0.34]) {
       createMesh(THREE, new THREE.BoxGeometry(width * 0.08, height * 0.38, depth * 0.7), materials.dark,
         'bench-leg', group, [x, height * 0.18, 0]);
@@ -204,7 +218,8 @@ function createDecorationGenerator(THREE, input, materials) {
       'flowerbed-border', group, [0, height * 0.09, 0]);
     createMesh(THREE, new THREE.BoxGeometry(width * 0.86, height * 0.12, depth * 0.84), materials.leaf,
       'flowerbed-soil', group, [0, height * 0.19, 0]);
-    for (let i = 0; i < 7; i += 1) {
+    const flowerCount = Math.max(0, Math.min(40, Math.round(Number(geometry.flowerCount) || 7)));
+    for (let i = 0; i < flowerCount; i += 1) {
       const flower = new THREE.Mesh(new THREE.IcosahedronGeometry(Math.min(width, depth) * 0.055, 0), i % 2 ? materials.accent : materials.primary);
       flower.position.set((i - 3) * width / 9, height * 0.4, (i % 2 ? 1 : -1) * depth * 0.18);
       group.add(flower);
@@ -299,7 +314,8 @@ export function createSceneAssetGeneratorRegistry(THREE) {
       const handler = generators.get(category + ':' + objectType);
       if (!handler) throw new Error('未注册场景资产生成器：' + category + '/' + objectType);
       const style = normalize(input.visualStyle) || 'stylized';
-      const materials = createMaterials(THREE, style, input.materials || {});
+      const leafColors = { green: '#69a65e', darkGreen: '#315b3b', yellowGreen: '#9dbb50', red: '#a94e4e', autumn: '#c77b36' };
+      const materials = createMaterials(THREE, style, { ...(input.materials || {}), ...(leafColors[input.design?.geometry?.leafPalette] ? { leaf: leafColors[input.design.geometry.leafPalette] } : {}) });
       const root = handler(THREE, input, materials);
       root.name = input.name || category + '-' + objectType;
       root.userData.sceneAsset = {

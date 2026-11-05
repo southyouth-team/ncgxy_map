@@ -332,15 +332,24 @@ export class ImageGenerationService {
     return { ...result, repair: { strategy: 'targeted-structure-repair', validationError } };
   }
 
+
+  async reconstructObjectFromImage(imageDataUrl: unknown, prompt: unknown, objectType: unknown, visualStyle: unknown): Promise<any> {
+    if (typeof imageDataUrl !== 'string' || !imageDataUrl) throw new BadRequestException('请上传参考图片');
+    return this.generateObjectFromPrompt(prompt, objectType, visualStyle, true, imageDataUrl);
+  }
+
   /**
    * Prompt-to-3D POC: ask the configured vision/chat model for a bounded ObjectSculptSpec.
    * The model returns JSON data only; no generated JavaScript is evaluated in the server.
    */
-  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, allowGeometryRepair = true): Promise<any> {
-    if (typeof promptInput !== 'string' || !promptInput.trim()) {
-      throw new BadRequestException('Three.js 模型生成提示词不能为空');
+  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, allowGeometryRepair = true, imageDataUrlInput?: unknown): Promise<any> {
+    const promptText = typeof promptInput === 'string' ? promptInput.trim() : '';
+    const imageDataUrl = typeof imageDataUrlInput === 'string' ? imageDataUrlInput : '';
+    if (!promptText && !imageDataUrl) throw new BadRequestException('Three.js 模型生成需要提示词或参考图片');
+    if (imageDataUrl && (!/^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl) || Buffer.byteLength(imageDataUrl, 'utf8') > 14 * 1024 * 1024)) {
+      throw new BadRequestException('参考图片格式无效或超过 10 MB');
     }
-    const prompt = promptInput.trim().slice(0, 40000);
+    const prompt = (promptText || '请严格依据参考图片重建该物体。') .slice(0, 40000);
     const objectType = typeof objectTypeInput === 'string' && objectTypeInput.trim()
       ? objectTypeInput.trim().slice(0, 80) : '独立 3D 物体';
     const visualStyle = typeof visualStyleInput === 'string' && visualStyleInput.trim()
@@ -366,7 +375,8 @@ export class ImageGenerationService {
             {
               role: 'system',
               content: [
-                '你是专业的 Three.js 独立物体建模工程师。根据用户提示词输出 ObjectSculptSpec JSON，不要输出 JavaScript、Markdown 或解释。',
+                '你是专业的 Three.js 独立物体建模工程师。根据用户提示词和可能提供的参考图片输出 ObjectSculptSpec JSON，不要输出 JavaScript、Markdown 或解释。',
+                '当提供参考图片时，图片是几何外形和比例的第一依据，提示词只能补充图片中不可见的信息。不得把图片简单当成贴图，不得忽略图片主体轮廓；应使用足够的分段、曲线和截面描述可见结构。',
                 '根对象字段：schemaVersion 固定为字符串 2.0，targetName，category（AI 自行判断的开放分类）、objectType（AI 自行判断的具体物体）、visualStyle、materials、componentTree、parameterSchema。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
                 'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
@@ -384,7 +394,15 @@ export class ImageGenerationService {
                 '目标对象类型：' + objectType + '；视觉风格：' + visualStyle + '；用户要求：' + prompt,
               ].join('\\n'),
             },
-            { role: 'user', content: '请直接构建可转换为真实 Three.js Mesh 的独立物体结构，优先保证外轮廓、部件层级、比例和材质。只返回 JSON。' },
+            {
+              role: 'user',
+              content: imageDataUrl
+                ? [
+                    { type: 'text', text: '请以参考图片为首要几何依据，重建图片中的主体。不要臆造与图片不符的轮廓、塔身比例、顶部结构或底座。先识别主体边界、宽高比、分段轮廓、支撑结构和接地位置，再输出 ObjectSculptSpec。用户补充要求：' + (prompt || '无') + '。图片中的主体必须作为一个完整对象，所有部件按真实连接关系组织；不得出现无理由悬空部件。只返回 JSON。' },
+                    { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
+                  ]
+                : '请直接构建可转换为真实 Three.js Mesh 的独立物体结构，优先保证外轮廓、部件层级、比例和材质。只返回 JSON。',
+            },
           ],
         }),
       });

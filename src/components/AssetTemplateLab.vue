@@ -147,15 +147,14 @@ async function generateModel() {
     const isReferenceImage = Boolean(imageDataUrl.value)
     if (isReferenceImage) {
       status.value = '图片模式：正在确认参考图并调用视觉模型重建…'
-      const approved = await requestJson('/assets/ai-image/approve-reference', { imageDataUrl: imageDataUrl.value })
       result = await requestJson('/assets/ai-image/reconstruct-object', {
-        category: 'auto', objectType: objectType.value.trim(), visualStyle: 'anime-painted',
-        imageDataUrl: imageDataUrl.value, approvalToken: approved.approvalToken, prompt: prompt.value.trim(),
+        objectType: objectType.value.trim(), visualStyle: 'realistic',
+        imageDataUrl: imageDataUrl.value, prompt: prompt.value.trim(),
       })
     } else {
       status.value = '提示词模式：正在生成结构描述…'
       result = await requestJson('/assets/ai-image/generate-object', {
-        objectType: objectType.value.trim() || '独立 3D 物体', visualStyle: 'anime-painted', prompt: prompt.value.trim(),
+        objectType: objectType.value.trim() || '独立 3D 物体', visualStyle: 'realistic', prompt: prompt.value.trim(),
       })
     }
     spec = result?.design?.objectSculptSpec || result?.objectSculptSpec
@@ -180,6 +179,11 @@ async function generateModel() {
     const index = instances.value.length
     model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)
     model.scale.setScalar(scale.value)
+    // Normalize the complete generated asset to the ground plane (Y=0) before adding it to the scene.
+    model.updateMatrixWorld(true)
+    const modelBounds = new THREE.Box3().setFromObject(model)
+    if (Number.isFinite(modelBounds.min.y)) model.position.y -= modelBounds.min.y
+    model.updateMatrixWorld(true)
     model.userData.assetInstanceId = id
     model.userData.assetTemplate = { id: 'ai-generated:' + id, version: 1, category: spec.category || 'other', objectType: spec.objectType || objectType.value }
     scene.add(model)
@@ -561,6 +565,18 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* Wizard pages are document-flow layouts; do not inherit the legacy fixed-height editor shell. */
+.wizard-lab{display:block!important;height:auto!important;min-height:100dvh!important;overflow:visible!important;padding:20px 24px!important}
+.wizard-lab>.wizard-header,.wizard-lab>.wizard-progress,.wizard-lab>.wizard-card,.wizard-lab>.wizard-preview,.wizard-lab>.wizard-editor,.wizard-lab>.shared-viewport,.wizard-lab>footer{width:100%;max-width:1500px;margin-left:auto;margin-right:auto}
+.wizard-lab>.wizard-header{margin-bottom:14px}
+.wizard-lab>.wizard-progress{margin-bottom:16px}
+.wizard-lab>.wizard-card,.wizard-lab>.wizard-preview,.wizard-lab>.wizard-editor{margin-bottom:16px}
+.wizard-lab>.shared-viewport{display:block}
+.wizard-lab .viewport-panel{position:relative}
+.wizard-lab .viewport{position:absolute;inset:0;min-height:100%}
+.wizard-lab footer{padding-bottom:max(16px,env(safe-area-inset-bottom))}
+@media(max-width:700px){.wizard-lab{padding:12px!important}.wizard-lab>.wizard-header{align-items:flex-start}.wizard-lab>.shared-viewport .viewport-panel{height:55vh;min-height:360px}.wizard-lab>.wizard-card,.wizard-lab>.wizard-preview,.wizard-lab>.wizard-editor{margin-bottom:12px}}
+
 .lab{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;padding:20px 24px;background:#edf1ed;color:#243329;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}
 header{flex:0 0 auto;width:100%;max-width:1600px;margin:0 auto 14px;display:flex;justify-content:space-between;align-items:center;gap:20px}
 header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}

@@ -384,23 +384,14 @@ function switchEditorView(mode, document) {
 }
 
 async function closeEditor() {
-  // 编辑器退出时重新拉取刚刚自动保存的平面图，确保首页立即使用最新版本。
-  await loadHomepagePlanDocument()
-  // 从室内样板返回像素地图前，先释放室内场景并恢复室外角色快照。
-  engine?.exitIndoorPrototype()
-  engine?.clearRpgPreview()
-  showEditor.value = false
-  editorViewMode.value = '2d'
+  // 编辑器在 emit close 前已完成最终保存；整页重载可同步刷新空间文档、模板清单、渲染网格与碰撞数据。
   const url = new URL(window.location.href)
   url.pathname = '/'
   url.searchParams.delete('view')
   url.searchParams.delete('buildingId')
-  // 关闭编辑器应替换当前历史记录，避免点击“返回校园探索”后再按浏览器后退重新进入编辑器。
-  window.history.replaceState({}, '', url)
-  activeMode.value = 'overview'
-  viewMode.value = '2.5d'
-  engine?.setViewMode('2.5d')
-  engine?.setMode('overview')
+  url.searchParams.delete('returnX')
+  url.searchParams.delete('returnY')
+  window.location.replace(url.toString())
 }
 
 function toggleHelp() {

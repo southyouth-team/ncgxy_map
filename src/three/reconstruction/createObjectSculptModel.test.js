@@ -249,6 +249,44 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   });
 
 
+  it('rebuilds room layouts as a deterministic two-dimensional grid', () => {
+    const spec = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'building-root', kind: 'group', name: '教学楼' },
+        { id: 'room-prototype', kind: 'group', name: '标准教室', parent: 'building-root' },
+        { id: 'room-shell', kind: 'mesh', name: '教室主体', parent: 'room-prototype', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 5 } },
+      ],
+      parameterSchema: [
+        { id: 'room-rows', label: '房间行数', type: 'number', value: 2, min: 1, max: 4, step: 1, targets: [] },
+        { id: 'room-columns', label: '房间列数', type: 'number', value: 3, min: 1, max: 5, step: 1, targets: [] },
+      ],
+      generators: [{
+        id: 'room-grid', type: 'grid', templateRootId: 'room-prototype',
+        rowParameterId: 'room-rows', columnParameterId: 'room-columns',
+        spacingX: 7, spacingZ: 6, defaultRows: 2, defaultColumns: 3, maxRows: 4, maxColumns: 5,
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    expect(model.userData.componentGroups.size).toBe(13);
+    const roomAtSecondColumn = [...model.userData.componentGroups.values()].find(group =>
+      group.userData.componentSourceId === 'room-prototype' && Math.abs(group.position.x - 7) < 0.001 && Math.abs(group.position.z) < 0.001);
+    expect(roomAtSecondColumn).toBeDefined();
+    const roomAtSecondRow = [...model.userData.componentGroups.values()].find(group =>
+      group.userData.componentSourceId === 'room-prototype' && Math.abs(group.position.x) < 0.001 && Math.abs(group.position.z - 6) < 0.001);
+    expect(roomAtSecondRow).toBeDefined();
+    const originalGeneratedIds = [...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-')).sort();
+    applyObjectSculptParameter(THREE, model, 'room-rows', 3);
+    applyObjectSculptParameter(THREE, model, 'room-columns', 2);
+    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'room-rows').value).toBe(3);
+    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'room-columns').value).toBe(2);
+    expect(model.userData.componentGroups.size).toBe(13);
+    expect([...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-')).sort()).not.toEqual(originalGeneratedIds);
+    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
+    expect(reloaded.userData.componentGroups.size).toBe(13);
+  });
+
   it('rejects AI parameter targets outside the renderer allowlist', () => {
     const spec = {
       schemaVersion: '2.0',

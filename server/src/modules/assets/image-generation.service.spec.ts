@@ -63,6 +63,54 @@ describe('ImageGenerationService', () => {
     expect(result.model).toBe('gpt-image-2');
   });
 
+  it('generates a prompt-based model with one connected component root', async () => {
+    const service = createService({
+      VISION_API_KEY: 'vision-key',
+      VISION_API_BASE_URL: 'http://vision.local/v1',
+      VISION_MODEL: 'vision-test',
+    });
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      targetName: 'castle',
+      materials: { stone: { color: '#c9b58d' } },
+      componentTree: [
+        { id: 'body', name: '主体', primitive: 'box', dimensions: { width: 8, height: 6, depth: 7 }, transform: { position: [0, 3, 0] }, material: 'stone' },
+        { id: 'roof', name: '屋顶', parent: 'body', primitive: 'wedge', dimensions: { width: 9, height: 2, depth: 8 }, transform: { position: [0, 4, 0] }, material: 'stone' },
+      ],
+    };
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ ...objectSculptSpec, materials: objectSculptSpec.materials }) } }] }),
+    });
+    global.fetch = fetchMock as never;
+
+    const result = await service.generateObjectFromPrompt('一座完整的城堡', '城堡', 'anime-painted');
+    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(systemPrompt).toContain('恰好只有一个根节点');
+    expect(systemPrompt).toContain('相对直接 parent 的局部坐标');
+    expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
+  });
+
+  it('rejects prompt-generated models with disconnected component roots', async () => {
+    const service = createService({
+      VISION_API_KEY: 'vision-key',
+      VISION_MODEL: 'vision-test',
+    });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        schemaVersion: '2.0',
+        materials: { stone: { color: '#c9b58d' } },
+        componentTree: [
+          { id: 'body', primitive: 'box' },
+          { id: 'tower', primitive: 'cylinder' },
+        ],
+      }) } }] }),
+    }) as never;
+    await expect(service.generateObjectFromPrompt('城堡', '城堡', 'anime-painted'))
+      .rejects.toThrow('只有一个主体根节点');
+  });
+
   it('fails clearly when image credentials are missing', async () => {
     const service = createService({});
     await expect(service.generate('Campus visual asset')).rejects.toBeInstanceOf(ServiceUnavailableException);

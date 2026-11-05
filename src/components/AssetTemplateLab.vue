@@ -140,28 +140,59 @@ async function generateModel() {
   const startedAt = performance.now()
   try {
     let result
-    if (imageDataUrl.value) {
+    let spec
+    let approved
+    const isReferenceImage = Boolean(imageDataUrl.value)
+    if (isReferenceImage) {
       status.value = '图片模式：正在确认参考图并调用视觉模型重建…'
-      const approved = await requestJson('/assets/ai-image/approve-reference', { imageDataUrl: imageDataUrl.value })
-      result = await requestJson('/assets/ai-image/reconstruct-object', {
-        category: 'auto',
-        objectType: objectType.value.trim(),
-        visualStyle: 'anime-painted',
-        imageDataUrl: imageDataUrl.value,
-        approvalToken: approved.approvalToken,
-        prompt: prompt.value.trim(),
-      })
-    } else {
-      status.value = '提示词模式：正在直接生成 Three.js 结构描述…'
-      result = await requestJson('/assets/ai-image/generate-object', {
-        objectType: objectType.value.trim() || '独立 3D 物体',
-        visualStyle: 'anime-painted',
-        prompt: prompt.value.trim(),
-      })
+      approved = await requestJson('/assets/ai-image/approve-reference', { imageDataUrl: imageDataUrl.value })
     }
-    const spec = result?.design?.objectSculptSpec || result?.objectSculptSpec
-    if (!spec) throw new Error('AI 返回结果缺少 ObjectSculptSpec')
-    const model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
+    // Runtime 校验失败时，只针对明确的 loft 截面协议错误进行一次定向重生成。
+    // 不在前端猜测或篡改截面轮廓，避免静默改变屋顶几何形状。
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const correction = attempt === 0 ? '' : [
+        '',
+        '上一次生成的 ObjectSculptSpec 未通过 Three.js Runtime 校验：',
+        'loft 的 geometryDescriptor.sections 中存在无效截面。',
+        '请重新检查所有 primitive=loft 的节点：sections 必须是 2-12 个对象数组；',
+        '每个对象必须包含 height（-0.5 到 0.5 的有限数值）和 points（3-24 个二维数值坐标，每个坐标在 -0.5 到 0.5）；',
+        '所有截面 points 数量必须一致，height 严格递增，轮廓不得自相交且绕序一致。',
+        '无法可靠构造合法 loft 时，请为该部件选择更合适且合法的基础几何，不要输出猜测或不完整的 sections。',
+        '只返回完整、合法的 ObjectSculptSpec JSON。',
+      ].join('')
+      const requestPrompt = prompt.value.trim() + correction
+      if (isReferenceImage) {
+        status.value = attempt === 0 ? '图片模式：视觉模型正在重建结构…' : '检测到几何协议错误，正在按校验反馈重新生成…'
+        result = await requestJson('/assets/ai-image/reconstruct-object', {
+          category: 'auto',
+          objectType: objectType.value.trim(),
+          visualStyle: 'anime-painted',
+          imageDataUrl: imageDataUrl.value,
+          approvalToken: approved.approvalToken,
+          prompt: requestPrompt,
+        })
+      } else {
+        status.value = attempt === 0 ? '提示词模式：正在生成结构描述…' : '检测到几何协议错误，正在按校验反馈重新生成…'
+        result = await requestJson('/assets/ai-image/generate-object', {
+          objectType: objectType.value.trim() || '独立 3D 物体',
+          visualStyle: 'anime-painted',
+          prompt: requestPrompt,
+        })
+      }
+      spec = result?.design?.objectSculptSpec || result?.objectSculptSpec
+      if (!spec) throw new Error('AI 返回结果缺少 ObjectSculptSpec')
+      try {
+        const model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
+        result.__runtimeModel = model
+        break
+      } catch (runtimeError) {
+        const isLoftSectionError = /geometryDescriptor\.sections\[\d+\] 格式无效/.test(runtimeError?.message || '')
+        if (attempt === 0 && isLoftSectionError) continue
+        throw runtimeError
+      }
+    }
+    const model = result.__runtimeModel
+    if (!model) throw new Error('AI 生成结果未能通过 Three.js Runtime 校验')
     const id = 'ai-instance-' + (++serial)
     const index = instances.value.length
     model.position.set(((index % 4) - 1.5) * 12, 0, Math.floor(index / 4) * 12)

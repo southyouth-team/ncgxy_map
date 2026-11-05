@@ -50,6 +50,7 @@ function normalizeObjectParameterSchema(input: unknown, componentTree: any[], ma
     parameter.targets = raw.targets.map((target: any) => {
       const node = componentTree.find(item => item.id === target?.nodeId);
       if (!nodeIds.has(target?.nodeId) || !PARAMETER_TARGETS.has(target?.property)) throw new ServiceUnavailableException('参数目标无效：' + id);
+      if (node.kind === 'group' && String(target.property).startsWith('material.')) throw new ServiceUnavailableException('Group 节点不能绑定材质参数：' + id);
       const mode = target.mode || 'set';
       if (!['set','multiply','add','visible-from','visible-through'].includes(mode) || (target.property.startsWith('material.') && mode !== 'set')) throw new ServiceUnavailableException('参数目标运算无效：' + id);
       if (['visible-from','visible-through'].includes(mode) && target.property !== 'visibility.visible') throw new ServiceUnavailableException('可见性阈值运算只能用于 visibility.visible：' + id);

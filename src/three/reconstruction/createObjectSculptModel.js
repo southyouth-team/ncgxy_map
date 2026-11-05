@@ -28,7 +28,7 @@ function expandObjectSculptSpec(spec) {
       parent = byId.get(parent)?.parent;
     }
     return false;
-  }));
+  })).map(node => JSON.parse(JSON.stringify(node)));
   for (const generator of generators) {
     const rootNode = byId.get(generator.templateRootId);
     const subtree = sourceNodes.filter(node => {

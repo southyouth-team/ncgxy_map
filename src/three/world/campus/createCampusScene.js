@@ -4,6 +4,7 @@ import {
 import { createCampusSceneRenderData } from './campusSceneData.js'
 import { resolveCampusBuildingDesign } from '../../../data/campus/campusAssetManifest.js'
 import { createCampusPlayer } from './createCampusPlayer.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 import {
   createCampusMaterials, addPixelTree, addPixelFlowerPatch,
@@ -248,7 +249,8 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
     const bounds = mapRectToWorld(footprintBounds)
     const width = Math.max(4.2, bounds.width)
     const depth = Math.max(2.4, bounds.depth)
-    const buildingDesign = resolveCampusBuildingDesign(visualAssets.manifest, item.id)
+    const buildingTemplate = visualAssets.buildingTemplates?.find(entry => entry.templateId === item.modelTemplateId && entry.status === 'ready') || null
+    const buildingDesign = buildingTemplate?.modelType === 'procedural' ? buildingTemplate.buildingDesign : resolveCampusBuildingDesign(visualAssets.manifest, item.id)
     const template = buildingDesign?.template || item.template || ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼'][index % 4]
     const buildingWallMaterial = buildingDesign ? (mats[buildingDesign.wallPalette] || mats.wallCream) : (mats[item.wall] || wallPalette[index % wallPalette.length])
     const localFootprint = item.polygon
@@ -338,8 +340,26 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
     root.add(group)
 
     // 同一套真实 3D Mesh 同时服务 2.5D 与 3D；参考图只用于 AI 识别和工坊审核，不进入运行时场景。
-    group.userData.visualAssetSource = buildingDesign ? 'ai-reference-derived-procedural-3d' : 'procedural-3d'
+    group.userData.visualAssetSource = buildingTemplate?.modelType === 'glb' ? 'published-glb-template' : buildingDesign ? 'ai-reference-derived-procedural-3d' : 'procedural-3d'
+    group.userData.modelTemplateId = buildingTemplate?.templateId || null
     group.userData.referenceAssetId = visualAssets.manifest?.bindings?.find(binding => String(binding.featureId) === String(item.id))?.assetId || null
+    if (buildingTemplate?.modelType === 'glb' && buildingTemplate.modelFile?.url && visualAssets.assetBaseUrl) {
+      const modelUrl = visualAssets.assetBaseUrl.replace(/\\/+$/, '') + buildingTemplate.modelFile.url
+      new GLTFLoader().load(modelUrl, gltf => {
+        const model = gltf.scene
+        const modelBounds = new THREE.Box3().setFromObject(model)
+        const modelSize = modelBounds.getSize(new THREE.Vector3())
+        const fit = Math.min(width / Math.max(modelSize.x, 0.001), depth / Math.max(modelSize.z, 0.001), Math.max(2, buildingDesign?.height || item.height || 20) / Math.max(modelSize.y, 0.001))
+        model.scale.setScalar(fit)
+        const fittedBounds = new THREE.Box3().setFromObject(model)
+        const center = fittedBounds.getCenter(new THREE.Vector3())
+        model.position.set(-center.x, -fittedBounds.min.y, -center.z)
+        model.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true } })
+        group.clear()
+        group.add(model)
+        group.userData.visualAssetSource = 'published-glb-template'
+      }, undefined, error => console.warn('[BuildingTemplate] GLB 加载失败，保留程序化建筑回退：', buildingTemplate.templateId, error))
+    }
   }
   CAMPUS_BUILDING_FOOTPRINTS.forEach(addCampusBuilding)
 

@@ -196,6 +196,40 @@ describe('BuildingDesignService', () => {
     expect(service.consumeDesignToken(result.designToken, result.design)).toBe(true);
   });
 
+  it('validates and preserves bounded polygon outline coordinates', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'sculpt-secret', VISION_MODEL: 'vision-test',
+      } as Record<string, string>)[key],
+    } as never);
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+    const approval = service.approveReference(imageDataUrl);
+    const polygonNode = {
+      id: 'gable-outline', primitive: 'polygon',
+      dimensions: { width: 4, height: 3, depth: 0.6 },
+      geometryDescriptor: { points: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]] },
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        componentTree: [polygonNode], materials: { stone: { color: '#aaaaaa' } },
+      }) } }] }),
+    }) as never;
+    const result = await service.reconstructObjectReference('facility', '三角景观构件', 'anime-painted', imageDataUrl, approval.approvalToken);
+    expect(result.design.objectSculptSpec.componentTree[0].geometryDescriptor.points).toEqual(polygonNode.geometryDescriptor.points);
+
+    const invalid = structuredClone(polygonNode);
+    invalid.geometryDescriptor.points[0][0] = 2;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        componentTree: [invalid], materials: { stone: { color: '#aaaaaa' } },
+      }) } }] }),
+    }) as never;
+    await expect(service.reconstructObjectReference('facility', '三角景观构件', 'anime-painted', imageDataUrl, approval.approvalToken))
+      .rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
   it('rejects malformed ObjectSculptSpec parent references and cycles', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({

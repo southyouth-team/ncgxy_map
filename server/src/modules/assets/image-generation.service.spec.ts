@@ -88,6 +88,9 @@ describe('ImageGenerationService', () => {
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
     expect(systemPrompt).toContain('恰好只有一个根节点');
     expect(systemPrompt).toContain('相对直接 parent 的局部坐标');
+    expect(systemPrompt).toContain('树木的枝干连接树干');
+    expect(systemPrompt).toContain('车轮连接车轴/底盘');
+    expect(systemPrompt).toContain('简单对象可以少于 12 个');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 

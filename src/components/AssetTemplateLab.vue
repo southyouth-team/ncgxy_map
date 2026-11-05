@@ -25,17 +25,10 @@ const categoryLabel = value => labels[value] || value
 const authHeaders = () => ({ 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID })
 
 function resize() {
-  if (!renderer || !viewport.value) return
+  if (!renderer || !viewport.value || !camera) return
   const w = Math.max(1, viewport.value.clientWidth), h = Math.max(1, viewport.value.clientHeight)
-  const aspect = w / h
   renderer.setSize(w, h, false)
-  // 固定俯视平铺范围，确保 180×140 的沙盒地面完整进入视口。
-  const viewHeight = Math.max(140, 180 / Math.max(aspect, 0.1)) * 1.12
-  const viewWidth = viewHeight * aspect
-  camera.left = -viewWidth / 2
-  camera.right = viewWidth / 2
-  camera.top = viewHeight / 2
-  camera.bottom = -viewHeight / 2
+  camera.aspect = w / h
   camera.updateProjectionMatrix()
 }
 
@@ -49,10 +42,18 @@ function centerObjectAtOverview(object) {
   const center = bounds.isEmpty()
     ? object.getWorldPosition(new THREE.Vector3())
     : bounds.getCenter(new THREE.Vector3())
-  controls.target.set(center.x, 0, center.z)
-  camera.position.set(center.x, 200, center.z)
-  camera.up.set(0, 0, -1)
-  camera.lookAt(controls.target)
+  const size = bounds.isEmpty() ? new THREE.Vector3(8, 8, 8) : bounds.getSize(new THREE.Vector3())
+  const radius = Math.max(size.length() * 0.5, 4)
+  const direction = new THREE.Vector3(1, 0.82, 1).normalize()
+  controls.target.copy(center)
+  camera.position.copy(center).addScaledVector(direction, Math.max(28, radius * 3.2))
+  camera.up.set(0, 1, 0)
+  camera.near = 0.1
+  camera.far = Math.max(2000, radius * 30)
+  camera.updateProjectionMatrix()
+  camera.lookAt(center)
+  controls.minDistance = Math.max(5, radius * 0.35)
+  controls.maxDistance = Math.max(600, radius * 20)
   controls.update()
 }
 function readFileAsDataUrl(file) {
@@ -170,9 +171,12 @@ function clearScene() { [...objects.keys()].forEach(removeInstance); status.valu
 function resetCamera() {
   const object = objects.get(selectedInstanceId.value)
   if (object) return centerObjectAtOverview(object)
-  camera.position.set(0, 200, 0)
   controls.target.set(0, 0, 0)
-  camera.position.set(0, 200, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0); camera.zoom = 1; camera.updateProjectionMatrix()
+  camera.position.set(190, 165, 190)
+  camera.up.set(0, 1, 0)
+  camera.near = 0.1; camera.far = 3000
+  camera.lookAt(0, 0, 0)
+  camera.updateProjectionMatrix()
   controls.update()
 }
 
@@ -195,11 +199,30 @@ onMounted(() => {
     centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-3, 0.05, 0), new THREE.Vector3(3, 0.05, 0)]), markerMaterial))
     centerMarker.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, -3), new THREE.Vector3(0, 0.05, 3)]), markerMaterial))
     scene.add(centerMarker)
-    camera = new THREE.OrthographicCamera(-90, 90, 70, -70, 0.1, 1000); camera.position.set(0, 200, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0)
+    camera = new THREE.PerspectiveCamera(48, 1, 0.1, 3000)
+    camera.position.set(190, 165, 190)
+    camera.up.set(0, 1, 0)
+    camera.lookAt(0, 0, 0)
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); renderer.setClearColor(0x000000, 0); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace; viewport.value.replaceChildren(renderer.domElement)
-    controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enableRotate = false; controls.enablePan = true; controls.screenSpacePanning = true; controls.mouseButtons.LEFT = THREE.MOUSE.PAN; controls.mouseButtons.RIGHT = THREE.MOUSE.PAN; controls.target.set(0, 0, 0); controls.minZoom = 0.25; controls.maxZoom = 8; controls.update()
+    controls = new OrbitControls(camera, renderer.domElement)
+    controls.enableDamping = true
+    controls.enableRotate = true
+    controls.enablePan = true
+    controls.enableZoom = true
+    controls.screenSpacePanning = true
+    controls.rotateSpeed = 0.75
+    controls.panSpeed = 0.85
+    controls.zoomSpeed = 0.9
+    controls.minDistance = 8
+    controls.maxDistance = 1800
+    controls.maxPolarAngle = Math.PI * 0.49
+    controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE
+    controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
+    controls.mouseButtons.RIGHT = THREE.MOUSE.PAN
+    controls.target.set(0, 0, 0)
+    controls.update()
     observer = new ResizeObserver(resize); observer.observe(viewport.value); resize()
     const render = () => { controls.update(); renderer.render(scene, camera); frame = requestAnimationFrame(render) }; render()
     status.value = '沙盒已就绪；可输入提示词或上传图片生成独立模型'
@@ -232,7 +255,7 @@ onBeforeUnmount(() => {
         <div class="templates"><button v-for="item in visibleTemplates" :key="item.id" :class="{active:selectedId===item.id}" @click="selectedId=item.id"><b>{{ item.name }}</b><small>{{ categoryLabel(item.category) }} · v{{ item.version }}</small></button></div>
         <button class="secondary" :disabled="!selectedTemplate" @click="addTemplate">添加选中的预置模板（对照）</button>
       </aside>
-      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键 / 右键平移 · 滚轮缩放</span></div><div class="hint status">{{ status }}</div></section>
+      <section class="viewport-panel"><div ref="viewport" class="viewport"></div><div class="toolbar"><button @click="resetCamera">复位视角</button><button @click="clearScene">清空场景</button><span>左键旋转 · 右键平移 · 滚轮缩放</span></div><div class="hint status">{{ status }}</div></section>
       <aside class="panel inspector">
         <h3>沙盒实例 <span>{{ instances.length }} 个</span></h3>
         <label>选中实例缩放 {{ scale.toFixed(1) }}×</label><input v-model.number="scale" type="range" min="0.3" max="2.5" step="0.1">
@@ -245,5 +268,5 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:330px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel input:not([type=file]),.panel textarea,.panel select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #dce4dc;border-radius:7px;font:inherit;font-size:12px}.panel input[type=file]{font-size:11px;max-width:100%}.reference{display:block;max-width:100%;max-height:170px;object-fit:contain;margin-top:10px;border-radius:7px;background:#f3f5f2}.generate,.secondary{margin-top:12px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.generate:disabled{opacity:.55;cursor:wait}.secondary{background:#fff;color:#3d7950;border:1px solid #b9cdbb}.hint{font-size:10px;color:#7d8b80;line-height:1.65}.log{white-space:pre-wrap;background:#f3f7f2;border-radius:7px;padding:10px;margin-top:10px;font-size:10px;color:#53675a;line-height:1.6}.error{margin-top:10px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}.subheading{margin-top:22px!important;padding-top:14px;border-top:1px solid #e8ede8}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small{font-size:10px;color:#89968b}.viewport-panel{position:relative;min-height:580px;background:#dfe8e0} .viewport{position:absolute;inset:0;background-color:#78b96b;background-image:linear-gradient(rgba(34,82,40,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(34,82,40,.22) 1px,transparent 1px);background-size:40px 40px;background-position:center center}.viewport :deep(canvas){display:block;width:100%;height:100%;touch-action:none}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.status{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px}.inspector input{accent-color:#4f855e}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1100px){.layout{grid-template-columns:290px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:220px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:180px}.viewport-panel{min-height:450px}footer{text-align:left}}
+.lab{min-height:100vh;background:#edf1ed;color:#243329;padding:24px;box-sizing:border-box;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}header{max-width:1600px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:20px}header small{font-size:10px;letter-spacing:.15em;color:#66816b;font-weight:800}h1{font-size:25px;margin:7px 0}header p{font-size:13px;color:#718075;margin:0}header a{color:#386b4b;text-decoration:none;font-weight:700;font-size:13px}.layout{max-width:1600px;margin:auto;display:grid;grid-template-columns:330px minmax(400px,1fr) 270px;gap:13px;min-height:calc(100vh - 160px)}.panel,.viewport-panel{background:white;border:1px solid #dce4dc;border-radius:11px;overflow:hidden;min-width:0}.panel{padding:15px;display:flex;flex-direction:column}.panel h3{font-size:13px;margin:0 0 14px;display:flex;justify-content:space-between}.panel h3 span{font-size:11px;color:#87948a;font-weight:400}.panel label{font-size:11px;color:#768378;margin:12px 0 7px}.panel input:not([type=file]),.panel textarea,.panel select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #dce4dc;border-radius:7px;font:inherit;font-size:12px}.panel input[type=file]{font-size:11px;max-width:100%}.reference{display:block;max-width:100%;max-height:170px;object-fit:contain;margin-top:10px;border-radius:7px;background:#f3f5f2}.generate,.secondary{margin-top:12px;border:0;border-radius:8px;background:#3d7950;color:white;padding:11px;font-weight:700;cursor:pointer}.generate:disabled{opacity:.55;cursor:wait}.secondary{background:#fff;color:#3d7950;border:1px solid #b9cdbb}.hint{font-size:10px;color:#7d8b80;line-height:1.65}.log{white-space:pre-wrap;background:#f3f7f2;border-radius:7px;padding:10px;margin-top:10px;font-size:10px;color:#53675a;line-height:1.6}.error{margin-top:10px;background:#fff0ee;color:#a4493f;padding:9px;border-radius:7px;font-size:11px}.subheading{margin-top:22px!important;padding-top:14px;border-top:1px solid #e8ede8}.templates,.instances{overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:9px}.templates button{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid transparent;background:transparent;border-radius:7px;padding:9px;cursor:pointer;color:#34453a}.templates button.active,.instances>div.active{background:#eef6ef;border-color:#bcd2bf}.templates b,.instance b{font-size:12px}.templates small,.instance small{font-size:10px;color:#89968b}.viewport-panel{position:relative;min-height:580px;background:#dfe8e0} .viewport{position:absolute;inset:0;background:#b9c8bb}.viewport :deep(canvas){display:block;width:100%;height:100%;touch-action:none}.toolbar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;align-items:center;pointer-events:none}.toolbar button{pointer-events:auto;border:1px solid #d6e0d6;background:#ffffffed;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer}.toolbar span{margin-left:auto;background:#ffffffc9;padding:7px;border-radius:6px;font-size:10px;color:#718075}.status{position:absolute;bottom:12px;left:12px;background:#ffffffd9;border-radius:6px;padding:7px 10px}.inspector input{accent-color:#4f855e}.instances>div{display:flex;align-items:center;border:1px solid #e5ebe5;border-radius:7px}.instance{flex:1;display:flex;flex-direction:column;gap:4px;text-align:left;background:transparent;border:0;padding:9px;cursor:pointer;color:#34453a}.remove{border:0;background:transparent;color:#9a665d;font-size:19px;padding:5px 10px;cursor:pointer}.instances p{font-size:11px;color:#9aa49b;text-align:center;padding:15px}footer{max-width:1600px;margin:12px auto;text-align:right;color:#87948a;font-size:10px}@media(max-width:1100px){.layout{grid-template-columns:290px minmax(280px,1fr)}.inspector{grid-column:1/-1;min-height:220px}}@media(max-width:650px){.lab{padding:12px}header{align-items:flex-start;flex-direction:column}.layout{display:flex;flex-direction:column}.templates{max-height:180px}.viewport-panel{min-height:450px}footer{text-align:left}}
 </style>

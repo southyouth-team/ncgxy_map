@@ -393,6 +393,23 @@ export class AssetsService {
       claimedConstraintTargets.add(targetKey);
     }
 
+    const attachmentGraph = new Map<string, Set<string>>();
+    for (const constraint of constraints) if (constraint.type === 'attach') {
+      const sources = attachmentGraph.get(constraint.targetNodeId) || new Set<string>();
+      sources.add(constraint.sourceNodeId);
+      attachmentGraph.set(constraint.targetNodeId, sources);
+    }
+    const visitingAttachments = new Set<string>(), visitedAttachments = new Set<string>();
+    const visitAttachment = (nodeId: string) => {
+      if (visitingAttachments.has(nodeId)) throw new BadRequestException('资产 attach 关系存在循环依赖：' + nodeId);
+      if (visitedAttachments.has(nodeId)) return;
+      visitingAttachments.add(nodeId);
+      for (const sourceId of attachmentGraph.get(nodeId) || []) visitAttachment(sourceId);
+      visitingAttachments.delete(nodeId);
+      visitedAttachments.add(nodeId);
+    };
+    for (const nodeId of attachmentGraph.keys()) visitAttachment(nodeId);
+
     const assetId = randomUUID();
     const directory = resolve(this.storageDir, 'campus-visual-assets', 'objects');
     await mkdir(directory, { recursive: true });

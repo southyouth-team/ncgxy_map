@@ -225,6 +225,82 @@ export class AssetsService {
     return { fileId, assetId: 'campus-' + featureId, url, checksumSha256: checksum, sizeBytes: file.size, manifest };
   }
 
+  async saveObjectSculptAsset(userId: string, input: Record<string, unknown>) {
+    if (!userId) throw new BadRequestException('缺少资产保存用户身份');
+    const spec = input?.objectSculptSpec as Record<string, any> | undefined;
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec) || spec.schemaVersion !== '2.0'
+      || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 300
+      || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
+      throw new BadRequestException('ObjectSculptSpec 结构无效，无法保存');
+    }
+    const serialized = JSON.stringify(spec);
+    if (Buffer.byteLength(serialized, 'utf8') > 2 * 1024 * 1024) throw new BadRequestException('结构化资产数据不能超过 2 MB');
+    const ids = new Set<string>();
+    for (const node of spec.componentTree) {
+      if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id) || ids.has(node.id)) throw new BadRequestException('资产组件 ID 无效或重复');
+      ids.add(node.id);
+    }
+    for (const node of spec.componentTree) {
+      if (node.parent && !ids.has(node.parent)) throw new BadRequestException('资产组件父节点不存在：' + node.id);
+    }
+    if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) throw new BadRequestException('资产参数 Schema 无效');
+    const assetId = randomUUID();
+    const directory = resolve(this.storageDir, 'campus-visual-assets', 'objects');
+    await mkdir(directory, { recursive: true });
+    const absolutePath = resolve(directory, assetId + '.json');
+    const temporaryPath = absolutePath + '.tmp';
+    await writeFile(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' });
+    const { rename } = await import('node:fs/promises');
+    await rename(temporaryPath, absolutePath);
+    const record = {
+      assetId,
+      name: String(input.name || spec.targetName || '未命名 3D 资产').slice(0, 160),
+      category: String(spec.category || input.category || 'other').slice(0, 80),
+      objectType: String(spec.objectType || input.objectType || spec.targetName || '3D 资产').slice(0, 120),
+      format: 'object-sculpt-json',
+      filePath: 'objects/' + assetId + '.json',
+      checksumSha256: createHash('sha256').update(serialized).digest('hex'),
+      sizeBytes: Buffer.byteLength(serialized, 'utf8'),
+      createdBy: userId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      await this.enqueueVisualManifestUpdate(async () => {
+        const manifest = await this.readVisualManifest();
+        manifest.objects = Array.isArray(manifest.objects) ? manifest.objects : [];
+        manifest.objects.push(record);
+        await this.writeVisualManifest(manifest);
+      });
+    } catch (error) {
+      await rm(absolutePath, { force: true });
+      throw error;
+    }
+    return { ...record, spec };
+  }
+
+  async getObjectSculptAsset(userId: string, assetId: string) {
+    if (!userId) throw new BadRequestException('缺少资产读取用户身份');
+    if (!/^[a-f0-9-]{36}$/i.test(assetId)) throw new NotFoundException('结构化资产不存在');
+    const manifest = await this.readVisualManifest();
+    const record = (manifest.objects || []).find((item: any) => item.assetId === assetId);
+    if (!record) throw new NotFoundException('结构化资产不存在');
+    if (record.createdBy !== userId) throw new ForbiddenException('无权读取该结构化资产');
+    const root = resolve(this.storageDir, 'campus-visual-assets');
+    const absolutePath = resolve(root, record.filePath);
+    const relativePath = relative(root, absolutePath);
+    if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) throw new NotFoundException('结构化资产路径无效');
+    try {
+      const content = await readFile(absolutePath, 'utf8');
+      const spec = JSON.parse(content);
+      if (createHash('sha256').update(content).digest('hex') !== record.checksumSha256) throw new NotFoundException('结构化资产校验失败');
+      return { ...record, spec };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new NotFoundException('结构化资产文件不存在或内容损坏');
+    }
+  }
+
   async getVisualAssetManifest() {
     return this.readVisualManifest();
   }
@@ -271,6 +347,7 @@ export class AssetsService {
         sourceTypes: ['ai_generated', 'manual_model', 'procedural', 'external'],
         statuses: ['draft', 'review', 'ready', 'archived'],
         assets: [],
+        objects: [],
         bindings: [],
       };
     }

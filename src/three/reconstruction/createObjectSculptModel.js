@@ -48,6 +48,38 @@ function createGeometry(THREE, node) {
   const segments = Math.round(boundedNumber(descriptor.segments, 16, 3, MAX_SEGMENTS, node.id + '.segments'));
 
   switch (String(node.primitive || 'box').toLowerCase()) {
+    case 'wedge': {
+      const shape = new THREE.Shape();
+      shape.moveTo(-width / 2, -height / 2);
+      shape.lineTo(width / 2, -height / 2);
+      shape.lineTo(0, height / 2);
+      shape.closePath();
+      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
+      geometry.translate(0, 0, -depth / 2);
+      return geometry;
+    }
+    case 'arch': {
+      const shape = new THREE.Shape();
+      const spring = height * 0.08;
+      shape.moveTo(-width / 2, -height / 2);
+      shape.lineTo(-width / 2, spring);
+      shape.quadraticCurveTo(-width / 2, height / 2, 0, height / 2);
+      shape.quadraticCurveTo(width / 2, height / 2, width / 2, spring);
+      shape.lineTo(width / 2, -height / 2);
+      shape.closePath();
+      const inset = boundedNumber(descriptor.inset, Math.min(width, height) * 0.12, 0.02, Math.min(width, height) * 0.4, node.id + '.inset');
+      const opening = new THREE.Path();
+      opening.moveTo(-width / 2 + inset, -height / 2);
+      opening.lineTo(-width / 2 + inset, spring);
+      opening.quadraticCurveTo(-width / 2 + inset, height / 2 - inset, 0, height / 2 - inset);
+      opening.quadraticCurveTo(width / 2 - inset, height / 2 - inset, width / 2 - inset, spring);
+      opening.lineTo(width / 2 - inset, -height / 2);
+      opening.closePath();
+      shape.holes.push(opening);
+      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
+      geometry.translate(0, 0, -depth / 2);
+      return geometry;
+    }
     case 'box':
     case 'cuboid':
       return new THREE.BoxGeometry(width, height, depth);

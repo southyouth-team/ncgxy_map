@@ -69,14 +69,14 @@ function createVegetationGenerator(THREE, input, materials) {
     const crownRadius = Math.max(width, depth) * 0.34;
     const canopyShape = normalize(geometry.canopyShape);
     const branchSpread = Math.max(0.2, Math.min(1, Number(geometry.branchSpread) || 0.65));
-    const crownGeometry = () => canopyShape === 'conical'
-      ? new THREE.ConeGeometry(crownRadius * 0.95, crownRadius * 2, 7)
+    const crownGeometry = (scale = 1) => canopyShape === 'conical'
+      ? new THREE.ConeGeometry(crownRadius * 0.95 * scale, crownRadius * 2 * scale, 7)
       : canopyShape === 'irregular'
-        ? new THREE.DodecahedronGeometry(crownRadius, 1)
-        : new THREE.IcosahedronGeometry(crownRadius, 1);
+        ? new THREE.DodecahedronGeometry(crownRadius * scale, 1)
+        : new THREE.IcosahedronGeometry(crownRadius * scale, 1);
     const crownLayers = Math.max(1, Math.min(6, Math.round(Number(geometry.crownLayers) || 1)));
     for (let layer = 0; layer < crownLayers; layer += 1) {
-      const crown = new THREE.Mesh(crownGeometry(), layer % 2 ? materials.secondary : materials.leaf);
+      const crown = new THREE.Mesh(crownGeometry(1 - layer * 0.1), layer % 2 ? materials.secondary : materials.leaf);
       crown.name = 'vegetation-crown-' + layer;
       crown.position.y = trunkHeight + height * 0.18 + layer * height * 0.1;
       crown.scale.set(branchSpread * (1 - layer * 0.08), Math.max(0.55, height / Math.max(width, depth) * 0.7), branchSpread * (1 - layer * 0.08));

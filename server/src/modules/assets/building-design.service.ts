@@ -25,7 +25,6 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('结构生成器 ID 无效或重复：' + id);
     ids.add(id);
     if (raw.type !== 'repeat' || !nodeIds.has(raw.templateRootId)) throw new ServiceUnavailableException('结构生成器模板节点无效：' + id);
-    if (raw.parentId != null && !nodeIds.has(raw.parentId)) throw new ServiceUnavailableException('结构生成器父节点无效：' + id);
     if (!['x','y','z'].includes(raw.axis)) throw new ServiceUnavailableException('结构生成器排列轴无效：' + id);
     const spacing = Number(raw.spacing), maxCount = Number(raw.maxCount), defaultCount = Number(raw.defaultCount);
     if (!Number.isFinite(spacing) || Math.abs(spacing) > 100 || !Number.isInteger(maxCount) || maxCount < 1 || maxCount > 100
@@ -55,7 +54,7 @@ function normalizeObjectGenerators(input: unknown, componentTree: any[]) {
     }
     estimatedExpandedCount += descendants.length * (maxCount - 1);
     if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('结构生成器最大展开数量超过 300：' + id);
-    return { id, type: 'repeat', templateRootId: raw.templateRootId, ...(raw.parentId == null ? {} : { parentId: raw.parentId }), countParameterId, axis: raw.axis, spacing, defaultCount, maxCount, followers };
+    return { id, type: 'repeat', templateRootId: raw.templateRootId, countParameterId, axis: raw.axis, spacing, defaultCount, maxCount, followers };
   });
   return normalized;
 }

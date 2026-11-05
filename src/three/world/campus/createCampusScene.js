@@ -358,7 +358,6 @@ export function createCampusScene(THREE, featureCollection = null, visualAssets 
         group.traverse(node => {
           if (node === group) return
           if (node.geometry) node.geometry.dispose()
-          if (node.material) (Array.isArray(node.material) ? node.material : [node.material]).forEach(material => material.dispose())
         })
         group.clear()
         group.add(model)

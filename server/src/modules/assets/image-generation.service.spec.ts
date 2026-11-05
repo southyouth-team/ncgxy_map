@@ -125,6 +125,36 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.parameterSchema[0]).toMatchObject({ id: 'crown-count', value: 3, targets: [] });
   });
 
+  it('allows multiple generators to share one count parameter ID', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const objectSculptSpec = {
+      schemaVersion: '2.0',
+      materials: { wood: { color: '#8a623d' } },
+      componentTree: [
+        { id: 'building-root', kind: 'group' },
+        { id: 'left-window-template', kind: 'group', parent: 'building-root' },
+        { id: 'left-window', parent: 'left-window-template', primitive: 'box', dimensions: { width: 0.4, height: 0.5, depth: 0.1 }, material: 'wood' },
+        { id: 'right-window-template', kind: 'group', parent: 'building-root' },
+        { id: 'right-window', parent: 'right-window-template', primitive: 'box', dimensions: { width: 0.4, height: 0.5, depth: 0.1 }, material: 'wood' },
+      ],
+      parameterSchema: [{ id: 'window-repeat-count', type: 'number', value: 3, min: 1, max: 6, step: 1, targets: [] }],
+      generators: [
+        { id: 'left-window-repeat', type: 'repeat', templateRootId: 'left-window-template', countParameterId: 'window-repeat-count', axis: 'x', spacing: 0.8, defaultCount: 3, maxCount: 6 },
+        { id: 'right-window-repeat', type: 'repeat', templateRootId: 'right-window-template', countParameterId: 'window-repeat-count', axis: 'x', spacing: 0.8, defaultCount: 3, maxCount: 6 },
+      ],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(objectSculptSpec) } }] }),
+    }) as never;
+
+    const result = await service.generateObjectFromPrompt('一栋左右两侧窗户数量联动的建筑', '建筑', 'low-poly');
+    expect(result.objectSculptSpec.generators).toHaveLength(2);
+    expect(result.objectSculptSpec.generators.map((generator: { countParameterId: string }) => generator.countParameterId))
+      .toEqual(['window-repeat-count', 'window-repeat-count']);
+    expect(result.objectSculptSpec.parameterSchema).toHaveLength(1);
+  });
+
   it('rejects invalid generator template roots and mismatched default parameter values', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const base = {

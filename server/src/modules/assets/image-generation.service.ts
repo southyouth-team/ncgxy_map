@@ -120,9 +120,11 @@ function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
       claimedNodes.add(node.id);
     }
     const parameterId = (value: unknown): string => {
-      if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value) || parameterIds.has(value)) {
+      if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value)) {
         throw new ServiceUnavailableException('AI 结构生成器数量参数 ID 无效或重复：' + id);
       }
+      // Generator parameter IDs are references to shared business parameters.
+      // Uniqueness belongs to parameterSchema and to row/column pairs within one grid, not across generators.
       parameterIds.add(value);
       return value;
     };

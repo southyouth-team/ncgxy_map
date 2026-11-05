@@ -49,8 +49,9 @@ export class BuildingDesignService {
     return image;
   }
 
-  async analyzeReference(imageDataUrlInput: unknown, approvalTokenInput: unknown) {
+  async analyzeReference(imageDataUrlInput: unknown, approvalTokenInput: unknown, promptInput?: unknown) {
     const image = this.parseReferenceImage(imageDataUrlInput);
+    const promptContext = typeof promptInput === 'string' ? promptInput.trim().slice(0, 4000) : '';
     if (typeof approvalTokenInput !== 'string' || !approvalTokenInput) {
       throw new BadRequestException('请先确认建筑参考图片，再执行 3D 结构识别');
     }
@@ -92,7 +93,7 @@ export class BuildingDesignService {
             {
               role: 'user',
               content: [
-                { type: 'text', text: '分析这张 AI 生成的校园建筑参考图，给出可直接驱动参数化 3D 几何生成器的外观参数。' },
+                { type: 'text', text: '分析这张校园建筑参考图，给出可直接驱动参数化 3D 几何生成器的外观参数。用户补充要求：' + (promptContext || '无') },
                 { type: 'image_url', image_url: { url: imageDataUrlInput, detail: 'high' } },
               ],
             },

@@ -6,7 +6,7 @@ import { DataSource } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
-import { validateObjectModelSpecV3 } from '../../../../../shared/object-model-spec-v3';
+import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 
 
 function assertStableSweepPath(path: number[][], label: string, ErrorType: new (message?: string) => Error) {

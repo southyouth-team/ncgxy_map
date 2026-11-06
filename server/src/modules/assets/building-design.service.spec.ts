@@ -512,10 +512,10 @@ describe('BuildingDesignService', () => {
 
     const result = await service.addObjectParameters(current, '检查并保留当前几何结构');
     const nodes = new Map(result.objectSculptSpec.componentTree.map((node: any) => [node.id, node]));
-    expect(nodes.get('tube-part').geometryDescriptor).toMatchObject({ radius: 0.08, tubularSegments: 24, radialSegments: 8, path: current.componentTree[1].geometryDescriptor.path });
-    expect(nodes.get('lathe-part').geometryDescriptor).toMatchObject({ segments: 24, profile: current.componentTree[2].geometryDescriptor.profile });
-    expect(nodes.get('sweep-part').geometryDescriptor).toMatchObject({ steps: 24, path: current.componentTree[3].geometryDescriptor.path, profile: current.componentTree[3].geometryDescriptor.profile });
-    expect(nodes.get('loft-part').geometryDescriptor).toEqual(current.componentTree[4].geometryDescriptor);
+    expect(nodes.get('tube-part').geometryDescriptor).toMatchObject({ radius: 0.08, tubularSegments: 24, radialSegments: 8, path: current.componentTree[1]?.geometryDescriptor?.path });
+    expect(nodes.get('lathe-part').geometryDescriptor).toMatchObject({ segments: 24, profile: current.componentTree[2]?.geometryDescriptor?.profile });
+    expect(nodes.get('sweep-part').geometryDescriptor).toMatchObject({ steps: 24, path: current.componentTree[3]?.geometryDescriptor?.path, profile: current.componentTree[3]?.geometryDescriptor?.profile });
+    expect(nodes.get('loft-part').geometryDescriptor).toEqual(current.componentTree[4]?.geometryDescriptor);
   });
 
 

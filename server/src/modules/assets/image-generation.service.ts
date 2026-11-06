@@ -229,7 +229,7 @@ function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   if (input == null) return { operations: [], parameterIds: new Set<string>() };
   if (!Array.isArray(input) || input.length > 40) throw new ServiceUnavailableException('AI operations 必须是最多 40 项的数组');
   const byId = new Map(componentTree.map(node => [node.id, node]));
-  const ids = new Set<string>(), roots = new Set<string>(), parameterIds = new Set<string>(), expressionParameterIds = new Set<string>();
+  const ids = new Set<string>(), roots = new Set<string>(), claimedSourceNodes = new Set<string>(), parameterIds = new Set<string>(), expressionParameterIds = new Set<string>();
   let estimatedExpandedCount = componentTree.length;
   const subtreeFor = (rootId: string) => componentTree.filter(node => {
     let current = node;

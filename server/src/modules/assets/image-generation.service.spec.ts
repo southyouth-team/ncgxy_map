@@ -180,6 +180,8 @@ describe('ImageGenerationService', () => {
       schemaVersion: '3.0',
       targetName: 'mesh-object',
       materials: { stone: { color: '#888888', roughness: 0.8, metalness: 0 } },
+      parameterSchema: [],
+      operations: [],
       componentTree: [{
         id: 'body', kind: 'mesh', material: 'stone',
         geometry: {
@@ -213,6 +215,8 @@ describe('ImageGenerationService', () => {
     const original = {
       schemaVersion: '3.0',
       materials: { stone: { color: '#888888', roughness: 0.8, metalness: 0 } },
+      parameterSchema: [],
+      operations: [],
       componentTree: [{
         id: 'body', material: 'stone',
         geometry: {

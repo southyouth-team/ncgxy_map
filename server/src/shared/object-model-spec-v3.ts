@@ -92,6 +92,139 @@ function resolveTargetKind(node: any, materials: Record<string, any>, property: 
   return null;
 }
 
+
+const GEOMETRY_POINT_MIN = -0.5;
+const GEOMETRY_POINT_MAX = 0.5;
+function geometryPoint(value: any, size: number, min = GEOMETRY_POINT_MIN, max = GEOMETRY_POINT_MAX) {
+  return Array.isArray(value) && value.length === size
+    && value.every(item => Number.isFinite(Number(item)) && Number(item) >= min && Number(item) <= max);
+}
+function geometryFail(node: any, field: string, reason: string): never {
+  fail('组件几何描述符无效：' + node.id + '.geometryDescriptor.' + field + ' ' + reason);
+}
+function geometryCross(a: number[], b: number[], c: number[]) {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+function geometrySegmentsIntersect(a: number[], b: number[], c: number[], d: number[]) {
+  const eps = 1e-6;
+  const onSegment = (p: number[], q: number[], r: number[]) => Math.abs(geometryCross(p, q, r)) < eps
+    && r[0] >= Math.min(p[0], q[0]) - eps && r[0] <= Math.max(p[0], q[0]) + eps
+    && r[1] >= Math.min(p[1], q[1]) - eps && r[1] <= Math.max(p[1], q[1]) + eps;
+  const abC = geometryCross(a, b, c), abD = geometryCross(a, b, d);
+  const cdA = geometryCross(c, d, a), cdB = geometryCross(c, d, b);
+  if (((abC > eps && abD < -eps) || (abC < -eps && abD > eps))
+    && ((cdA > eps && cdB < -eps) || (cdA < -eps && cdB > eps))) return true;
+  return (Math.abs(abC) < eps && onSegment(a, b, c))
+    || (Math.abs(abD) < eps && onSegment(a, b, d))
+    || (Math.abs(cdA) < eps && onSegment(c, d, a))
+    || (Math.abs(cdB) < eps && onSegment(c, d, b));
+}
+function validateSimpleGeometryProfile(points: number[][], node: any, field: string) {
+  let twiceArea = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index], next = points[(index + 1) % points.length];
+    if (Math.hypot(current[0] - next[0], current[1] - next[1]) < 1e-4) geometryFail(node, field, '不能包含重复点或零长度边');
+    twiceArea += current[0] * next[1] - next[0] * current[1];
+  }
+  if (Math.abs(twiceArea) < 1e-4) geometryFail(node, field, '轮廓面积不能为零');
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      if (j === i + 1 || (i === 0 && j === points.length - 1)) continue;
+      if (geometrySegmentsIntersect(points[i], points[(i + 1) % points.length], points[j], points[(j + 1) % points.length])) {
+        geometryFail(node, field, '轮廓不能自相交');
+      }
+    }
+  }
+  return Math.sign(twiceArea);
+}
+function validateGeometryPath(path: any[], node: any, field: string) {
+  for (let index = 1; index < path.length; index += 1) {
+    const distance = Math.hypot(...path[index].map((value: number, axis: number) => value - path[index - 1][axis]));
+    if (distance < 1e-4) geometryFail(node, field, '不能包含重复点或零长度路径段');
+  }
+  for (let index = 1; index < path.length - 1; index += 1) {
+    const incoming = path[index].map((value: number, axis: number) => value - path[index - 1][axis]);
+    const outgoing = path[index + 1].map((value: number, axis: number) => value - path[index][axis]);
+    const dot = incoming.reduce((sum: number, value: number, axis: number) => sum + value * outgoing[axis], 0);
+    const cosine = dot / (Math.hypot(...incoming) * Math.hypot(...outgoing));
+    if (Math.acos(Math.max(-1, Math.min(1, cosine))) > Math.PI * 150 / 180) {
+      geometryFail(node, field, '存在超过 150° 的急转弯，可能导致扫掠截面翻转或自相交');
+    }
+  }
+}
+function validateGeometryDescriptor(node: any) {
+  if ((node.kind || 'mesh') !== 'mesh') return;
+  const primitive = String(node.primitive || '').toLowerCase();
+  const descriptor = node.geometryDescriptor ?? {};
+  if (!isRecord(descriptor)) geometryFail(node, '', '必须是对象');
+  if (primitive === 'polygon') {
+    const points = descriptor.points;
+    if (!Array.isArray(points) || points.length < 3 || points.length > 32 || !points.every((point: any) => geometryPoint(point, 2))) {
+      geometryFail(node, 'points', '必须包含 3-32 个位于 [-0.5,0.5] 的二维点');
+    }
+    validateSimpleGeometryProfile(points.map((point: number[]) => point.map(Number)), node, 'points');
+  } else if (primitive === 'tube' || primitive === 'sweep') {
+    const path = descriptor.path;
+    if (!Array.isArray(path) || path.length < 2 || path.length > 32 || !path.every((point: any) => geometryPoint(point, 3))) {
+      geometryFail(node, 'path', '必须包含 2-32 个位于 [-0.5,0.5] 的三维点');
+    }
+    validateGeometryPath(path.map((point: number[]) => point.map(Number)), node, 'path');
+    if (descriptor.radius !== undefined && descriptor.radius !== null
+      && (!Number.isFinite(Number(descriptor.radius)) || Number(descriptor.radius) < 0.01 || Number(descriptor.radius) > 10)) {
+      geometryFail(node, 'radius', '必须是 0.01-10 范围内的有限数值');
+    }
+    if (primitive === 'tube') {
+      const tubularSegments = Number(descriptor.tubularSegments ?? 32);
+      const radialSegments = Number(descriptor.radialSegments ?? 8);
+      if (!Number.isInteger(tubularSegments) || tubularSegments < 3 || tubularSegments > 128
+        || !Number.isInteger(radialSegments) || radialSegments < 3 || radialSegments > 24
+        || (descriptor.closed !== undefined && typeof descriptor.closed !== 'boolean')) {
+        geometryFail(node, 'segments', 'tubularSegments 必须为 3-128、radialSegments 必须为 3-24，closed 必须为布尔值');
+      }
+    } else {
+      if (descriptor.closed === true) geometryFail(node, 'closed', '当前不支持闭合扫掠路径');
+      if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 3 || descriptor.profile.length > 24
+        || !descriptor.profile.every((point: any) => geometryPoint(point, 2))) {
+        geometryFail(node, 'profile', '必须包含 3-24 个合法二维截面点');
+      }
+      validateSimpleGeometryProfile(descriptor.profile.map((point: number[]) => point.map(Number)), node, 'profile');
+      const steps = Number(descriptor.steps ?? 32);
+      if (!Number.isInteger(steps) || steps < 3 || steps > 128) geometryFail(node, 'steps', '必须是 3-128 的整数');
+    }
+  } else if (primitive === 'lathe') {
+    const profile = descriptor.profile;
+    if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32
+      || !profile.every((point: any) => Array.isArray(point) && point.length === 2
+        && Number.isFinite(Number(point[0])) && Number(point[0]) >= 0 && Number(point[0]) <= 0.5
+        && Number.isFinite(Number(point[1])) && Number(point[1]) >= -0.5 && Number(point[1]) <= 0.5)) {
+      geometryFail(node, 'profile', '必须包含 2-32 个合法 [半径,高度] 归一化点');
+    }
+    if (profile.every((point: number[], index: number) => index === 0
+      || Math.hypot(Number(point[0]) - Number(profile[index - 1][0]), Number(point[1]) - Number(profile[index - 1][1])) < 1e-4)) {
+      geometryFail(node, 'profile', '不能全部由重复点组成');
+    }
+  } else if (primitive === 'loft') {
+    const sections = descriptor.sections;
+    if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) geometryFail(node, 'sections', '必须包含 2-12 个截面');
+    let pointCount = 0, previousHeight = -Infinity, orientation = 0;
+    sections.forEach((section: any, index: number) => {
+      if (!isRecord(section) || !Number.isFinite(Number(section.height)) || Number(section.height) < -0.5 || Number(section.height) > 0.5
+        || !Array.isArray(section.points) || section.points.length < 3 || section.points.length > 24
+        || !section.points.every((point: any) => geometryPoint(point, 2))) {
+        geometryFail(node, 'sections[' + index + ']', '截面结构或坐标无效');
+      }
+      if (index === 0) pointCount = section.points.length;
+      if (section.points.length !== pointCount || Number(section.height) <= previousHeight + 1e-4) {
+        geometryFail(node, 'sections', '所有截面点数必须一致且 height 必须严格递增');
+      }
+      const currentOrientation = validateSimpleGeometryProfile(section.points.map((point: number[]) => point.map(Number)), node, 'sections[' + index + '].points');
+      if (orientation && currentOrientation !== orientation) geometryFail(node, 'sections', '所有截面必须保持一致的轮廓绕序');
+      orientation = currentOrientation;
+      previousHeight = Number(section.height);
+    });
+  }
+}
+
 export function validateObjectModelSpecV3(spec: any) {
   if (!isRecord(spec) || spec.schemaVersion !== '3.0') fail('ObjectModelSpec 3.0 无效：仅接受 3.0 JSON 对象');
   if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
@@ -109,6 +242,7 @@ export function validateObjectModelSpecV3(spec: any) {
     if (!['group', 'mesh'].includes(kind)) fail('组件 kind 无效：' + node.id);
     if (kind === 'mesh') {
       if (typeof node.primitive !== 'string' || !node.primitive) fail('Mesh 组件缺少 primitive：' + node.id);
+      validateGeometryDescriptor(node);
       if (!isRecord(node.dimensions)) fail('Mesh 组件缺少 dimensions：' + node.id);
       for (const key of ['width', 'height', 'depth']) {
         const value = Number(node.dimensions[key]);

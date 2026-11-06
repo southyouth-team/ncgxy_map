@@ -21,6 +21,10 @@
 
 参数目标使用真实数据路径，由目标当前值决定数据类型；禁止访问原型链和结构身份字段。数量或表达式控制参数可以使用空 targets，由 operations 引用。
 
+## 几何能力注册表
+
+`server/src/shared/object-model-spec-v3.ts` 导出 `OBJECT_MODEL_GEOMETRY_CAPABILITIES` 与 `getObjectModelGeometryCapability()`，作为协议支持 primitive 的唯一声明入口。公共 Validator、资产保存边界和 Three.js Runtime 消费同一注册表。Runtime 的 Three.js 构建分支仍负责真实几何构建；注册表登记不等于执行器已经实现。新增 primitive 必须同时补充描述符校验、Runtime 构建分支和跨边界测试。
+
 ## 执行链路
 
 1. AI 生成完整 ObjectModelSpec 3.0。
@@ -51,7 +55,7 @@
 | 阶段 | 状态 | 说明 |
 |---|---|---|
 | P0 架构盘点与协议边界 | 第一轮审计完成 | 已定位重复控制器、旧生成器执行器和校验重复 |
-| P1 新协议切换 | 进行中 | 3.0 入口已统一；公共几何描述符校验第一轮接入，保存/参数设计仍有重复局部规则 |
+| P1 新协议切换 | 进行中 | 统一几何能力注册表与描述符校验已接入；生成/保存重复几何校验已移除，仍需完成 Runtime/参数设计边界审计与 raw/compiled 校验模式划分 |
 | P2 通用几何运算 | 进行中 | instance + bounded expression 已执行；还需扩展通用操作并验证复杂阵列 |
 | P3 参数绑定与依赖引擎 | 进行中 | 动态路径和 operation 参数可用；依赖图与增量更新未完成 |
 | P4 编辑器闭环 | 进行中 | 已有保存/读取 operation 往返测试；仍需真实 Provider 与浏览器端综合验收 |

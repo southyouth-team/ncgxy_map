@@ -582,7 +582,7 @@ export class AssetsService {
     } else {
       const operations = spec.operations === undefined ? [] : spec.operations;
       if (!Array.isArray(operations) || operations.length > 40) throw new BadRequestException('资产 operations 数量无效');
-      const operationIds = new Set<string>(), operationRoots = new Set<string>();
+      const operationIds = new Set<string>(), operationRoots = new Set<string>(), claimedSourceNodes = new Set<string>();
       const parameterById = new Map<string, any>((spec.parameterSchema || []).map((item: any) => [item.id, item]));
       let expandedCount = spec.componentTree.length;
       const validateExpression = (expression: any, depth = 0): void => {
@@ -630,6 +630,10 @@ export class AssetsService {
         }
         operationRoots.add(root.id);
         const subtree = subtreeFor(root.id);
+        for (const node of subtree) {
+          if (claimedSourceNodes.has(node.id)) throw new BadRequestException('资产 instance 源子树不能重叠：' + operation.id);
+          claimedSourceNodes.add(node.id);
+        }
         const countParameter = parameterById.get(operation.count?.parameterId);
         if (!countParameter || countParameter.type !== 'number' || !Number.isInteger(countParameter.value)
           || !Number.isInteger(countParameter.min) || !Number.isInteger(countParameter.max)

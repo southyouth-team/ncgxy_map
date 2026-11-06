@@ -15,7 +15,7 @@ export function getVirtualSunState(hour = 12) {
   const phase = ((normalizedHour - 6) / 12) * Math.PI
   const elevation = Math.sin(phase)
   const horizontal = Math.cos(phase)
-  const rawDirection = [-horizontal * 0.92, elevation, 0.28]
+  const rawDirection = [-horizontal * 0.92, Math.max(0.015, elevation), 0.28]
   const length = Math.hypot(...rawDirection) || 1
   const sunDirection = rawDirection.map(value => value / length)
   const daylight = smoothstep(-0.08, 0.28, elevation)

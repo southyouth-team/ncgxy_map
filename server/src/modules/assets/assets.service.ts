@@ -6,6 +6,7 @@ import { DataSource } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
+import { validateObjectModelSpecV3 } from '../../../../../shared/object-model-spec-v3';
 
 
 function assertStableSweepPath(path: number[][], label: string, ErrorType: new (message?: string) => Error) {
@@ -271,6 +272,9 @@ export class AssetsService {
   async saveObjectSculptAsset(userId: string, input: Record<string, unknown>) {
     if (!userId) throw new BadRequestException('缺少资产保存用户身份');
     const spec = input?.objectSculptSpec as Record<string, any> | undefined;
+    try { validateObjectModelSpecV3(spec); } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
+    }
     if (!spec || typeof spec !== 'object' || Array.isArray(spec) || spec.schemaVersion !== '3.0'
       || Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')
       || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 300
@@ -515,12 +519,10 @@ export class AssetsService {
     try {
       const content = await readFile(absolutePath, 'utf8');
       const spec = JSON.parse(content);
-      if (!spec || spec.schemaVersion !== '3.0'
-        || Object.prototype.hasOwnProperty.call(spec, 'generators')
-        || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
+      if (createHash('sha256').update(content).digest('hex') !== record.checksumSha256) throw new NotFoundException('结构化资产校验失败');
+      try { validateObjectModelSpecV3(spec); } catch {
         throw new NotFoundException('结构化资产不是有效的 ObjectModelSpec 3.0');
       }
-      if (createHash('sha256').update(content).digest('hex') !== record.checksumSha256) throw new NotFoundException('结构化资产校验失败');
       return { ...record, spec };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;

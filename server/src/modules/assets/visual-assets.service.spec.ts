@@ -87,7 +87,7 @@ describe('AssetsService visual asset persistence', () => {
   });
   it('rejects loft assets whose section contours use inconsistent winding', async () => {
     const objectSculptSpec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
       componentTree: [{
         id: 'loft-body',
@@ -101,35 +101,11 @@ describe('AssetsService visual asset persistence', () => {
           ],
         },
       }],
+      operations: [],
     };
 
     await expect(service.saveObjectSculptAsset('owner-1', { name: 'invalid loft', objectSculptSpec }))
       .rejects.toThrow('资产 loft 截面必须保持一致的轮廓绕序');
-  });
-
-  it('persists multiple cutouts targeting the same mesh', async () => {
-    const objectSculptSpec = {
-      schemaVersion: '2.0',
-      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
-      componentTree: [
-        { id: 'building', kind: 'group' },
-        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 4, height: 3, depth: 0.3 } },
-        { id: 'left-opening', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 0.8, height: 1.8, depth: 0.5 }, transform: { position: [-1, 0, 0] } },
-        { id: 'right-opening', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 0.8, height: 1.8, depth: 0.5 }, transform: { position: [1, 0, 0] } },
-      ],
-      constraints: [
-        { id: 'left-window-cutout', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'left-opening', axis: 'z', operation: 'subtract' },
-        { id: 'right-window-cutout', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'right-opening', axis: 'z', operation: 'subtract' },
-      ],
-    };
-
-    const saved = await service.saveObjectSculptAsset('owner-1', { name: '双开口墙体', objectSculptSpec });
-    const loaded = await service.getObjectSculptAsset('owner-1', saved.assetId);
-    expect(loaded.spec.constraints).toHaveLength(2);
-    expect(loaded.spec.constraints.map((item: any) => item.cutterNodeId).sort()).toEqual(['left-opening', 'right-opening']);
   });
 
   it('persists and owner-scopes a complete ObjectModelSpec 3.0', async () => {

@@ -13,6 +13,7 @@ const MAX_OPERATIONS = 40;
 const MAX_PARAMETERS = 100;
 const MAX_INSTANCES = 100;
 const MAX_DEPTH = 16;
+const MAX_INDEXED_MESH_BYTES = 2 * 1024 * 1024;
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 
 
@@ -240,6 +241,42 @@ function validateGeometryDescriptor(node: any) {
   geometryCapabilityRegistry.validate(primitive, node, descriptor);
 }
 
+function validateIndexedMeshGeometry(node: any) {
+  const geometry = node.geometry;
+  if (!isRecord(geometry) || geometry.type !== 'indexed-mesh') fail('组件通用几何数据格式无效：' + node.id);
+  for (const key of Object.keys(geometry)) {
+    if (!['type', 'positions', 'indices'].includes(key)) fail('组件通用几何数据包含不支持的字段：' + node.id + '.' + key);
+  }
+  const positions = geometry.positions;
+  const indices = geometry.indices;
+  if (!Array.isArray(positions) || positions.length < 9 || positions.length % 3 !== 0
+    || positions.some((value: any) => typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 10000)) {
+    fail('组件通用几何 positions 必须是至少包含 3 个顶点的有限三维坐标数组：' + node.id);
+  }
+  if (!Array.isArray(indices) || indices.length < 3 || indices.length % 3 !== 0) {
+    fail('组件通用几何 indices 必须是非空三角形索引数组：' + node.id);
+  }
+  const vertexCount = positions.length / 3;
+  for (let offset = 0; offset < indices.length; offset += 3) {
+    const a = indices[offset], b = indices[offset + 1], c = indices[offset + 2];
+    if (![a, b, c].every((value: any) => Number.isInteger(value) && value >= 0 && value < vertexCount)) {
+      fail('组件通用几何索引超出顶点范围：' + node.id + '.indices[' + offset + ']');
+    }
+    if (a === b || b === c || c === a) fail('组件通用几何三角形不能重复引用同一顶点：' + node.id);
+    const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
+    const abx = positions[b * 3] - ax, aby = positions[b * 3 + 1] - ay, abz = positions[b * 3 + 2] - az;
+    const acx = positions[c * 3] - ax, acy = positions[c * 3 + 1] - ay, acz = positions[c * 3 + 2] - az;
+    const crossX = aby * acz - abz * acy;
+    const crossY = abz * acx - abx * acz;
+    const crossZ = abx * acy - aby * acx;
+    if (crossX * crossX + crossY * crossY + crossZ * crossZ < 1e-20) {
+      fail('组件通用几何不能包含退化三角形：' + node.id + '.indices[' + offset + ']');
+    }
+  }
+  const byteLength = new TextEncoder().encode(JSON.stringify(geometry)).length;
+  if (byteLength > MAX_INDEXED_MESH_BYTES) fail('组件通用几何数据超过 2 MB 资源预算：' + node.id);
+}
+
 export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | 'compiled' } = {}) {
   const mode = options.mode || 'raw';
   if (mode !== 'raw' && mode !== 'compiled') fail('ObjectModelSpec Validator mode 无效');
@@ -258,13 +295,20 @@ export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | '
     const kind = node.kind || 'mesh';
     if (!['group', 'mesh'].includes(kind)) fail('组件 kind 无效：' + node.id);
     if (kind === 'mesh') {
-      if (typeof node.primitive !== 'string' || !node.primitive) fail('Mesh 组件缺少 primitive：' + node.id);
-      if (!getObjectModelGeometryCapability(node.primitive)) fail('组件几何类型不受支持：' + node.primitive);
-      validateGeometryDescriptor(node);
-      if (!isRecord(node.dimensions)) fail('Mesh 组件缺少 dimensions：' + node.id);
-      for (const key of ['width', 'height', 'depth']) {
-        const value = Number(node.dimensions[key]);
-        if (!Number.isFinite(value) || value < 0.02 || value > 100) fail('组件尺寸超出允许范围：' + node.id + '.' + key);
+      if (node.geometry !== undefined) {
+        if (node.primitive !== undefined || node.geometryDescriptor !== undefined) {
+          fail('通用几何组件不能同时声明 primitive 或 geometryDescriptor：' + node.id);
+        }
+        validateIndexedMeshGeometry(node);
+      } else {
+        if (typeof node.primitive !== 'string' || !node.primitive) fail('Mesh 组件缺少 primitive 或 geometry：' + node.id);
+        if (!getObjectModelGeometryCapability(node.primitive)) fail('组件几何类型不受支持：' + node.primitive);
+        validateGeometryDescriptor(node);
+        if (!isRecord(node.dimensions)) fail('Mesh 组件缺少 dimensions：' + node.id);
+        for (const key of ['width', 'height', 'depth']) {
+          const value = Number(node.dimensions[key]);
+          if (!Number.isFinite(value) || value < 0.02 || value > 100) fail('组件尺寸超出允许范围：' + node.id + '.' + key);
+        }
       }
     }
     const transformKeys: Array<[string, number[]]> = [['position', [0, 0, 0]], ['rotation', [0, 0, 0]], ['scale', [1, 1, 1]]];

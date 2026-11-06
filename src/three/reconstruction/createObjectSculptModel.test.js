@@ -27,6 +27,43 @@ function castleSpec() {
 }
 
 describe('ObjectSculptSpec Three.js adapter', () => {
+  it('builds an arbitrary indexed mesh without requiring a registered primitive', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      materials: { metal: { color: '#777777', roughness: 0.35, metalness: 0.7 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        {
+          id: 'custom-shell', kind: 'mesh', parent: 'root', material: 'metal',
+          geometry: {
+            type: 'indexed-mesh',
+            positions: [-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1, 0, 2, 0],
+            indices: [0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4],
+          },
+        },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.getObjectByName('custom-shell:mesh');
+    expect(mesh.isMesh).toBe(true);
+    expect(mesh.geometry.isBufferGeometry).toBe(true);
+    expect(mesh.geometry.getAttribute('position').count).toBe(5);
+    expect(mesh.geometry.getIndex().count).toBe(12);
+    expect(mesh.geometry.getAttribute('normal').count).toBe(5);
+    expect(mesh.geometry.boundingSphere).not.toBeNull();
+  });
+
+  it('rejects malformed indexed mesh topology before Three.js construction', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      componentTree: [{
+        id: 'custom-shell',
+        geometry: { type: 'indexed-mesh', positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], indices: [0, 1, 3] },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('索引超出顶点范围');
+  });
+
   it('reconstructs a hierarchical castle as real Three.js meshes', () => {
     const spec = castleSpec();
     const result = createObjectSculptModel(THREE, spec);

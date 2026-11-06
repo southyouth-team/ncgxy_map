@@ -568,6 +568,15 @@ export function auditObjectModelGeometryCapabilityCoverage() {
 }
 
 function createGeometry(THREE, node) {
+  if (node.geometry?.type === 'indexed-mesh') {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(node.geometry.positions, 3));
+    geometry.setIndex(node.geometry.indices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
   if (!getObjectModelGeometryCapability(node.primitive)) {
     throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
   }

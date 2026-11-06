@@ -11,7 +11,7 @@
 | 字段 | 职责 |
 |---|---|
 | `materials` | 材质定义 |
-| `componentTree` | 原始组件树、层级和局部变换 |
+| `componentTree` | 原始组件树、层级和局部变换；Mesh 可使用通用 indexed-mesh 顶点/索引数据，不依赖 primitive 注册表 |
 | `parameterSchema` | 参数值、范围、类型和目标绑定 |
 | `operations` | 声明式结构运算；当前执行器实现通用 `instance` 运算 |
 
@@ -46,7 +46,7 @@
 
 ## 当前能力边界与后续工作
 
-- 当前 `operations` 只有通用 `instance` 运算；路径采样、布尔几何、曲面拓扑等不属于已完成能力。
+- Mesh 已支持通用 `indexed-mesh`（positions + indices）数据表达与 Three.js BufferGeometry 构建；该路径不依赖 primitive 注册表。路径采样、布尔几何、曲面拓扑等仍不属于已完成能力。
 - 参数目标支持动态数据路径，但完整依赖图、派生参数、局部增量重建尚未完成。
 - 目前参数变更采用基线重算，不应宣称已实现局部 Mesh 增量更新。
 - 保存/恢复完整闭环、真实 Provider 多物体回归和浏览器端体验验收仍需完成。

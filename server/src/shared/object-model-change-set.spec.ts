@@ -39,6 +39,27 @@ describe('ObjectModelChangeSet 1.0', () => {
     expect(base.componentTree[1].dimensions.width).toBe(2);
   });
 
+  it('replaces one component with an indexed mesh while preserving unrelated components', () => {
+    const base = baseSpec();
+    base.componentTree.push({ id: 'window', parent: 'body', primitive: 'box',
+      dimensions: { width: 0.5, height: 0.6, depth: 0.1 } });
+    const result = applyObjectModelChangeSet(base, changeSet(base, [{
+      type: 'replace-component',
+      nodeId: 'body',
+      component: {
+        id: 'body', parent: 'root', material: 'stone',
+        geometry: {
+          type: 'indexed-mesh',
+          positions: [-1, 0, -1, 1, 0, -1, 0, 2, 0],
+          indices: [0, 1, 2],
+        },
+      },
+    }]));
+    expect(result.objectModelSpec.componentTree.find((node: any) => node.id === 'body').geometry.type).toBe('indexed-mesh');
+    expect(result.objectModelSpec.componentTree.find((node: any) => node.id === 'window').primitive).toBe('box');
+    expect(result.affectedNodeIds).toEqual(['body']);
+  });
+
   it('removes a leaf and requires explicit cascade for a subtree', () => {
     const base = baseSpec();
     base.componentTree.push({ id: 'window', parent: 'body', primitive: 'box',

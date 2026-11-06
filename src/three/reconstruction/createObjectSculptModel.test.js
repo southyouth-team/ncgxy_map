@@ -1326,7 +1326,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
     expect(expandedResources.slice(3).map(({ resource }) => [
       resource.geometryDisposals, resource.materialDisposals,
-    ])).toEqual([[1, 1], [1, 1], [1, 1]]);
+    ])).toEqual([[1, 1], [1, 1], [1, 1], [1, 1]]);
     expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(3);
   });
 

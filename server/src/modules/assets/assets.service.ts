@@ -6,7 +6,7 @@ import { DataSource } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
-import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
+import { getObjectModelGeometryCapability, validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 
 
 export interface UploadedAsset {
@@ -246,14 +246,13 @@ export class AssetsService {
       if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id) || ids.has(node.id)) throw new BadRequestException('资产组件 ID 无效或重复');
       ids.add(node.id);
     }
-    const primitives = new Set(['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft']);
     const byId = new Map<string, any>(spec.componentTree.map((node: any) => [node.id, node] as [string, any]));
     for (const node of spec.componentTree) {
       if (node.parent && !ids.has(node.parent)) throw new BadRequestException('资产组件父节点不存在：' + node.id);
       const kind = node.kind || 'mesh';
       if (!['group', 'mesh'].includes(kind)) throw new BadRequestException('资产组件 kind 无效：' + node.id);
       if (kind === 'mesh') {
-        if (!primitives.has(String(node.primitive || '').toLowerCase())) throw new BadRequestException('资产组件几何类型无效：' + node.id);
+        if (!getObjectModelGeometryCapability(node.primitive)) throw new BadRequestException('资产组件几何类型无效：' + node.id);
         if (!node.dimensions || ['width','height','depth'].some(key => !Number.isFinite(Number(node.dimensions[key])) || Number(node.dimensions[key]) < 0.02 || Number(node.dimensions[key]) > 100)) throw new BadRequestException('资产组件尺寸无效：' + node.id);
 
       }

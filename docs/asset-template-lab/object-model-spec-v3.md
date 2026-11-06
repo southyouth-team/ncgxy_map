@@ -36,7 +36,7 @@
 - Three.js Runtime 只接受 3.0；旧 generator/constraint 扩展器已从 Runtime 移除。
 - 移除旧版 BuildingDesignController 中与 ImageGenerationController 重复的重建/修改路由。
 - 删除旧版 2.0 资产重建、审核和局部修改服务链路。
-- 前后端 CI 已覆盖协议拒绝、表达式编译、旋转阵列、几何描述符参数、operation 数量参数重建，以及 operation 数据的保存/读取往返。\n- 资产保存和读取接口均只接受 3.0；旧 2.0 数据不做兼容。\n- **校验闭环正在统一**：公共 Validator 已覆盖组件/参数/Operations 结构，并开始统一 Polygon、Tube、Lathe、Sweep、Loft 的几何描述符规则；AI 生成链路已移除自身重复的基础描述符校验。资产保存仍保留部分重复几何检查，Runtime 仍保留执行器级几何安全检查，参数设计链路仍有局部规则，尚未达到单一校验源。
+- 前后端 CI 已覆盖协议拒绝、表达式编译、旋转阵列、几何描述符参数、operation 数量参数重建，以及 operation 数据的保存/读取往返。\n- 资产保存和读取接口均只接受 3.0；旧 2.0 数据不做兼容。\n- **校验闭环正在统一**：公共 Validator 已覆盖组件/参数/Operations 结构，并统一 Polygon、Tube、Lathe、Sweep、Loft 的几何描述符规则；AI 生成链路与资产保存链路已移除重复的描述符协议校验。Runtime 仍保留执行器级几何构建安全检查，资产保存仍保留组件 ID/尺寸/层级等局部防御检查，尚未达到所有边界完全复用单一校验源。
 
 ## 当前能力边界与后续工作
 

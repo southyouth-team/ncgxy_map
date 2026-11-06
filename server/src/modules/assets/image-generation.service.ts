@@ -841,7 +841,7 @@ export class ImageGenerationService {
         role: 'user',
         content: imageDataUrl
           ? [
-              { type: 'text', text: 'Create the complete editable procedural Three.js model from this reference image. Reproduce visible silhouette, proportions, part relationships and material regions. The image is the primary evidence; do not invent hidden details. Return only the createModel(THREE) JavaScript factory.' },
+              { type: 'text', text: 'Create the complete editable procedural Three.js model from this reference image. Reproduce visible silhouette, proportions, part relationships and material regions. The image is the primary evidence; do not invent hidden details. Return only the complete JavaScript module exporting createModel(THREE, params = {}), modelParameters and modelParts.' },
               { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
             ]
           : 'Generate the complete editable procedural model. Return only the createModel(THREE) JavaScript factory.',

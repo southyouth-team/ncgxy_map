@@ -61,7 +61,8 @@ self.addEventListener('message', async (event) => {
       throw new Error('源码必须导出 createModel(THREE)')
     }
 
-    const root = modelModule.createModel(THREE)
+    const parameters = event.data?.parameters && typeof event.data.parameters === 'object' ? event.data.parameters : {}
+    const root = modelModule.createModel(THREE, parameters)
     if (!root || root.isGroup !== true) {
       throw new Error('createModel(THREE) 必须返回 THREE.Group')
     }
@@ -69,6 +70,12 @@ self.addEventListener('message', async (event) => {
       throw new Error('模型根节点不能预先挂载到其他对象')
     }
 
+    root.userData = {
+      ...(root.userData || {}),
+      proceduralModelParameters: Array.isArray(modelModule.modelParameters) ? modelModule.modelParameters : [],
+      proceduralModelParts: Array.isArray(modelModule.modelParts) ? modelModule.modelParts : [],
+      proceduralModelParameterValues: parameters,
+    }
     root.updateMatrixWorld(true)
     port.postMessage({
       ok: true,

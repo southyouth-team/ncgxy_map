@@ -2,7 +2,7 @@ name: Frontend CI
 
 on:
   push:
-    branches: [feat/multi-campus-data-foundation, feat/object-model-protocol-p1, feat/img2threejs-procedural-mvp]
+    branches: [feat/multi-campus-data-foundation, feat/object-model-protocol-p1, feat/img2threejs-procedural-mvp, feat/world-sandbox-conversational-model-editor]
   pull_request:
     branches: [main, feat/multi-campus-data-foundation, feat/object-model-protocol-p1, feat/img2threejs-procedural-mvp]
 jobs:

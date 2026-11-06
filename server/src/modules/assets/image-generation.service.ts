@@ -620,12 +620,6 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('组件未连接到主体根节点：' + String(node.id || 'unknown'));
       }
     }
-    try {
-    } catch (error) {
-      if (!allowGeometryRepair || !(error instanceof Error)) throw error;
-      this.logger.warn('ObjectSculptSpec 几何校验失败，执行一次定向修复：' + error.message);
-      return this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
-    }
     if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
       throw new ServiceUnavailableException('ObjectModelSpec 3.0 不接受 generators/constraints；请使用 operations 声明结构运算');
     }
@@ -635,7 +629,11 @@ export class ImageGenerationService {
     spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
     validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
     try { validateObjectModelSpecV3(spec); } catch (error) {
-      throw new ServiceUnavailableException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
+      if (!allowGeometryRepair || !(error instanceof Error)) {
+        throw new ServiceUnavailableException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
+      }
+      this.logger.warn('ObjectModelSpec 3.0 校验失败，执行一次定向修复：' + error.message);
+      return this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
     }
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };

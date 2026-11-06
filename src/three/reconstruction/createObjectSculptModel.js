@@ -669,6 +669,20 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
       maxIndex = vertexCount - 1;
       break;
     }
+    case 'arch': {
+      // Both the outer contour and its opening contain three straight edges
+      // and two quadratic curves. CurvePath samples each quadratic at
+      // `segments` divisions and removes duplicate joins: 3 + 2*segments
+      // points per contour. Earcut triangulates one hole into N triangles
+      // for N combined contour points; ExtrudeGeometry emits two cap copies
+      // and one two-triangle side quad per contour edge.
+      const contourPointCount = 3 + 2 * segments;
+      const combinedContourPointCount = contourPointCount * 2;
+      vertexCount = 12 * combinedContourPointCount;
+      indexCount = 0;
+      maxIndex = 0;
+      break;
+    }
     case 'polygon': {
       const points = options.points;
       if (!Array.isArray(points) || points.length < 3 || points.length > 32) {

@@ -685,6 +685,36 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('estimates arch extrusion buffers against actual Three.js geometry across curve resolutions', () => {
+    for (const segments of [3, 8, 16, 32, 48]) {
+      const descriptor = { inset: 0.35, segments };
+      const estimate = estimateObjectSculptPrimitiveGeometry('arch', descriptor);
+      const node = {
+        id: 'estimated-arch-' + segments,
+        primitive: 'arch',
+        dimensions: { width: 3, height: 4, depth: 0.5 },
+        geometryDescriptor: descriptor,
+      };
+      const component = createObjectSculptComponentGroup(THREE, node);
+      const geometry = component.getObjectByName(node.id + ':mesh').geometry;
+      const actualAttributeBytes = Object.values(geometry.attributes)
+        .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+      expect(geometry.type).toBe('ExtrudeGeometry');
+      expect(geometry.getIndex()).toBeNull();
+      expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+      expect(estimate.indexCount).toBe(0);
+      expect(estimate.attributeComponents).toBe(8);
+      expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+      expect(estimate.indexBytes).toBe(0);
+      expect(estimate.indexBytesPerElement).toBe(0);
+      expect(estimate.bufferBytes).toBe(actualAttributeBytes);
+      component.traverse(object => {
+        object.geometry?.dispose?.();
+        object.material?.dispose?.();
+      });
+    }
+  });
+
   it('estimates polygon extrusion buffers against actual Three.js geometry', () => {
     const pointSets = [
       [[-0.4, -0.4], [0.4, -0.4], [0, 0.4]],

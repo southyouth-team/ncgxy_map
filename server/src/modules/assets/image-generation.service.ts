@@ -927,7 +927,7 @@ export class ImageGenerationService {
       'The factory must synchronously return one THREE.Group, use only THREE and params, and keep the model centered near X/Z origin, Y-up, standing on Y=0.',
       'Avoid unbounded loops and pathological geometry. Do not claim that geometry intersections have been automatically detected.',
     ].join('\n');
-    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameters: parameters, currentParts: parts, currentSource: source, instruction });
+    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameterDefinitions: parameterDefinitions, currentParameterValues: parameterValues, currentParts: parts, currentSource: source, instruction });
     let response: Response;
     try {
       response = await fetch(baseUrl + '/chat/completions', {

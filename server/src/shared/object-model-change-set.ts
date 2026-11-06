@@ -224,7 +224,7 @@ function applyChange(spec: Record<string, any>, rawChange: any, affectedNodeIds:
  * The caller must persist only the returned candidate after this function succeeds.
  */
 export function applyObjectModelChangeSet(baseSpecInput: unknown, changeSetInput: unknown) {
-  const baseSpec = cloneJson(baseSpecInput, 'baseSpec');
+  const baseSpec = cloneJson(baseSpecInput, 'baseSpec') as Record<string, any>;
   try {
     validateObjectModelSpecV3(baseSpec);
   } catch (error) {

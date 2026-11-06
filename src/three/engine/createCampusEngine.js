@@ -326,7 +326,31 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     let root = hit.object
     while (root && !root.userData?.sandboxModelId) root = root.parent
-    selectSandboxModel(root?.userData?.sandboxModelId || null)
+    const modelId = root?.userData?.sandboxModelId || null
+    selectSandboxModel(modelId)
+    let part = hit.object
+    while (part && part !== root && !part.userData?.componentId) part = part.parent
+    callbacks.onSandboxPartSelected?.(part && part !== root ? {
+      modelId,
+      id: String(part.userData.componentId),
+      name: part.name || String(part.userData.componentId),
+    } : null)
+  }
+
+  function onSandboxDoubleClick(event) {
+    if (!renderer || !cameraRig || sandboxTransform?.dragging) return
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointerNdc, cameraRig.camera)
+    const hit = raycaster.intersectObjects(Array.from(sandboxModels.values()), true).find(item => item.object.visible)
+    if (!hit) return
+    let root = hit.object
+    while (root && !root.userData?.sandboxModelId) root = root.parent
+    const id = root?.userData?.sandboxModelId
+    if (!id) return
+    selectSandboxModel(id)
+    callbacks.onSandboxModelDoubleClick?.({ id, name: root.name })
   }
 
   function addSandboxModel(model, options = {}) {
@@ -352,6 +376,40 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function getSandboxModel(id) {
     return sandboxModels.get(String(id)) || null
+  }
+
+  function replaceSandboxModel(id, replacement, metadata = {}) {
+    const current = sandboxModels.get(String(id))
+    if (!current || !replacement?.isObject3D || replacement.parent) return false
+    replacement.userData = {
+      ...(replacement.userData || {}),
+      ...(metadata.userData || {}),
+      sandboxModelId: String(id),
+      isSandboxModel: true,
+    }
+    replacement.name = metadata.name || current.name || replacement.name
+    replacement.position.copy(current.position)
+    replacement.rotation.copy(current.rotation)
+    replacement.scale.copy(current.scale)
+    replacement.traverse(object => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true } })
+    const parent = current.parent || scene
+    parent.add(replacement)
+    sandboxModels.set(String(id), replacement)
+    if (sandboxSelectedModel === current) {
+      sandboxSelectedModel = replacement
+      sandboxTransform?.attach(replacement)
+    }
+    current.parent?.remove(current)
+    disposeObjectGroup(current)
+    invalidateShadowMap()
+    requestFrame()
+    callbacks.onSandboxModelsChange?.(getSandboxModels())
+    callbacks.onSandboxModelSelected?.({
+      id: String(id),
+      name: replacement.name,
+      spec: replacement.userData.objectSculptSpec || null,
+    })
+    return true
   }
 
   function selectSandboxModel(id) {
@@ -696,6 +754,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform.addEventListener('change', requestFrame)
     scene.add(sandboxTransform.getHelper())
     renderer.domElement.addEventListener('pointerdown', onSandboxPointerDown)
+    renderer.domElement.addEventListener('dblclick', onSandboxDoubleClick)
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)
     renderer.domElement.addEventListener('pointerup', requestFrame)
@@ -2360,6 +2419,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer?.domElement?.removeEventListener('pointermove', requestFrame)
     renderer?.domElement?.removeEventListener('wheel', requestFrame)
     renderer?.domElement?.removeEventListener('pointerdown', onSandboxPointerDown)
+    renderer?.domElement?.removeEventListener('dblclick', onSandboxDoubleClick)
     sandboxTransform?.detach()
     sandboxTransform?.dispose()
     sandboxTransform = null
@@ -2384,5 +2444,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, getSandboxModels, getSandboxModel, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

@@ -49,7 +49,7 @@ describe('trusted geometry capability registry', () => {
       descriptorMismatches: [],
       primitiveMismatches: [],
     });
-  }));
+  });
 
   it('audits missing, unknown and mismatched runtime executors without hiding partial coverage', () => {
     const result = auditGeometryCapabilityCoverage([

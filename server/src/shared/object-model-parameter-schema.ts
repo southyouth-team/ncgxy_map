@@ -120,7 +120,7 @@ export function normalizeObjectModelParameterSchema(
       // AI 生成的可选编辑控件不应阻断资产交付；无效绑定整项丢弃。
       // operation 控制参数属于结构生成必需项，仍必须严格失败。
       if (options.dropInvalidOptionalTargets && !operationParameterIds.has(id)
-        && error instanceof Error && /参数目标无效|Group 节点仅支持|参数类型与目标属性|参数目标运算|可见性参数运算/.test(error.message)) {
+        && error instanceof Error && /参数目标无效|Group 节点仅支持|参数类型与目标属性/.test(error.message)) {
         return [];
       }
       throw error;

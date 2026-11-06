@@ -666,7 +666,6 @@ export class ImageGenerationService {
                 'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 必须严格使用标准路径 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible，禁止输出 lattice_color、body_color 等自定义别名；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
                 'componentTree 按对象复杂度包含 1-100 个有意义的独立组件；简单对象可以只有一个组件，复杂对象应按真实结构拆分，不得为了凑数量拆出无意义零件。节点字段：id（唯一英文 ID）、name、role、kind（group 或 mesh，省略时为 mesh）、parent（唯一根节点省略，其余组件必填）、primitive、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。mesh primitive 必须从引擎支持集合中按几何形态选择：box/cuboid、polygon、wedge、arch、cylinder、cone、sphere、ellipsoid、torus、tube、lathe、sweep、loft；不得把所有曲面或异形物体都近似成 box。',
                 '复杂几何描述符必须按 primitive 输出：polygon 使用 geometryDescriptor.points（3-32 个归一化二维轮廓点）；tube 使用 path（2-32 个归一化三维点）及 radius/tubularSegments/radialSegments；lathe 使用 profile（2-32 个 [半径,高度] 归一化点）；sweep 使用 path（2-32 个归一化三维点）、profile（3-24 个归一化二维截面点）及 steps；loft 使用 sections（2-12 个截面，每个截面含严格递增的 height 与相同数量的 points）。这些坐标范围为 [-0.5,0.5]；tube/sweep 的 geometryDescriptor.radius 必须是 0.01-10 的有限数值，且应结合组件 dimensions 使用合理的小半径（细肋条/格栅通常远小于组件宽高），禁止把直径、百分比或归一化坐标误填为 radius；不需要复杂几何时使用基础 primitive。',
-                '每个 generator.templateRootId 必须指向 componentTree 中 kind="group" 的节点；重复模板即使只有一个 Mesh，也必须先创建一个无几何 Group 作为模板容器，再把 Mesh 作为该 Group 的子节点。不得让 generator 直接引用 Mesh。',
 '重复结构必须用通用 operations 描述，不得使用 repeat/grid 专用生成器。operations 项格式：{id,type:"instance",sourceRootId,count:{parameterId},transform:{position:[表达式,表达式,表达式],rotation:[表达式,表达式,表达式],scale:[表达式,表达式,表达式]}}。sourceRootId 指向 componentTree 中完整的 Group 子树；count.parameterId 指向 parameterSchema 中的整数参数。表达式只允许数字常量或 AST：{op:"constant",value}、{op:"index"}、{op:"count"}、{op:"parameter",id}、{op:"add"|"subtract"|"multiply"|"divide",left,right}、{op:"sin"|"cos"|"negate",value}。index 是当前实例索引，count 是实例总数；角度使用弧度。通过三角函数、向量分量和旋转表达式描述任意轴向/圆周/螺旋/非均匀分布，不得把这些分布固化成专用类型。数量参数 targets=[]，由 operation 控制。禁止输出 JavaScript、函数体、eval 或未声明的表达式操作。'
                 'constraints 可选用于部件联动，支持引擎已实现的 follow、span、attach、adjacency、cutout；仅在能准确表达几何依赖时使用，引用必须指向真实节点或生成器。',
                 '单个资产的装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表该对象的核心主体（例如建筑主体、树干/主枝、车身、人体躯干、家具主框架或机械机架）；其余组件必须通过 parent 连接到该根节点，形成一棵连通树。不要把单个资产拆成互不关联的多个根对象。',
@@ -746,7 +745,6 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('组件未连接到主体根节点：' + String(node.id || 'unknown'));
       }
     }
-    if (Array.isArray(spec.generators)) normalizeGeneratorTemplateRoots(spec.componentTree, spec.generators);
     try {
       validateGeneratedGeometryDescriptors(spec.componentTree);
     } catch (error) {
@@ -759,32 +757,6 @@ export class ImageGenerationService {
     spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationValidation.parameterIds);
     validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree);
 
-    // Validate constraint identities and references at the generation boundary too.
-    // The browser Runtime repeats these checks before materialization; this catches
-    // malformed AI output here instead of returning a spec that can only fail later.
-    if (spec.constraints !== undefined && (!Array.isArray(spec.constraints) || spec.constraints.length > 60)) {
-      throw new ServiceUnavailableException('AI constraints 必须是最多 60 项的数组');
-    }
-    const constraintIds = new Set<string>();
-    const generatorIds = new Set((spec.generators || []).map((item: any) => item.id));
-    for (const constraint of spec.constraints || []) {
-      if (!constraint || typeof constraint !== 'object'
-        || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
-        || constraintIds.has(constraint.id)) {
-        throw new ServiceUnavailableException('AI 结构约束 ID 无效或重复');
-      }
-      constraintIds.add(constraint.id);
-      const componentRef = (id: unknown) => typeof id === 'string' && componentIds.has(id);
-      if ((constraint.type === 'follow' || constraint.type === 'span')
-        ? (!generatorIds.has(constraint.sourceGeneratorId) || !componentRef(constraint.targetNodeId))
-        : constraint.type === 'cutout'
-          ? (!componentRef(constraint.targetNodeId) || !componentRef(constraint.cutterNodeId))
-          : ['attach', 'adjacency'].includes(constraint.type)
-            ? (!componentRef(constraint.sourceNodeId) || !componentRef(constraint.targetNodeId))
-            : true) {
-        throw new ServiceUnavailableException('AI 结构约束引用无效：' + constraint.id);
-      }
-    }
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };
   }
 

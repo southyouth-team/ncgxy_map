@@ -18,6 +18,9 @@ const indoorFloor = ref(1)
 const indoorFloors = ref([1])
 const indoorPrompt = ref('')
 const buildingInfo = ref(null)
+const generatedAssets = ref([])
+const placementActive = ref(false)
+const selectedAssetId = ref(null)
 const environment = ref({ timeOfDay: 'day', weather: 'clear', wind: 0.25 })
 let engine = null
 
@@ -49,9 +52,9 @@ async function generateBuilding() {
     if (!spec) throw new Error('AI 返回结果缺少 ObjectModelSpec 3.0')
     status.value = 'AI 结构已返回，正在构建 Three.js 几何…'
     const model = createObjectSculptModel(THREE, spec, { source: 'world-sandbox-mvp' })
-    buildingInfo.value = engine.mountMvpBuilding(model, { floors: 2, floorHeight: 4.2 })
+    engine.beginGeneratedAssetPlacement(model, { floors: 2, floorHeight: 4.2, spec, name: 'AI 两层教学楼' })
     generated.value = true
-    status.value = 'AI 建筑已装入共享世界。使用 WASD 移动，靠近入口后按 E 进入。'
+    status.value = '生成完成：移动鼠标选择沙盒坐标，点击放置；Q/E 旋转，Esc 取消。'
   } catch (cause) {
     error.value = cause?.message || '教学楼生成失败'
     status.value = '生成未完成'
@@ -59,6 +62,16 @@ async function generateBuilding() {
     generating.value = false
   }
 }
+
+function handleGeneratedAssetsChange(items = []) { generatedAssets.value = items }
+function handlePlacementChange(state = {}) {
+  placementActive.value = Boolean(state.active)
+  if (state.asset?.id) selectedAssetId.value = state.asset.id
+  if (!state.active && !state.cancelled) status.value = '资产已放置。可在资产列表中重新选择并移动或旋转。'
+}
+function moveAsset(id) { if (engine?.moveGeneratedAsset(id)) status.value = '移动模式：移动鼠标选择新位置，点击确认，Q/E 旋转，Esc 取消。' }
+function rotateAsset(id, direction) { engine?.rotateGeneratedAsset(id, direction * Math.PI / 12) }
+function removeAsset(id) { engine?.removeGeneratedAsset(id); if (selectedAssetId.value === id) selectedAssetId.value = null }
 
 function handleIndoorState(state = {}) {
   indoor.value = Boolean(state.active)
@@ -96,6 +109,9 @@ onMounted(async () => {
       status.value = '世界场景已就绪。先生成一栋 AI 教学楼。'
     },
     onIndoorStateChange: handleIndoorState,
+    onGeneratedAssetsChange: handleGeneratedAssetsChange,
+    onGeneratedAssetPlacementChange: handlePlacementChange,
+    onGeneratedAssetSelected: asset => { selectedAssetId.value = asset?.id || null },
     onIndoorPromptChange: handleIndoorPrompt,
     onError: cause => { error.value = cause?.message || '场景初始化失败' },
   }, { sceneType: 'rpg-sample', isometricRpg: true, viewMode: '3d' })
@@ -132,16 +148,26 @@ onBeforeUnmount(() => {
         <label for="world-mvp-prompt">教学楼生成要求</label>
         <textarea id="world-mvp-prompt" v-model="prompt" rows="6" :disabled="generating || !ready"></textarea>
         <button class="world-mvp__primary" :disabled="generating || !ready" @click="generateBuilding">
-          {{ generating ? '生成中…' : generated ? '重新生成并替换建筑' : '生成并装入世界' }}
+          {{ generating ? '生成中…' : '生成新资产' }}
         </button>
-        <small v-if="buildingInfo">已装载：{{ buildingInfo.floors }} 层 · {{ buildingInfo.dimensions.width }} × {{ buildingInfo.dimensions.depth }} × {{ buildingInfo.dimensions.height }}</small>
+        <small>生成不会替换校园原有建筑；每次生成都会创建一个独立资产实例。</small>
         <p v-if="error" class="world-mvp__error">{{ error }}</p>
       </section>
 
       <section>
-        <h2>02 · 世界移动与空间交互</h2>
-        <p>点击三维画布后使用 WASD 移动，鼠标拖动调整视角。靠近教学楼入口后按 E 进入或离开。</p>
-        <div class="world-mvp__keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>移动</span><kbd>E</kbd><span>交互</span></div>
+        <h2>02 · 沙盒资产放置</h2>
+        <p v-if="placementActive">移动鼠标选择位置，点击确认放置；Q/E 旋转 15°，Esc 取消。</p>
+        <p v-else>点击资产可选中；使用移动重新选址，旋转按钮调整朝向。WASD 用于角色漫游。</p>
+        <div v-if="generatedAssets.length" class="world-mvp__asset-list">
+          <div v-for="asset in generatedAssets" :key="asset.id" class="world-mvp__asset-row" :class="{ active: selectedAssetId === asset.id }">
+            <span>{{ asset.name }} · {{ asset.dimensions.width.toFixed(1) }}×{{ asset.dimensions.depth.toFixed(1) }}m</span>
+            <button @click="moveAsset(asset.id)">移动</button>
+            <button @click="rotateAsset(asset.id, -1)">↶</button>
+            <button @click="rotateAsset(asset.id, 1)">↷</button>
+            <button @click="removeAsset(asset.id)">删除</button>
+          </div>
+        </div>
+        <div class="world-mvp__keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>漫游</span><kbd>Q</kbd><kbd>E</kbd><span>放置时旋转</span></div>
         <p v-if="indoorPrompt" class="world-mvp__prompt">{{ indoorPrompt }}</p>
         <div v-if="indoor" class="world-mvp__floor-actions">
           <button v-for="level in indoorFloors" :key="level" :class="{ active: indoorFloor === level }" @click="navigateFloor(level)">前往 {{ level }} 楼</button>
@@ -174,8 +200,8 @@ onBeforeUnmount(() => {
         <h2>04 · 当前验证状态</h2>
         <ul>
           <li :class="{ done: ready }">Three.js 世界运行时</li>
-          <li :class="{ done: generated }">AI 生成模型装入共享场景</li>
-          <li :class="{ done: indoor }">进入建筑室内空间</li>
+          <li :class="{ done: generatedAssets.length > 0 }">独立资产实例放置（{{ generatedAssets.length }}）</li>
+          <li :class="{ done: indoor }">室内空间原型（当前为场景样板）</li>
           <li :class="{ done: indoor && indoorFloor === 2 }">跨楼层导航至二楼</li>
         </ul>
         <small>说明：当前室内楼层和房间由现有空间原型生成，AI 生成的是建筑外观模型。MVP 第一轮先验证资产与世界运行时的接入，不把外观几何误当成已自动推导的室内 BIM。</small>
@@ -219,6 +245,11 @@ onBeforeUnmount(() => {
 .world-mvp__environment-row input[type="range"] { width:100%; accent-color:#356c49; }
 
 .world-mvp__panel li.done { color:#287342; font-weight:700; }
+.world-mvp__asset-list { display:grid; gap:7px; margin-top:10px; }
+.world-mvp__asset-row { display:grid; grid-template-columns:1fr repeat(4,auto); align-items:center; gap:4px; padding:7px; border:1px solid #dbe4dc; border-radius:7px; background:#fff; }
+.world-mvp__asset-row.active { border-color:#356c49; background:#edf5ee; }
+.world-mvp__asset-row span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+.world-mvp__asset-row button { padding:5px 6px; font-size:10px; }
 @media (max-width:720px) {
   .world-mvp__header { top:10px; left:10px; right:10px; }
   .world-mvp__header > div { max-width:calc(100vw - 145px); padding:10px 12px; }

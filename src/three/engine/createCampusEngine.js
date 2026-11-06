@@ -92,6 +92,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   const raycaster = new THREE.Raycaster()
   const pointerNdc = new THREE.Vector2()
   let pointerStart = null
+  let generatedAssetsGroup = null
+  const generatedAssets = new Map()
+  let placementState = null
+  let selectedGeneratedAsset = null
+  let generatedAssetSequence = 0
   let navigationVisualGroup = null
   let navigationWasActive = false
   let pendingIndoorFloorTarget = null
@@ -114,67 +119,192 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let environmentConfig = { timeOfDay: 'day', weather: 'clear', wind: 0 }
 
   /**
-   * MVP bridge: mount an AI-generated building into the shared RPG world.
-   * The exterior remains the generated Object3D; indoor rooms/floors are supplied
-   * as spatial metadata and rendered by the existing indoor runtime.
+   * Generated asset definitions stay independent from the sandbox. This group stores
+   * only placed instances and their world-space transforms; the campus sample is untouched.
    */
-  function mountMvpBuilding(model, options = {}) {
-    if (!isRpgSample || !campus) throw new Error('AI 建筑挂载仅在 MVP 世界场景中可用');
-    if (indoorGroup) throw new Error('请先退出室内空间，再替换 AI 建筑');
-    if (!model?.isObject3D || model.parent) throw new TypeError('AI 建筑必须是尚未挂载的 THREE.Object3D');
-    const target = campus.getObjectByName('sample-teaching-building');
-    if (!target) throw new Error('MVP 场景缺少教学楼挂载节点');
-
-    model.updateMatrixWorld(true);
-    const sourceBounds = new THREE.Box3().setFromObject(model);
-    if (sourceBounds.isEmpty()) throw new Error('AI 建筑没有可渲染的几何体');
-    const sourceSize = sourceBounds.getSize(new THREE.Vector3());
-    if (![sourceSize.x, sourceSize.y, sourceSize.z].every(value => Number.isFinite(value) && value > 0.001)) {
-      throw new Error('AI 建筑几何尺寸无效，无法装配到场景');
-    }
-
-    const width = Number(options.width) || 14.8;
-    const depth = Number(options.depth) || 8.5;
-    const floorHeight = Number(options.floorHeight) || 4.2;
-    const floors = Number.isInteger(options.floors) ? Math.max(1, options.floors) : 2;
-    const height = floors * floorHeight;
-    const holder = new THREE.Group();
-    holder.name = 'ai-generated-building-model';
-    model.position.x -= (sourceBounds.min.x + sourceBounds.max.x) / 2;
-    model.position.y -= sourceBounds.min.y;
-    model.position.z -= (sourceBounds.min.z + sourceBounds.max.z) / 2;
-    holder.add(model);
-    // Preserve the generated model's proportions. Independent XYZ scaling can
-    // distort windows, wall thickness and roof geometry, and cannot repair bad joins.
-    const fitScale = Math.min(width / sourceSize.x, height / sourceSize.y, depth / sourceSize.z);
-    if (!Number.isFinite(fitScale) || fitScale <= 0) throw new Error('AI 建筑无法计算有效的等比装配比例');
-    holder.scale.setScalar(fitScale);
-    const fittedSize = sourceSize.clone().multiplyScalar(fitScale);
-    const baseY = Number(target.userData.generatedBuildingBaseY);
-    holder.position.y = Number.isFinite(baseY) ? baseY : 0.73;
-
-    const foundation = target.userData.foundationMesh;
-    target.children.slice().forEach(child => {
-      if (child === foundation) return;
-      target.remove(child);
-      // 原样板建筑复用了场景级材质；替换资产时只释放旧几何，避免误销毁道路等对象共用的材质。
-      child.traverse?.(object => object.geometry?.dispose?.());
-    });
-    target.add(holder);
-    target.userData.generatedBuildingShell = holder;
-    target.userData.floorCount = floors;
-    target.userData.floorHeight = floorHeight;
-    target.userData.buildingHeight = height;
-    target.userData.buildingId = 'sample-teaching-building';
-    target.userData.objectType = 'building';
-    target.userData.indoorEntrance = { x: 0, z: fittedSize.z / 2 + 1.1, radius: Number(options.entranceRadius) || 2.4 };
-    target.userData.rebuildOptions = null;
-    target.updateMatrixWorld(true);
-    invalidateShadowMap();
-    requestFrame();
-    return { buildingId: target.userData.buildingId, floors, floorHeight, dimensions: { width: fittedSize.x, depth: fittedSize.z, height: fittedSize.y }, entrance: { ...target.userData.indoorEntrance } };
+  function getGeneratedAssetBounds(object) {
+    object.updateWorldMatrix(true, true)
+    return new THREE.Box3().setFromObject(object)
   }
 
+  function updateGeneratedAssetObstacle(instance) {
+    if (!collisionWorld || !instance?.userData?.generatedAssetObstacle) return
+    const bounds = getGeneratedAssetBounds(instance)
+    const obstacle = instance.userData.generatedAssetObstacle
+    obstacle.minX = bounds.min.x
+    obstacle.maxX = bounds.max.x
+    obstacle.minZ = bounds.min.z
+    obstacle.maxZ = bounds.max.z
+  }
+
+  function beginGeneratedAssetPlacement(model, options = {}) {
+    if (!isRpgSample || !campus || !generatedAssetsGroup) throw new Error('资产放置仅在沙盒场景中可用')
+    if (indoorGroup) throw new Error('请先退出室内空间，再放置资产')
+    const existing = options.instanceId ? generatedAssets.get(options.instanceId) : null
+    if (!existing && (!model?.isObject3D || model.parent)) throw new TypeError('生成资产必须是未挂载的 THREE.Object3D')
+    if (options.instanceId && !existing) throw new Error('待移动的资产实例不存在')
+    if (!existing) {
+      model.updateMatrixWorld(true)
+      const sourceBounds = new THREE.Box3().setFromObject(model)
+      const sourceSize = sourceBounds.getSize(new THREE.Vector3())
+      if (sourceBounds.isEmpty() || ![sourceSize.x, sourceSize.y, sourceSize.z].every(value => Number.isFinite(value) && value > 0.001)) {
+        throw new Error('生成资产几何尺寸无效')
+      }
+      const width = Number(options.width) || 14.8
+      const depth = Number(options.depth) || 8.5
+      const height = Number(options.height) || ((Number(options.floors) || 2) * (Number(options.floorHeight) || 4.2))
+      const holder = new THREE.Group()
+      holder.name = 'generated-asset-instance'
+      model.position.x -= (sourceBounds.min.x + sourceBounds.max.x) / 2
+      model.position.y -= sourceBounds.min.y
+      model.position.z -= (sourceBounds.min.z + sourceBounds.max.z) / 2
+      holder.add(model)
+      const fitScale = Math.min(width / sourceSize.x, height / sourceSize.y, depth / sourceSize.z)
+      if (!Number.isFinite(fitScale) || fitScale <= 0) throw new Error('无法计算资产等比缩放')
+      holder.scale.setScalar(fitScale)
+      const id = 'asset_' + (++generatedAssetSequence) + '_' + Date.now().toString(36)
+      holder.userData.generatedAssetId = id
+      holder.userData.assetType = options.assetType || 'building'
+      holder.userData.displayName = options.name || 'AI 生成资产'
+      holder.userData.assetDefinition = options.spec || null
+      holder.userData.floorCount = Number.isInteger(options.floors) ? options.floors : 2
+      holder.userData.floorHeight = Number(options.floorHeight) || 4.2
+      generatedAssets.set(id, holder)
+      generatedAssetsGroup.add(holder)
+      placementState = { instance: holder, isNew: true, originalPosition: holder.position.clone(), originalRotation: holder.rotation.clone() }
+    } else {
+      placementState = { instance: existing, isNew: false, originalPosition: existing.position.clone(), originalRotation: existing.rotation.clone() }
+    }
+    selectedGeneratedAsset = placementState.instance
+    selectedGeneratedAsset.userData.isPlacementPreview = true
+    cameraRig?.setMode('overview')
+    input?.setMode('overview')
+    input?.setMovementEnabled(false)
+    callbacks.onGeneratedAssetsChange?.(getGeneratedAssets())
+    callbacks.onGeneratedAssetPlacementChange?.({ active: true, asset: serializeGeneratedAsset(selectedGeneratedAsset), isNew: placementState.isNew })
+    requestFrame()
+    return serializeGeneratedAsset(selectedGeneratedAsset)
+  }
+
+  function serializeGeneratedAsset(instance) {
+    if (!instance) return null
+    return {
+      id: instance.userData.generatedAssetId,
+      name: instance.userData.displayName,
+      position: { x: instance.position.x, y: instance.position.y, z: instance.position.z },
+      rotation: { x: instance.rotation.x, y: instance.rotation.y, z: instance.rotation.z },
+      scale: { x: instance.scale.x, y: instance.scale.y, z: instance.scale.z },
+      dimensions: (() => {
+        const b = getGeneratedAssetBounds(instance)
+        return { width: b.max.x - b.min.x, depth: b.max.z - b.min.z, height: b.max.y - b.min.y }
+      })(),
+    }
+  }
+
+  function getGeneratedAssets() {
+    return Array.from(generatedAssets.values()).map(serializeGeneratedAsset)
+  }
+
+  function updatePlacementFromPointer(event) {
+    if (!placementState || !renderer || !cameraRig) return
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointerNdc, cameraRig.camera)
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.012)
+    const point = new THREE.Vector3()
+    if (!raycaster.ray.intersectPlane(ground, point)) return
+    // 沙盒样板有效地面约为 54 × 42；边界按场景空间限制，避免资产落到场景外。
+    point.x = THREE.MathUtils.clamp(point.x, -26 + 0.5, 26 - 0.5)
+    point.z = THREE.MathUtils.clamp(point.z, -20 + 0.5, 20 - 0.5)
+    placementState.instance.position.set(point.x, 0.012, point.z)
+    updateGeneratedAssetObstacle(placementState.instance)
+    requestFrame()
+  }
+
+  function confirmGeneratedAssetPlacement() {
+    if (!placementState) return false
+    const instance = placementState.instance
+    instance.userData.isPlacementPreview = false
+    const bounds = getGeneratedAssetBounds(instance)
+    if (!instance.userData.generatedAssetObstacle && collisionWorld) {
+      const obstacle = { minX: bounds.min.x, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: bounds.max.z }
+      collisionWorld.obstacles.push(obstacle)
+      instance.userData.generatedAssetObstacle = obstacle
+    } else updateGeneratedAssetObstacle(instance)
+    placementState = null
+    input?.setMovementEnabled(true)
+    cameraRig?.setMode('thirdPerson')
+    input?.setMode('thirdPerson')
+    callbacks.onGeneratedAssetPlacementChange?.({ active: false, asset: serializeGeneratedAsset(instance) })
+    callbacks.onGeneratedAssetsChange?.(getGeneratedAssets())
+    requestFrame()
+    return true
+  }
+
+  function cancelGeneratedAssetPlacement() {
+    if (!placementState) return false
+    const { instance, isNew, originalPosition, originalRotation } = placementState
+    if (isNew) {
+      generatedAssets.delete(instance.userData.generatedAssetId)
+      instance.parent?.remove(instance)
+      disposeObjectGroup(instance)
+    } else {
+      instance.position.copy(originalPosition)
+      instance.rotation.copy(originalRotation)
+      updateGeneratedAssetObstacle(instance)
+    }
+    placementState = null
+    selectedGeneratedAsset = null
+    input?.setMovementEnabled(true)
+    cameraRig?.setMode('thirdPerson')
+    input?.setMode('thirdPerson')
+    callbacks.onGeneratedAssetPlacementChange?.({ active: false, cancelled: true })
+    callbacks.onGeneratedAssetsChange?.(getGeneratedAssets())
+    requestFrame()
+    return true
+  }
+
+  function moveGeneratedAsset(id) {
+    const instance = generatedAssets.get(String(id))
+    if (!instance) return false
+    return Boolean(beginGeneratedAssetPlacement(null, { instanceId: String(id) }))
+  }
+
+  function rotateGeneratedAsset(id, radians = Math.PI / 12) {
+    const instance = generatedAssets.get(String(id))
+    if (!instance) return false
+    instance.rotation.y += Number(radians) || Math.PI / 12
+    updateGeneratedAssetObstacle(instance)
+    callbacks.onGeneratedAssetsChange?.(getGeneratedAssets())
+    requestFrame()
+    return true
+  }
+
+  function removeGeneratedAsset(id) {
+    const instance = generatedAssets.get(String(id))
+    if (!instance) return false
+    if (placementState?.instance === instance) placementState = null
+    if (instance.userData.generatedAssetObstacle && collisionWorld) {
+      const index = collisionWorld.obstacles.indexOf(instance.userData.generatedAssetObstacle)
+      if (index >= 0) collisionWorld.obstacles.splice(index, 1)
+    }
+    generatedAssets.delete(String(id))
+    instance.parent?.remove(instance)
+    disposeObjectGroup(instance)
+    if (selectedGeneratedAsset === instance) selectedGeneratedAsset = null
+    callbacks.onGeneratedAssetsChange?.(getGeneratedAssets())
+    requestFrame()
+    return true
+  }
+
+  function selectGeneratedAsset(instance) {
+    if (!instance?.userData?.generatedAssetId) return false
+    selectedGeneratedAsset = instance
+    callbacks.onGeneratedAssetSelected?.(serializeGeneratedAsset(instance))
+    callbacks.onGeneratedAssetsChange?.(getGeneratedAssets())
+    return true
+  }
 
   // 静态校园保留阴影贴图；只有场景几何变化时才重算，不随相机交互重复执行 shadow pass。
   function invalidateShadowMap() {
@@ -321,6 +451,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       else if (renderDebugEnabled) console.info('[CampusSceneAudit] 场景装配检查通过', sceneAudit.summary)
     }
     scene.add(campus)
+    generatedAssetsGroup = new THREE.Group()
+    generatedAssetsGroup.name = 'GeneratedAssets'
+    campus.add(generatedAssetsGroup)
     cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     playerSpriteObject = campus.getObjectByName('PixelExplorerSprite')
@@ -464,6 +597,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.domElement.addEventListener('pointerup', requestFrame)
     // 总览模式按需渲染：用户操作、相机阻尼或窗口变化时才请求下一帧。
     renderer.domElement.addEventListener('pointerdown', requestFrame)
+    renderer.domElement.addEventListener('pointermove', onScenePointerMove)
     renderer.domElement.addEventListener('pointermove', requestFrame)
     renderer.domElement.addEventListener('wheel', requestFrame, { passive: true })
     if (cameraRig.viewMode === '3d') void ensureCampusBuildingModelsLoaded()
@@ -1097,15 +1231,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function onScenePointerDown(event) {
-    if (event.button !== 0 || (cameraRig?.mode !== 'overview' && !indoorGroup)) { pointerStart = null; return }
+    if (event.button !== 0 || (!placementState && cameraRig?.mode !== 'overview' && !indoorGroup)) { pointerStart = null; return }
     pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
+  }
+
+  function onScenePointerMove(event) {
+    if (placementState) updatePlacementFromPointer(event)
   }
 
   function onScenePointerUp(event) {
     if (!pointerStart || pointerStart.pointerId !== event.pointerId) return
     const moved = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y)
     pointerStart = null
-    if (moved > 5 || (cameraRig?.mode !== 'overview' && !indoorGroup)) return
+    if (placementState) {
+      updatePlacementFromPointer(event)
+      confirmGeneratedAssetPlacement()
+      return
+    }
+    if (moved > 5) return
+    if (cameraRig?.mode !== 'overview' && !indoorGroup) return
     const rect = renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return
     pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
@@ -1128,14 +1272,16 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         selectIndoorObject(indoorTarget)
         return
       }
-      // 点击室内地面时沿导航网格寻路；墙体、家具和楼梯仍由碰撞世界兜底。
       const floorHit = indoorHits.find(hit => hit.object.name === 'indoor-floor-slab')
-      if (floorHit) {
-        navigateIndoorTo({ x: floorHit.point.x, z: floorHit.point.z })
-        return
-      }
+      if (floorHit) { navigateIndoorTo({ x: floorHit.point.x, z: floorHit.point.z }); return }
     }
-    const hits = raycaster.intersectObjects(campus.children, true)
+    if (generatedAssetsGroup) {
+      const assetHits = raycaster.intersectObjects(generatedAssetsGroup.children, true)
+      let assetTarget = assetHits[0]?.object || null
+      while (assetTarget && assetTarget !== generatedAssetsGroup && !assetTarget.userData?.generatedAssetId) assetTarget = assetTarget.parent
+      if (assetTarget?.userData?.generatedAssetId) { selectGeneratedAsset(assetTarget); return }
+    }
+    const hits = raycaster.intersectObjects(campus.children.filter(child => child !== generatedAssetsGroup), true)
     let target = hits[0]?.object || null
     while (target && target !== campus
       && !target.userData?.featureId
@@ -1227,6 +1373,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     callbacks.onObjectSelected?.(null)
   }
   function onKeyDown(event) {
+    if (placementState && event.key === 'Escape') { cancelGeneratedAssetPlacement(); return }
+    if (placementState && ['q', 'Q', 'e', 'E'].includes(event.key)) {
+      rotateGeneratedAsset(placementState.instance.userData.generatedAssetId, event.key.toLowerCase() === 'q' ? -Math.PI / 12 : Math.PI / 12)
+      return
+    }
     if (event.key === 'Escape') input?.exitPointerLock()
     if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
     if (event.key.toLowerCase() !== 'e') return
@@ -2069,11 +2220,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer?.domElement?.removeEventListener('pointerup', onScenePointerUp)
     renderer?.domElement?.removeEventListener('pointerup', requestFrame)
     renderer?.domElement?.removeEventListener('pointerdown', requestFrame)
+    renderer?.domElement?.removeEventListener('pointermove', onScenePointerMove)
     renderer?.domElement?.removeEventListener('pointermove', requestFrame)
     renderer?.domElement?.removeEventListener('wheel', requestFrame)
     clearSelection()
     clearNavigationVisuals()
     clearRpgPreview()
+    generatedAssets.clear()
+    placementState = null
     activeHorizonGround = null
     if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()
@@ -2088,5 +2242,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, enterIndoorPrototype, enterIndoorBuilding, mountMvpBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

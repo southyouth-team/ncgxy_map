@@ -1081,7 +1081,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   root.userData.objectSculptSpec = JSON.parse(JSON.stringify(spec));
   root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(spec));
   root.userData.objectSculpt = {
-    schemaVersion: effectiveSpec.schemaVersion,
+    schemaVersion: spec.schemaVersion,
     targetName: root.name,
     componentCount: validation.componentCount,
     source: options.source || 'object-sculpt-spec',

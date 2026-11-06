@@ -588,7 +588,7 @@ function estimateGeometryBuffers(vertexCount, indexCount, attributeComponents, m
     || !Number.isSafeInteger(maxIndex) || maxIndex < 0 || maxIndex >= vertexCount) {
     throw new RangeError('几何资源估算数量无效');
   }
-  const indexBytesPerElement = maxIndex > 65535 ? 4 : 2;
+  const indexBytesPerElement = indexCount === 0 ? 0 : maxIndex > 65535 ? 4 : 2;
   const attributeBytes = vertexCount * attributeComponents * Float32Array.BYTES_PER_ELEMENT;
   const indexBytes = indexCount * indexBytesPerElement;
   return {
@@ -667,6 +667,20 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
       vertexCount = (radialSegments + 1) * (segments + 1);
       indexCount = 6 * radialSegments * segments;
       maxIndex = vertexCount - 1;
+      break;
+    }
+    case 'polygon': {
+      const points = options.points;
+      if (!Array.isArray(points) || points.length < 3) {
+        throw new TypeError('polygon points 格式无效');
+      }
+      const pointCount = points.length;
+      // Three.js r180 ExtrudeGeometry with bevel disabled and one depth step
+      // emits two cap triangles per contour triangulation face plus one
+      // two-triangle quad per contour edge. It is non-indexed.
+      vertexCount = 6 * (pointCount - 2) + 6 * pointCount;
+      indexCount = 0;
+      maxIndex = 0;
       break;
     }
     case 'indexed-mesh': {

@@ -685,6 +685,42 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('estimates polygon extrusion buffers against actual Three.js geometry', () => {
+    const pointSets = [
+      [[-0.4, -0.4], [0.4, -0.4], [0, 0.4]],
+      [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]],
+      [[-0.4, -0.3], [0, -0.45], [0.4, -0.3], [0.3, 0.1], [0, 0.4], [-0.3, 0.1]],
+      [[-0.45, -0.35], [-0.15, -0.45], [0.1, -0.35], [0.4, -0.4],
+        [0.45, 0], [0.25, 0.35], [0, 0.45], [-0.3, 0.3], [-0.45, 0]],
+    ];
+    for (const [index, points] of pointSets.entries()) {
+      const descriptor = { points };
+      const estimate = estimateObjectSculptPrimitiveGeometry('polygon', descriptor);
+      const node = {
+        id: 'estimated-polygon-' + index,
+        primitive: 'polygon',
+        dimensions: { width: 2, height: 3, depth: 1.5 },
+        geometryDescriptor: descriptor,
+      };
+      const component = createObjectSculptComponentGroup(THREE, node);
+      const geometry = component.getObjectByName(node.id + ':mesh').geometry;
+      const actualAttributeBytes = Object.values(geometry.attributes)
+        .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+      expect(geometry.getIndex()).toBeNull();
+      expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+      expect(estimate.indexCount).toBe(0);
+      expect(estimate.attributeComponents).toBe(8);
+      expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+      expect(estimate.indexBytes).toBe(0);
+      expect(estimate.indexBytesPerElement).toBe(0);
+      expect(estimate.bufferBytes).toBe(actualAttributeBytes);
+      component.traverse(object => {
+        object.geometry?.dispose?.();
+        object.material?.dispose?.();
+      });
+    }
+  });
+
   it('estimates indexed-mesh buffers from actual positions and maximum index', () => {
     const positions = [
       0, 0, 0, 1, 0, 0, 0, 1, 0, 9, 9, 9,

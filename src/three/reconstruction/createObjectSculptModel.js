@@ -592,7 +592,7 @@ function applyObjectModelParameterValues(input) {
           : mode === 'visible-through' ? Number(parameter.value) > threshold
             : !Boolean(parameter.value);
       } else if (target.property === 'geometry.primitive') {
-        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft'].includes(String(resolved))) {
+        if (!getObjectModelGeometryCapability(resolved)) {
           throw new TypeError('参数指定了不支持的几何类型');
         }
         node.primitive = resolved;

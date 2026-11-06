@@ -678,7 +678,11 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
       // and one two-triangle side quad per contour edge.
       const contourPointCount = 3 + 2 * segments;
       const combinedContourPointCount = contourPointCount * 2;
-      vertexCount = 12 * combinedContourPointCount;
+      // The opening reaches the outer contour at both lower endpoints, so
+      // ShapeUtils triangulates this connected arch profile as a simple
+      // contour: N - 2 cap triangles. Total non-indexed vertices are
+      // 6 * 2 * (N - 2) for caps plus 6 * N for side quads.
+      vertexCount = 12 * combinedContourPointCount - 12;
       indexCount = 0;
       maxIndex = 0;
       break;

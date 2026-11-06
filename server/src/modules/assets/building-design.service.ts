@@ -328,11 +328,12 @@ function normalizeObjectParameterSchema(input: unknown, componentTree: any[], ma
       const binding = resolveEditableParameterTarget(node, materials, target?.property);
       if (!nodeIds.has(target?.nodeId) || !binding) throw new ServiceUnavailableException('参数目标无效：' + id);
       if (node.kind === 'group' && !String(target.property).startsWith('transform.') && target.property !== 'visibility.visible') throw new ServiceUnavailableException('Group 节点仅支持变换和显隐参数：' + id);
-      if (type === 'number' && binding.kind !== 'number'
+      const mode = target.mode || 'set';
+      const visibilityThreshold = target.property === 'visibility.visible' && ['visible-from','visible-through'].includes(mode);
+      if (type === 'number' && binding.kind !== 'number' && !visibilityThreshold
         || type === 'color' && binding.kind !== 'color'
         || type === 'boolean' && binding.kind !== 'boolean'
         || type === 'select' && binding.kind !== 'select') throw new ServiceUnavailableException('参数类型与目标属性的数据类型不匹配：' + id);
-      const mode = target.mode || 'set';
       if (!['set','multiply','add','visible-from','visible-through'].includes(mode) || (target.property.startsWith('material.') && mode !== 'set')) throw new ServiceUnavailableException('参数目标运算无效：' + id);
       if (['visible-from','visible-through'].includes(mode) && target.property !== 'visibility.visible') throw new ServiceUnavailableException('可见性阈值运算只能用于 visibility.visible：' + id);
       if (target.property === 'visibility.visible' && mode === 'set' && type !== 'boolean' && type !== 'number') throw new ServiceUnavailableException('可见性参数类型无效：' + id);
@@ -1188,7 +1189,7 @@ export class BuildingDesignService {
         throw new ServiceUnavailableException('AI 参数设计不得修改或删除已有 operations');
       }
       const operationParameterIds = new Set(operations.map((operation: any) => operation?.count?.parameterId).filter((id: unknown) => typeof id === 'string'));
-      const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, operationParameterIds);
+      const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, current.materials || {}, operationParameterIds);
       const previous = current.parameterSchema || [];
       const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));
       for (const item of previous) {

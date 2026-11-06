@@ -86,6 +86,34 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(right.material.color.getHexString()).toBe('cccccc');
   });
 
+  it('routes box and cuboid geometry through their registered capability executors', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'box', parent: 'root', primitive: 'box', dimensions: { width: 2, height: 2, depth: 2 } },
+        { id: 'cuboid', parent: 'root', primitive: 'cuboid', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    expect(model.getObjectByName('box:mesh').geometry.type).toBe('BoxGeometry');
+    expect(model.getObjectByName('cuboid:mesh').geometry.type).toBe('BoxGeometry');
+  });
+
+  it('rejects malformed box opening descriptors before invoking the executor', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      componentTree: [{
+        id: 'root', kind: 'group',
+      }, {
+        id: 'wall', parent: 'root', primitive: 'box',
+        dimensions: { width: 2, height: 2, depth: 0.2 },
+        geometryDescriptor: { openings: [{ width: 0.5, height: 0.5, center: [0] }] },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('center 必须是两个有限数值');
+  });
+
   it('builds dedicated arch openings and wedge roof geometry', () => {
     const spec = {
       schemaVersion: '3.0',

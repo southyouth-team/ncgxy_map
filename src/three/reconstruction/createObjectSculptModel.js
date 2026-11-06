@@ -2,6 +2,7 @@ import { getObjectModelGeometryCapability, validateObjectModelSpecV3 } from '../
 import { normalizeObjectModelMaterialParameterAliases, normalizeObjectModelMaterialParameterProperty } from '../../../server/src/shared/object-model-parameter-schema.ts';
 import { resolveObjectModelParameterTarget } from '../../../server/src/shared/object-model-property-resolver.ts';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
+import { createGeometryCapabilityRegistry } from './geometryCapabilityRegistry.js';
 /**
  * Bounded ObjectSculptSpec -> Three.js runtime adapter.
  *
@@ -226,6 +227,63 @@ function validateGeneratedGeometry(geometry, label) {
   return geometry;
 }
 
+function validateBoxGeometryDescriptor({ node, descriptor }) {
+  if (descriptor.openings === undefined) return;
+  if (!Array.isArray(descriptor.openings) || descriptor.openings.length > 24) {
+    throw new TypeError(node.id + '.geometryDescriptor.openings 必须是最多 24 项的数组');
+  }
+  descriptor.openings.forEach((opening, index) => {
+    if (!opening || typeof opening !== 'object' || Array.isArray(opening)) {
+      throw new TypeError(node.id + '.geometryDescriptor.openings[' + index + '] 必须是对象');
+    }
+    for (const key of ['width', 'height']) {
+      if (!Number.isFinite(Number(opening[key]))) {
+        throw new TypeError(node.id + '.geometryDescriptor.openings[' + index + '].' + key + ' 必须是有限数值');
+      }
+    }
+    if (opening.center !== undefined && (!Array.isArray(opening.center) || opening.center.length !== 2
+      || opening.center.some(value => !Number.isFinite(Number(value))))) {
+      throw new TypeError(node.id + '.geometryDescriptor.openings[' + index + '].center 必须是两个有限数值');
+    }
+  });
+}
+
+function createBoxGeometry({ THREE, node, width, height, depth, segments, descriptor }) {
+  const openings = Array.isArray(descriptor.openings) ? descriptor.openings : [];
+  if (!openings.length) return new THREE.BoxGeometry(width, height, depth);
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, -height / 2);
+  shape.lineTo(width / 2, -height / 2);
+  shape.lineTo(width / 2, height / 2);
+  shape.lineTo(-width / 2, height / 2);
+  shape.closePath();
+  for (const opening of openings) {
+    const openingWidth = boundedNumber(opening.width, 0, 0.02, width, node.id + '.opening.width');
+    const openingHeight = boundedNumber(opening.height, 0, 0.02, height, node.id + '.opening.height');
+    const centerX = boundedNumber(opening.center?.[0], 0, -width / 2, width / 2, node.id + '.opening.centerX');
+    const centerY = boundedNumber(opening.center?.[1], 0, -height / 2, height / 2, node.id + '.opening.centerY');
+    if (Math.abs(centerX) + openingWidth / 2 > width / 2 + 0.0001
+      || Math.abs(centerY) + openingHeight / 2 > height / 2 + 0.0001) {
+      throw new RangeError(node.id + '.opening 超出目标 Mesh 边界');
+    }
+    const hole = new THREE.Path();
+    hole.moveTo(centerX - openingWidth / 2, centerY - openingHeight / 2);
+    hole.lineTo(centerX - openingWidth / 2, centerY + openingHeight / 2);
+    hole.lineTo(centerX + openingWidth / 2, centerY + openingHeight / 2);
+    hole.lineTo(centerX + openingWidth / 2, centerY - openingHeight / 2);
+    hole.closePath();
+    shape.holes.push(hole);
+  }
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
+  geometry.translate(0, 0, -depth / 2);
+  return geometry;
+}
+
+const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
+  { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
+  { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
+]);
+
 function createGeometry(THREE, node) {
   if (!getObjectModelGeometryCapability(node.primitive)) {
     throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
@@ -236,6 +294,9 @@ function createGeometry(THREE, node) {
   const depth = boundedNumber(dimensions.depth, 1, 0.02, MAX_DIMENSION, node.id + '.depth');
   const descriptor = node.geometryDescriptor || {};
   const segments = Math.round(boundedNumber(descriptor.segments, 16, 3, MAX_SEGMENTS, node.id + '.segments'));
+  if (runtimeGeometryCapabilities.has(node.primitive)) {
+    return runtimeGeometryCapabilities.create(node.primitive, { THREE, node, width, height, depth, segments, descriptor });
+  }
   if (String(node.primitive || '').toLowerCase() === 'tube') {
     const points = descriptor.path;
     if (!Array.isArray(points) || points.length < 2 || points.length > 32) {
@@ -437,38 +498,6 @@ function createGeometry(THREE, node) {
       opening.lineTo(width / 2 - inset, -height / 2);
       opening.closePath();
       shape.holes.push(opening);
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
-      geometry.translate(0, 0, -depth / 2);
-      return geometry;
-    }
-    case 'box':
-    case 'cuboid': {
-      const openings = Array.isArray(descriptor.openings) ? descriptor.openings : [];
-      if (!openings.length) return new THREE.BoxGeometry(width, height, depth);
-      // 轴对齐盒体沿 Z 轴贯穿的矩形开口：使用真实 ExtrudeGeometry 洞口拓扑。
-      const shape = new THREE.Shape();
-      shape.moveTo(-width / 2, -height / 2);
-      shape.lineTo(width / 2, -height / 2);
-      shape.lineTo(width / 2, height / 2);
-      shape.lineTo(-width / 2, height / 2);
-      shape.closePath();
-      for (const opening of openings) {
-        const openingWidth = boundedNumber(opening.width, 0, 0.02, width, node.id + '.opening.width');
-        const openingHeight = boundedNumber(opening.height, 0, 0.02, height, node.id + '.opening.height');
-        const centerX = boundedNumber(opening.center?.[0], 0, -width / 2, width / 2, node.id + '.opening.centerX');
-        const centerY = boundedNumber(opening.center?.[1], 0, -height / 2, height / 2, node.id + '.opening.centerY');
-        if (Math.abs(centerX) + openingWidth / 2 > width / 2 + 0.0001
-          || Math.abs(centerY) + openingHeight / 2 > height / 2 + 0.0001) {
-          throw new RangeError(node.id + '.opening 超出目标 Mesh 边界');
-        }
-        const hole = new THREE.Path();
-        hole.moveTo(centerX - openingWidth / 2, centerY - openingHeight / 2);
-        hole.lineTo(centerX - openingWidth / 2, centerY + openingHeight / 2);
-        hole.lineTo(centerX + openingWidth / 2, centerY + openingHeight / 2);
-        hole.lineTo(centerX + openingWidth / 2, centerY - openingHeight / 2);
-        hole.closePath();
-        shape.holes.push(hole);
-      }
       const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
       geometry.translate(0, 0, -depth / 2);
       return geometry;

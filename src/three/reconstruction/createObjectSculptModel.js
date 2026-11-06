@@ -1059,8 +1059,9 @@ export function validateObjectSculptSpec(spec) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
       if (nodes.get(target.nodeId).kind === 'group' && !target.property.startsWith('transform.') && target.property !== 'visibility.visible') throw new TypeError('Group 节点仅支持变换和显隐参数：' + target.nodeId);
       const binding = resolveEditableParameterTarget(nodes.get(target.nodeId), spec.materials || {}, target.property);
-      if (!binding) throw new TypeError('参数目标属性不存在、不可编辑或不是标量：' + target.property);
-      if (parameter.type === 'number' && binding.kind !== 'number'
+      if (!binding) throw new TypeError('参数目标属性不受支持或不存在、不可编辑或不是标量：' + target.property);
+      const visibilityThreshold = target.property === 'visibility.visible' && ['visible-from','visible-through'].includes(target.mode);
+      if (parameter.type === 'number' && binding.kind !== 'number' && !visibilityThreshold
         || parameter.type === 'color' && binding.kind !== 'color'
         || parameter.type === 'boolean' && binding.kind !== 'boolean'
         || parameter.type === 'select' && binding.kind !== 'select') throw new TypeError('参数类型与目标属性的数据类型不匹配：' + target.property);

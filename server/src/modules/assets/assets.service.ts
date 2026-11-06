@@ -274,7 +274,7 @@ export class AssetsService {
     const spec = input?.objectSculptSpec as Record<string, any> | undefined;
     if (spec && (!spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials))) spec.materials = {};
     try { validateObjectModelSpecV3(spec); } catch (error) {
-      throw new BadRequestException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
+      throw new BadRequestException('ObjectModelSpec 3.0 结构无效：' + (error instanceof Error ? error.message : '校验失败'));
     }
     if (!spec || typeof spec !== 'object' || Array.isArray(spec) || spec.schemaVersion !== '3.0'
       || Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')

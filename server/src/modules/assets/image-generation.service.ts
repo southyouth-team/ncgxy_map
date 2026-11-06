@@ -631,11 +631,31 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException('无法连接视觉模型，请检查后端网络连接');
     }
     if (!response.ok) {
-      const detail = (await response.text()).slice(0, 1000);
+      let detail = '';
+      try {
+        // 响应头返回不代表响应体已经完整到达；读取响应体也受同一个 180 秒超时信号控制。
+        detail = (await response.text()).slice(0, 1000);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error('提示词 3D 模型生成 API 错误响应体读取失败：' + message);
+        throw new ServiceUnavailableException('视觉模型 API 错误响应体读取超时或连接中断');
+      }
       this.logger.warn('提示词 3D 模型生成 API HTTP ' + response.status + '：' + detail);
       throw new ServiceUnavailableException('提示词 3D 模型生成失败（HTTP ' + response.status + '）');
     }
-    const payload = await response.json() as any;
+    let payload: any;
+    try {
+      // fetch() 在收到响应头后即可完成；JSON 响应体仍可能持续传输并触发 AbortSignal 超时。
+      payload = await response.json() as any;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      this.logger.error('提示词 3D 模型生成响应体读取/JSON 解析失败（' + errorName + '）：' + message);
+      if (errorName === 'TimeoutError' || errorName === 'AbortError') {
+        throw new ServiceUnavailableException('视觉模型生成响应超时：模型可能尚未完成输出，或响应体传输过慢');
+      }
+      throw new ServiceUnavailableException('视觉模型生成响应不是有效 JSON：' + message.slice(0, 300));
+    }
     const raw = payload?.choices?.[0]?.message?.content;
     let spec: any;
     try { spec = typeof raw === 'string' ? JSON.parse(raw) : null; } catch {

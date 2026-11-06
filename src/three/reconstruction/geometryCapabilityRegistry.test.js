@@ -17,9 +17,24 @@ describe('trusted geometry capability registry', () => {
     }]);
 
     expect(registry.has('BOX')).toBe(true);
-    expect(registry.list()).toEqual([{ primitive: 'box', descriptor: 'optional' }]);
+    expect(registry.list()).toEqual([{ id: 'box', primitive: 'box', descriptor: 'optional' }]);
     expect(registry.create('BOX', { node: { id: 'wall' } })).toEqual({ kind: 'box' });
     expect(calls).toEqual([['validate', 'wall'], ['execute', 'wall']]);
+  });
+
+  it('binds runtime executors to the exact protocol capability ID and descriptor contract', () => {
+    const capability = {
+      primitive: 'box', descriptor: 'optional',
+      validateDescriptor() {}, createGeometry() { return {}; },
+    };
+    const resolveContract = id => id === 'box'
+      ? { id: 'box', primitive: 'box', descriptor: 'optional' } : null;
+    expect(() => createGeometryCapabilityRegistry([capability], () => null))
+      .toThrow('no matching protocol contract');
+    expect(() => createGeometryCapabilityRegistry([capability], () => ({
+      id: 'box', primitive: 'box', descriptor: 'points',
+    }))).toThrow('descriptor contract mismatch');
+    expect(createGeometryCapabilityRegistry([capability], resolveContract).has('box')).toBe(true);
   });
 
   it('rejects duplicate registrations and unregistered primitives', () => {

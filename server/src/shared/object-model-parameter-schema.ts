@@ -95,7 +95,9 @@ export function normalizeObjectModelParameterSchema(
       if (!['set', 'multiply', 'add', 'visible-from', 'visible-through'].includes(mode)
         || (target.property.startsWith('material.') && mode !== 'set')) fail('参数目标运算无效：' + id);
       if (['visible-from', 'visible-through'].includes(mode) && target.property !== 'visibility.visible') fail('可见性阈值运算只能用于 visibility.visible：' + id);
+      if (target.property === 'visibility.visible' && !['set', 'visible-from', 'visible-through'].includes(mode)) fail('可见性参数运算无效：' + id);
       if (target.property === 'geometry.primitive' && type !== 'select') fail('几何类型参数必须是 select：' + id);
+      if (target.property === 'geometry.primitive' && mode !== 'set') fail('几何类型参数仅支持 set：' + id);
 
       const normalizedTarget: Record<string, any> = { nodeId: target.nodeId, property: target.property, mode };
       if (target.property === 'visibility.visible' && ['visible-from', 'visible-through'].includes(mode)) {

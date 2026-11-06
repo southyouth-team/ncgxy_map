@@ -19,11 +19,11 @@
 
 表达式 AST 当前支持常量、参数引用、实例索引、实例总数、加减乘除、sin、cos 和 negate。表达式必须有深度、数值范围、数量和展开组件预算限制。
 
-参数目标使用真实数据路径，由目标当前值决定数据类型；禁止访问原型链和结构身份字段。数量或表达式控制参数可以使用空 targets，由 operations 引用。
+参数目标使用真实数据路径，由目标当前值决定数据类型；禁止访问原型链和结构身份字段。数量或表达式控制参数可以使用空 targets，由 operations 引用。原始协议拒绝编译器内部字段 `operationControl`；只有 Runtime 编译结果校验模式允许该标记，避免外部 AI 输入伪造内部状态。
 
 ## 几何能力注册表
 
-`server/src/shared/object-model-spec-v3.ts` 导出 `OBJECT_MODEL_GEOMETRY_CAPABILITIES` 与 `getObjectModelGeometryCapability()`，作为协议支持 primitive 的唯一声明入口。公共 Validator、资产保存边界和 Three.js Runtime 消费同一注册表。Runtime 的 Three.js 构建分支仍负责真实几何构建；注册表登记不等于执行器已经实现。新增 primitive 必须同时补充描述符校验、Runtime 构建分支和跨边界测试。
+`server/src/shared/object-model-spec-v3.ts` 导出 `OBJECT_MODEL_GEOMETRY_CAPABILITIES` 与 `getObjectModelGeometryCapability()`，作为协议支持 primitive 的唯一声明入口。公共 Validator、资产保存边界和 Three.js Runtime 消费同一注册表。`geometry.primitive` 动态参数的全部 options 也必须引用已注册能力。Runtime 的 Three.js 构建分支仍负责真实几何构建；注册表登记不等于执行器已经实现。新增 primitive 必须同时补充描述符校验、Runtime 构建分支和跨边界测试。
 
 ## 执行链路
 
@@ -58,7 +58,7 @@
 | 阶段 | 状态 | 说明 |
 |---|---|---|
 | P0 架构盘点与协议边界 | 第一轮审计完成 | 已定位重复控制器、旧生成器执行器和校验重复 |
-| P1 新协议切换 | 进行中 | 几何能力注册表、共享描述符校验及 raw/compiled Validator 模式已接入；主要重复协议校验已清理，仍需完成跨入口回归与边界审计 |
+| P1 新协议切换 | 进行中 | 几何能力注册表、共享描述符校验及 raw/compiled Validator 模式已接入；主要重复协议校验已清理，仍需完成 Runtime 描述符重复检查的边界清理与跨入口回归 |
 | P2 通用几何运算 | 进行中 | instance + bounded expression 已执行；还需扩展通用操作并验证复杂阵列 |
 | P3 参数绑定与依赖引擎 | 进行中 | 动态路径和 operation 参数可用；依赖图与增量更新未完成 |
 | P4 编辑器闭环 | 进行中 | 已有保存/读取 operation 往返测试；仍需真实 Provider 与浏览器端综合验收 |

@@ -137,11 +137,12 @@ function validateSimpleGeometryProfile(points: number[][], node: any, field: str
   }
   return Math.sign(twiceArea);
 }
-function validateGeometryPath(path: any[], node: any, field: string) {
+function validateGeometryPath(path: any[], node: any, field: string, enforceCurvature = false) {
   for (let index = 1; index < path.length; index += 1) {
     const distance = Math.hypot(...path[index].map((value: number, axis: number) => value - path[index - 1][axis]));
     if (distance < 1e-4) geometryFail(node, field, '不能包含重复点或零长度路径段');
   }
+  if (!enforceCurvature) return;
   for (let index = 1; index < path.length - 1; index += 1) {
     const incoming = path[index].map((value: number, axis: number) => value - path[index - 1][axis]);
     const outgoing = path[index + 1].map((value: number, axis: number) => value - path[index][axis]);
@@ -168,7 +169,7 @@ function validateGeometryDescriptor(node: any) {
     if (!Array.isArray(path) || path.length < 2 || path.length > 32 || !path.every((point: any) => geometryPoint(point, 3))) {
       geometryFail(node, 'path', '必须包含 2-32 个位于 [-0.5,0.5] 的三维点');
     }
-    validateGeometryPath(path.map((point: number[]) => point.map(Number)), node, 'path');
+    validateGeometryPath(path.map((point: number[]) => point.map(Number)), node, 'path', primitive === 'sweep');
     if (descriptor.radius !== undefined && descriptor.radius !== null
       && (!Number.isFinite(Number(descriptor.radius)) || Number(descriptor.radius) < 0.01 || Number(descriptor.radius) > 10)) {
       geometryFail(node, 'radius', '必须是 0.01-10 范围内的有限数值');
@@ -199,9 +200,9 @@ function validateGeometryDescriptor(node: any) {
         && Number.isFinite(Number(point[1])) && Number(point[1]) >= -0.5 && Number(point[1]) <= 0.5)) {
       geometryFail(node, 'profile', '必须包含 2-32 个合法 [半径,高度] 归一化点');
     }
-    if (profile.every((point: number[], index: number) => index === 0
-      || Math.hypot(Number(point[0]) - Number(profile[index - 1][0]), Number(point[1]) - Number(profile[index - 1][1])) < 1e-4)) {
-      geometryFail(node, 'profile', '不能全部由重复点组成');
+    if (profile.some((point: number[], index: number) => index > 0
+      && Math.hypot(Number(point[0]) - Number(profile[index - 1][0]), Number(point[1]) - Number(profile[index - 1][1])) < 1e-4)) {
+      geometryFail(node, 'profile', '不能包含重复或零长度轮廓段');
     }
   } else if (primitive === 'loft') {
     const sections = descriptor.sections;

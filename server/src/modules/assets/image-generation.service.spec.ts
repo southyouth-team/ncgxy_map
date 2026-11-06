@@ -173,6 +173,18 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 
+  it('accepts an instance operation whose source root is a mesh component', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const spec = createTeachingBuildingSpec('ground-left-window');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(spec) } }] }),
+    }) as never;
+
+    const result = await service.generateObjectFromPrompt('生成教学楼窗户阵列', '教学楼', 'realistic');
+    expect(result.objectSculptSpec.operations[0].sourceRootId).toBe('ground-left-window');
+  });
+
   it('keeps the world MVP profile implementation-agnostic', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const spec = {

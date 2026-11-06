@@ -376,7 +376,7 @@ export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | '
     if (!isRecord(operation) || operation.type !== 'instance' || typeof operation.id !== 'string' || !ID_PATTERN.test(operation.id) || operationIds.has(operation.id)) fail('instance operation ID 或类型无效');
     operationIds.add(operation.id);
     const root = nodes.get(operation.sourceRootId);
-    if (!root || (root.kind || 'mesh') !== 'group' || operationRoots.has(root.id)) fail('instance 源节点必须是唯一 Group：' + operation.id);
+    if (!root || operationRoots.has(root.id)) fail('instance 源节点必须是唯一组件节点：' + operation.id);
     operationRoots.add(root.id);
     const subtree = subtreeFor(root.id);
     if (!subtree.length) fail('instance 源子树为空：' + operation.id);

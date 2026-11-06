@@ -1598,6 +1598,32 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(3);
   });
 
+  it('builds instance operations from a mesh source root', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      targetName: 'mesh-source-instance',
+      materials: { steel: { color: '#777777', roughness: 0.5, metalness: 0.8 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'panel', parent: 'root', primitive: 'box', material: 'steel',
+          dimensions: { width: 1, height: 1, depth: 0.1 } },
+      ],
+      parameterSchema: [{
+        id: 'panel-count', label: 'Panel count', type: 'number',
+        value: 3, min: 1, max: 5, step: 1, targets: [],
+      }],
+      operations: [{
+        id: 'panel-array', type: 'instance', sourceRootId: 'panel',
+        count: { parameterId: 'panel-count' },
+        transform: { position: [{ op: 'index' }, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const instances = [...model.userData.componentGroups.values()]
+      .filter(group => group.userData.componentSourceId === 'panel');
+    expect(instances).toHaveLength(3);
+  });
+
   it('exposes geometry descriptor scalars as dynamic parameters in ObjectModelSpec 3.0', () => {
     const spec = {
       schemaVersion: '3.0',

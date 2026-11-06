@@ -98,7 +98,7 @@ export function compileObjectModelSpec(spec) {
     if (operationRoots.has(operation.sourceRootId)) throw new TypeError('多个操作不能重复占用同一源子树：' + operation.sourceRootId);
     operationRoots.add(operation.sourceRootId);
     const sourceRoot = sourceNodes.find(node => node.id === operation.sourceRootId);
-    if (!sourceRoot || (sourceRoot.kind || 'mesh') !== 'group') throw new TypeError('instance 源节点必须是 Group：' + operation.id);
+    if (!sourceRoot) throw new TypeError('instance 源节点不存在：' + operation.id);
     const subtree = collectSubtree(sourceNodes, operation.sourceRootId);
     for (const node of subtree) {
       if (claimedSourceNodes.has(node.id)) throw new TypeError('instance 操作的源子树不能重叠：' + operation.id);

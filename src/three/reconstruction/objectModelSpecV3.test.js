@@ -198,6 +198,14 @@ describe('ObjectModelSpec 3.0 compiler', () => {
     expect(secondRoot.transform.rotation[1]).toBeCloseTo(Math.PI / 4);
   });
 
+  it('accepts a mesh component as an instance source root', () => {
+    const spec = createRadialSpec();
+    spec.operations[0].sourceRootId = 'rib';
+    expect(() => validateObjectModelSpecV3(spec)).not.toThrow();
+    const compiled = compileObjectModelSpec(spec);
+    expect(compiled.componentTree.filter(node => node.operationInstance?.operationId === 'radial-ribs')).toHaveLength(7);
+  });
+
   it('rejects unsupported expression operators instead of evaluating code', () => {
     const spec = createRadialSpec();
     spec.operations[0].transform.rotation[1] = { op: 'javascript', source: 'process.exit()' };

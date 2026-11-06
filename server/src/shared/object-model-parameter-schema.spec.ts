@@ -35,6 +35,16 @@ describe('ObjectModelSpec parameter schema normalization', () => {
     expect(result[2].targets[0].property).toBe('material.opacity');
   });
 
+  it('drops an invalid optional AI parameter binding without dropping operation parameters', () => {
+    const result = normalizeObjectModelParameterSchema([
+      { id: 'ground-window-frame-height', type: 'number', value: 0.12, min: 0.02, max: 0.3,
+        targets: [{ nodeId: 'panel', property: 'geometryDescriptor.missingHeight' }] },
+      { id: 'repeat-count', type: 'number', value: 3, min: 2, max: 8, targets: [] },
+    ], tree, materials, new Set(['repeat-count']), { dropInvalidOptionalTargets: true });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('repeat-count');
+  });
+
   it('supports operation-controlled parameters without ordinary targets', () => {
     const result = normalizeObjectModelParameterSchema([
       { id: 'repeat-count', type: 'number', value: 3, min: 1, max: 8, targets: [] },

@@ -628,7 +628,7 @@ export class ImageGenerationService {
                 '当提供参考图片时，图片是几何外形和比例的第一依据，提示词只能补充图片中不可见的信息。不得把图片简单当成贴图，不得忽略图片主体轮廓；应使用足够的分段、曲线和截面描述可见结构。',
                 '根对象字段：schemaVersion 固定为字符串 3.0，targetName，category，objectType，visualStyle，materials，componentTree，parameterSchema，operations。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
-                'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 使用点分隔的真实数据路径，可指向当前节点 dimensions、transform、geometryDescriptor 中存在的标量字段，或当前材质中存在的标量字段；geometry.primitive 和 visibility.visible 为专用语义目标。不得预先穷举属性字段，也不得虚构节点中不存在的字段；服务端按目标实际数据类型校验 number/color/boolean/select。禁止访问 id、parent、kind 等结构身份字段及原型链字段；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
+                'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。只声明能精确绑定到当前 componentTree 真实存在的标量属性的可选参数；对于 indexed-mesh 或没有可编辑标量字段的节点，不得虚构 dimensions/geometryDescriptor 属性；无法确认合法 target 时直接省略该可选参数，不能让参数声明阻断模型生成。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 使用点分隔的真实数据路径，可指向当前节点 dimensions、transform、geometryDescriptor 中存在的标量字段，或当前材质中存在的标量字段；geometry.primitive 和 visibility.visible 为专用语义目标。不得预先穷举属性字段，也不得虚构节点中不存在的字段；服务端按目标实际数据类型校验 number/color/boolean/select。禁止访问 id、parent、kind 等结构身份字段及原型链字段；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
                 'componentTree 按对象复杂度包含 1-100 个有意义的独立组件；简单对象可以只有一个组件，复杂对象应按真实结构拆分，不得为了凑数量拆出无意义零件。节点字段：id（唯一英文 ID）、name、role、kind（group 或 mesh，省略时为 mesh）、parent（唯一根节点省略，其余组件必填）、material（materials 中的键）、transform（position/rotation/scale 三个三维数组）。Mesh 几何优先使用通用 geometry：{type:"indexed-mesh",positions:[x,y,z,...],indices:[a,b,c,...]}，positions 是局部空间顶点坐标，indices 每三个整数定义一个三角形；不需要 dimensions、primitive 或 geometryDescriptor。它可以表达任意网格外形，不受预置几何类型限制。数据必须形成有效三角网格；不要为了节省数据而把复杂物体错误简化成基础形状。只有在形状确实适合现有参数化构造时，才使用 primitive + dimensions + geometryDescriptor 兼容表达。',
                 '旧式 geometryDescriptor 仍可用于兼容构造：polygon 使用 points，tube 使用 path/radius，lathe 使用 profile，sweep 使用 path/profile，loft 使用 sections。通用 indexed-mesh 不使用这些描述符；不要把通用网格退化成受限轮廓点、路径点或截面数量。',
 '重复结构必须用通用 operations 描述，不得使用 repeat/grid 专用生成器。operations 项格式：{id,type:"instance",sourceRootId,count:{parameterId},transform:{position:[表达式,表达式,表达式],rotation:[表达式,表达式,表达式],scale:[表达式,表达式,表达式]}}。sourceRootId 指向 componentTree 中完整的 Group 子树；count.parameterId 指向 parameterSchema 中的整数参数。表达式只允许数字常量或 AST：{op:"constant",value}、{op:"index"}、{op:"count"}、{op:"parameter",id}、{op:"add"|"subtract"|"multiply"|"divide",left,right}、{op:"sin"|"cos"|"negate",value}。index 是当前实例索引，count 是实例总数；角度使用弧度。通过三角函数、向量分量和旋转表达式描述任意轴向/圆周/螺旋/非均匀分布，不得把这些分布固化成专用类型。数量参数 targets=[]，由 operation 控制。禁止输出 JavaScript、函数体、eval 或未声明的表达式操作。',
@@ -718,7 +718,14 @@ export class ImageGenerationService {
     spec.operations = operationValidation.operations;
     const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
     try {
-      spec.parameterSchema = normalizeObjectModelParameterSchema(spec.parameterSchema, spec.componentTree, spec.materials, operationParameterIds);
+      const declaredParameterCount = Array.isArray(spec.parameterSchema) ? spec.parameterSchema.length : 0;
+      spec.parameterSchema = normalizeObjectModelParameterSchema(
+        spec.parameterSchema, spec.componentTree, spec.materials, operationParameterIds,
+        { dropInvalidOptionalTargets: true },
+      );
+      if (spec.parameterSchema.length < declaredParameterCount) {
+        this.logger.warn('AI 参数 Schema 存在无效的可选目标，已丢弃对应编辑参数；资产几何与结构不受影响');
+      }
     } catch (error) {
       throw new ServiceUnavailableException(error instanceof Error ? error.message : 'AI 参数 Schema 无效');
     }

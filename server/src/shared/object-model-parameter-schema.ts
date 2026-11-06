@@ -39,6 +39,7 @@ export function normalizeObjectModelParameterSchema(
   componentTree: any[],
   materials: Record<string, any> = {},
   operationParameterIds: ReadonlySet<string> = new Set<string>(),
+  options: { dropInvalidOptionalTargets?: boolean } = {},
 ) {
   const normalizedInput = normalizeObjectModelMaterialParameterAliases(input);
   if (normalizedInput == null) return [];
@@ -46,7 +47,7 @@ export function normalizeObjectModelParameterSchema(
 
   const nodeById = new Map(componentTree.map(node => [node?.id, node]));
   const ids = new Set<string>();
-  return normalizedInput.map((raw: any) => {
+  return normalizedInput.flatMap((raw: any) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('参数定义格式无效');
     const id = typeof raw.id === 'string' ? raw.id : '';
     if (!PARAMETER_ID_PATTERN.test(id) || ids.has(id)) fail('参数 ID 无效或重复：' + id);
@@ -87,7 +88,8 @@ export function normalizeObjectModelParameterSchema(
     if (!Array.isArray(raw.targets) || raw.targets.length > 100
       || (raw.targets.length < 1 && !operationParameterIds.has(id))) fail('参数目标不能为空或超出数量限制：' + id);
 
-    parameter.targets = raw.targets.map((target: any) => {
+    try {
+      parameter.targets = raw.targets.map((target: any) => {
       if (!target || typeof target !== 'object' || Array.isArray(target)
         || typeof target.nodeId !== 'string' || typeof target.property !== 'string') fail('参数目标无效：' + id);
       const node = nodeById.get(target.nodeId);
@@ -112,8 +114,17 @@ export function normalizeObjectModelParameterSchema(
         if (!Number.isFinite(threshold) || threshold < 1 || threshold > 100) fail('可见性阈值无效：' + id);
         normalizedTarget.threshold = threshold;
       }
-      return normalizedTarget;
-    });
-    return parameter;
+        return normalizedTarget;
+      });
+    } catch (error) {
+      // AI 生成的可选编辑控件不应阻断资产交付；无效绑定整项丢弃。
+      // operation 控制参数属于结构生成必需项，仍必须严格失败。
+      if (options.dropInvalidOptionalTargets && !operationParameterIds.has(id)
+        && error instanceof Error && /参数目标无效|Group 节点仅支持|参数类型与目标属性|参数目标运算|可见性参数运算/.test(error.message)) {
+        return [];
+      }
+      throw error;
+    }
+    return [parameter];
   });
 }

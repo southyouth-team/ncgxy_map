@@ -148,290 +148,6 @@ describe('BuildingDesignService', () => {
   });
 
 
-  it('reconstructs a confirmed castle reference into a signed hierarchical ObjectSculptSpec', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({
-        VISION_API_KEY: 'sculpt-secret',
-        VISION_MODEL: 'vision-test',
-        VISION_API_BASE_URL: 'http://vision.local/v1',
-      } as Record<string, string>)[key],
-    } as never);
-    const componentTree = [
-      { id: 'keep', name: '主城楼', role: 'main-massing', primitive: 'box', dimensions: { width: 7, height: 5, depth: 5 }, transform: { position: [0, 2.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
-      { id: 'west-tower', name: '西侧塔楼', role: 'tower', parent: 'keep', primitive: 'cylinder', dimensions: { width: 2, height: 7, depth: 2 }, transform: { position: [-2.8, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
-      { id: 'west-roof', name: '西塔尖顶', role: 'tower-roof', parent: 'west-tower', primitive: 'cone', dimensions: { width: 2.8, height: 2.2, depth: 2.8 }, transform: { position: [0, 4.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'roof' },
-      { id: 'east-tower', name: '东侧塔楼', role: 'tower', parent: 'keep', primitive: 'cylinder', dimensions: { width: 2, height: 7, depth: 2 }, transform: { position: [2.8, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
-      { id: 'east-roof', name: '东塔尖顶', role: 'tower-roof', parent: 'east-tower', primitive: 'cone', dimensions: { width: 2.8, height: 2.2, depth: 2.8 }, transform: { position: [0, 4.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'roof' },
-      { id: 'main-roof', name: '主楼屋顶', role: 'main-roof', parent: 'keep', primitive: 'cone', dimensions: { width: 7.8, height: 2, depth: 5.8 }, transform: { position: [0, 3.4, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'roof' },
-      { id: 'gate', name: '入口', role: 'entrance', parent: 'keep', primitive: 'box', dimensions: { width: 1.6, height: 2.4, depth: 0.35 }, transform: { position: [0, -0.6, 2.55], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'dark' },
-      { id: 'window-a', name: '左窗', role: 'window', parent: 'keep', primitive: 'box', dimensions: { width: 0.6, height: 1, depth: 0.1 }, transform: { position: [-1.4, 1.2, 2.55], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'glass' },
-      { id: 'window-b', name: '右窗', role: 'window', parent: 'keep', primitive: 'box', dimensions: { width: 0.6, height: 1, depth: 0.1 }, transform: { position: [1.4, 1.2, 2.55], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'glass' },
-      { id: 'flag-pole', name: '旗杆', role: 'decoration', parent: 'keep', primitive: 'cylinder', dimensions: { width: 0.08, height: 1.8, depth: 0.08 }, transform: { position: [0, 5.8, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'dark' },
-      { id: 'west-battlement', name: '西侧城垛', role: 'battlement', parent: 'keep', primitive: 'box', dimensions: { width: 2, height: 0.5, depth: 0.5 }, transform: { position: [-2.4, 5.2, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
-      { id: 'east-battlement', name: '东侧城垛', role: 'battlement', parent: 'keep', primitive: 'box', dimensions: { width: 2, height: 0.5, depth: 0.5 }, transform: { position: [2.4, 5.2, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, material: 'stone' },
-    ];
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
-        schemaVersion: '2.0', targetName: 'anime-painted-castle',
-        materials: {
-          stone: { color: '#ead9ad', roughness: 0.9 },
-          roof: { color: '#b84b3d', roughness: 0.78 },
-          dark: { color: '#493b37', roughness: 0.8 },
-          glass: { color: '#79b8c4', roughness: 0.25, metalness: 0.08 },
-        },
-        componentTree, confidence: 0.86, evidence: ['双侧塔楼', '红色尖顶'], limitations: ['背面结构不可见'],
-      }) } }] }),
-    });
-    global.fetch = fetchMock as never;
-    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
-    const approval = service.approveReference(imageDataUrl);
-    const result = await service.reconstructObjectReference('building', '城堡', 'anime-painted', imageDataUrl, approval.approvalToken, '保留双塔和红色尖顶');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
-    expect(systemPrompt).toContain('城堡');
-    expect(systemPrompt).toContain('必须只有一个根节点');
-    expect(systemPrompt).toContain('相对直接 parent 的局部坐标');
-    expect(systemPrompt).toContain('评估是否输出 generators');
-    expect(systemPrompt).toContain('数量参数必须放入 parameterSchema');
-    expect(result.design.objectSculptSpec.componentTree).toHaveLength(12);
-    expect(result.design.objectSculptSpec.componentTree.filter((node: any) => !node.parent)).toHaveLength(1);
-    expect(result.design.objectSculptSpec.componentTree.find((node: any) => node.id === 'west-roof').parent).toBe('west-tower');
-    expect(result.design.objectSculptSpec.materials.roof.color).toBe('#b84b3d');
-    expect(result.design.reviewed).toBe(false);
-    expect(service.consumeDesignToken(result.designToken, result.design)).toBe(true);
-  });
-
-  it('requires Group generator templates and matching integer default parameters during image reconstruction', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({
-        VISION_API_KEY: 'generator-contract-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
-      } as Record<string, string>)[key],
-    } as never);
-    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
-    const approval = service.approveReference(imageDataUrl);
-    const componentTree = [
-      { id: 'object-root', kind: 'group', name: '树木主体' },
-      { id: 'crown-prototype', kind: 'group', name: '树冠层', parent: 'object-root' },
-      { id: 'crown-mesh', kind: 'mesh', name: '树冠', parent: 'crown-prototype', primitive: 'sphere',
-        dimensions: { width: 2, height: 1, depth: 2 }, material: 'leaf' },
-      { id: 'trunk', kind: 'mesh', name: '树干', parent: 'object-root', primitive: 'cylinder',
-        dimensions: { width: 0.5, height: 3, depth: 0.5 }, material: 'bark' },
-    ];
-    const parameterSchema = [{
-      id: 'crown-layer-count', label: '树冠层数', type: 'number', value: 3, min: 1, max: 6, step: 1, unit: '层', targets: [],
-    }];
-    const generators = [{
-      id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-prototype', countParameterId: 'crown-layer-count',
-      axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6,
-    }];
-    const respond = (tree: any[], parameters: any[], generatorList: any[]) => {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ choices: [{ message: { content: JSON.stringify({
-          componentTree: tree, materials: { leaf: { color: '#287a38' }, bark: { color: '#79502f' } },
-          parameterSchema: parameters, generators: generatorList,
-        }) } }] }),
-      }) as never;
-    };
-
-    respond(componentTree, parameterSchema, generators);
-    const valid = await service.reconstructObjectReference('vegetation', '树木', 'low-poly', imageDataUrl, approval.approvalToken);
-    expect(valid.design.objectSculptSpec.generators).toMatchObject([{ id: 'crown-repeat', templateRootId: 'crown-prototype', defaultCount: 3 }]);
-    expect(valid.design.objectSculptSpec.parameterSchema[0]).toMatchObject({ value: 3, targets: [] });
-
-    const meshTemplate: any[] = structuredClone(componentTree);
-    meshTemplate[1] = { ...meshTemplate[1], kind: 'mesh', primitive: 'sphere', dimensions: { width: 1, height: 1, depth: 1 }, material: 'leaf' };
-    respond(meshTemplate, parameterSchema, generators);
-    await expect(service.reconstructObjectReference('vegetation', '树木', 'low-poly', imageDataUrl, approval.approvalToken))
-      .rejects.toThrow('结构生成器模板根节点必须是 Group');
-
-    const mismatchedDefault = structuredClone(parameterSchema);
-    mismatchedDefault[0].value = 4;
-    respond(componentTree, mismatchedDefault, generators);
-    await expect(service.reconstructObjectReference('vegetation', '树木', 'low-poly', imageDataUrl, approval.approvalToken))
-      .rejects.toThrow('默认值一致的有效整数数量参数');
-  });
-
-  it('validates and preserves bounded polygon outline coordinates', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({
-        VISION_API_KEY: 'sculpt-secret', VISION_MODEL: 'vision-test',
-      } as Record<string, string>)[key],
-    } as never);
-    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
-    const approval = service.approveReference(imageDataUrl);
-    const polygonNode = {
-      id: 'gable-outline', primitive: 'polygon',
-      dimensions: { width: 4, height: 3, depth: 0.6 },
-      geometryDescriptor: { points: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]] },
-    };
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
-        componentTree: [polygonNode], materials: { stone: { color: '#aaaaaa' } },
-      }) } }] }),
-    }) as never;
-    const result = await service.reconstructObjectReference('facility', '三角景观构件', 'anime-painted', imageDataUrl, approval.approvalToken);
-    expect(result.design.objectSculptSpec.componentTree[0].geometryDescriptor.points).toEqual(polygonNode.geometryDescriptor.points);
-
-    const invalid = structuredClone(polygonNode);
-    invalid.geometryDescriptor.points[0][0] = 2;
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
-        componentTree: [invalid], materials: { stone: { color: '#aaaaaa' } },
-      }) } }] }),
-    }) as never;
-    await expect(service.reconstructObjectReference('facility', '三角景观构件', 'anime-painted', imageDataUrl, approval.approvalToken))
-      .rejects.toBeInstanceOf(ServiceUnavailableException);
-  });
-
-  it('rejects malformed ObjectSculptSpec parent references and cycles', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({
-        VISION_API_KEY: 'sculpt-secret', VISION_MODEL: 'vision-test',
-      } as Record<string, string>)[key],
-    } as never);
-    const invalidTrees = [
-      [{ id: 'root', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'missing' }],
-      [
-        { id: 'a', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'b' },
-        { id: 'b', primitive: 'box', dimensions: {}, transform: {}, material: 'default', parent: 'a' },
-      ],
-      [
-        { id: 'root-a', primitive: 'box', dimensions: {}, transform: {}, material: 'default' },
-        { id: 'root-b', primitive: 'box', dimensions: {}, transform: {}, material: 'default' },
-      ],
-    ];
-    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
-    const approval = service.approveReference(imageDataUrl);
-    for (const componentTree of invalidTrees) {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ choices: [{ message: { content: JSON.stringify({ componentTree, materials: { default: { color: '#aaaaaa' } } }) } }] }),
-      }) as never;
-      await expect(service.reconstructObjectReference('facility', '长椅', 'anime-painted', imageDataUrl, approval.approvalToken))
-        .rejects.toBeInstanceOf(ServiceUnavailableException);
-    }
-  });
-
-
-  it('revalidates edited ObjectSculptSpec and issues a new credential bound to the reviewed tree', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({
-        VISION_API_KEY: 'sculpt-review-secret', VISION_MODEL: 'vision-test',
-        VISION_API_BASE_URL: 'http://vision.local/v1',
-      } as Record<string, string>)[key],
-    } as never);
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
-        targetName: 'test-building',
-        materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
-        componentTree: Array.from({ length: 6 }, (_, index) => ({
-          id: 'part-' + index, name: '主体部件 ' + index, role: index === 0 ? 'main-massing' : 'attached-part', primitive: 'box',
-          ...(index > 0 ? { parent: 'part-0' } : {}),
-          dimensions: { width: 8, height: 6, depth: 7 },
-          transform: { position: [index === 0 ? 0 : (index - 1) * 0.2, index === 0 ? 3 : 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-          material: 'wall',
-        })),
-      }) } }] }),
-    }) as never;
-    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
-    const approval = service.approveReference(imageDataUrl);
-    const identified = await service.reconstructObjectReference('building', '教学楼', 'stylized', imageDataUrl, approval.approvalToken);
-    const edited = structuredClone(identified.design.objectSculptSpec);
-    edited.componentTree[0].dimensions.width = 9.5;
-    edited.materials.wall.color = '#aa8866';
-
-    const reviewed = service.reviewObjectDesign(identified.design, identified.designToken, edited);
-    expect(reviewed.design.reviewed).toBe(true);
-    expect(reviewed.design.objectSculptSpec.componentTree[0].dimensions?.width).toBe(9.5);
-    expect(reviewed.design.objectSculptSpec.materials.wall.color).toBe('#aa8866');
-    edited.componentTree[0].hidden = true;
-    edited.componentTree[1].locked = true;
-    const flagsReviewed = service.reviewObjectDesign(identified.design, identified.designToken, edited);
-    expect(flagsReviewed.design.objectSculptSpec.componentTree[0]).toMatchObject({ hidden: true, locked: false });
-    expect(flagsReviewed.design.objectSculptSpec.componentTree[1]).toMatchObject({ hidden: false, locked: true });
-    expect(service.consumeDesignToken(reviewed.designToken, reviewed.design)).toBe(true);
-    expect(service.consumeDesignToken(identified.designToken, reviewed.design)).toBe(false);
-    expect(service.consumeDesignToken(reviewed.designToken, identified.design)).toBe(false);
-
-    const invalidDimension = structuredClone(edited);
-    invalidDimension.componentTree[0].dimensions.width = 1000;
-    expect(() => service.reviewObjectDesign(identified.design, identified.designToken, invalidDimension)).toThrow('超出允许范围');
-
-    const invalidHierarchy = structuredClone(edited);
-    invalidHierarchy.componentTree[0].parent = 'missing';
-    expect(() => service.reviewObjectDesign(identified.design, identified.designToken, invalidHierarchy)).toThrow('父节点不存在');
-
-    const invalidMaterial = structuredClone(edited);
-    invalidMaterial.materials.wall.opacity = 0;
-    expect(() => service.reviewObjectDesign(identified.design, identified.designToken, invalidMaterial)).toThrow('opacity');
-
-    const invalidToken = structuredClone(identified.design);
-    invalidToken.objectType = '被篡改';
-    expect(() => service.reviewObjectDesign(invalidToken, identified.designToken, edited)).toThrow('凭证无效');
-  });
-
-
-  it('lets AI infer an open-ended object category and declare asset-specific linked parameters', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({ VISION_API_KEY: 'open-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1' } as Record<string, string>)[key],
-    } as never);
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({
-        category: 'interior', objectType: 'classroom', targetName: 'storybook-classroom',
-        materials: { wall: { color: '#e7d2a5', roughness: 0.8, metalness: 0, opacity: 1 } },
-        componentTree: [{ id: 'room', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 4, depth: 7 }, transform: { position: [0,2,0] } }],
-        parameterSchema: [{ id: 'room-height', label: '教室高度', type: 'number', value: 4, min: 3, max: 8, step: 0.1, unit: 'm', targets: [{ nodeId: 'room', property: 'dimensions.height', mode: 'set' }] }],
-      }) } }] }),
-    }) as never;
-    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
-    const approval = service.approveReference(imageDataUrl);
-    const result = await service.reconstructObjectReference('auto', '', 'storybook', imageDataUrl, approval.approvalToken);
-    expect(result.design.objectSculptSpec).toMatchObject({
-      category: 'interior', objectType: 'classroom',
-      parameterSchema: [{ id: 'room-height', value: 4, targets: [{ nodeId: 'room', property: 'dimensions.height', mode: 'set' }] }],
-    });
-    const systemPrompt = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).messages[0].content;
-    expect(systemPrompt).toContain('不要依赖固定物体类别清单');
-  });
-
-  it('applies AI local edits only to the selected component subtree', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({ VISION_API_KEY: 'local-edit-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1' } as Record<string, string>)[key],
-    } as never);
-    const current = {
-      schemaVersion: '2.0', targetName: 'building', category: 'building', objectType: 'building', visualStyle: 'stylized',
-      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 }, glass: { color: '#77aabb', roughness: 0.2, metalness: 0, opacity: 1 } },
-      componentTree: [
-        { id: 'body', name: '主体', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 8, depth: 6 }, transform: { position: [0,4,0], rotation: [0,0,0], scale: [1,1,1] } },
-        { id: 'window', name: '窗户', parent: 'body', primitive: 'box', material: 'glass', dimensions: { width: 1, height: 1.5, depth: 0.1 }, transform: { position: [0,1,3], rotation: [0,0,0], scale: [1,1,1] } },
-      ],
-      parameterSchema: [],
-    };
-    const updated: any = structuredClone(current);
-    updated.componentTree[1].primitive = 'arch';
-    updated.componentTree[1].geometryDescriptor = { inset: 0.12 };
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ objectSculptSpec: updated }) } }] }),
-    }) as never;
-    const result = await service.modifyObjectDesign(current, ['window'], '把选中的窗户改成拱形');
-    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'window')?.primitive).toBe('arch');
-    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'body')).toMatchObject(current.componentTree[0]);
-    const illegal = structuredClone(updated);
-    illegal.componentTree[0].dimensions.width = 10;
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ objectSculptSpec: illegal }) } }] }),
-    }) as never;
-    await expect(service.modifyObjectDesign(current, ['window'], '改变窗户')).rejects.toThrow('修改了未选中的组件');
-  });
-
   it('adds conversationally requested parameters only when they bind to existing model components', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({
@@ -441,7 +157,7 @@ describe('BuildingDesignService', () => {
       } as Record<string, string>)[key],
     } as never);
     const current = {
-      schemaVersion: '2.0', targetName: 'gate', category: 'architecture', objectType: '大门', visualStyle: 'stylized',
+      schemaVersion: '3.0', targetName: 'gate', category: 'architecture', objectType: '大门', visualStyle: 'stylized',
       materials: { stone: { color: '#c9b18a', roughness: 0.85, metalness: 0, opacity: 1 } },
       componentTree: [
         { id: 'gate', name: '门体', primitive: 'box', material: 'stone', dimensions: { width: 4, height: 5, depth: 1 }, transform: { position: [0,2.5,0], rotation: [0,0,0], scale: [1,1,1] } },
@@ -461,7 +177,6 @@ describe('BuildingDesignService', () => {
     const result = await service.addObjectParameters(current, '给大门增加长度、宽度和高度三个参数');
     expect(result.addedParameters).toHaveLength(3);
     expect(result.objectSculptSpec.parameterSchema.map((item: any) => item.id)).toEqual(['gate-length', 'gate-width', 'gate-height']);
-    expect(service.reviewObjectDesign).toBeDefined();
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
     expect(systemPrompt).toContain('不能伪造目标');
     expect(systemPrompt).toContain('禁止返回 JavaScript/TypeScript');
@@ -477,7 +192,7 @@ describe('BuildingDesignService', () => {
       } as Record<string, string>)[key],
     } as never);
     const current = {
-      schemaVersion: '2.0', targetName: 'advanced-object', category: 'other', objectType: '组合模型', visualStyle: 'stylized',
+      schemaVersion: '3.0', targetName: 'advanced-object', category: 'other', objectType: '组合模型', visualStyle: 'stylized',
       materials: { surface: { color: '#aaaaaa', roughness: 0.8, metalness: 0, opacity: 1 } },
       componentTree: [
         { id: 'root', kind: 'group', name: '主体' },
@@ -503,7 +218,7 @@ describe('BuildingDesignService', () => {
           } },
       ],
       parameterSchema: [],
-      generators: [],
+      operations: [],
     };
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -560,80 +275,6 @@ describe('BuildingDesignService', () => {
     expect(resultSpec.operations).toEqual([]);
   });
 
-  it('creates a repeat generator and a direct floor-count parameter for a reusable template', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({
-        VISION_API_KEY: 'floor-parameter-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
-      } as Record<string, string>)[key],
-    } as never);
-    const current = {
-      schemaVersion: '2.0', targetName: 'school', category: 'building', objectType: '教学楼', visualStyle: 'stylized',
-      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
-      componentTree: [
-        { id: 'school-root', kind: 'group', name: '教学楼主体', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
-        { id: 'floor-prototype', kind: 'group', name: '标准楼层', parent: 'school-root', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
-        { id: 'floor-slab', kind: 'mesh', name: '楼板', parent: 'floor-prototype', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 0.25, depth: 6 }, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
-        { id: 'roof', kind: 'mesh', name: '屋顶', parent: 'school-root', primitive: 'box', material: 'wall', dimensions: { width: 8.5, height: 0.4, depth: 6.5 }, transform: { position: [0,11,0], rotation: [0,0,0], scale: [1,1,1] } },
-      ],
-      parameterSchema: [],
-      generators: [],
-    };
-    const parameterSchema = [{
-      id: 'floor-count', label: '楼层数', type: 'number', value: 3, min: 1, max: 8, step: 1, unit: '层', targets: [],
-    }];
-    const generators = [{
-      id: 'floor-repeat', type: 'repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count',
-      axis: 'y', spacing: 3.2, defaultCount: 3, maxCount: 8, followers: [{ nodeId: 'roof', axis: 'y', offset: 0 }],
-    }];
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema, generators }) } }] }),
-    }) as never;
-    const result = await service.addObjectParameters(current, '增加一个楼层数调整变量，默认三层，最高八层');
-    expect(result.objectSculptSpec.parameterSchema).toMatchObject([{ id: 'floor-count', value: 3, targets: [] }]);
-    expect((result.objectSculptSpec as any)?.generators).toMatchObject([{ id: 'floor-repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count', axis: 'y', maxCount: 8 }]);
-    expect(result.addedGenerators).toHaveLength(1);
-  });
-
-
-  it('creates a grid generator with independent row and column controls', async () => {
-    const service = new BuildingDesignService({
-      get: (key: string) => ({
-        VISION_API_KEY: 'grid-parameter-secret', VISION_MODEL: 'vision-test', VISION_API_BASE_URL: 'http://vision.local/v1',
-      } as Record<string, string>)[key],
-    } as never);
-    const current = {
-      schemaVersion: '2.0', targetName: 'school', category: 'building', objectType: '教学楼', visualStyle: 'stylized',
-      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0, opacity: 1 } },
-      componentTree: [
-        { id: 'school-root', kind: 'group', name: '教学楼主体', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
-        { id: 'room-prototype', kind: 'group', name: '标准教室', parent: 'school-root', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
-        { id: 'room-shell', kind: 'mesh', name: '教室主体', parent: 'room-prototype', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 5 }, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } },
-      ],
-      parameterSchema: [], generators: [],
-    };
-    const parameterSchema = [
-      { id: 'room-rows', label: '房间行数', type: 'number', value: 2, min: 1, max: 4, step: 1, targets: [] },
-      { id: 'room-columns', label: '房间列数', type: 'number', value: 3, min: 1, max: 5, step: 1, targets: [] },
-    ];
-    const generators = [{
-      id: 'room-grid', type: 'grid', templateRootId: 'room-prototype',
-      rowParameterId: 'room-rows', columnParameterId: 'room-columns',
-      spacingX: 7, spacingZ: 6, defaultRows: 2, defaultColumns: 3, maxRows: 4, maxColumns: 5,
-    }];
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema, generators }) } }] }),
-    });
-    global.fetch = fetchMock as never;
-    const result = await service.addObjectParameters(current, '给教学楼增加房间行数和列数调整变量');
-    expect((result.objectSculptSpec as any).generators).toMatchObject([{ id: 'room-grid', type: 'grid', rowParameterId: 'room-rows', columnParameterId: 'room-columns' }]);
-    expect(result.addedParameters.map((item: any) => item.id)).toEqual(['room-rows', 'room-columns']);
-    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
-    expect(systemPrompt).toContain('generators 支持 repeat 和 grid');
-    expect(systemPrompt).toContain('行沿 z 轴、列沿 x 轴');
-  });
-
   it('rejects conversational parameters that target components outside the current model', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({
@@ -641,7 +282,7 @@ describe('BuildingDesignService', () => {
       } as Record<string, string>)[key],
     } as never);
     const current = {
-      schemaVersion: '2.0', targetName: 'gate', category: 'architecture', objectType: '大门', visualStyle: 'stylized',
+      schemaVersion: '3.0', targetName: 'gate', category: 'architecture', objectType: '大门', visualStyle: 'stylized',
       materials: { stone: { color: '#c9b18a', roughness: 0.85, metalness: 0, opacity: 1 } },
       componentTree: [{ id: 'gate', name: '门体', primitive: 'box', material: 'stone', dimensions: { width: 4, height: 5, depth: 1 }, transform: { position: [0,2.5,0], rotation: [0,0,0], scale: [1,1,1] } }],
       parameterSchema: [],

@@ -805,9 +805,9 @@ export class ImageGenerationService {
     } else {
       // Transitional read path for existing 2.0 templates. New generation prompts and
       // all new procedural authoring use 3.0 operations; legacy templates remain editable.
+      normalizeGeneratorTemplateRoots(spec.componentTree, Array.isArray(spec.generators) ? spec.generators : []);
       const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
       spec.generators = generatorValidation.generators;
-      normalizeGeneratorTemplateRoots(spec.componentTree, spec.generators);
       spec.parameterSchema = validateGeneratedParameterSchema(
         normalizeGeneratedParameterBindings(spec.parameterSchema),
         spec.componentTree,

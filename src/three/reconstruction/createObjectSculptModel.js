@@ -1,4 +1,4 @@
-import { validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
+import { getObjectModelGeometryCapability, validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
 /**
  * Bounded ObjectSculptSpec -> Three.js runtime adapter.
@@ -227,6 +227,9 @@ function validateGeneratedGeometry(geometry, label) {
 }
 
 function createGeometry(THREE, node) {
+  if (!getObjectModelGeometryCapability(node.primitive)) {
+    throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
+  }
   const dimensions = node.dimensions || {};
   const width = boundedNumber(dimensions.width, 1, 0.02, MAX_DIMENSION, node.id + '.width');
   const height = boundedNumber(dimensions.height, 1, 0.02, MAX_DIMENSION, node.id + '.height');

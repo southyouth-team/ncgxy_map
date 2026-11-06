@@ -133,12 +133,13 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('树木的枝干连接树干');
     expect(systemPrompt).toContain('车轮连接车轴/底盘');
     expect(systemPrompt).toContain('简单对象可以只有一个组件');
-    expect(systemPrompt).toContain('tube、lathe、sweep、loft');
+    expect(systemPrompt).toContain('type:"indexed-mesh"');
+    expect(systemPrompt).toContain('positions:[x,y,z,...],indices:[a,b,c,...]');
+    expect(systemPrompt).toContain('旧式 geometryDescriptor 仍可用于兼容构造');
     expect(systemPrompt).toContain('operations');
     expect(systemPrompt).toContain('sourceRootId 指向 componentTree 中完整的 Group 子树');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
-    expect(systemPrompt).toContain('loft 使用 sections');
-    expect(systemPrompt).toContain('geometryDescriptor.radius 必须是 0.01-10');
+    expect(systemPrompt).toContain('不受预置几何类型限制');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 

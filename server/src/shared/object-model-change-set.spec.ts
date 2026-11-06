@@ -60,6 +60,22 @@ describe('ObjectModelChangeSet 1.0', () => {
     expect(result.affectedNodeIds).toEqual(['body']);
   });
 
+  it('rejects invalid indexed mesh topology through the canonical validator', () => {
+    const base = baseSpec();
+    expect(() => applyObjectModelChangeSet(base, changeSet(base, [{
+      type: 'replace-component',
+      nodeId: 'body',
+      component: {
+        id: 'body', parent: 'root', material: 'stone',
+        geometry: {
+          type: 'indexed-mesh',
+          positions: [-1, 0, -1, 1, 0, -1, 0, 2, 0],
+          indices: [0, 1, 3],
+        },
+      },
+    }]))).toThrow('组件通用几何索引超出顶点范围');
+  });
+
   it('removes a leaf and requires explicit cascade for a subtree', () => {
     const base = baseSpec();
     base.componentTree.push({ id: 'window', parent: 'body', primitive: 'box',

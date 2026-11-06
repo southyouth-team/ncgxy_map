@@ -65,7 +65,7 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
       id: 'fake-field', label: 'Fake', type: 'number', value: 1, min: 0, max: 2,
       targets: [{ nodeId: 'rib', property: 'geometryDescriptor.fakeRadius', mode: 'set' }],
     });
-    expect(() => validateObjectModelSpecV3(invalid)).toThrow('参数类型与目标属性不匹配');
+    expect(() => validateObjectModelSpecV3(invalid)).toThrow('参数目标属性不受支持');
   });
 
   it('rejects legacy protocol fields at the canonical boundary', () => {

@@ -89,6 +89,21 @@ describe('ImageGenerationService', () => {
     ]);
   });
 
+  it('rejects ObjectSculptSpec 2.0 provider output instead of adapting it', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        schemaVersion: '2.0',
+        materials: { stone: { color: '#999999' } },
+        componentTree: [{ id: 'body', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } }],
+        generators: [],
+      }) } }] }),
+    }) as never;
+    await expect(service.generateObjectFromPrompt('一个物体', '物体', 'stylized'))
+      .rejects.toThrow('ObjectSculptSpec 结构无效');
+  });
+
   it('generates a prompt-based model with one connected component root', async () => {
     const service = createService({
       VISION_API_KEY: 'vision-key',

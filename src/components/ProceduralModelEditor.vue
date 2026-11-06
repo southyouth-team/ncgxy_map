@@ -7,8 +7,9 @@ const props = defineProps({
   model: { type: Object, default: null },
   busy: { type: Boolean, default: false },
   error: { type: String, default: '' },
+  canUndo: { type: Boolean, default: false },
 })
-const emit = defineEmits(['close', 'edit', 'parameter-change', 'part-select'])
+const emit = defineEmits(['close', 'edit', 'parameter-change', 'part-select', 'undo'])
 const canvasHost = ref(null)
 const instruction = ref('')
 const selectedPartId = ref('')
@@ -141,7 +142,7 @@ onBeforeUnmount(() => {
   <div class="model-editor" role="dialog" aria-modal="true" aria-label="AI 模型编辑器">
     <header class="model-editor__header">
       <div><strong>模型微调</strong><span>{{ model?.name || '程序化模型' }} · AI 对话编辑</span></div>
-      <button @click="emit('close')">关闭</button>
+      <div class="model-editor__header-actions"><button :disabled="busy || !canUndo" @click="emit('undo')">撤销上一步</button><button @click="emit('close')">关闭</button></div>
     </header>
     <div class="model-editor__body">
       <section class="model-editor__preview">
@@ -187,7 +188,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .model-editor { position:fixed; z-index:20; inset:3vh 3vw; display:flex; flex-direction:column; overflow:hidden; color:#eaf1ed; background:#101b22; border:1px solid rgba(255,255,255,.16); border-radius:14px; box-shadow:0 28px 100px rgba(0,0,0,.55); }
-.model-editor__header { height:58px; flex:none; display:flex; align-items:center; justify-content:space-between; padding:0 18px; border-bottom:1px solid rgba(255,255,255,.1); }
+.model-editor__header-actions { display:flex; gap:7px; }.model-editor__header { height:58px; flex:none; display:flex; align-items:center; justify-content:space-between; padding:0 18px; border-bottom:1px solid rgba(255,255,255,.1); }
 .model-editor__header strong,.model-editor__header span { display:block; }.model-editor__header strong { font-size:14px; }.model-editor__header span { margin-top:4px; color:#8fa2a5; font-size:10px; }
 .model-editor button { padding:8px 10px; border:1px solid rgba(255,255,255,.14); border-radius:7px; color:#dce7e3; background:#1a2931; cursor:pointer; font:inherit; font-size:11px; }
 .model-editor button.active { border-color:#9fc8ad; color:#c5e3cd; background:#243c32; }

@@ -174,10 +174,15 @@ export function compileObjectModelSpec(spec) {
     seen.add(node.id);
     return true;
   });
+  const operationParameterIds = new Set(operations.map(operation => operation.count?.parameterId));
+  const parameterSchema = (spec.parameterSchema || []).map(parameter => operationParameterIds.has(parameter.id)
+    ? { ...parameter, generatorControl: true }
+    : parameter);
   return {
     ...spec,
     schemaVersion: '2.0',
     componentTree,
+    parameterSchema,
     generators: [],
     constraints: [],
     operations: undefined,

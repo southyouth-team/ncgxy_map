@@ -796,7 +796,7 @@ export class ImageGenerationService {
     const prompt = typeof promptInput === 'string' ? promptInput.trim().slice(0, 40000) : '';
     const imageDataUrl = typeof imageDataUrlInput === 'string' ? imageDataUrlInput : '';
     if (!prompt && !imageDataUrl) throw new BadRequestException('程序化模型生成需要提示词或参考图片');
-    if (imageDataUrl && (!/^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl)
+    if (imageDataUrl && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl)
       || Buffer.byteLength(imageDataUrl, 'utf8') > 14 * 1024 * 1024)) {
       throw new BadRequestException('参考图片格式无效或超过 10 MB');
     }
@@ -807,7 +807,7 @@ export class ImageGenerationService {
       ? visualStyleInput.trim().slice(0, 80) : 'stylized';
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
-    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
     if (!apiKey || !model) {
       throw new ServiceUnavailableException('程序化模型生成未配置视觉模型，请检查 VISION_API_KEY、VISION_MODEL 和 VISION_API_BASE_URL');
     }
@@ -833,7 +833,7 @@ export class ImageGenerationService {
           'Object type: ' + objectType,
           'Visual style: ' + visualStyle,
           'User request: ' + (prompt || 'Reconstruct the visible object in the reference image.'),
-        ].join('\\n'),
+        ].join('\n'),
       },
       {
         role: 'user',
@@ -871,13 +871,13 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException('视觉模型未返回程序化 Three.js 源码');
     }
     let generatedCode = raw.trim()
-      .replace(/^\`\`\`(?:javascript|js|typescript|ts)?\\s*/i, '')
-      .replace(/\\s*\`\`\`$/, '');
+      .replace(/^\`\`\`(?:javascript|js|typescript|ts)?\s*/i, '')
+      .replace(/\s*\`\`\`$/, '');
     if (generatedCode.length > 120000) {
       throw new ServiceUnavailableException('程序化模型源码超过 120 KB');
     }
-    if (!/export\\s+function\\s+createModel\\s*\\(\\s*THREE\\s*\\)/.test(generatedCode)
-      || !/return\\s+[A-Za-z_$][\\w$]*\\s*;?/.test(generatedCode)) {
+    if (!/export\s+function\s+createModel\s*\(\s*THREE\s*\)/.test(generatedCode)
+      || !/return\s+[A-Za-z_$][\w$]*\s*;?/.test(generatedCode)) {
       throw new ServiceUnavailableException('程序化模型源码缺少 createModel(THREE) 工厂或 Group 返回语句');
     }
     this.logger.log('程序化 Three.js 源码生成完成：模型 ' + model + '，耗时 ' + (Date.now() - startedAt) + 'ms，源码 ' + Buffer.byteLength(generatedCode, 'utf8') + ' bytes');

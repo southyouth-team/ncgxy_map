@@ -64,13 +64,14 @@ export class ImageGenerationController {
   modifyProceduralObject(
     @Body('source') source: string,
     @Body('parameters') parameters: unknown,
+    @Body('parameterValues') parameterValues: unknown,
     @Body('parts') parts: unknown,
     @Body('selectedPartId') selectedPartId: string,
     @Body('instruction') instruction: string,
     @Body('objectType') objectType: string,
   ) {
     return this.service.modifyProceduralObjectFromInstruction(
-      source, parameters, parts, selectedPartId, instruction, objectType,
+      source, parameters, parameterValues, parts, selectedPartId, instruction, objectType,
     );
   }
 

@@ -184,6 +184,16 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }));
     expect(() => validateObjectSculptSpec(tooDeep)).toThrow('组件层级超过');
   });
+  it('rejects legacy 2.0 specs and generator fields at the runtime boundary', () => {
+    const legacyVersion = castleSpec();
+    legacyVersion.schemaVersion = '2.0';
+    expect(() => createObjectSculptModel(THREE, legacyVersion)).toThrow('仅支持 ObjectModelSpec 3.0');
+
+    const legacyGenerator = castleSpec();
+    legacyGenerator.generators = [];
+    expect(() => createObjectSculptModel(THREE, legacyGenerator)).toThrow('不接受 generators/constraints');
+  });
+
   it('applies AI-declared parameters to linked components without cumulative drift', () => {
     const spec = {
       schemaVersion: '3.0',

@@ -4,6 +4,7 @@ import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
+import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
@@ -94,6 +95,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let pointerStart = null
   let generatedAssetsGroup = null
   const generatedAssets = new Map()
+  const sandboxModels = new Map()
+  let sandboxModelSequence = 0
+  let sandboxSelectedModel = null
+  let sandboxTransform = null
   let placementState = null
   let selectedGeneratedAsset = null
   let generatedAssetSequence = 0
@@ -304,6 +309,94 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     callbacks.onGeneratedAssetSelected?.(serializeGeneratedAsset(instance))
     callbacks.onGeneratedAssetsChange?.(getGeneratedAssets())
     return true
+  }
+
+  function onSandboxPointerDown(event) {
+    if (!renderer || !cameraRig || sandboxTransform?.dragging) return
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointerNdc, cameraRig.camera)
+    const roots = Array.from(sandboxModels.values())
+    const hit = raycaster.intersectObjects(roots, true).find(item => item.object.visible)
+    if (!hit) {
+      selectSandboxModel(null)
+      return
+    }
+    let root = hit.object
+    while (root && !root.userData?.sandboxModelId) root = root.parent
+    selectSandboxModel(root?.userData?.sandboxModelId || null)
+  }
+
+  function addSandboxModel(model, options = {}) {
+    if (!scene || !model?.isObject3D || model.parent) throw new TypeError('AI 建模结果必须是未挂载的 THREE.Object3D')
+    const id = 'sandbox_' + (++sandboxModelSequence)
+    model.userData = { ...(model.userData || {}), sandboxModelId: id, isSandboxModel: true }
+    model.name = options.name || model.name || 'AI 建模组 ' + sandboxModelSequence
+    if (options.position) model.position.set(Number(options.position.x) || 0, Number(options.position.y) || 0, Number(options.position.z) || 0)
+    else if (cameraRig?.player) model.position.set(cameraRig.player.x + 3, 0, cameraRig.player.z + 3)
+    model.traverse(object => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true } })
+    scene.add(model)
+    sandboxModels.set(id, model)
+    selectSandboxModel(id)
+    invalidateShadowMap()
+    requestFrame()
+    callbacks.onSandboxModelsChange?.(getSandboxModels())
+    return id
+  }
+
+  function getSandboxModels() {
+    return Array.from(sandboxModels, ([id, model]) => ({ id, name: model.name, spec: model.userData.objectSculptSpec || null }))
+  }
+
+  function selectSandboxModel(id) {
+    const model = id ? sandboxModels.get(String(id)) : null
+    sandboxSelectedModel = model || null
+    if (sandboxSelectedModel) sandboxTransform?.attach(sandboxSelectedModel)
+    else sandboxTransform?.detach()
+    callbacks.onSandboxModelSelected?.(sandboxSelectedModel ? {
+      id: sandboxSelectedModel.userData.sandboxModelId,
+      name: sandboxSelectedModel.name,
+      spec: sandboxSelectedModel.userData.objectSculptSpec || null,
+    } : null)
+    requestFrame()
+    return Boolean(sandboxSelectedModel)
+  }
+
+  function setSandboxTransformMode(mode) {
+    if (!['translate', 'rotate', 'scale'].includes(mode)) return false
+    sandboxTransform?.setMode(mode)
+    requestFrame()
+    return true
+  }
+
+  function removeSandboxModel(id) {
+    const model = sandboxModels.get(String(id))
+    if (!model) return false
+    if (sandboxSelectedModel === model) selectSandboxModel(null)
+    sandboxModels.delete(String(id))
+    model.parent?.remove(model)
+    disposeObjectGroup(model)
+    invalidateShadowMap()
+    callbacks.onSandboxModelsChange?.(getSandboxModels())
+    requestFrame()
+    return true
+  }
+
+  function duplicateSandboxModel(id) {
+    const source = sandboxModels.get(String(id))
+    if (!source) return null
+    const copy = source.clone(true)
+    copy.traverse(object => {
+      if (object.geometry) object.geometry = object.geometry.clone()
+      if (Array.isArray(object.material)) object.material = object.material.map(material => material.clone())
+      else if (object.material) object.material = object.material.clone()
+    })
+    copy.position.x += 3
+    copy.name = source.name + ' 副本'
+    copy.userData = { ...source.userData }
+    delete copy.userData.sandboxModelId
+    return addSandboxModel(copy, { name: copy.name, position: copy.position })
   }
 
   // 静态校园保留阴影贴图；只有场景几何变化时才重算，不随相机交互重复执行 shadow pass。
@@ -592,6 +685,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 3D 建筑模型延迟到用户切换 3D/跟随视角时加载，2.5D 总览不承担 GLB 下载与解析成本。
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
     input.attach()
+    sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
+    sandboxTransform.setMode('translate')
+    sandboxTransform.addEventListener('dragging-changed', event => input?.setMovementEnabled(!event.value))
+    sandboxTransform.addEventListener('change', requestFrame)
+    scene.add(sandboxTransform.getHelper())
+    renderer.domElement.addEventListener('pointerdown', onSandboxPointerDown)
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)
     renderer.domElement.addEventListener('pointerup', requestFrame)
@@ -2174,6 +2273,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function setMode(mode) {
     cameraRig?.setMode(mode)
+    if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
     input?.setMode(mode)
     syncRenderQuality()
     requestFrame()
@@ -2183,6 +2283,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function setViewMode(mode) {
     cameraRig?.setViewMode(mode)
+    if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
     syncRenderQuality()
     requestFrame()
     if (mode === '3d' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
@@ -2223,6 +2324,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer?.domElement?.removeEventListener('pointermove', onScenePointerMove)
     renderer?.domElement?.removeEventListener('pointermove', requestFrame)
     renderer?.domElement?.removeEventListener('wheel', requestFrame)
+    renderer?.domElement?.removeEventListener('pointerdown', onSandboxPointerDown)
+    sandboxTransform?.detach()
+    sandboxTransform?.dispose()
+    sandboxTransform = null
+    sandboxModels.clear()
+    sandboxSelectedModel = null
     clearSelection()
     clearNavigationVisuals()
     clearRpgPreview()
@@ -2242,5 +2349,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, getSandboxModels, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

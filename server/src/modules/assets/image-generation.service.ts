@@ -781,4 +781,115 @@ export class ImageGenerationService {
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };
   }
 
+
+  /**
+   * Procedural Three.js generation MVP.
+   * The model returns a factory source string; this service never evaluates generated code.
+   * Execution and rendering must happen in the isolated preview runtime, not in NestJS.
+   */
+  async generateProceduralObjectFromPrompt(
+    promptInput: unknown,
+    objectTypeInput: unknown,
+    visualStyleInput: unknown,
+    imageDataUrlInput?: unknown,
+  ): Promise<any> {
+    const prompt = typeof promptInput === 'string' ? promptInput.trim().slice(0, 40000) : '';
+    const imageDataUrl = typeof imageDataUrlInput === 'string' ? imageDataUrlInput : '';
+    if (!prompt && !imageDataUrl) throw new BadRequestException('程序化模型生成需要提示词或参考图片');
+    if (imageDataUrl && (!/^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl)
+      || Buffer.byteLength(imageDataUrl, 'utf8') > 14 * 1024 * 1024)) {
+      throw new BadRequestException('参考图片格式无效或超过 10 MB');
+    }
+
+    const objectType = typeof objectTypeInput === 'string' && objectTypeInput.trim()
+      ? objectTypeInput.trim().slice(0, 80) : '独立 3D 物体';
+    const visualStyle = typeof visualStyleInput === 'string' && visualStyleInput.trim()
+      ? visualStyleInput.trim().slice(0, 80) : 'stylized';
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+    if (!apiKey || !model) {
+      throw new ServiceUnavailableException('程序化模型生成未配置视觉模型，请检查 VISION_API_KEY、VISION_MODEL 和 VISION_API_BASE_URL');
+    }
+
+    const configuredTimeout = Number(this.config.get<string>('VISION_REQUEST_TIMEOUT_MS') || 600000);
+    const timeoutMs = Number.isFinite(configuredTimeout)
+      ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
+    const messages: any[] = [
+      {
+        role: 'system',
+        content: [
+          'You are an expert procedural Three.js asset artist using the img2threejs editable procedural-draft approach.',
+          'Return JavaScript ES module source code only. Do not return JSON, Markdown fences, explanations, TypeScript annotations, imports, or external dependencies.',
+          'Export exactly one named factory: export function createModel(THREE) { ... }.',
+          'The factory must synchronously return one THREE.Group. Build real geometry and materials with Three.js APIs.',
+          'Use arbitrary combinations of BufferGeometry, ExtrudeGeometry, LatheGeometry, Shape, curves, custom vertices, meshes, groups and materials as appropriate. Do not restrict yourself to a predefined primitive catalogue.',
+          'Keep meaningful parts in nested THREE.Group objects. Set stable descriptive object.name values and userData.componentId on editable part groups. Give the root group userData.assetName.',
+          'Use local coordinates for child parts. The model should be centered near X/Z origin, Y-up, and stand on Y=0 unless the reference clearly depicts a floating object.',
+          'Use procedural geometry and code to reproduce silhouette, proportions, visible structure, material boundaries and small details. Do not use external textures, URLs, network requests, DOM, browser globals, Node APIs, eval, Function, or dynamic imports.',
+          'The code must be self-contained and use only the THREE argument. Do not access window, document, globalThis, fetch, XMLHttpRequest, WebSocket, process, require, or filesystem.',
+          'Dispose is managed by the host. Do not start animation loops or create renderers/cameras. Return only the model group.',
+          'Prefer visual fidelity over low polygon count, but avoid pathological geometry or unbounded loops. Target a practical real-time asset.',
+          'Object type: ' + objectType,
+          'Visual style: ' + visualStyle,
+          'User request: ' + (prompt || 'Reconstruct the visible object in the reference image.'),
+        ].join('\\n'),
+      },
+      {
+        role: 'user',
+        content: imageDataUrl
+          ? [
+              { type: 'text', text: 'Create the complete editable procedural Three.js model from this reference image. Reproduce visible silhouette, proportions, part relationships and material regions. The image is the primary evidence; do not invent hidden details. Return only the createModel(THREE) JavaScript factory.' },
+              { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
+            ]
+          : 'Generate the complete editable procedural model. Return only the createModel(THREE) JavaScript factory.',
+      },
+    ];
+
+    const startedAt = Date.now();
+    let response: Response;
+    try {
+      response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({ model, temperature: 0.25, messages }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('程序化 Three.js 生成请求失败：' + message);
+      throw new ServiceUnavailableException('程序化模型生成服务连接失败');
+    }
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 1000);
+      this.logger.warn('程序化 Three.js 生成 API HTTP ' + response.status + '：' + detail);
+      throw new ServiceUnavailableException('程序化模型生成失败（HTTP ' + response.status + '）');
+    }
+    const payload = await response.json() as any;
+    const raw = payload?.choices?.[0]?.message?.content;
+    if (typeof raw !== 'string' || !raw.trim()) {
+      throw new ServiceUnavailableException('视觉模型未返回程序化 Three.js 源码');
+    }
+    let generatedCode = raw.trim()
+      .replace(/^\`\`\`(?:javascript|js|typescript|ts)?\\s*/i, '')
+      .replace(/\\s*\`\`\`$/, '');
+    if (generatedCode.length > 120000) {
+      throw new ServiceUnavailableException('程序化模型源码超过 120 KB');
+    }
+    if (!/export\\s+function\\s+createModel\\s*\\(\\s*THREE\\s*\\)/.test(generatedCode)
+      || !/return\\s+[A-Za-z_$][\\w$]*\\s*;?/.test(generatedCode)) {
+      throw new ServiceUnavailableException('程序化模型源码缺少 createModel(THREE) 工厂或 Group 返回语句');
+    }
+    this.logger.log('程序化 Three.js 源码生成完成：模型 ' + model + '，耗时 ' + (Date.now() - startedAt) + 'ms，源码 ' + Buffer.byteLength(generatedCode, 'utf8') + ' bytes');
+    return {
+      provider: baseUrl,
+      model,
+      objectType,
+      visualStyle,
+      generationMethod: 'img2threejs-procedural',
+      generatedCode,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
 }

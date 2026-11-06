@@ -107,6 +107,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
   let directionalLight = null
+  let hemisphereLight = null
+  let rainEffect = null
+  let rainParticleCount = 360
+  let windSwayTargets = []
+  let environmentConfig = { timeOfDay: 'day', weather: 'clear', wind: 0 }
 
   /**
    * MVP bridge: mount an AI-generated building into the shared RPG world.
@@ -171,6 +176,90 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.shadowMap.needsUpdate = true
   }
 
+  function ensureRainEffect() {
+    if (rainEffect || !scene) return
+    const positions = new Float32Array(rainParticleCount * 6)
+    for (let index = 0; index < rainParticleCount; index += 1) {
+      const offset = index * 6
+      const x = ((index * 17) % 61) - 30
+      const y = (index * 13) % 24
+      const z = ((index * 29) % 61) - 30
+      positions[offset] = x
+      positions[offset + 1] = y
+      positions[offset + 2] = z
+      positions[offset + 3] = x + 0.02
+      positions[offset + 4] = y - 0.48
+      positions[offset + 5] = z + 0.01
+    }
+    const geometry = new THREE.BufferGeometry()
+    const attribute = new THREE.BufferAttribute(positions, 3)
+    attribute.setUsage(THREE.DynamicDrawUsage)
+    geometry.setAttribute('position', attribute)
+    const material = new THREE.LineBasicMaterial({ color: '#d8e8f5', transparent: true, opacity: 0.58 })
+    rainEffect = new THREE.LineSegments(geometry, material)
+    rainEffect.name = 'world-rain-effect'
+    rainEffect.frustumCulled = false
+    rainEffect.visible = false
+    scene.add(rainEffect)
+  }
+
+  function updateRainEffect(delta) {
+    if (!rainEffect?.visible) return
+    const positions = rainEffect.geometry.attributes.position.array
+    const wind = environmentConfig.wind
+    for (let index = 0; index < rainParticleCount; index += 1) {
+      const offset = index * 6
+      positions[offset] += wind * 3.2 * delta
+      positions[offset + 1] -= 18 * delta
+      positions[offset + 2] += wind * 0.9 * delta
+      if (positions[offset + 1] < 0) {
+        positions[offset] = ((index * 17) % 61) - 30
+        positions[offset + 1] = 18 + ((index * 11) % 12)
+        positions[offset + 2] = ((index * 29) % 61) - 30
+      }
+      positions[offset + 3] = positions[offset] + 0.025 + wind * 0.035
+      positions[offset + 4] = positions[offset + 1] - 0.48
+      positions[offset + 5] = positions[offset + 2] + 0.01 + wind * 0.015
+    }
+    rainEffect.geometry.attributes.position.needsUpdate = true
+  }
+
+  function setEnvironment(config = {}) {
+    const timeOfDay = ['day', 'night'].includes(config.timeOfDay) ? config.timeOfDay : environmentConfig.timeOfDay
+    const weather = ['clear', 'rain'].includes(config.weather) ? config.weather : environmentConfig.weather
+    const windValue = config.wind === undefined ? environmentConfig.wind : Number(config.wind)
+    const wind = Number.isFinite(windValue) ? Math.max(0, Math.min(1, windValue)) : environmentConfig.wind
+    environmentConfig = { timeOfDay, weather, wind }
+    if (!scene) return { ...environmentConfig }
+    if (indoorGroup) {
+      if (rainEffect) rainEffect.visible = false
+      return { ...environmentConfig }
+    }
+
+    const night = timeOfDay === 'night'
+    const rainy = weather === 'rain'
+    scene.background = new THREE.Color(night ? '#111d31' : rainy ? '#788894' : '#b9d0c2')
+    scene.fog = rainy
+      ? new THREE.Fog(night ? '#303e51' : '#87939b', 24, 125)
+      : night ? new THREE.Fog('#17243a', 48, 180) : null
+    if (hemisphereLight) {
+      hemisphereLight.color.set(night ? '#7187b0' : '#fff2d8')
+      hemisphereLight.groundColor.set(night ? '#202b3a' : '#71865e')
+      hemisphereLight.intensity = night ? 0.48 : 2.2
+    }
+    if (directionalLight) {
+      directionalLight.color.set(night ? '#91a9d6' : '#ffe2b2')
+      directionalLight.intensity = night ? 0.38 : 2.7
+      directionalLight.position.set(night ? -24 : -55, night ? 34 : 90, night ? 18 : 45)
+    }
+    ensureRainEffect()
+    rainEffect.visible = rainy
+    invalidateShadowMap()
+    requestFrame()
+    return { ...environmentConfig }
+  }
+
+
   function syncRenderQuality() {
     if (!renderer || !cameraRig) return
     renderer.shadowMap.enabled = true
@@ -203,6 +292,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
     // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
     campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE, options.featureCollection || null, { manifest: options.assetManifest || null, buildingTemplates: options.buildingTemplates || [], assetBaseUrl: options.assetBaseUrl || '' })
+    windSwayTargets = []
+    campus.traverse(object => {
+      if (object.name !== 'tree-canopy-occluder') return
+      windSwayTargets.push({
+        object,
+        baseX: object.rotation.x,
+        baseZ: object.rotation.z,
+        phase: windSwayTargets.length * 1.73,
+        amplitude: 0.055,
+      })
+    })
     // 碰撞与渲染必须读取同一份规范化空间数据；不能让已移动/删除的旧湖泊继续留在碰撞层。
     const spatialLayers = isRpgSample ? null : createCampusSceneRenderData(options.featureCollection || undefined).layers
     // 基础空间图层已为校园建筑注册精确墙段/footprint 碰撞；GLB 仅替换视觉模型，
@@ -358,8 +458,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.domElement.addEventListener('wheel', requestFrame, { passive: true })
     if (cameraRig.viewMode === '3d') void ensureCampusBuildingModelsLoaded()
 
-    const hemi = new THREE.HemisphereLight(0xfff2d8, 0x71865e, 2.2)
-    scene.add(hemi)
+    hemisphereLight = new THREE.HemisphereLight(0xfff2d8, 0x71865e, 2.2)
+    scene.add(hemisphereLight)
     directionalLight = new THREE.DirectionalLight(0xffe2b2, 2.7)
     directionalLight.position.set(-55, 90, 45)
     directionalLight.castShadow = true
@@ -1354,6 +1454,16 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       lastPlayerZ = cameraRig.player.z
     }
     const cameraChanged = cameraRig?.update(delta) || false
+    updateRainEffect(delta)
+    if (windSwayTargets.length) {
+      const wind = environmentConfig.wind
+      const seconds = time / 1000
+      for (const target of windSwayTargets) {
+        const sway = Math.sin(seconds * 1.25 + target.phase) * target.amplitude * wind
+        target.object.rotation.x = target.baseX + sway
+        target.object.rotation.z = target.baseZ + sway * 0.62
+      }
+    }
     // 远景地面跟随相机的 X/Z 坐标，避免相机平移或低角度观察时看到有限平面的边缘。
     if (activeHorizonGround && cameraRig?.camera) {
       activeHorizonGround.position.x = cameraRig.camera.position.x
@@ -1366,7 +1476,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
     }
     // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
-    if (cameraRig?.mode !== 'overview' || cameraChanged) requestFrame()
+    if (cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0) requestFrame()
   }
 
   function updateSceneObject(sceneObject) {
@@ -1450,6 +1560,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     // 室内是独立空间：校园地面、树木及独立加载的建筑模型全部隐藏，不能从室内看到室外。
     campus.visible = false
+    if (rainEffect) rainEffect.visible = false
     loadedBuildingModels.forEach(model => { model.visible = false })
     scene.background = new THREE.Color('#d9d4c5')
     scene.fog = new THREE.Fog('#d9d4c5', 38, 95)
@@ -1876,6 +1987,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorOutdoorBase = null
     currentIndoorFloor = null
     campus.visible = outdoorState.visible
+    if (rainEffect) rainEffect.visible = environmentConfig.weather === 'rain'
     for (const item of outdoorState.loadedModelVisibility || []) item.model.visible = item.visible
     scene.background = outdoorState.background
     scene.fog = outdoorState.fog
@@ -1966,5 +2078,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, resetView, enterIndoorPrototype, enterIndoorBuilding, mountMvpBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, enterIndoorPrototype, enterIndoorBuilding, mountMvpBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

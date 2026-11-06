@@ -18,6 +18,7 @@ const indoorFloor = ref(1)
 const indoorFloors = ref([1])
 const indoorPrompt = ref('')
 const buildingInfo = ref(null)
+const environment = ref({ timeOfDay: 'day', weather: 'clear', wind: 0.25 })
 let engine = null
 
 async function requestJson(path, body) {
@@ -81,6 +82,11 @@ function exitBuilding() {
   engine?.exitIndoorPrototype()
 }
 
+function applyEnvironment() {
+  if (!engine || indoor.value) return
+  engine.setEnvironment(environment.value)
+}
+
 onMounted(async () => {
   if (!viewport.value) return
   engine = createCampusEngine(viewport.value, {
@@ -95,6 +101,7 @@ onMounted(async () => {
   try {
     await engine.init()
     engine.setMode('thirdPerson')
+    engine.setEnvironment(environment.value)
   } catch (cause) {
     error.value = cause?.message || '世界场景初始化失败'
   }
@@ -142,7 +149,28 @@ onBeforeUnmount(() => {
       </section>
 
       <section>
-        <h2>03 · 当前验证状态</h2>
+        <h2>03 · 环境控制</h2>
+        <div class="world-mvp__environment-row">
+          <label for="world-mvp-time">时间</label>
+          <select id="world-mvp-time" v-model="environment.timeOfDay" :disabled="!ready || indoor" @change="applyEnvironment">
+            <option value="day">白天</option><option value="night">夜晚</option>
+          </select>
+        </div>
+        <div class="world-mvp__environment-row">
+          <label for="world-mvp-weather">天气</label>
+          <select id="world-mvp-weather" v-model="environment.weather" :disabled="!ready || indoor" @change="applyEnvironment">
+            <option value="clear">晴天</option><option value="rain">下雨</option>
+          </select>
+        </div>
+        <div class="world-mvp__environment-row">
+          <label for="world-mvp-wind">风力 {{ Math.round(environment.wind * 100) }}%</label>
+          <input id="world-mvp-wind" v-model.number="environment.wind" type="range" min="0" max="1" step="0.05" :disabled="!ready || indoor" @input="applyEnvironment">
+        </div>
+        <small>雨滴、天空雾效、光照和样板树冠会随环境参数变化。当前为轻量实时效果，不是流体或气象物理模拟。</small>
+      </section>
+
+      <section>
+        <h2>04 · 当前验证状态</h2>
         <ul>
           <li :class="{ done: ready }">Three.js 世界运行时</li>
           <li :class="{ done: generated }">AI 生成模型装入共享场景</li>
@@ -170,7 +198,7 @@ onBeforeUnmount(() => {
 .world-mvp__panel section + section { margin-top:17px; padding-top:16px; border-top:1px solid #e2e9e3; }
 .world-mvp__panel h2 { margin:0 0 10px; font-size:14px; }
 .world-mvp__panel label { display:block; margin-bottom:6px; color:#68776e; font-size:12px; }
-.world-mvp__panel textarea { box-sizing:border-box; width:100%; resize:vertical; border:1px solid #d5dfd7; border-radius:8px; padding:10px; color:#29382f; background:#fff; font:12px/1.6 inherit; }
+.world-mvp__panel textarea { box-sizing:border-box; width:100%; resize:vertical; border:1px solid #d5dfd7; border-radius:8px; padding:10px; color:#29382f; background:#fff; font-family:inherit; font-size:12px; line-height:1.6; }
 .world-mvp__panel button { border:1px solid #d3ded5; border-radius:7px; padding:8px 10px; color:#355341; background:#fff; cursor:pointer; font:inherit; font-size:12px; }
 .world-mvp__panel button:disabled { opacity:.55; cursor:not-allowed; }
 .world-mvp__panel .world-mvp__primary { width:100%; margin-top:9px; border-color:#356c49; background:#356c49; color:#fff; font-weight:700; }
@@ -184,6 +212,11 @@ onBeforeUnmount(() => {
 .world-mvp__floor-actions { display:flex; gap:6px; flex-wrap:wrap; }
 .world-mvp__floor-actions button.active { border-color:#356c49; background:#eaf3eb; }
 .world-mvp__panel ul { margin:0; padding-left:18px; color:#7a877e; font-size:12px; line-height:1.9; }
+.world-mvp__environment-row { display:grid; grid-template-columns:78px 1fr; align-items:center; gap:8px; margin:8px 0; }
+.world-mvp__environment-row label { margin:0; }
+.world-mvp__environment-row select { width:100%; padding:7px 8px; border:1px solid #d3ded5; border-radius:7px; background:#fff; color:#355341; font:inherit; font-size:12px; }
+.world-mvp__environment-row input[type="range"] { width:100%; accent-color:#356c49; }
+
 .world-mvp__panel li.done { color:#287342; font-weight:700; }
 @media (max-width:720px) {
   .world-mvp__header { top:10px; left:10px; right:10px; }

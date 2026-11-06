@@ -115,7 +115,7 @@ export async function executeProceduralModel(source, options = {}) {
     try {
       // IMPORTANT: transfer port2. The worker responds through this port,
       // not through the Worker global message channel.
-      worker.postMessage({ type: 'run', source }, [channel.port2])
+      worker.postMessage({ type: 'run', source, parameters: options.parameters || {} }, [channel.port2])
     } catch (error) {
       fail(error)
     }

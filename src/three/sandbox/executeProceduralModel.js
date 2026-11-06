@@ -6,6 +6,10 @@ const MAX_SOURCE_LENGTH = 120000
  * Run generated Three.js code in a dedicated module Worker, never in the
  * page's Window context. The Worker has no DOM or direct scene access.
  *
+ * A MessageChannel is used for the task protocol: the worker receives port2,
+ * and the page listens on port1. Worker messages and task results are separate
+ * channels so worker startup errors remain observable on the Worker itself.
+ *
  * The Worker is a containment boundary for ordinary generated model code,
  * not a hardened sandbox for adversarial JavaScript. Network APIs are
  * restricted in the Worker as defense in depth, but production deployments
@@ -22,11 +26,15 @@ export async function executeProceduralModel(source, options = {}) {
     throw new RangeError('Three.js 程序化源码超过 120 KB')
   }
 
-  const timeoutMs = Math.min(60000, Math.max(5000, Number(options.timeoutMs) || 25000))
+  // Model source generation happens on the backend before this function runs.
+  // This timeout only covers browser Worker startup, execution and serialization.
+  const timeoutMs = Math.min(120000, Math.max(5000, Number(options.timeoutMs) || 60000))
 
   return new Promise((resolve, reject) => {
     let settled = false
     let timer
+    const channel = new MessageChannel()
+    const resultPort = channel.port1
 
     const worker = new Worker(
       new URL('./proceduralModel.worker.js', import.meta.url),
@@ -35,9 +43,12 @@ export async function executeProceduralModel(source, options = {}) {
 
     const cleanup = () => {
       clearTimeout(timer)
-      worker.removeEventListener('message', onMessage)
+      resultPort.removeEventListener('message', onMessage)
+      resultPort.removeEventListener('messageerror', onMessageError)
       worker.removeEventListener('error', onError)
-      worker.removeEventListener('messageerror', onMessageError)
+      worker.removeEventListener('messageerror', onWorkerMessageError)
+      resultPort.close()
+      channel.port2.close()
       worker.terminate()
     }
 
@@ -52,7 +63,7 @@ export async function executeProceduralModel(source, options = {}) {
       if (settled) return
       const data = event.data || {}
       if (!data.ok) {
-        const detail = data.stack ? `\n${data.stack}` : ''
+        const detail = data.stack ? `\\n${data.stack}` : ''
         fail(new Error((data.error || '程序化模型执行失败') + detail))
         return
       }
@@ -87,16 +98,24 @@ export async function executeProceduralModel(source, options = {}) {
       fail(new Error('模型执行 Worker 返回的数据无法解析'))
     }
 
-    worker.addEventListener('message', onMessage)
+    const onWorkerMessageError = () => {
+      fail(new Error('模型执行 Worker 无法解析主线程发送的任务'))
+    }
+
+    resultPort.addEventListener('message', onMessage)
+    resultPort.addEventListener('messageerror', onMessageError)
+    resultPort.start()
     worker.addEventListener('error', onError)
-    worker.addEventListener('messageerror', onMessageError)
+    worker.addEventListener('messageerror', onWorkerMessageError)
 
     timer = setTimeout(() => {
-      fail(new Error('模型代码执行超时（Worker 已终止）'))
+      fail(new Error(`模型代码执行超时（${Math.round(timeoutMs / 1000)} 秒，Worker 已终止）`))
     }, timeoutMs)
 
     try {
-      worker.postMessage({ type: 'run', source })
+      // IMPORTANT: transfer port2. The worker responds through this port,
+      // not through the Worker global message channel.
+      worker.postMessage({ type: 'run', source }, [channel.port2])
     } catch (error) {
       fail(error)
     }

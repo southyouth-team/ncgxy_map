@@ -5,11 +5,13 @@ on:
     branches:
       - feat/multi-campus-data-foundation
       - feat/object-model-protocol-p1
+      - feat/img2threejs-procedural-mvp
   pull_request:
     branches:
       - main
       - feat/multi-campus-data-foundation
       - feat/object-model-protocol-p1
+      - feat/img2threejs-procedural-mvp
 
 jobs:
   backend:

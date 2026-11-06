@@ -6,7 +6,44 @@ const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
 const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
 const ROOFS = ['flat', 'pitched', 'span', 'glass'];
 const WALLS = ['wallCream', 'wallPeach', 'wallMint', 'wall'];
-const PARAMETER_TARGETS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible']);
+function resolveEditableParameterTarget(node: any, materials: Record<string, any>, property: unknown) {
+  if (!node || typeof property !== 'string' || property.length > 160) return null;
+  const parts = property.split('.');
+  if (parts.some(part => !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(part) || ['__proto__','prototype','constructor'].includes(part))) return null;
+  if (property === 'visibility.visible') return { value: node.hidden !== true, kind: 'boolean' };
+  if (property === 'geometry.primitive') return typeof node.primitive === 'string' ? { value: node.primitive, kind: 'select' } : null;
+  const root = parts[0];
+  if (!['dimensions','transform','geometryDescriptor','material'].includes(root)) return null;
+  if (root === 'material') {
+    if (parts.length !== 2 || typeof node.material !== 'string') return null;
+    const material = materials[node.material];
+    if (!material || !Object.prototype.hasOwnProperty.call(material, parts[1])) return null;
+    const value = material[parts[1]];
+    if (value === null || typeof value === 'object') return null;
+    return { value, kind: typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? 'color' : typeof value };
+  }
+  if (root === 'transform' && ['position','rotation','scale'].includes(parts[1])) {
+    if (parts.length !== 3 || !['x','y','z'].includes(parts[2])) return null;
+    const index = 'xyz'.indexOf(parts[2]);
+    const vector = node.transform?.[parts[1]];
+    const value = Array.isArray(vector) ? vector[index] : (parts[1] === 'scale' ? 1 : 0);
+    return Number.isFinite(Number(value)) ? { value: Number(value), kind: 'number' } : null;
+  }
+  if (parts.length < 2 || parts.length > 4) return null;
+  let value = node[root];
+  for (const part of parts.slice(1)) {
+    if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, part)) return null;
+    value = value[part];
+  }
+  if (value === null || typeof value === 'object') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return { value, kind: 'number' };
+  if (typeof value === 'boolean') return { value, kind: 'boolean' };
+  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return { value, kind: 'color' };
+  if (typeof value === 'string') return { value, kind: 'select' };
+  return null;
+}
+
+
 
 function assertStableSweepPath(path: number[][], label: string, ErrorType: new (message?: string) => Error) {
   const maxTurnRadians = Math.PI * (150 / 180);
@@ -281,8 +318,13 @@ function normalizeObjectParameterSchema(input: unknown, componentTree: any[], ma
     if (!Array.isArray(raw.targets) || raw.targets.length > 100 || (raw.targets.length < 1 && !generatorParameterIds.has(id))) throw new ServiceUnavailableException('参数目标不能为空或超出数量限制：' + id);
     parameter.targets = raw.targets.map((target: any) => {
       const node = componentTree.find(item => item.id === target?.nodeId);
-      if (!nodeIds.has(target?.nodeId) || !PARAMETER_TARGETS.has(target?.property)) throw new ServiceUnavailableException('参数目标无效：' + id);
+      const binding = resolveEditableParameterTarget(node, materials, target?.property);
+      if (!nodeIds.has(target?.nodeId) || !binding) throw new ServiceUnavailableException('参数目标无效：' + id);
       if (node.kind === 'group' && !String(target.property).startsWith('transform.') && target.property !== 'visibility.visible') throw new ServiceUnavailableException('Group 节点仅支持变换和显隐参数：' + id);
+      if (type === 'number' && binding.kind !== 'number'
+        || type === 'color' && binding.kind !== 'color'
+        || type === 'boolean' && binding.kind !== 'boolean'
+        || type === 'select' && binding.kind !== 'select') throw new ServiceUnavailableException('参数类型与目标属性的数据类型不匹配：' + id);
       const mode = target.mode || 'set';
       if (!['set','multiply','add','visible-from','visible-through'].includes(mode) || (target.property.startsWith('material.') && mode !== 'set')) throw new ServiceUnavailableException('参数目标运算无效：' + id);
       if (['visible-from','visible-through'].includes(mode) && target.property !== 'visibility.visible') throw new ServiceUnavailableException('可见性阈值运算只能用于 visibility.visible：' + id);

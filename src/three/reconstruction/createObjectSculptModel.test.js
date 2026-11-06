@@ -157,7 +157,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   it('rejects unsupported primitives and out-of-range dimensions', () => {
     const unsupported = castleSpec();
     unsupported.componentTree[0].primitive = 'javascript';
-    expect(() => createObjectSculptModel(THREE, unsupported)).toThrow('不支持的重建几何 primitive');
+    expect(() => createObjectSculptModel(THREE, unsupported)).toThrow('组件几何类型不受支持');
 
     const oversized = castleSpec();
     oversized.componentTree[0].dimensions.width = 1000;

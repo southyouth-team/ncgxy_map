@@ -45,10 +45,10 @@ describe('ObjectModelSpec 3.0 compiler', () => {
   it('expands arbitrary axis-angle instance distributions from expressions', () => {
     const compiled = compileObjectModelSpec(createRadialSpec());
     expect(compiled.schemaVersion).toBe('2.0');
-    expect(compiled.componentTree).toHaveLength(3 + 3 * 7);
+    expect(compiled.componentTree).toHaveLength(1 + 2 * 8);
     expect(new Set(compiled.componentTree.map(node => node.id)).size).toBe(compiled.componentTree.length);
     const instances = compiled.componentTree.filter(node => node.operationInstance?.operationId === 'radial-ribs');
-    expect(instances).toHaveLength(3 * 7);
+    expect(instances).toHaveLength(2 * 7);
     const secondRoot = instances.find(node => node.operationInstance?.sourceNodeId === 'rib-unit' && node.operationInstance.index === 1);
     expect(secondRoot.transform.position[0]).toBeCloseTo(2 * Math.cos(Math.PI / 4));
     expect(secondRoot.transform.position[2]).toBeCloseTo(2 * Math.sin(Math.PI / 4));

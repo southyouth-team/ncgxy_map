@@ -1015,10 +1015,14 @@ export class BuildingDesignService {
       }
       if (after.parent !== node.parent) throw new ServiceUnavailableException('局部修改不得改变组件父子关系：' + node.id);
     }
-    if (stableSerialize(updated.generators || []) !== stableSerialize(current.generators || [])) {
+    if (current.schemaVersion === '3.0') {
+      if (updated.schemaVersion !== '3.0' || stableSerialize(updated.operations || []) !== stableSerialize(current.operations || [])) {
+        throw new ServiceUnavailableException('局部修改不得擅自改变 ObjectModelSpec 3.0 operations');
+      }
+    } else if (stableSerialize(updated.generators || []) !== stableSerialize(current.generators || [])) {
       throw new ServiceUnavailableException('局部修改不得擅自改变资产结构生成规则');
     }
-    if (stableSerialize(updated.parameterSchema || []) !== stableSerialize(current.parameterSchema || [])) {
+        if (stableSerialize(updated.parameterSchema || []) !== stableSerialize(current.parameterSchema || [])) {
       throw new ServiceUnavailableException('局部修改不得擅自改变资产参数 Schema');
     }
     const protectedMaterials = new Set<string>();
@@ -1027,6 +1031,12 @@ export class BuildingDesignService {
       if (stableSerialize(updated.materials?.[key]) !== stableSerialize(current.materials?.[key])) {
         throw new ServiceUnavailableException('局部修改不得改变未选中组件共用的材质：' + key);
       }
+    }
+    if (current.schemaVersion === '3.0') {
+      return {
+        objectSculptSpec: { ...updated, operations: current.operations, parameterSchema: current.parameterSchema },
+        affectedNodeIds: [...allowedIds],
+      };
     }
     const design = {
       source: 'ai-vision-object-sculpt',
@@ -1046,7 +1056,7 @@ export class BuildingDesignService {
   async addObjectParameters(objectSculptSpecInput: unknown, instructionInput: unknown) {
     const current = objectSculptSpecInput as Record<string, any> | undefined;
     const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 3000) : '';
-    if (!current || current.schemaVersion !== '2.0' || !Array.isArray(current.componentTree)
+    if (!current || !['2.0','3.0'].includes(current.schemaVersion) || !Array.isArray(current.componentTree)
       || !current.materials || typeof current.materials !== 'object') {
       throw new BadRequestException('当前 ObjectSculptSpec 无效');
     }

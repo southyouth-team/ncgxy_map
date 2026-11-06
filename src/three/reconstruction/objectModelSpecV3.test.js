@@ -44,7 +44,7 @@ function createRadialSpec(count = 8) {
 describe('ObjectModelSpec 3.0 compiler', () => {
   it('expands arbitrary axis-angle instance distributions from expressions', () => {
     const compiled = compileObjectModelSpec(createRadialSpec());
-    expect(compiled.schemaVersion).toBe('2.0');
+    expect(compiled.schemaVersion).toBe('3.0');
     expect(compiled.componentTree).toHaveLength(1 + 2 * 8);
     expect(new Set(compiled.componentTree.map(node => node.id)).size).toBe(compiled.componentTree.length);
     const instances = compiled.componentTree.filter(node => node.operationInstance?.operationId === 'radial-ribs');

@@ -821,7 +821,7 @@ function setEditableParameterTarget(node, materials, property, value) {
   target[parts[parts.length - 1]] = value;
 }
 
-function validateObjectSculptSpec(spec) {
+export function validateObjectSculptSpec(spec) {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new TypeError('ObjectSculptSpec 必须是 JSON 对象');
   if (![1, 2, '2.0', '2.0.0'].includes(spec.schemaVersion)) throw new TypeError('ObjectSculptSpec schemaVersion 不受支持');
   if (!Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > MAX_COMPONENTS) {

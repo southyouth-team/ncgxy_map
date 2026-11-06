@@ -30,6 +30,15 @@ export async function executeProceduralModel(source, options = {}) {
   // This timeout only covers browser Worker startup, execution and serialization.
   const timeoutMs = Math.min(120000, Math.max(5000, Number(options.timeoutMs) || 60000))
 
+  // Vue refs/proxies are not structured-cloneable. Model parameters are a JSON data contract,
+  // so normalize them into plain data before crossing the Worker boundary.
+  let workerParameters
+  try {
+    workerParameters = JSON.parse(JSON.stringify(options.parameters ?? {}))
+  } catch {
+    throw new TypeError('模型参数无法序列化为 Worker 可传输数据')
+  }
+
   return new Promise((resolve, reject) => {
     let settled = false
     let timer
@@ -115,7 +124,7 @@ export async function executeProceduralModel(source, options = {}) {
     try {
       // IMPORTANT: transfer port2. The worker responds through this port,
       // not through the Worker global message channel.
-      worker.postMessage({ type: 'run', source, parameters: options.parameters || {} }, [channel.port2])
+      worker.postMessage({ type: 'run', source, parameters: workerParameters }, [channel.port2])
     } catch (error) {
       fail(error)
     }

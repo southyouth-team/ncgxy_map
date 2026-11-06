@@ -9,48 +9,6 @@ import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 
 
-function assertStableSweepPath(path: number[][], label: string, ErrorType: new (message?: string) => Error) {
-  const maxTurnRadians = Math.PI * (150 / 180);
-  for (let index = 1; index < path.length - 1; index += 1) {
-    const incoming = [path[index][0] - path[index - 1][0], path[index][1] - path[index - 1][1], path[index][2] - path[index - 1][2]];
-    const outgoing = [path[index + 1][0] - path[index][0], path[index + 1][1] - path[index][1], path[index + 1][2] - path[index][2]];
-    const incomingLength = Math.hypot(...incoming);
-    const outgoingLength = Math.hypot(...outgoing);
-    const dot = incoming.reduce((sum, value, axis) => sum + value * outgoing[axis], 0);
-    const turnRadians = Math.acos(Math.max(-1, Math.min(1, dot / (incomingLength * outgoingLength))));
-    if (turnRadians > maxTurnRadians) throw new ErrorType(label + ' 存在超过 150° 的急转弯，可能导致扫掠截面翻转或自相交');
-  }
-}
-
-function assertSimpleAssetProfile(points: number[][], label: string, ErrorType: new (message?: string) => Error) {
-  const cross = (a: number[], b: number[], c: number[]) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-  const onSegment = (a: number[], b: number[], p: number[]) => Math.abs(cross(a, b, p)) < 0.000001
-    && p[0] >= Math.min(a[0], b[0]) - 0.000001 && p[0] <= Math.max(a[0], b[0]) + 0.000001
-    && p[1] >= Math.min(a[1], b[1]) - 0.000001 && p[1] <= Math.max(a[1], b[1]) + 0.000001;
-  let area = 0;
-  for (let i = 0; i < points.length; i += 1) {
-    const next = points[(i + 1) % points.length];
-    if (Math.hypot(points[i][0] - next[0], points[i][1] - next[1]) < 0.0001) throw new ErrorType(label + ' 存在重复或零长度边');
-    area += points[i][0] * next[1] - next[0] * points[i][1];
-  }
-  if (Math.abs(area) < 0.0001) throw new ErrorType(label + ' 轮廓面积不能为零');
-  for (let i = 0; i < points.length; i += 1) {
-    const a = points[i], b = points[(i + 1) % points.length];
-    for (let j = i + 1; j < points.length; j += 1) {
-      if (j === i || j === (i + 1) % points.length || i === (j + 1) % points.length) continue;
-      const d = points[j], e = points[(j + 1) % points.length];
-      const abC = cross(a, b, d), abD = cross(a, b, e), cdA = cross(d, e, a), cdB = cross(d, e, b);
-      const proper = ((abC > 0 && abD < 0) || (abC < 0 && abD > 0))
-        && ((cdA > 0 && cdB < 0) || (cdA < 0 && cdB > 0));
-      const touching = (Math.abs(abC) < 0.000001 && onSegment(a, b, d))
-        || (Math.abs(abD) < 0.000001 && onSegment(a, b, e))
-        || (Math.abs(cdA) < 0.000001 && onSegment(d, e, a))
-        || (Math.abs(cdB) < 0.000001 && onSegment(d, e, b));
-      if (proper || touching) throw new ErrorType(label + ' 存在自相交边');
-    }
-  }
-}
-
 export interface UploadedAsset {
   originalname: string;
   mimetype: string;
@@ -297,95 +255,7 @@ export class AssetsService {
       if (kind === 'mesh') {
         if (!primitives.has(String(node.primitive || '').toLowerCase())) throw new BadRequestException('资产组件几何类型无效：' + node.id);
         if (!node.dimensions || ['width','height','depth'].some(key => !Number.isFinite(Number(node.dimensions[key])) || Number(node.dimensions[key]) < 0.02 || Number(node.dimensions[key]) > 100)) throw new BadRequestException('资产组件尺寸无效：' + node.id);
-        if (String(node.primitive).toLowerCase() === 'tube') {
-          const path = node.geometryDescriptor?.path;
-          if (!Array.isArray(path) || path.length < 2 || path.length > 32
-            || path.some((point: any) => !Array.isArray(point) || point.length !== 3
-              || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {
-            throw new BadRequestException('资产 tube 路径必须包含 2 到 32 个有效三维归一化坐标点：' + node.id);
-          }
-          const radius = Number(node.geometryDescriptor?.radius ?? 0.08);
-          const tubularSegments = Number(node.geometryDescriptor?.tubularSegments ?? 32);
-          const radialSegments = Number(node.geometryDescriptor?.radialSegments ?? 8);
-          if (!Number.isFinite(radius) || radius < 0.01 || radius > 10
-            || !Number.isInteger(tubularSegments) || tubularSegments < 3 || tubularSegments > 128
-            || !Number.isInteger(radialSegments) || radialSegments < 3 || radialSegments > 24
-            || (node.geometryDescriptor?.closed !== undefined && typeof node.geometryDescriptor.closed !== 'boolean')) {
-            throw new BadRequestException('资产 tube 几何参数无效：' + node.id);
-          }
-        }
-        if (String(node.primitive).toLowerCase() === 'lathe') {
-          const profile = node.geometryDescriptor?.profile;
-          if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32
-            || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
-              || !Number.isFinite(Number(point[0])) || Number(point[0]) < 0 || Number(point[0]) > 0.5
-              || !Number.isFinite(Number(point[1])) || Number(point[1]) < -0.5 || Number(point[1]) > 0.5)
-            || profile.every((point: number[], index: number) => index === 0
-              || (Math.abs(Number(point[0]) - Number(profile[index - 1][0])) < 0.0001
-                && Math.abs(Number(point[1]) - Number(profile[index - 1][1])) < 0.0001))) {
-            throw new BadRequestException('资产 lathe profile 必须包含 2 到 32 个有效的 [半径,高度] 归一化截面点：' + node.id);
-          }
-        }
-        if (String(node.primitive).toLowerCase() === 'sweep') {
-          if (node.geometryDescriptor?.closed === true) throw new BadRequestException('资产 sweep 暂不支持闭合路径：' + node.id);
-          const path = node.geometryDescriptor?.path;
-          const profile = node.geometryDescriptor?.profile;
-          if (!Array.isArray(path) || path.length < 2 || path.length > 32
-            || path.some((point: any) => !Array.isArray(point) || point.length !== 3
-              || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {
-            throw new BadRequestException('资产 sweep path 必须包含 2 到 32 个有效三维归一化坐标点：' + node.id);
-          }
-          if (path.some((point: any, index: number) => index > 0
-            && Math.hypot(Number(point[0]) - Number(path[index - 1][0]), Number(point[1]) - Number(path[index - 1][1]), Number(point[2]) - Number(path[index - 1][2])) < 0.0001)) {
-            throw new BadRequestException('资产 sweep path 不能包含重复或零长度路径段：' + node.id);
-          }
-          assertStableSweepPath(path.map((point: any[]) => point.map(Number)), '资产 sweep path：' + node.id, BadRequestException);
-          if (!Array.isArray(profile) || profile.length < 3 || profile.length > 24
-            || profile.some((point: any) => !Array.isArray(point) || point.length !== 2
-              || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5))) {
-            throw new BadRequestException('资产 sweep profile 必须包含 3 到 24 个有效二维归一化坐标点：' + node.id);
-          }
-          assertSimpleAssetProfile(profile.map((point: any) => [Number(point[0]), Number(point[1])]), '资产 sweep profile', BadRequestException);
-          const steps = Number(node.geometryDescriptor?.steps ?? 32);
-          if (!Number.isInteger(steps) || steps < 3 || steps > 128) {
-            throw new BadRequestException('资产 sweep steps 参数无效：' + node.id);
-          }
-        }
-        if (String(node.primitive).toLowerCase() === 'loft') {
-          const sections = node.geometryDescriptor?.sections;
-          if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) {
-            throw new BadRequestException('资产 loft 必须包含 2 到 12 个截面：' + node.id);
-          }
-          const pointCount = Array.isArray(sections[0]?.points) ? sections[0].points.length : 0;
-          let previousHeight = -Infinity;
-          let contourOrientation = 0;
-          if (pointCount < 3 || pointCount > 24
-            || sections.some((section: any) => {
-              const invalid = !section || typeof section !== 'object'
-                || !Number.isFinite(Number(section.height)) || Number(section.height) < -0.5 || Number(section.height) > 0.5
-                || Number(section.height) <= previousHeight + 0.0001
-                || !Array.isArray(section.points) || section.points.length !== pointCount
-                || section.points.some((point: any) => !Array.isArray(point) || point.length !== 2
-                  || point.some((value: unknown) => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5));
-              if (!invalid) {
-                const profile = section.points.map((point: any) => [Number(point[0]), Number(point[1])]);
-                assertSimpleAssetProfile(profile, '资产 loft section', BadRequestException);
-                const signedArea = profile.reduce((sum: number, point: number[], index: number) => {
-                  const next = profile[(index + 1) % profile.length];
-                  return sum + point[0] * next[1] - next[0] * point[1];
-                }, 0);
-                const orientation = Math.sign(signedArea);
-                if (contourOrientation && orientation !== contourOrientation) {
-                  throw new BadRequestException('资产 loft 截面必须保持一致的轮廓绕序：' + node.id);
-                }
-                contourOrientation = orientation;
-                previousHeight = Number(section.height);
-              }
-              return invalid;
-            })) {
-            throw new BadRequestException('资产 loft 截面高度必须严格递增，且每个截面包含相同数量的有效轮廓点：' + node.id);
-          }
-        }
+
       }
       const visited = new Set([node.id]);
       let parent = node.parent;

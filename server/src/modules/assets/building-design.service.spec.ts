@@ -629,7 +629,7 @@ describe('BuildingDesignService', () => {
     expect((result.objectSculptSpec as any).generators).toMatchObject([{ id: 'room-grid', type: 'grid', rowParameterId: 'room-rows', columnParameterId: 'room-columns' }]);
     expect(result.addedParameters.map((item: any) => item.id)).toEqual(['room-rows', 'room-columns']);
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
-    expect(systemPrompt).toContain('type:"grid"');
+    expect(systemPrompt).toContain('generators 支持 repeat 和 grid');
     expect(systemPrompt).toContain('行沿 z 轴、列沿 x 轴');
   });
 

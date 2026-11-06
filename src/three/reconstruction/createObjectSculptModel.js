@@ -794,21 +794,21 @@ export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput, ch
     throw new TypeError('服务端结构 ChangeSet 与模型结果不一致');
   }
   const affectedMaterialIds = new Set(changeSetResult?.affectedMaterialIds || []);
-  // A server replace-component may represent only a parent change. That is a
-  // hierarchy operation, not a geometry replacement: retain its Group and reattach it.
+  const candidate = JSON.parse(JSON.stringify(changeSetResult?.objectModelSpec || nextSpecInput));
+  const compatibleSpec = { ...candidate, parameterSchema: normalizeObjectModelMaterialParameterAliases(candidate.parameterSchema) };
+  // Compare uncompiled Specs: the render snapshot may contain parameterized/expanded data.
+  // A parent-only replace is a hierarchy move, not a geometry replacement.
   const replacedNodeIds = new Set((changeSetResult?.changes || [])
     .filter(change => change?.type === 'replace-component' && typeof change.nodeId === 'string')
     .filter(change => {
-      const before = root.userData.renderObjectSculptSpec.componentTree.find(node => node.id === change.nodeId);
-      const after = changeSetResult.objectModelSpec.componentTree.find(node => node.id === change.nodeId);
+      const before = root.userData.parameterBaseSpec.componentTree.find(node => node.id === change.nodeId);
+      const after = compatibleSpec.componentTree.find(node => node.id === change.nodeId);
       if (!before || !after) return false;
       const { parent: beforeParent, ...beforeContent } = before;
       const { parent: afterParent, ...afterContent } = after;
       return stableObjectJson(beforeContent) !== stableObjectJson(afterContent);
     })
     .map(change => change.nodeId));
-  const candidate = JSON.parse(JSON.stringify(changeSetResult?.objectModelSpec || nextSpecInput));
-  const compatibleSpec = { ...candidate, parameterSchema: normalizeObjectModelMaterialParameterAliases(candidate.parameterSchema) };
   validateObjectModelSpecV3(compatibleSpec);
   const parameterizedSpec = applyObjectModelParameterValues(compatibleSpec);
   const renderSpec = compileObjectModelSpec(parameterizedSpec);

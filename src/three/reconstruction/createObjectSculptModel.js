@@ -611,7 +611,7 @@ function applyObjectModelParameterValues(input) {
 }
 
 export function validateObjectSculptSpec(spec) {
-  const validation = validateObjectModelSpecV3(spec);
+  const validation = validateObjectModelSpecV3(spec, { mode: 'compiled' });
   // These are executor resource-safety limits, not protocol schema rules.
   for (const node of spec.componentTree) {
     const scale = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');

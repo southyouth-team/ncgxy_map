@@ -18,6 +18,7 @@ const aiBusy = ref(false)
 const editingModel = ref(null)
 const editBusy = ref(false)
 const editError = ref('')
+const editHistory = ref([])
 const message = ref('正在初始化 RPG 校园场景…')
 const time = ref(14)
 const weather = ref('clear')
@@ -176,6 +177,7 @@ function openModelEditor(payload) {
     return
   }
   editingModel.value = model
+  editHistory.value = []
   editError.value = ''
 }
 function modelParameterDefaults(definitions, existing = {}) {
@@ -185,7 +187,7 @@ function modelParameterDefaults(definitions, existing = {}) {
   }
   return values
 }
-async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新') {
+async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新', recordHistory = true) {
   const current = editingModel.value
   if (!current) throw new Error('当前没有正在编辑的模型')
   const id = current.userData.sandboxModelId
@@ -201,6 +203,15 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   }
   replacement.name = current.name
   if (!engine.replaceSandboxModel(id, replacement, { name: current.name })) throw new Error('模型替换失败，原模型已保留')
+  if (recordHistory) {
+    editHistory.value.push({
+      source: current.userData.proceduralModelSource,
+      values: { ...(current.userData.proceduralModelParameterValues || {}) },
+      definitions: current.userData.proceduralModelParameters || [],
+      parts: current.userData.proceduralModelParts || [],
+    })
+    if (editHistory.value.length > 10) editHistory.value.shift()
+  }
   objectsById.set(id, replacement)
   selected = replacement
   editingModel.value = replacement
@@ -240,6 +251,22 @@ async function handleModelEdit(payload) {
     editBusy.value = false
   }
 }
+
+async function undoModelEdit() {
+  const snapshot = editHistory.value.pop()
+  if (!snapshot || !editingModel.value || editBusy.value) return
+  editBusy.value = true
+  editError.value = ''
+  try {
+    await replaceEditedModel(snapshot.source, snapshot.values, snapshot.definitions, snapshot.parts, '已恢复上一版本', false)
+  } catch (error) {
+    editHistory.value.push(snapshot)
+    editError.value = error?.message || '恢复失败'
+  } finally {
+    editBusy.value = false
+  }
+}
+
 async function handleParameterChange(payload) {
   const current = editingModel.value
   if (!current || editBusy.value || !payload?.id) return
@@ -417,6 +444,8 @@ onBeforeUnmount(() => {
       :model="editingModel"
       :busy="editBusy"
       :error="editError"
+      :can-undo="editHistory.length > 0"
+      @undo="undoModelEdit"
       @close="editingModel = null"
       @edit="handleModelEdit"
       @parameter-change="handleParameterChange"

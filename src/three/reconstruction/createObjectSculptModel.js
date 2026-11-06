@@ -666,6 +666,47 @@ export function validateObjectSculptSpec(spec) {
 }
 
 /**
+ * Build one component's Three.js Group without attaching it to a parent.
+ * Full-model construction and incremental edits share this exact component
+ * runtime path so geometry, material, metadata and transform behavior cannot drift.
+ */
+export function createObjectSculptComponentGroup(THREE, node, materialSpecs = {}) {
+  const group = new THREE.Group();
+  group.name = String(node.name || node.id).slice(0, 120);
+  group.userData.componentId = node.id;
+  group.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
+  group.userData.componentRole = String(node.role || 'component').slice(0, 80);
+  group.userData.componentRelations = Array.isArray(node.relations) ? JSON.parse(JSON.stringify(node.relations)) : [];
+  group.userData.componentHidden = node.hidden === true;
+  group.userData.componentLocked = node.locked === true;
+  group.visible = node.hidden !== true;
+  if ((node.kind || 'mesh') === 'mesh' && !node.structuralCutter) {
+    const geometry = createGeometry(THREE, node);
+    const materialKey = typeof node.material === 'string' ? node.material : 'default';
+    const material = normalizeMaterial(THREE,
+      Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = node.id + ':mesh';
+    mesh.userData.componentId = node.id;
+    mesh.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  group.userData.componentKind = node.kind || 'mesh';
+  const [px, py, pz] = finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
+  const [rx, ry, rz] = finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
+  const [sx, sy, sz] = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
+  if ([sx, sy, sz].some(value => Math.abs(value) < 0.001 || Math.abs(value) > 20)) {
+    throw new RangeError(node.id + '.scale 超出允许范围');
+  }
+  group.position.set(px, py, pz);
+  group.rotation.set(rx, ry, rz);
+  group.scale.set(sx, sy, sz);
+  return group;
+}
+
+/**
  * Build a real THREE.Group from a validated component tree.
  * Material keys resolve through spec.materials; missing keys use a neutral fallback.
  */
@@ -691,10 +732,6 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   root.name = String(effectiveSpec.targetName || effectiveSpec.name || 'reconstructed-object').slice(0, 120);
   const groups = new Map();
   const materialSpecs = renderSpec.materials && typeof renderSpec.materials === 'object' ? renderSpec.materials : {};
-  const resolveMaterial = key => {
-    const materialKey = typeof key === 'string' ? key : 'default';
-    return normalizeMaterial(THREE, Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL);
-  };
   const ordered = [...renderSpec.componentTree].sort((a, b) => {
     const depth = node => {
       let value = 0, parent = node.parent;
@@ -704,35 +741,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     return depth(a) - depth(b);
   });
   for (const node of ordered) {
-    const group = new THREE.Group();
-    group.name = String(node.name || node.id).slice(0, 120);
-    group.userData.componentId = node.id;
-    group.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
-    group.userData.componentRole = String(node.role || 'component').slice(0, 80);
-    group.userData.componentRelations = Array.isArray(node.relations) ? JSON.parse(JSON.stringify(node.relations)) : [];
-    group.userData.componentHidden = node.hidden === true;
-    group.userData.componentLocked = node.locked === true;
-    group.visible = node.hidden !== true;
-    if ((node.kind || 'mesh') === 'mesh' && !node.structuralCutter) {
-      const geometry = createGeometry(THREE, node);
-      const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
-      mesh.name = node.id + ':mesh';
-      mesh.userData.componentId = node.id;
-      mesh.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      group.add(mesh);
-    }
-    group.userData.componentKind = node.kind || 'mesh';
-    const [px, py, pz] = finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
-    const [rx, ry, rz] = finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
-    const [sx, sy, sz] = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
-    if ([sx, sy, sz].some(value => Math.abs(value) < 0.001 || Math.abs(value) > 20)) {
-      throw new RangeError(node.id + '.scale 超出允许范围');
-    }
-    group.position.set(px, py, pz);
-    group.rotation.set(rx, ry, rz);
-    group.scale.set(sx, sy, sz);
+    const group = createObjectSculptComponentGroup(THREE, node, materialSpecs);
     const parent = node.parent ? groups.get(node.parent) : root;
     if (!parent) throw new TypeError('组件父节点尚未构建：' + node.id);
     parent.add(group);

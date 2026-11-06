@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, resolveEditableParameterTarget } from './createObjectSculptModel.js';
+import { createObjectSculptModel, createObjectSculptComponentGroup, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, resolveEditableParameterTarget } from './createObjectSculptModel.js';
 import { createObjectModelParameterContractCases } from '../../../server/src/shared/object-model-parameter-contract.fixtures.ts';
 
 function castleSpec() {
@@ -27,6 +27,24 @@ function castleSpec() {
 }
 
 describe('ObjectSculptSpec Three.js adapter', () => {
+  it('builds an isolated component group through the shared runtime builder', () => {
+    const node = {
+      id: 'isolated-body',
+      kind: 'mesh',
+      primitive: 'box',
+      material: 'stone',
+      dimensions: { width: 2, height: 3, depth: 4 },
+      transform: { position: [1, 2, 3], rotation: [0, 0.2, 0], scale: [1, 1, 1] },
+    };
+    const group = createObjectSculptComponentGroup(THREE, node, {
+      stone: { color: '#888888', roughness: 0.8, metalness: 0 },
+    });
+    expect(group.userData.componentId).toBe('isolated-body');
+    expect(group.position.toArray()).toEqual([1, 2, 3]);
+    expect(group.getObjectByName('isolated-body:mesh')?.isMesh).toBe(true);
+    expect(group.getObjectByName('isolated-body:mesh')?.geometry.isBufferGeometry).toBe(true);
+  });
+
   it('builds an arbitrary indexed mesh without requiring a registered primitive', () => {
     const spec = {
       schemaVersion: '3.0',

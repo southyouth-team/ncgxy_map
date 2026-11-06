@@ -1,5 +1,6 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { ImageGenerationService } from './image-generation.service';
+import { createObjectModelParameterContractCases } from '../../shared/object-model-parameter-contract.fixtures';
 
 describe('ImageGenerationService', () => {
   const png = Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0,1,2,3,4]);
@@ -259,6 +260,23 @@ describe('ImageGenerationService', () => {
       json: async () => ({ data: [{ b64_json: Buffer.from('not an image payload').toString('base64') }] }),
     }) as never;
     await expect(service.generate('Campus visual asset')).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('enforces the shared parameter contract cases on the generation entrypoint', async () => {
+    for (const contract of createObjectModelParameterContractCases()) {
+      const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(contract.spec) } }] }),
+      }) as never;
+      if (contract.validator === 'accept') {
+        const result = await service.generateObjectFromPrompt('测试物体', '物体', 'stylized', false);
+        expect(result.objectSculptSpec.parameterSchema).toBeDefined();
+      } else {
+        await expect(service.generateObjectFromPrompt('测试物体', '物体', 'stylized', false))
+          .rejects.toBeInstanceOf(ServiceUnavailableException);
+      }
+    }
   });
 
 });

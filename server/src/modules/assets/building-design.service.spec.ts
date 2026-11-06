@@ -1,5 +1,6 @@
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { BuildingDesignService } from './building-design.service';
+import { createObjectModelParameterContractCases } from '../../shared/object-model-parameter-contract.fixtures';
 
 describe('BuildingDesignService', () => {
   const png = Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0,1,2,3,4]);
@@ -294,6 +295,30 @@ describe('BuildingDesignService', () => {
       ] }) } }] }),
     }) as never;
     await expect(service.addObjectParameters(current, '增加房间数')).rejects.toThrow('参数目标无效');
+  });
+
+  it('enforces the shared parameter contract cases on the parameter-design entrypoint', async () => {
+    for (const contract of createObjectModelParameterContractCases()) {
+      const service = new BuildingDesignService({
+        get: (key: string) => ({
+          VISION_API_KEY: 'parameter-contract-secret',
+          VISION_MODEL: 'vision-test',
+          VISION_API_BASE_URL: 'http://vision.local/v1',
+        } as Record<string, string>)[key],
+      } as never);
+      const current = { ...contract.spec, parameterSchema: [] };
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema: contract.spec.parameterSchema }) }] }),
+      }) as never;
+      if (contract.validator === 'accept') {
+        const result = await service.addObjectParameters(current, '为部件添加参数');
+        expect(result.objectSculptSpec.parameterSchema).toHaveLength(contract.spec.parameterSchema.length);
+      } else {
+        await expect(service.addObjectParameters(current, '为部件添加参数'))
+          .rejects.toBeInstanceOf(ServiceUnavailableException);
+      }
+    }
   });
 
 });

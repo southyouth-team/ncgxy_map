@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptParameter, resolveEditableParameterTarget } from './createObjectSculptModel.js';
+import { createObjectModelParameterContractCases } from '../../../server/src/shared/object-model-parameter-contract.fixtures.ts';
 
 function castleSpec() {
   return {
@@ -777,6 +778,16 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.parameterSchema[0].targets[0].property).toBe('material.color');
     expect(model.userData.objectSculptSpec.materials[model.userData.objectSculptSpec.componentTree[0].material].color).toBe('#aabbcc');
     expect(spec.parameterSchema[0].targets[0].property).toBe('lattice_color');
+  });
+
+  it('builds frontend models from the shared accepted parameter contract cases', () => {
+    for (const contract of createObjectModelParameterContractCases()) {
+      if (contract.validator !== 'accept') continue;
+      const input = structuredClone(contract.spec);
+      const model = createObjectSculptModel(THREE, input);
+      expect(model.userData.objectSculptSpec.parameterSchema).toHaveLength(input.parameterSchema.length);
+      expect(input.parameterSchema).toEqual(contract.spec.parameterSchema);
+    }
   });
 
 });

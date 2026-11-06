@@ -1,6 +1,8 @@
 import { validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
 import { describe, expect, it } from 'vitest';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
+import { createObjectModelParameterContractCases } from '../../../server/src/shared/object-model-parameter-contract.fixtures.ts';
+import { normalizeObjectModelParameterSchema } from '../../../server/src/shared/object-model-parameter-schema.ts';
 
 function createRadialSpec(count = 8) {
   return {
@@ -154,6 +156,30 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     const invalid = createRadialSpec();
     invalid.parameterSchema[0].step = '1';
     expect(() => validateObjectModelSpecV3(invalid)).toThrow('数值参数步长无效');
+  });
+
+  it('applies the shared cross-layer parameter contract fixtures', () => {
+    for (const contract of createObjectModelParameterContractCases()) {
+      const { spec } = contract;
+      const normalize = () => normalizeObjectModelParameterSchema(spec.parameterSchema, spec.componentTree, spec.materials);
+      const validateRaw = () => validateObjectModelSpecV3(spec);
+
+      if (contract.normalizer === 'accept') {
+        const normalizedParameters = normalize();
+        if (contract.normalizedTarget) expect(normalizedParameters[0].targets[0]).toEqual(contract.normalizedTarget);
+        const normalizedSpec = { ...spec, parameterSchema: normalizedParameters };
+        if (contract.validator === 'accept') {
+          expect(() => validateObjectModelSpecV3(normalizedSpec), contract.id + ' normalized validator').not.toThrow();
+        } else {
+          expect(() => validateObjectModelSpecV3(normalizedSpec), contract.id + ' normalized validator').toThrow();
+        }
+      } else {
+        expect(normalize, contract.id + ' normalizer').toThrow();
+      }
+
+      if (contract.validator === 'accept') expect(validateRaw, contract.id + ' raw validator').not.toThrow();
+      else expect(validateRaw, contract.id + ' raw validator').toThrow();
+    }
   });
 
 });

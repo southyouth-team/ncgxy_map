@@ -67,7 +67,10 @@ export function normalizeObjectModelParameterSchema(
         if (!Number.isFinite(step) || step <= 0 || step > max - min + 0.000001) fail('数值参数步长无效：' + id);
         parameter.step = step;
       }
-      if (typeof raw.unit === 'string') parameter.unit = raw.unit.slice(0, 20);
+      if (raw.unit !== undefined) {
+        if (typeof raw.unit !== 'string' || raw.unit.length > 20) fail('数值参数单位无效：' + id);
+        parameter.unit = raw.unit;
+      }
     } else if (type === 'color') {
       if (typeof raw.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(raw.value)) fail('颜色参数无效：' + id);
     } else if (type === 'boolean') {

@@ -100,7 +100,7 @@ function geometryPoint(value: any, size: number, min = GEOMETRY_POINT_MIN, max =
     && value.every(item => Number.isFinite(Number(item)) && Number(item) >= min && Number(item) <= max);
 }
 function geometryFail(node: any, field: string, reason: string): never {
-  fail('组件几何描述符无效：' + node.id + '.geometryDescriptor.' + field + ' ' + reason);
+  throw new TypeError('组件几何描述符无效：' + node.id + '.geometryDescriptor.' + field + ' ' + reason);
 }
 function geometryCross(a: number[], b: number[], c: number[]) {
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);

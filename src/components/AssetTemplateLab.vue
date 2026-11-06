@@ -172,8 +172,8 @@ async function generateModel() {
     }
     generationStage.value = 2
     status.value = 'AI 结构已返回，正在构建 Three.js 模型…'
-    spec = result?.design?.objectSculptSpec || result?.objectSculptSpec
-    if (!spec) throw new Error('AI 返回结果缺少 ObjectSculptSpec')
+    spec = result?.objectSculptSpec
+    if (!spec) throw new Error('AI 返回结果缺少 ObjectModelSpec 3.0')
     try {
       model = createObjectSculptModel(THREE, spec, { source: 'ai-object-sculpt' })
     } catch (runtimeError) {
@@ -185,7 +185,7 @@ async function generateModel() {
         visualStyle: spec.visualStyle || 'anime-painted',
       })
       const repairedSpec = repaired?.objectSculptSpec
-      if (!repairedSpec) throw new Error('AI 定向修复未返回 ObjectSculptSpec')
+      if (!repairedSpec) throw new Error('AI 定向修复未返回 ObjectModelSpec 3.0')
       model = createObjectSculptModel(THREE, repairedSpec, { source: 'ai-object-sculpt-repaired' })
       spec = repairedSpec
       result = repaired
@@ -403,8 +403,7 @@ async function addParametersFromConversation() {
     parameterInstruction.value = ''
     const added = (result.addedParameters || []).map(item => item.label).join('、')
     const unsupported = (result.unsupported || []).join('；')
-    const generators = (result.addedGenerators || []).map(item => item.id).join('、')
-    status.value = added ? '已新增模板参数：' + added + (generators ? '；结构生成规则：' + generators : '') : '参数设计完成，未新增参数'
+    status.value = added ? '已新增模板参数：' + added : '参数设计完成，未新增参数'
     if (selectedComponentId.value) selectComponent(selectedComponentId.value)
     if (unsupported) error.value = '当前结构暂不支持：' + unsupported
   } catch (e) {

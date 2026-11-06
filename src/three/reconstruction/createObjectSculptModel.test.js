@@ -167,7 +167,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
     const zeroArea = structuredClone(base);
     zeroArea.componentTree[0].geometryDescriptor.points = [
-      [-0.5, 0], [-0.25, 0], [0, 0], [0.25, 0],
+      [-0.5, 0], [0, 0], [0.5, 0],
     ];
     expect(() => createObjectSculptModel(THREE, zeroArea)).toThrow(/面积不能为零/);
   });

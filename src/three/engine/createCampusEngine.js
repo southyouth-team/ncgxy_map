@@ -349,6 +349,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return Array.from(sandboxModels, ([id, model]) => ({ id, name: model.name, spec: model.userData.objectSculptSpec || null }))
   }
 
+  function getSandboxModel(id) {
+    return sandboxModels.get(String(id)) || null
+  }
+
   function selectSandboxModel(id) {
     const model = id ? sandboxModels.get(String(id)) : null
     sandboxSelectedModel = model || null
@@ -2349,5 +2353,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, getSandboxModels, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, getSandboxModels, getSandboxModel, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

@@ -3,11 +3,19 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
+import { createCampusScene } from '../three/world/campus/createCampusScene.js'
+import { createObjectSculptModel } from '../three/reconstruction/createObjectSculptModel.js'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
+const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
 
 const viewport = ref(null)
 const selectedName = ref('')
 const objects = ref([])
 const command = ref('')
+const aiPrompt = ref('')
+const aiModificationPrompt = ref('')
+const aiBusy = ref(false)
 const message = ref('沙盒已就绪。创建一个模型，或输入任务指令。')
 const time = ref(14)
 const weather = ref('clear')
@@ -29,6 +37,7 @@ let sun
 let ambient
 let hemisphere
 let ground
+let campusRoot
 let weatherPoints
 let animationFrame
 let resizeObserver
@@ -45,6 +54,20 @@ function syncObjects() {
   selectedName.value = selected?.name || ''
 }
 
+function registerModel(root, name) {
+  root.name = name || root.name || '模型'
+  root.userData.id = String(++objectId)
+  root.userData.isSandboxModel = true
+  root.position.x += (Math.random() - 0.5) * 3
+  root.position.z += (Math.random() - 0.5) * 3
+  root.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true } })
+  scene.add(root)
+  objectsById.set(root.userData.id, root)
+  selectModel(root)
+  message.value = '已添加建模组：' + root.name
+  return root
+}
+
 function addModel(type) {
   const geometries = {
     box: () => new THREE.BoxGeometry(2, 2, 2),
@@ -59,16 +82,9 @@ function addModel(type) {
     roughness: 0.68,
   })
   const mesh = new THREE.Mesh(geometry, material)
-  mesh.name = (objectTypes.find(item => item.id === type)?.label || '模型') + ' ' + (++objectId)
-  mesh.position.set((Math.random() - 0.5) * 7, type === 'torus' ? 1.4 : 1, (Math.random() - 0.5) * 7)
-  mesh.castShadow = true
-  mesh.receiveShadow = true
-  mesh.userData.id = String(objectId)
-  mesh.userData.isSandboxModel = true
-  scene.add(mesh)
-  objectsById.set(mesh.userData.id, mesh)
-  selectModel(mesh)
-  message.value = '已创建模型：' + mesh.name
+  mesh.name = (objectTypes.find(item => item.id === type)?.label || '模型') + ' ' + (objectId + 1)
+  mesh.position.set(0, type === 'torus' ? 1.4 : 1, 0)
+  registerModel(mesh, mesh.name)
 }
 
 function selectModel(object) {
@@ -104,11 +120,72 @@ function deleteSelected() {
   transform.detach()
   scene.remove(target)
   objectsById.delete(target.userData.id)
-  target.geometry?.dispose()
-  target.material?.dispose()
+  target.traverse(node => {
+    node.geometry?.dispose?.()
+    if (Array.isArray(node.material)) node.material.forEach(material => material?.dispose?.())
+    else node.material?.dispose?.()
+  })
   selected = null
   syncObjects()
   message.value = '已删除模型'
+}
+
+async function generateAiModel() {
+  const prompt = aiPrompt.value.trim()
+  if (!prompt || aiBusy.value) return
+  aiBusy.value = true
+  message.value = '正在调用视觉模型生成独立建模组…'
+  try {
+    const response = await fetch(API_BASE + '/assets/ai-image/generate-object', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({ prompt, objectType: '独立 3D 模型', visualStyle: 'stylized' }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || '模型生成失败：HTTP ' + response.status)
+    const spec = payload.data || payload.result || payload
+    const group = createObjectSculptModel(THREE, spec, { source: 'world-sandbox-ai' })
+    registerModel(group, spec.targetName || 'AI 建模组 ' + (objectId + 1))
+    aiPrompt.value = ''
+  } catch (error) {
+    message.value = 'AI 建模失败：' + (error?.message || '未知错误')
+  } finally {
+    aiBusy.value = false
+  }
+}
+
+async function modifyAiModel() {
+  if (!selected || !aiModificationPrompt.value.trim() || aiBusy.value) return
+  const spec = selected.userData.objectSculptSpec
+  if (!spec) { message.value = '当前选中对象不是 AI 建模组，暂不支持 AI 修改'; return }
+  aiBusy.value = true
+  message.value = '正在根据指令修改建模组…'
+  try {
+    const response = await fetch(API_BASE + '/assets/ai-image/modify-object', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({ objectSculptSpec: spec, selectedNodeIds: [], instruction: aiModificationPrompt.value.trim() }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || '模型修改失败：HTTP ' + response.status)
+    const result = payload.data || payload.result || payload
+    const nextSpec = result.objectSculptSpec || result.spec || result
+    const replacement = createObjectSculptModel(THREE, nextSpec, { source: 'world-sandbox-ai-edit' })
+    replacement.position.copy(selected.position)
+    replacement.rotation.copy(selected.rotation)
+    replacement.scale.copy(selected.scale)
+    const old = selected
+    transform.detach()
+    scene.remove(old)
+    old.traverse(node => { node.geometry?.dispose?.(); if (Array.isArray(node.material)) node.material.forEach(item => item.dispose?.()); else node.material?.dispose?.() })
+    objectsById.delete(old.userData.id)
+    registerModel(replacement, nextSpec.targetName || old.name)
+    aiModificationPrompt.value = ''
+  } catch (error) {
+    message.value = 'AI 修改失败：' + (error?.message || '未知错误')
+  } finally {
+    aiBusy.value = false
+  }
 }
 
 function updateEnvironment() {
@@ -129,7 +206,7 @@ function updateEnvironment() {
   scene.fog.near = weather.value === 'fog' ? 5 : weather.value === 'rain' ? 22 : 48
   scene.fog.far = weather.value === 'fog' ? 58 : weather.value === 'rain' ? 120 : 210
   sun.color.set(weather.value === 'clear' ? '#fff0d2' : '#d0dce2')
-  ground.material.color.set(weather.value === 'snow' ? '#dce4e5' : weather.value === 'rain' ? '#657d78' : '#879b79')
+  if (ground?.material) ground.material.color.set(weather.value === 'snow' ? '#dce4e5' : weather.value === 'rain' ? '#657d78' : '#879b79')
   updateWeather()
 }
 
@@ -182,15 +259,12 @@ function executeTask() {
   else if (/复制|duplicate/i.test(text)) {
     if (!selected) message.value = '请先选择一个模型'
     else {
-      const copy = selected.clone()
-      copy.geometry = selected.geometry.clone()
-      copy.material = selected.material.clone()
+      const copy = selected.clone(true)
+      copy.traverse(node => { if (node.geometry) node.geometry = node.geometry.clone(); if (Array.isArray(node.material)) node.material = node.material.map(item => item.clone()); else if (node.material) node.material = node.material.clone() })
       copy.name = selected.name + ' 副本'
-      copy.userData = { ...selected.userData, id: String(++objectId) }
-      copy.position.x += 2
-      scene.add(copy)
-      objectsById.set(copy.userData.id, copy)
-      selectModel(copy)
+      copy.userData = { ...selected.userData, id: String(objectId + 1) }
+      copy.position.x += 3
+      registerModel(copy, copy.name)
       message.value = '已复制模型'
     }
   } else if (/移动|move/i.test(text)) {
@@ -252,10 +326,12 @@ onMounted(() => {
   const width = Math.max(1, viewport.value.clientWidth)
   const height = Math.max(1, viewport.value.clientHeight)
   scene = new THREE.Scene()
+  campusRoot = createCampusScene(THREE)
+  scene.add(campusRoot)
   scene.background = new THREE.Color('#b8d2df')
   scene.fog = new THREE.Fog('#b8d2df', 48, 210)
   camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 1000)
-  camera.position.set(18, 16, 22)
+  camera.position.set(118, 96, 132)
   renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.setSize(width, height)
@@ -266,7 +342,7 @@ onMounted(() => {
 
   orbit = new OrbitControls(camera, renderer.domElement)
   orbit.enableDamping = true
-  orbit.target.set(0, 1, 0)
+  orbit.target.set(0, 0, 0)
   transform = new TransformControls(camera, renderer.domElement)
   transform.addEventListener('dragging-changed', event => { orbit.enabled = !event.value })
   scene.add(transform.getHelper())
@@ -287,9 +363,11 @@ onMounted(() => {
   )
   ground.rotation.x = -Math.PI / 2
   ground.receiveShadow = true
+  ground.visible = false
   scene.add(ground)
   const grid = new THREE.GridHelper(300, 120, '#61715f', '#aab6a0')
   grid.position.y = 0.012
+  grid.visible = false
   scene.add(grid)
 
   renderer.domElement.addEventListener('pointerdown', selectFromPointer)
@@ -323,13 +401,25 @@ onBeforeUnmount(() => {
   <main class="world-mvp">
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
-      <div class="world-mvp__brand"><strong>WORLD SANDBOX MVP</strong><span>独立三维沙盒 · 不依赖校园场景</span></div>
+      <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>南昌工学院校园场景 · AI 独立建模组</span></div>
       <a href="/">返回地图</a>
     </header>
 
     <aside class="world-mvp__panel">
       <section>
-        <h2>模型</h2>
+        <h2>AI 建模</h2>
+        <div class="world-mvp__command">
+          <input v-model="aiPrompt" placeholder="描述要生成的模型，例如：一座现代图书馆" @keydown.enter="generateAiModel">
+          <button :disabled="aiBusy || !aiPrompt.trim()" @click="generateAiModel">{{ aiBusy ? '生成中' : '生成' }}</button>
+        </div>
+        <div class="world-mvp__command" style="margin-top:7px">
+          <input v-model="aiModificationPrompt" placeholder="修改当前 AI 建模组，例如：增加玻璃幕墙" @keydown.enter="modifyAiModel">
+          <button :disabled="aiBusy || !aiModificationPrompt.trim() || !selected?.userData.objectSculptSpec" @click="modifyAiModel">修改</button>
+        </div>
+        <p class="world-mvp__message">生成结果作为独立建模组加入场景，可整体移动、旋转、缩放和复制。</p>
+      </section>
+      <section>
+        <h2>基础模型</h2>
         <div class="world-mvp__model-grid">
           <button v-for="item in objectTypes" :key="item.id" @click="addModel(item.id)">＋ {{ item.label }}</button>
         </div>
@@ -347,6 +437,10 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
+      <section>
+        <h2>校园场景</h2>
+        <p class="world-mvp__message">已加载南昌工学院校园空间底图，校园建筑、道路、湖泊和公共区域作为场景环境。</p>
+      </section>
       <section>
         <h2>环境</h2>
         <label class="world-mvp__field"><span>时间 <b>{{ String(Math.floor(time)).padStart(2, '0') }}:{{ String(Math.round((time % 1) * 60)).padStart(2, '0') }}</b></span>

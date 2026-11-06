@@ -20,6 +20,8 @@ const editBusy = ref(false)
 const editError = ref('')
 const editHistory = ref([])
 const message = ref('正在初始化 RPG 校园场景…')
+const saveStatus = ref('尚未保存')
+const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
 const weather = ref('clear')
 const wind = ref(20)
@@ -296,6 +298,72 @@ async function handleParameterChange(payload) {
   }
 }
 
+function saveSandbox() {
+  if (!engine) return
+  try {
+    const models = Array.from(objectsById.entries()).map(([id, model]) => ({
+      id,
+      name: model.name,
+      object: model.toJSON(),
+    }))
+    const snapshot = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      environment: {
+        time: Number(time.value),
+        weather: weather.value,
+        wind: Number(wind.value),
+      },
+      selectedModelId: selected?.userData?.sandboxModelId || null,
+      models,
+    }
+    const serialized = JSON.stringify(snapshot)
+    localStorage.setItem(STORAGE_KEY, serialized)
+    saveStatus.value = '已保存 · ' + new Date(snapshot.savedAt).toLocaleTimeString()
+    message.value = '沙盒已保存，刷新页面后会自动恢复'
+  } catch (error) {
+    const reason = error?.name === 'QuotaExceededError' ? '浏览器本地存储空间不足' : (error?.message || '未知错误')
+    saveStatus.value = '保存失败'
+    message.value = '沙盒保存失败：' + reason
+  }
+}
+
+async function restoreSandbox() {
+  let snapshot
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return false
+    snapshot = JSON.parse(raw)
+    if (snapshot?.version !== 1 || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
+    const loader = new THREE.ObjectLoader()
+    for (const item of snapshot.models) {
+      if (!item?.object || !item?.id) continue
+      const model = loader.parse(item.object)
+      model.name = item.name || model.name || '已保存模型'
+      const id = engine.addSandboxModel(model, { name: model.name, id: item.id })
+      objectsById.set(id, model)
+    }
+    if (snapshot.environment) {
+      time.value = Number.isFinite(Number(snapshot.environment.time)) ? Number(snapshot.environment.time) : 14
+      weather.value = snapshot.environment.weather === 'rain' ? 'rain' : 'clear'
+      wind.value = Number.isFinite(Number(snapshot.environment.wind)) ? Number(snapshot.environment.wind) : 20
+      updateEnvironment()
+    }
+    if (snapshot.selectedModelId && objectsById.has(snapshot.selectedModelId)) {
+      selected = objectsById.get(snapshot.selectedModelId)
+      engine.selectSandboxModel(snapshot.selectedModelId)
+    }
+    syncObjects()
+    saveStatus.value = snapshot.savedAt ? '上次保存 · ' + new Date(snapshot.savedAt).toLocaleString() : '已恢复本地场景'
+    message.value = '已恢复上次保存的沙盒场景，共 ' + objectsById.size + ' 个模型'
+    return true
+  } catch (error) {
+    saveStatus.value = '恢复失败'
+    message.value = '本地沙盒恢复失败：' + (error?.message || '保存数据可能已损坏')
+    return false
+  }
+}
+
 function updateEnvironment() {
   if (!engine) return
   engine.setEnvironment({
@@ -358,8 +426,11 @@ onMounted(async () => {
     if (disposed) return
     engine.setMode('thirdPerson')
     engine.setSandboxTransformMode(transformMode.value)
-    updateEnvironment()
-    syncObjects()
+    const restored = await restoreSandbox()
+    if (!restored) {
+      updateEnvironment()
+      syncObjects()
+    }
   } catch (error) {
     message.value = '校园场景初始化失败：' + (error?.message || '未知错误')
   }
@@ -378,7 +449,7 @@ onBeforeUnmount(() => {
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
       <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>RPG 校园探索 · AI 独立建模组</span></div>
-      <a href="/">返回地图</a>
+      <div class="world-mvp__header-actions"><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
     </header>
 
     <aside class="world-mvp__panel">
@@ -470,6 +541,9 @@ onBeforeUnmount(() => {
 .world-mvp__brand strong,.world-mvp__brand span { display:block; }
 .world-mvp__brand strong { font-size:13px; letter-spacing:1.1px; }
 .world-mvp__brand span { margin-top:4px; color:#8e9fa3; font-size:10px; }
+.world-mvp__header-actions { display:flex; align-items:center; gap:9px; }
+.world-mvp__save-status { color:#a9bbb3; font-size:10px; }
+.world-mvp .world-mvp__save-button { border-color:#8fbea0; color:#14251c; background:#a5c9b1; font-weight:700; }
 .world-mvp a,.world-mvp button { border:1px solid rgba(255,255,255,.13); border-radius:7px; padding:8px 10px; color:#dce7e3; background:rgba(255,255,255,.06); text-decoration:none; cursor:pointer; font:inherit; font-size:11px; }
 .world-mvp button:hover,.world-mvp a:hover { border-color:#a5c9b1; background:rgba(165,201,177,.13); }
 .world-mvp button:disabled { opacity:.35; cursor:not-allowed; }

@@ -87,4 +87,10 @@ describe('ObjectModelSpec parameter schema normalization', () => {
     }], tree, materials);
     expect(current).toEqual(proposed);
   });
+  it('requires numeric protocol values instead of coercing strings', () => {
+    expect(() => normalizeObjectModelParameterSchema([
+      { id: 'string-width', type: 'number', value: '2', min: 1, max: 4, targets: [{ nodeId: 'panel', property: 'dimensions.width' }] },
+    ], tree, materials)).toThrow('数值参数范围无效');
+  });
+
 });

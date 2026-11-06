@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptParameter } from './createObjectSculptModel.js';
+import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptParameter, resolveEditableParameterTarget } from './createObjectSculptModel.js';
 
 function castleSpec() {
   return {
@@ -750,6 +750,28 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     applyObjectSculptParameter(THREE, model, 'rib-radius', 0.1);
     expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'rib').geometryDescriptor.radius).toBeCloseTo(0.1);
     expect(model.userData.componentGroups.get('rib').getObjectByName('rib:mesh').geometry.parameters.radius).toBeCloseTo(0.1);
+  });
+
+  it('uses the shared parameter target resolver and normalizes legacy material aliases at runtime', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
+      componentTree: [{ id: 'wall-panel', primitive: 'box', material: 'wall', dimensions: { width: 2, height: 2, depth: 0.2 } }],
+      parameterSchema: [{
+        id: 'legacy-wall-color', type: 'color', value: '#aabbcc',
+        targets: [{ nodeId: 'wall-panel', property: 'lattice_color' }],
+      }],
+    };
+    expect(resolveEditableParameterTarget(
+      { id: 'node', primitive: 'box', geometryDescriptor: { label: 'custom' } },
+      {},
+      'geometryDescriptor.label',
+    )).toMatchObject({ value: 'custom', kind: 'select' });
+
+    const model = createObjectSculptModel(THREE, spec);
+    expect(model.userData.objectSculptSpec.parameterSchema[0].targets[0].property).toBe('material.color');
+    expect(model.userData.objectSculptSpec.materials[model.userData.objectSculptSpec.componentTree[0].material].color).toBe('#aabbcc');
+    expect(spec.parameterSchema[0].targets[0].property).toBe('lattice_color');
   });
 
 });

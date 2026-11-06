@@ -1,4 +1,6 @@
 import { getObjectModelGeometryCapability, validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
+import { normalizeObjectModelMaterialParameterAliases } from '../../../server/src/shared/object-model-parameter-schema.ts';
+import { resolveObjectModelParameterTarget } from '../../../server/src/shared/object-model-property-resolver.ts';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
 /**
  * Bounded ObjectSculptSpec -> Three.js runtime adapter.
@@ -517,43 +519,8 @@ function createGeometry(THREE, node) {
  * a bounded subset and preserves the original spec outside the runtime object.
  */
 export function resolveEditableParameterTarget(node, materials, property) {
-  if (!node || typeof property !== 'string' || property.length > 160) return null;
-  const parts = property.split('.');
-  if (parts.some(part => !/^(?:[a-zA-Z][a-zA-Z0-9_]{0,39}|0|[1-9][0-9]{0,2})$/.test(part) || ['__proto__','prototype','constructor'].includes(part))) return null;
-  if (property === 'visibility.visible') return { value: node.hidden !== true, kind: 'boolean' };
-  if (property === 'geometry.primitive') return typeof node.primitive === 'string' ? { value: node.primitive, kind: 'select' } : null;
-  const root = parts[0];
-  if (root === 'material' && parts.length === 2 && typeof node.material === 'string') {
-    const material = materials?.[node.material];
-    if (!material || !Object.prototype.hasOwnProperty.call(material, parts[1])) return null;
-    const value = material[parts[1]];
-    if (value === null || typeof value === 'object') return null;
-    return { value, kind: typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? 'color' : typeof value };
-  }
-  if (root === 'transform' && ['position','rotation','scale'].includes(parts[1]) && parts.length === 3 && ['x','y','z'].includes(parts[2])) {
-    const index = 'xyz'.indexOf(parts[2]);
-    const value = node.transform?.[parts[1]]?.[index] ?? (parts[1] === 'scale' ? 1 : 0);
-    return Number.isFinite(Number(value)) ? { value: Number(value), kind: 'number' } : null;
-  }
-  if (!['dimensions','geometryDescriptor'].includes(root) || parts.length < 2 || parts.length > 4) return null;
-  let value = node[root];
-  for (const part of parts.slice(1)) {
-    if (!value || typeof value !== 'object') return null;
-    if (Array.isArray(value)) {
-      const index = Number(part);
-      if (!Number.isInteger(index) || index < 0 || index >= value.length || index > 127) return null;
-      value = value[index];
-    } else {
-      if (!Object.prototype.hasOwnProperty.call(value, part)) return null;
-      value = value[part];
-    }
-  }
-  if (value === null || typeof value === 'object') return null;
-  if (typeof value === 'number' && Number.isFinite(value)) return { value, kind: 'number' };
-  if (typeof value === 'boolean') return { value, kind: 'boolean' };
-  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return { value, kind: 'color' };
-  if (typeof value === 'string') return { value, kind: 'select' };
-  return null;
+  const resolved = resolveObjectModelParameterTarget(node, materials, property);
+  return resolved ? { value: resolved.value, kind: resolved.kind } : null;
 }
 
 function setEditableParameterTarget(node, materials, property, value) {
@@ -630,10 +597,16 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   if (!THREE?.Group || !THREE?.Mesh || !THREE?.MeshStandardMaterial) {
     throw new TypeError('Three.js runtime is required');
   }
-  validateObjectModelSpecV3(spec);
+  // Normalize supported legacy material aliases on a copy before validation
+  // and execution. The caller's persisted object is never mutated.
+  const compatibleSpec = {
+    ...spec,
+    parameterSchema: normalizeObjectModelMaterialParameterAliases(spec.parameterSchema),
+  };
+  validateObjectModelSpecV3(compatibleSpec);
   // 3.0 is the canonical declarative protocol. Compile it into the bounded
   // component-tree execution form only at the runtime adapter boundary.
-  const parameterizedSpec = applyObjectModelParameterValues(spec);
+  const parameterizedSpec = applyObjectModelParameterValues(compatibleSpec);
   const effectiveSpec = compileObjectModelSpec(parameterizedSpec);
   validateObjectSculptSpec(effectiveSpec);
   const renderSpec = effectiveSpec;

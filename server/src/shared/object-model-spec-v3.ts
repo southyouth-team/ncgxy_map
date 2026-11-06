@@ -1,4 +1,5 @@
 import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from './object-model-property-resolver';
+import { normalizeObjectModelMaterialParameterProperty } from './object-model-parameter-schema';
 /**
  * Canonical ObjectModelSpec 3.0 structural validator.
  *
@@ -288,11 +289,15 @@ export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | '
     if (!['number', 'color', 'boolean', 'select'].includes(parameter.type)) fail('参数类型不受支持：' + parameter.id);
     if (parameter.type === 'number') {
       if (![parameter.value, parameter.min, parameter.max].every(Number.isFinite) || parameter.min > parameter.max || parameter.value < parameter.min || parameter.value > parameter.max) fail('参数数值或范围无效：' + parameter.id);
+      if (parameter.step !== undefined && (!Number.isFinite(parameter.step) || parameter.step <= 0 || parameter.step > parameter.max - parameter.min + 0.000001)) fail('数值参数步长无效：' + parameter.id);
+      if (parameter.unit !== undefined && (typeof parameter.unit !== 'string' || parameter.unit.length > 20)) fail('数值参数单位无效：' + parameter.id);
     } else if (parameter.type === 'color') {
       if (typeof parameter.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(parameter.value)) fail('颜色参数无效：' + parameter.id);
     } else if (parameter.type === 'boolean') {
       if (typeof parameter.value !== 'boolean') fail('布尔参数无效：' + parameter.id);
-    } else if (!Array.isArray(parameter.options) || !parameter.options.some((option: any) => option?.value === parameter.value)) {
+    } else if (!Array.isArray(parameter.options) || parameter.options.length < 1 || parameter.options.length > 30
+      || !parameter.options.some((option: any) => option?.value === parameter.value)
+      || parameter.options.some((option: any) => !isRecord(option) || typeof option.value !== 'string' || option.value.length > 80)) {
       fail('枚举参数无效：' + parameter.id);
     }
     if (!Array.isArray(parameter.targets) || parameter.targets.length > 100) fail('参数 targets 格式无效：' + parameter.id);
@@ -359,16 +364,17 @@ export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | '
       const node = nodes.get(target?.nodeId);
       if (!node) fail('参数目标组件不存在：' + String(target?.nodeId));
       if ((node.kind || 'mesh') === 'group' && !String(target.property || '').startsWith('transform.') && target.property !== 'visibility.visible') fail('Group 节点仅支持变换和显隐参数：' + node.id);
-      const resolvedTarget = resolveObjectModelParameterTarget(node, materials, target.property);
+      const property = normalizeObjectModelMaterialParameterProperty(target.property);
+      const resolvedTarget = resolveObjectModelParameterTarget(node, materials, property);
       const mode = target.mode || 'set';
-      if (!resolvedTarget) fail('参数目标属性不受支持或不存在：' + parameter.id + '.' + target.property);
-      if (!isObjectModelParameterTargetTypeCompatible(parameter.type, resolvedTarget, mode, target.property)) fail('参数类型与目标属性的数据类型不匹配：' + parameter.id + '.' + target.property);
+      if (!resolvedTarget) fail('参数目标属性不受支持或不存在：' + parameter.id + '.' + String(property));
+      if (!isObjectModelParameterTargetTypeCompatible(parameter.type, resolvedTarget, mode, property)) fail('参数类型与目标属性的数据类型不匹配：' + parameter.id + '.' + String(property));
       if (!['set', 'multiply', 'add', 'visible-from', 'visible-through'].includes(mode)) fail('参数目标运算不受支持：' + parameter.id);
-      if (target.property.startsWith('material.') && mode !== 'set') fail('材质参数仅支持 set：' + parameter.id);
-      if (['visible-from', 'visible-through'].includes(mode) && (target.property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) fail('可见性阈值参数无效：' + parameter.id);
-      if (target.property === 'visibility.visible' && !['set', 'visible-from', 'visible-through'].includes(mode)) fail('可见性参数运算无效：' + parameter.id);
-      if (target.property === 'geometry.primitive' && mode !== 'set') fail('几何类型参数仅支持 set：' + parameter.id);
-      if (target.property === 'geometry.primitive' && parameter.options.some((option: any) => !getObjectModelGeometryCapability(option?.value))) fail('几何类型参数包含未注册的 primitive：' + parameter.id);
+      if (String(property).startsWith('material.') && mode !== 'set') fail('材质参数仅支持 set：' + parameter.id);
+      if (['visible-from', 'visible-through'].includes(mode) && (property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) fail('可见性阈值参数无效：' + parameter.id);
+      if (property === 'visibility.visible' && !['set', 'visible-from', 'visible-through'].includes(mode)) fail('可见性参数运算无效：' + parameter.id);
+      if (property === 'geometry.primitive' && mode !== 'set') fail('几何类型参数仅支持 set：' + parameter.id);
+      if (property === 'geometry.primitive' && parameter.options.some((option: any) => !getObjectModelGeometryCapability(option?.value))) fail('几何类型参数包含未注册的 primitive：' + parameter.id);
     }
   }
   return { nodes, parameterById, componentCount: nodes.size, expandedComponentCount: expandedCount };

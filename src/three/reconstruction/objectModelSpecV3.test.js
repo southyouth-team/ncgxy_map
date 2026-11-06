@@ -142,6 +142,22 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
   });
 });
 
+  it('accepts legacy material target aliases at the shared protocol boundary', () => {
+    const legacy = createRadialSpec();
+    legacy.materials.steel.color = '#777777';
+    legacy.parameterSchema.push({
+      id: 'legacy-color', label: 'Legacy color', type: 'color', value: '#aabbcc',
+      targets: [{ nodeId: 'rib', property: 'lattice_color' }],
+    });
+    expect(() => validateObjectModelSpecV3(legacy)).not.toThrow();
+  });
+
+  it('rejects numeric-string steps consistently with parameter normalization', () => {
+    const invalid = createRadialSpec();
+    invalid.parameterSchema[0].step = '1';
+    expect(() => validateObjectModelSpecV3(invalid)).toThrow('数值参数步长无效');
+  });
+
 describe('ObjectModelSpec 3.0 compiler', () => {
   it('expands arbitrary axis-angle instance distributions from expressions', () => {
     const compiled = compileObjectModelSpec(createRadialSpec());

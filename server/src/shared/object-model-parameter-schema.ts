@@ -53,13 +53,13 @@ export function normalizeObjectModelParameterSchema(
     const parameter: Record<string, any> = { id, label: String(raw.label || id).slice(0, 100), type, value: raw.value };
 
     if (type === 'number') {
-      const min = Number(raw.min), max = Number(raw.max), value = Number(raw.value);
+      const min = raw.min, max = raw.max, value = raw.value;
       if (![min, max, value].every(Number.isFinite) || min > max || value < min || value > max) fail('数值参数范围无效：' + id);
       parameter.min = min;
       parameter.max = max;
       parameter.value = value;
       if (raw.step !== undefined) {
-        const step = Number(raw.step);
+        const step = raw.step;
         if (!Number.isFinite(step) || step <= 0 || step > max - min + 0.000001) fail('数值参数步长无效：' + id);
         parameter.step = step;
       }
@@ -101,7 +101,7 @@ export function normalizeObjectModelParameterSchema(
 
       const normalizedTarget: Record<string, any> = { nodeId: target.nodeId, property: target.property, mode };
       if (target.property === 'visibility.visible' && ['visible-from', 'visible-through'].includes(mode)) {
-        const threshold = Number(target.threshold);
+        const threshold = target.threshold;
         if (!Number.isFinite(threshold) || threshold < 1 || threshold > 100) fail('可见性阈值无效：' + id);
         normalizedTarget.threshold = threshold;
       }

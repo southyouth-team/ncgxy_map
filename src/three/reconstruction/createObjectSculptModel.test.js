@@ -114,14 +114,31 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('new-part').parent).toBe(model.userData.componentGroups.get('root'));
   });
 
-  it('preserves migrated descendants when a parent subtree is removed by a server ChangeSet', () => {
-    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'assembly',kind:'group',parent:'root'},{id:'shell',parent:'assembly',primitive:'box',dimensions:{width:2,height:2,depth:2}},{id:'detail',parent:'shell',primitive:'sphere',dimensions:{width:0.5,height:0.5,depth:0.5}}]};
+  it('preserves migrated descendant resources and disposes only removed component resources', () => {
+    const spec={schemaVersion:'3.0',componentTree:[
+      {id:'root',kind:'group'},
+      {id:'assembly',kind:'group',parent:'root'},
+      {id:'shell',parent:'assembly',primitive:'box',dimensions:{width:2,height:2,depth:2}},
+      {id:'detail',parent:'shell',primitive:'sphere',dimensions:{width:0.5,height:0.5,depth:0.5}},
+      {id:'discarded',parent:'assembly',primitive:'box',dimensions:{width:0.25,height:0.25,depth:0.25}},
+    ]};
     const model=createObjectSculptModel(THREE,spec);
     const assembly=model.userData.componentGroups.get('assembly');
     const shell=model.userData.componentGroups.get('shell');
     const detail=model.userData.componentGroups.get('detail');
+    const discarded=model.userData.componentGroups.get('discarded');
+    const shellMesh=shell.getObjectByName('shell:mesh');
+    const detailMesh=detail.getObjectByName('detail:mesh');
+    const discardedMesh=discarded.getObjectByName('discarded:mesh');
+    const disposeCount={shellGeometry:0,shellMaterial:0,detailGeometry:0,detailMaterial:0,discardedGeometry:0,discardedMaterial:0};
+    shellMesh.geometry.addEventListener('dispose',()=>disposeCount.shellGeometry++);
+    shellMesh.material.addEventListener('dispose',()=>disposeCount.shellMaterial++);
+    detailMesh.geometry.addEventListener('dispose',()=>disposeCount.detailGeometry++);
+    detailMesh.material.addEventListener('dispose',()=>disposeCount.detailMaterial++);
+    discardedMesh.geometry.addEventListener('dispose',()=>disposeCount.discardedGeometry++);
+    discardedMesh.material.addEventListener('dispose',()=>disposeCount.discardedMaterial++);
     const next=structuredClone(model.userData.objectSculptSpec);
-    next.componentTree=next.componentTree.filter(node=>node.id!=='assembly');
+    next.componentTree=next.componentTree.filter(node=>node.id!=='assembly'&&node.id!=='discarded');
     next.componentTree.find(node=>node.id==='shell').parent='root';
     const changeSetResult={
       objectModelSpec:next,
@@ -129,18 +146,19 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         {type:'replace-component',nodeId:'shell',component:next.componentTree.find(node=>node.id==='shell')},
         {type:'remove-component',nodeId:'assembly',cascade:true},
       ],
-      affectedNodeIds:['shell','assembly'],
+      affectedNodeIds:['shell','assembly','discarded'],
       affectedMaterialIds:[],
     };
     applyObjectSculptComponentChanges(THREE,model,next,changeSetResult);
     expect(model.userData.componentGroups.has('assembly')).toBe(false);
+    expect(model.userData.componentGroups.has('discarded')).toBe(false);
     expect(model.userData.componentGroups.get('shell')).toBe(shell);
     expect(model.userData.componentGroups.get('detail')).toBe(detail);
     expect(shell.parent).toBe(model.userData.componentGroups.get('root'));
     expect(detail.parent).toBe(shell);
     expect(assembly.parent).toBe(null);
+    expect(disposeCount).toEqual({shellGeometry:0,shellMaterial:0,detailGeometry:0,detailMaterial:0,discardedGeometry:1,discardedMaterial:1});
   });
-
   it('attaches nested additions in parent-first order from a server ChangeSet', () => {
     const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'}]};
     const model=createObjectSculptModel(THREE,spec);

@@ -15,8 +15,15 @@ const instruction = ref('')
 const selectedPartId = ref('')
 const selectedPartName = ref('整体模型')
 const parameterValues = ref({})
-const previewParts = computed(() => props.model?.userData?.proceduralModelParts || [])
-const parameters = computed(() => props.model?.userData?.proceduralModelParameters || [])
+const previewParts = ref([])
+const parameters = ref([])
+
+function syncModelMetadata(model = props.model) {
+  const userData = model?.userData || {}
+  previewParts.value = Array.isArray(userData.proceduralModelParts) ? [...userData.proceduralModelParts] : []
+  parameters.value = Array.isArray(userData.proceduralModelParameters) ? [...userData.proceduralModelParameters] : []
+  parameterValues.value = { ...(userData.proceduralModelParameterValues || {}) }
+}
 
 let renderer = null
 let scene = null
@@ -50,7 +57,7 @@ function syncPreview() {
   camera.updateProjectionMatrix()
   controls.target.set(0, 0, 0)
   controls.update()
-  parameterValues.value = { ...(props.model.userData.proceduralModelParameterValues || {}) }
+  syncModelMetadata(props.model)
   selectedPartId.value = ''
   selectedPartName.value = '整体模型'
   render()
@@ -101,7 +108,10 @@ function submitEdit() {
   emit('edit', { instruction: text, selectedPartId: selectedPartId.value, parameterValues: parameterValues.value })
   instruction.value = ''
 }
-watch(() => props.model, syncPreview)
+watch(() => props.model, (model) => {
+  syncModelMetadata(model)
+  syncPreview()
+}, { flush: 'post' })
 onMounted(() => {
   scene = new THREE.Scene()
   scene.background = new THREE.Color('#17242b')

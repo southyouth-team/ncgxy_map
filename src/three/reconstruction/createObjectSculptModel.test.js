@@ -702,8 +702,17 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const countInstances = () => [...model.userData.componentGroups.values()]
       .filter(group => group.userData.componentSourceId === 'rib').length;
     expect(countInstances()).toBe(4);
+    const sourceMappedMeshes = () => {
+      const meshes = [];
+      model.traverse(object => { if (object.isMesh) meshes.push(object); });
+      return meshes;
+    };
+    expect(sourceMappedMeshes()).toHaveLength(4);
+    expect(sourceMappedMeshes().every(mesh => mesh.userData.componentSourceId === 'rib')).toBe(true);
     applyObjectSculptParameter(THREE, model, 'rib-count', 7);
     expect(countInstances()).toBe(7);
+    expect(sourceMappedMeshes()).toHaveLength(7);
+    expect(sourceMappedMeshes().every(mesh => mesh.userData.componentSourceId === 'rib')).toBe(true);
     expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(7);
   });
 

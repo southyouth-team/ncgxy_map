@@ -122,7 +122,39 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('generator.templateRootId 必须指向 componentTree 中 kind="group" 的节点');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
     expect(systemPrompt).toContain('loft 使用 sections');
+    expect(systemPrompt).toContain('geometryDescriptor.radius 必须是 0.01-10');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
+  });
+
+  it('repairs an out-of-range tube radius during first-generation validation', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const invalidSpec = {
+      schemaVersion: '2.0',
+      materials: { steel: { color: '#777777' } },
+      componentTree: [{
+        id: 'lattice_rib_cw_2', primitive: 'tube',
+        dimensions: { width: 2, height: 2, depth: 2 },
+        geometryDescriptor: { path: [[0, -0.4, 0], [0, 0.4, 0]], radius: 12 },
+      }],
+    };
+    const repairedSpec = {
+      ...invalidSpec,
+      componentTree: [{
+        ...invalidSpec.componentTree[0],
+        geometryDescriptor: { ...invalidSpec.componentTree[0].geometryDescriptor, radius: 0.08 },
+      }],
+    };
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(invalidSpec) } }] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(repairedSpec) } }] }) });
+    global.fetch = fetchMock as never;
+
+    const result = await service.generateObjectFromPrompt('一个格栅结构', '格栅', 'stylized');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).messages[0].content).toContain('lattice_rib_cw_2.geometryDescriptor.radius');
+    expect(result.objectSculptSpec.componentTree[0].geometryDescriptor.radius).toBe(0.08);
+    expect(result.repair.strategy).toBe('targeted-structure-repair');
   });
 
   it('analyzes reference-image proportions and spatial relations before generating geometry', async () => {

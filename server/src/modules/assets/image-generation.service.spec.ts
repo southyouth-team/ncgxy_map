@@ -166,23 +166,24 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('type:"indexed-mesh"');
     expect(systemPrompt).toContain('positions:[x,y,z,...],indices:[a,b,c,...]');
     expect(systemPrompt).toContain('旧式 geometryDescriptor 仍可用于兼容构造');
-    expect(systemPrompt).toContain('operations');
-    expect(systemPrompt).toContain('sourceRootId 指向 componentTree 中作为复制根节点的组件及其完整子树（Group 或 Mesh 均可）');
+    expect(systemPrompt).toContain('MVP 生成阶段不使用 instance operations、sourceRootId 或表达式参数绑定');
+    expect(systemPrompt).toContain('重复窗户、栏杆、立柱、车轮、叶片等结构必须直接展开');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
     expect(systemPrompt).toContain('不受预置几何类型限制');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 
-  it('accepts an instance operation whose source root is a mesh component', async () => {
+  it('ignores AI instance operations in the MVP generation path', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
-    const spec = createTeachingBuildingSpec('ground-left-window');
+    const spec = createTeachingBuildingSpec('placeFrontLowerRightWindows');
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ choices: [{ message: { content: JSON.stringify(spec) } }] }),
     }) as never;
 
     const result = await service.generateObjectFromPrompt('生成教学楼窗户阵列', '教学楼', 'realistic');
-    expect(result.objectSculptSpec.operations[0].sourceRootId).toBe('ground-left-window');
+    expect(result.objectSculptSpec.operations).toEqual([]);
+    expect(result.objectSculptSpec.componentTree).toHaveLength(4);
   });
 
   it('keeps the world MVP profile implementation-agnostic', async () => {

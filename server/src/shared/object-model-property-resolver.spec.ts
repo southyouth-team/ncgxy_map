@@ -3,6 +3,7 @@ import {
   isObjectModelParameterTargetTypeCompatible,
   resolveObjectModelParameterTarget,
 } from './object-model-property-resolver';
+import { validateObjectModelSpecV3 } from './object-model-spec-v3';
 
 describe('ObjectModelSpec parameter target resolver', () => {
   const node = {
@@ -47,5 +48,46 @@ describe('ObjectModelSpec parameter target resolver', () => {
     expect(resolveObjectModelParameterTarget({ id: 'empty' }, {}, 'transform.scale.z')).toMatchObject({ kind: 'number', value: 1 });
     expect(resolveObjectModelParameterTarget({ id: 'empty' }, {}, 'transform.position.x')).toMatchObject({ kind: 'number', value: 0 });
     expect(resolveObjectModelParameterTarget(node, materials, 'material.missing')).toBeNull();
+  });
+
+  it('applies the shared visibility typing rules in the canonical protocol validator', () => {
+    const createSpec = (parameter: any) => ({
+      schemaVersion: '3.0',
+      materials: {},
+      componentTree: [{
+        id: 'body',
+        primitive: 'box',
+        dimensions: { width: 2, height: 2, depth: 2 },
+      }],
+      parameterSchema: [parameter],
+    });
+
+    expect(() => validateObjectModelSpecV3(createSpec({
+      id: 'visible',
+      label: '显示',
+      type: 'boolean',
+      value: true,
+      targets: [{ nodeId: 'body', property: 'visibility.visible', mode: 'set' }],
+    }))).not.toThrow();
+
+    expect(() => validateObjectModelSpecV3(createSpec({
+      id: 'visible-distance',
+      label: '显示距离',
+      type: 'number',
+      value: 10,
+      min: 1,
+      max: 100,
+      targets: [{ nodeId: 'body', property: 'visibility.visible', mode: 'visible-from', threshold: 10 }],
+    }))).not.toThrow();
+
+    expect(() => validateObjectModelSpecV3(createSpec({
+      id: 'invalid-visible-distance',
+      label: '错误的显示距离',
+      type: 'number',
+      value: 10,
+      min: 1,
+      max: 100,
+      targets: [{ nodeId: 'body', property: 'visibility.visible', mode: 'set' }],
+    }))).toThrow('参数类型与目标属性的数据类型不匹配');
   });
 });

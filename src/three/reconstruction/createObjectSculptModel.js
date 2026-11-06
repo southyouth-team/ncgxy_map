@@ -6,8 +6,6 @@ import { compileObjectModelSpec } from './objectModelSpecV3.js';
  * This is the first integration seam for img2threejs-style component-tree specs.
  * It interprets declarative geometry only; it never evaluates model-generated JavaScript.
  */
-const MAX_COMPONENTS = 300;
-const MAX_HIERARCHY_DEPTH = 16;
 const MAX_DIMENSION = 100;
 const MAX_SEGMENTS = 48;
 const DEFAULT_MATERIAL = Object.freeze({ color: '#b8b8b8', roughness: 0.82, metalness: 0 });
@@ -613,87 +611,15 @@ function applyObjectModelParameterValues(input) {
 }
 
 export function validateObjectSculptSpec(spec) {
-  validateObjectModelSpecV3(spec);
-  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new TypeError('ObjectSculptSpec 必须是 JSON 对象');
-  if (spec.schemaVersion !== '3.0') throw new TypeError('仅支持 ObjectModelSpec 3.0');
-  if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) throw new TypeError('ObjectModelSpec 3.0 不接受 generators/constraints');
-  if (!Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > MAX_COMPONENTS) {
-    throw new RangeError('componentTree 数量必须在 1 到 ' + MAX_COMPONENTS + ' 之间');
-  }
-  const ids = new Set();
-  const nodes = new Map();
+  const validation = validateObjectModelSpecV3(spec);
+  // These are executor resource-safety limits, not protocol schema rules.
   for (const node of spec.componentTree) {
-    if (!node || typeof node !== 'object' || Array.isArray(node)) throw new TypeError('组件节点必须是对象');
-    if (typeof node.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(node.id)) throw new TypeError('组件 id 无效');
-    if (ids.has(node.id)) throw new TypeError('组件 id 重复：' + node.id);
-    ids.add(node.id);
-    nodes.set(node.id, node);
-    const kind = node.kind || 'mesh';
-    if (!['group', 'mesh'].includes(kind)) throw new TypeError('组件 kind 无效：' + node.id);
-    if (kind === 'mesh') {
-      if (typeof node.primitive !== 'string' || !node.primitive) throw new TypeError('Mesh 组件缺少 primitive：' + node.id);
-      if (!node.dimensions || typeof node.dimensions !== 'object') throw new TypeError('Mesh 组件缺少 dimensions：' + node.id);
-    }
-    finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
-    finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
-    finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
-  }
-  for (const node of spec.componentTree) {
-    if (node.parent !== undefined && node.parent !== null && !nodes.has(node.parent)) {
-      throw new TypeError('组件父节点不存在：' + node.id + ' -> ' + node.parent);
-    }
-    const visited = new Set([node.id]);
-    let parent = node.parent;
-    let depth = 1;
-    while (parent !== undefined && parent !== null) {
-      if (visited.has(parent)) throw new TypeError('组件层级存在循环引用：' + node.id);
-      visited.add(parent);
-      depth += 1;
-      if (depth > MAX_HIERARCHY_DEPTH) throw new RangeError('组件层级超过 ' + MAX_HIERARCHY_DEPTH + ' 层');
-      parent = nodes.get(parent)?.parent;
+    const scale = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
+    if (scale.some(value => Math.abs(value) < 0.001 || Math.abs(value) > 20)) {
+      throw new RangeError(node.id + '.scale 超出允许范围');
     }
   }
-
-  const parameterIds = new Set();
-  if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) {
-    throw new RangeError('parameterSchema 最多允许 100 个参数');
-  }
-  for (const parameter of spec.parameterSchema || []) {
-    if (!parameter || typeof parameter !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(parameter.id || '') || parameterIds.has(parameter.id)) {
-      throw new TypeError('参数 ID 无效或重复');
-    }
-    parameterIds.add(parameter.id);
-    if (!['number','color','boolean','select'].includes(parameter.type)) throw new TypeError('参数类型不受支持：' + parameter.type);
-    if (parameter.type === 'number') {
-      if (!Number.isFinite(parameter.value) || !Number.isFinite(parameter.min) || !Number.isFinite(parameter.max) || parameter.min > parameter.max || parameter.value < parameter.min || parameter.value > parameter.max) {
-        throw new RangeError('参数数值或范围无效：' + parameter.id);
-      }
-    } else if (parameter.type === 'color' && (typeof parameter.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(parameter.value))) {
-      throw new TypeError('颜色参数无效：' + parameter.id);
-    } else if (parameter.type === 'boolean' && typeof parameter.value !== 'boolean') {
-      throw new TypeError('布尔参数无效：' + parameter.id);
-    } else if (parameter.type === 'select' && (!Array.isArray(parameter.options) || !parameter.options.some(option => option.value === parameter.value))) {
-      throw new TypeError('枚举参数无效：' + parameter.id);
-    }
-    if (!Array.isArray(parameter.targets) || parameter.targets.length > 100 || (parameter.targets.length < 1 && parameter.operationControl !== true)) throw new TypeError('参数目标无效：' + parameter.id);
-    for (const target of parameter.targets) {
-      if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
-      if (nodes.get(target.nodeId).kind === 'group' && !target.property.startsWith('transform.') && target.property !== 'visibility.visible') throw new TypeError('Group 节点仅支持变换和显隐参数：' + target.nodeId);
-      const binding = resolveEditableParameterTarget(nodes.get(target.nodeId), spec.materials || {}, target.property);
-      if (!binding) throw new TypeError('参数目标属性不受支持或不存在、不可编辑或不是标量：' + target.property);
-      const visibilityThreshold = target.property === 'visibility.visible' && ['visible-from','visible-through'].includes(target.mode);
-      if (parameter.type === 'number' && binding.kind !== 'number' && !visibilityThreshold
-        || parameter.type === 'color' && binding.kind !== 'color'
-        || parameter.type === 'boolean' && binding.kind !== 'boolean'
-        || parameter.type === 'select' && binding.kind !== 'select') throw new TypeError('参数类型与目标属性的数据类型不匹配：' + target.property);
-      if (!['set','multiply','add','visible-from','visible-through'].includes(target.mode || 'set')) throw new TypeError('参数目标运算不受支持：' + target.mode);
-      if (target.property.startsWith('material.') && target.mode !== 'set') throw new TypeError('材质参数仅支持 set');
-      if (['visible-from','visible-through'].includes(target.mode) && target.property !== 'visibility.visible') throw new TypeError('可见性阈值运算只能用于 visibility.visible');
-      if (target.property === 'visibility.visible' && !['set','visible-from','visible-through'].includes(target.mode || 'set')) throw new TypeError('可见性参数运算无效');
-      if (target.property === 'geometry.primitive' && !['set'].includes(target.mode || 'set')) throw new TypeError('几何类型参数仅支持 set');
-    }
-  }
-  return { nodes, componentCount: nodes.size };
+  return validation;
 }
 
 /**

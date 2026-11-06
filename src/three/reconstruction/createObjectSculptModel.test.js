@@ -63,6 +63,37 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('keeps the live model intact and disposes staged groups when a later addition fails', () => {
+    const model = createObjectSculptModel(THREE, {
+      schemaVersion: '3.0',
+      componentTree: [{ id: 'root', kind: 'group' }],
+    });
+    const rootGroup = model.userData.componentGroups.get('root');
+    const previousGroups = model.userData.componentGroups;
+    const previousSpec = structuredClone(model.userData.parameterBaseSpec);
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose');
+    const materialDispose = vi.spyOn(THREE.MeshStandardMaterial.prototype, 'dispose');
+    const next = structuredClone(model.userData.objectSculptSpec);
+    next.componentTree.push(
+      { id: 'staged-valid', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+      { id: 'staged-invalid', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 }, transform: { scale: [0, 1, 1] } },
+    );
+    try {
+      expect(() => applyObjectSculptComponentChanges(THREE, model, next)).toThrow('staged-invalid.scale 超出允许范围');
+      expect(model.userData.componentGroups).toBe(previousGroups);
+      expect(model.userData.componentGroups.get('root')).toBe(rootGroup);
+      expect(rootGroup.parent).toBe(model);
+      expect(rootGroup.children).toHaveLength(0);
+      expect(model.userData.parameterBaseSpec).toEqual(previousSpec);
+      expect(model.userData.objectSculptSpec.componentTree).toHaveLength(1);
+      expect(geometryDispose).toHaveBeenCalledTimes(2);
+      expect(materialDispose).toHaveBeenCalledTimes(2);
+    } finally {
+      geometryDispose.mockRestore();
+      materialDispose.mockRestore();
+    }
+  });
+
   it('builds an arbitrary indexed mesh without requiring a registered primitive', () => {
     const spec = {
       schemaVersion: '3.0',

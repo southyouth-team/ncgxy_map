@@ -5,11 +5,11 @@ const CampusPlanEditor = defineAsyncComponent(() => import('./editor/CampusPlanE
 const IndoorFloorPlanEditor = defineAsyncComponent(() => import('./components/IndoorFloorPlanEditor.vue'))
 const BuildingTemplateWorkshop = defineAsyncComponent(() => import('./components/BuildingTemplateWorkshop.vue'))
 const AssetTemplateLab = defineAsyncComponent(() => import('./components/AssetTemplateLab.vue'))
-const WorldSandboxMvp = defineAsyncComponent(() => import('./components/WorldSandboxMvp.vue'))
+const SandboxApp = defineAsyncComponent(() => import('./sandbox/SandboxApp.vue'))
 const currentRoute = window.location.pathname.replace(/\/+$/, '')
 const isAssetTemplateLabRoute = currentRoute === '/asset-template-lab'
 const isAssetWorkshopRoute = currentRoute === '/asset-workshop'
-const isWorldSandboxMvpRoute = currentRoute === '/world-sandbox-mvp'
+const isSandboxRoute = currentRoute === '/sandbox' || currentRoute === '/world-sandbox-mvp'
 const BuildingFootprintEditor = defineAsyncComponent(() => import('./components/BuildingFootprintEditor.vue'))
 import { loadCampusSceneData } from './three/scene/loadCampusSceneData.js'
 import { createSceneDocument } from './three/scene/sceneDocument.js'
@@ -486,7 +486,7 @@ async function handleBrowserNavigation() {
 }
 
 onMounted(async () => {
-  if (isAssetWorkshopRoute || isAssetTemplateLabRoute) return
+  if (isSandboxRoute || isAssetWorkshopRoute || isAssetTemplateLabRoute) return
   updateViewportState()
   window.addEventListener('resize', updateViewportState)
   window.addEventListener('orientationchange', updateViewportState)
@@ -572,7 +572,7 @@ onBeforeUnmount(() => {
 
 <template>
   <BuildingTemplateWorkshop v-if="isAssetWorkshopRoute" />
-  <WorldSandboxMvp v-else-if="isWorldSandboxMvpRoute" />
+  <SandboxApp v-else-if="isSandboxRoute" />
   <AssetTemplateLab v-else-if="isAssetTemplateLabRoute" />
   <main v-else ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isCampusExplorer } ]">
     <div ref="viewport" class="scene-viewport" :style="{ display: showEditor && editorViewMode === '2d' ? 'none' : 'block' }"></div>

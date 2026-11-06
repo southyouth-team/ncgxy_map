@@ -1,3 +1,4 @@
+import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from './object-model-property-resolver';
 /**
  * Canonical ObjectModelSpec 3.0 structural validator.
  *
@@ -11,7 +12,6 @@ const MAX_PARAMETERS = 100;
 const MAX_INSTANCES = 100;
 const MAX_DEPTH = 16;
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
-import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from './object-model-property-resolver';
 
 /**
  * Canonical geometry capability registry.

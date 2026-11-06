@@ -499,7 +499,7 @@ onBeforeUnmount(() => {
           </select>
         </label>
         <label class="world-mvp__field"><span>风力 <b>{{ wind }}%</b></span>
-          <input v-model.number="wind" type="range" min="0" max="100" step="5">
+          <input v-model.number="wind" type="range" min="0" max="100" step="5" @input="updateEnvironment">
         </label>
       </section>
 

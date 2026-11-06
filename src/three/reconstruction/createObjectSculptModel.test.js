@@ -1299,11 +1299,35 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     };
     expect(sourceMappedMeshes()).toHaveLength(4);
     expect(sourceMappedMeshes().every(mesh => mesh.userData.componentSourceId === 'rib')).toBe(true);
+    const initialInstances = new Map([...model.userData.componentGroups.entries()]
+      .filter(([, group]) => group.userData.componentSourceId === 'rib'));
     applyObjectSculptParameter(THREE, model, 'rib-count', 7);
     expect(countInstances()).toBe(7);
     expect(sourceMappedMeshes()).toHaveLength(7);
     expect(sourceMappedMeshes().every(mesh => mesh.userData.componentSourceId === 'rib')).toBe(true);
-    expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(7);
+    for (const [id, group] of initialInstances) {
+      expect(model.userData.componentGroups.get(id)).toBe(group);
+    }
+
+    const expandedInstances = [...model.userData.componentGroups.entries()]
+      .filter(([, group]) => group.userData.componentSourceId === 'rib');
+    const expandedResources = expandedInstances.map(([id, group]) => {
+      const mesh = group.getObjectByName(id + ':mesh');
+      const resource = { geometry: mesh.geometry, material: mesh.material, geometryDisposals: 0, materialDisposals: 0 };
+      resource.geometry.addEventListener('dispose', () => resource.geometryDisposals++);
+      resource.material.addEventListener('dispose', () => resource.materialDisposals++);
+      return { id, group, resource };
+    });
+    applyObjectSculptParameter(THREE, model, 'rib-count', 3);
+    expect(countInstances()).toBe(3);
+    expect(sourceMappedMeshes()).toHaveLength(3);
+    for (const { id, group } of expandedResources.slice(0, 3)) {
+      expect(model.userData.componentGroups.get(id)).toBe(group);
+    }
+    expect(expandedResources.slice(3).map(({ resource }) => [
+      resource.geometryDisposals, resource.materialDisposals,
+    ])).toEqual([[1, 1], [1, 1], [1, 1]]);
+    expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(3);
   });
 
   it('exposes geometry descriptor scalars as dynamic parameters in ObjectModelSpec 3.0', () => {

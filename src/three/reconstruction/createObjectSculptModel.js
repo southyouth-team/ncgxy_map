@@ -1,3 +1,4 @@
+import { validateObjectModelSpecV3 } from '../../../shared/object-model-spec-v3.ts';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
 /**
  * Bounded ObjectSculptSpec -> Three.js runtime adapter.
@@ -609,6 +610,7 @@ function applyObjectModelParameterValues(input) {
 }
 
 export function validateObjectSculptSpec(spec) {
+  validateObjectModelSpecV3(spec);
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new TypeError('ObjectSculptSpec 必须是 JSON 对象');
   if (spec.schemaVersion !== '3.0') throw new TypeError('仅支持 ObjectModelSpec 3.0');
   if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) throw new TypeError('ObjectModelSpec 3.0 不接受 generators/constraints');
@@ -699,6 +701,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   if (!THREE?.Group || !THREE?.Mesh || !THREE?.MeshStandardMaterial) {
     throw new TypeError('Three.js runtime is required');
   }
+  validateObjectModelSpecV3(spec);
   // 3.0 is the canonical declarative protocol. Compile it into the bounded
   // component-tree execution form only at the runtime adapter boundary.
   const parameterizedSpec = applyObjectModelParameterValues(spec);

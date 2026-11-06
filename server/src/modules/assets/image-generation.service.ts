@@ -224,6 +224,102 @@ function validateGeneratorParameterBindings(generators: any[], parameterSchema: 
   }
 }
 
+
+function validateGeneratedOperations(input: unknown, componentTree: any[]) {
+  if (input == null) return { operations: [], parameterIds: new Set<string>() };
+  if (!Array.isArray(input) || input.length > 40) throw new ServiceUnavailableException('AI operations 必须是最多 40 项的数组');
+  const byId = new Map(componentTree.map(node => [node.id, node]));
+  const ids = new Set<string>(), roots = new Set<string>(), parameterIds = new Set<string>();
+  let estimatedExpandedCount = componentTree.length;
+  const subtreeFor = (rootId: string) => componentTree.filter(node => {
+    let current = node;
+    while (current) {
+      if (current.id === rootId) return true;
+      current = current.parent ? byId.get(current.parent) : null;
+    }
+    return false;
+  });
+  const validateExpression = (expression: any, depth = 0): void => {
+    if (depth > 16) throw new ServiceUnavailableException('AI 表达式嵌套层级超过 16 层');
+    if (typeof expression === 'number') {
+      if (!Number.isFinite(expression) || Math.abs(expression) > 10000) throw new ServiceUnavailableException('AI 表达式常量超出范围');
+      return;
+    }
+    if (!expression || typeof expression !== 'object' || Array.isArray(expression)) throw new ServiceUnavailableException('AI 表达式节点格式无效');
+    if (expression.op === 'constant') {
+      if (!Number.isFinite(Number(expression.value)) || Math.abs(Number(expression.value)) > 10000) throw new ServiceUnavailableException('AI 表达式常量无效');
+    } else if (expression.op === 'index' || expression.op === 'count') {
+      return;
+    } else if (['add','subtract','multiply','divide'].includes(expression.op)) {
+      validateExpression(expression.left, depth + 1);
+      validateExpression(expression.right, depth + 1);
+    } else if (['sin','cos','negate'].includes(expression.op)) {
+      validateExpression(expression.value, depth + 1);
+    } else {
+      throw new ServiceUnavailableException('AI 表达式运算不受支持：' + String(expression.op));
+    }
+  };
+  const operations = input.map((raw: any) => {
+    const id = typeof raw?.id === 'string' ? raw.id : '';
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id) || raw?.type !== 'instance') {
+      throw new ServiceUnavailableException('AI operation ID 或类型无效：' + id);
+    }
+    ids.add(id);
+    const root = byId.get(raw.sourceRootId);
+    if (!root || (root.kind || 'mesh') !== 'group' || roots.has(root.id)) {
+      throw new ServiceUnavailableException('AI instance sourceRootId 必须引用唯一 Group：' + id);
+    }
+    roots.add(root.id);
+    const subtree = subtreeFor(root.id);
+    if (!subtree.length) throw new ServiceUnavailableException('AI instance 源子树为空：' + id);
+    const parameterId = raw.count?.parameterId;
+    if (typeof parameterId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(parameterId)) {
+      throw new ServiceUnavailableException('AI instance 数量参数引用无效：' + id);
+    }
+    parameterIds.add(parameterId);
+    const transform = raw.transform || {};
+    for (const key of ['position','rotation','scale']) {
+      const vector = transform[key] ?? (key === 'scale' ? [1,1,1] : [0,0,0]);
+      if (!Array.isArray(vector) || vector.length !== 3) throw new ServiceUnavailableException('AI instance transform.' + key + ' 必须是三维表达式数组：' + id);
+      vector.forEach((value: any) => validateExpression(value));
+    }
+    return { id, type: 'instance', sourceRootId: root.id, count: { parameterId }, transform };
+  });
+  for (const operation of operations) {
+    const subtree = subtreeFor(operation.sourceRootId);
+    const parameter = null;
+    // Parameter ranges are checked after parameterSchema normalization.
+    estimatedExpandedCount += subtree.length;
+  }
+  if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('AI operations 基础展开规模超过 300 个组件');
+  return { operations, parameterIds };
+}
+
+function validateOperationParameterBindings(operations: any[], parameterSchema: any[], componentTree: any[]) {
+  const byId = new Map(parameterSchema.map(item => [item.id, item]));
+  const byNode = new Map(componentTree.map(node => [node.id, node]));
+  let expandedCount = componentTree.length;
+  for (const operation of operations) {
+    const parameter = byId.get(operation.count.parameterId);
+    if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.value)
+      || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
+      || parameter.min < 1 || parameter.max > 100 || parameter.value < parameter.min || parameter.value > parameter.max) {
+      throw new ServiceUnavailableException('instance 必须绑定 1-100 范围内的整数数量参数：' + operation.id);
+    }
+    const root = byNode.get(operation.sourceRootId);
+    const subtree = componentTree.filter(node => {
+      let current = node;
+      while (current) {
+        if (current.id === root.id) return true;
+        current = current.parent ? byNode.get(current.parent) : null;
+      }
+      return false;
+    });
+    expandedCount += subtree.length * (parameter.max - 1);
+    if (expandedCount > 300) throw new ServiceUnavailableException('AI operations 最大展开组件数超过 300：' + operation.id);
+  }
+}
+
 @Injectable()
 export class ImageGenerationService {
   private readonly logger = new Logger(ImageGenerationService.name);
@@ -565,13 +661,13 @@ export class ImageGenerationService {
               content: [
                 '你是专业的 Three.js 独立物体建模工程师。根据用户提示词和可能提供的参考图片输出 ObjectSculptSpec JSON，不要输出 JavaScript、Markdown 或解释。',
                 '当提供参考图片时，图片是几何外形和比例的第一依据，提示词只能补充图片中不可见的信息。不得把图片简单当成贴图，不得忽略图片主体轮廓；应使用足够的分段、曲线和截面描述可见结构。',
-                '根对象字段：schemaVersion 固定为字符串 2.0，targetName，category（AI 自行判断的开放分类）、objectType（AI 自行判断的具体物体）、visualStyle、materials、componentTree、parameterSchema。',
+                '根对象字段：schemaVersion 固定为字符串 3.0，targetName，category，objectType，visualStyle，materials，componentTree，parameterSchema，operations。',
                 'materials 是对象，材质项包含 color(#RRGGBB)、roughness(0-1)、metalness(0-1)、opacity(0.05-1)。',
                 'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 必须严格使用标准路径 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible，禁止输出 lattice_color、body_color 等自定义别名；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
                 'componentTree 按对象复杂度包含 1-100 个有意义的独立组件；简单对象可以只有一个组件，复杂对象应按真实结构拆分，不得为了凑数量拆出无意义零件。节点字段：id（唯一英文 ID）、name、role、kind（group 或 mesh，省略时为 mesh）、parent（唯一根节点省略，其余组件必填）、primitive、dimensions（width/height/depth 正数）、transform（position/rotation/scale 三个三维数组）、material（materials 中的键）、geometryDescriptor（可选）。mesh primitive 必须从引擎支持集合中按几何形态选择：box/cuboid、polygon、wedge、arch、cylinder、cone、sphere、ellipsoid、torus、tube、lathe、sweep、loft；不得把所有曲面或异形物体都近似成 box。',
                 '复杂几何描述符必须按 primitive 输出：polygon 使用 geometryDescriptor.points（3-32 个归一化二维轮廓点）；tube 使用 path（2-32 个归一化三维点）及 radius/tubularSegments/radialSegments；lathe 使用 profile（2-32 个 [半径,高度] 归一化点）；sweep 使用 path（2-32 个归一化三维点）、profile（3-24 个归一化二维截面点）及 steps；loft 使用 sections（2-12 个截面，每个截面含严格递增的 height 与相同数量的 points）。这些坐标范围为 [-0.5,0.5]；tube/sweep 的 geometryDescriptor.radius 必须是 0.01-10 的有限数值，且应结合组件 dimensions 使用合理的小半径（细肋条/格栅通常远小于组件宽高），禁止把直径、百分比或归一化坐标误填为 radius；不需要复杂几何时使用基础 primitive。',
                 '每个 generator.templateRootId 必须指向 componentTree 中 kind="group" 的节点；重复模板即使只有一个 Mesh，也必须先创建一个无几何 Group 作为模板容器，再把 Mesh 作为该 Group 的子节点。不得让 generator 直接引用 Mesh。',
-                '当对象存在规则重复结构时，必须优先用声明式 generators，而不是手工复制大量相同节点。generators 允许 repeat 或 grid。repeat 字段：id、type=repeat、templateRootId、axis(x/y/z)、spacing、defaultCount、maxCount、countParameterId；grid 字段：id、type=grid、templateRootId、spacingX、spacingZ、defaultRows、defaultColumns、maxRows、maxColumns、rowParameterId、columnParameterId；可选 centered=true 让网格围绕模板根节点居中展开。对应数量参数必须存在于 parameterSchema，type=number，min/value/max 为整数且从 1 开始，maxCount/maxRows/maxColumns 不超过 100；模板子树只允许被一个 generator 使用，不得嵌套。repeat 可用 followers 将主体/底座等非重复节点按数量变化联动，字段为 nodeId、axis、offset。栏杆立柱、车轮组、窗户阵列、树冠层/叶簇、椅子重复横档等可按实际结构判断是否适用；不要为了使用生成器而强行重复。',
+'重复结构必须用通用 operations 描述，不得使用 repeat/grid 专用生成器。operations 项格式：{id,type:"instance",sourceRootId,count:{parameterId},transform:{position:[表达式,表达式,表达式],rotation:[表达式,表达式,表达式],scale:[表达式,表达式,表达式]}}。sourceRootId 指向 componentTree 中完整的 Group 子树；count.parameterId 指向 parameterSchema 中的整数参数。表达式只允许数字常量或 AST：{op:"constant",value}、{op:"index"}、{op:"count"}、{op:"parameter",id}、{op:"add"|"subtract"|"multiply"|"divide",left,right}、{op:"sin"|"cos"|"negate",value}。index 是当前实例索引，count 是实例总数；角度使用弧度。通过三角函数、向量分量和旋转表达式描述任意轴向/圆周/螺旋/非均匀分布，不得把这些分布固化成专用类型。数量参数 targets=[]，由 operation 控制。禁止输出 JavaScript、函数体、eval 或未声明的表达式操作。'
                 'constraints 可选用于部件联动，支持引擎已实现的 follow、span、attach、adjacency、cutout；仅在能准确表达几何依赖时使用，引用必须指向真实节点或生成器。',
                 '单个资产的装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表该对象的核心主体（例如建筑主体、树干/主枝、车身、人体躯干、家具主框架或机械机架）；其余组件必须通过 parent 连接到该根节点，形成一棵连通树。不要把单个资产拆成互不关联的多个根对象。',
                 '所有子组件 position 必须是相对直接 parent 的局部坐标。先确定对象整体中心、尺度和局部坐标系，再按类别安排部件：建筑的屋顶/塔楼/门窗连接主体；树木的枝干连接树干、树冠叶簇连接枝条；车辆的车轮连接车轴/底盘、车门连接车身；人物的头部和四肢连接躯干/关节；家具的面板、桌腿、靠背连接主框架；机械的轴、齿轮、外壳连接机架或传动组件。',
@@ -612,7 +708,7 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException('视觉模型未返回有效 ObjectSculptSpec JSON');
     }
     if (!spec || typeof spec !== 'object' || Array.isArray(spec)
-      || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
+      || spec.schemaVersion !== '3.0' || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
       || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
       throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 结构无效');
     }
@@ -658,10 +754,10 @@ export class ImageGenerationService {
       this.logger.warn('ObjectSculptSpec 几何校验失败，执行一次定向修复：' + error.message);
       return this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
     }
-    const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
-    spec.generators = generatorValidation.generators;
-    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, generatorValidation.parameterIds);
-    validateGeneratorParameterBindings(spec.generators, spec.parameterSchema);
+    const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
+    spec.operations = operationValidation.operations;
+    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationValidation.parameterIds);
+    validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree);
 
     // Validate constraint identities and references at the generation boundary too.
     // The browser Runtime repeats these checks before materialization; this catches

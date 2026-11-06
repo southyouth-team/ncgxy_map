@@ -814,6 +814,7 @@ export class ImageGenerationService {
         generatorValidation.parameterIds,
         spec.materials,
       );
+      validateGeneratorParameterBindings(spec.generators, spec.parameterSchema);
     }
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };

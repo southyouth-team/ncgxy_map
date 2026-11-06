@@ -6,7 +6,7 @@ import { createObjectModelParameterContractCases } from './object-model-paramete
 
 describe('geometry capability validator registry', () => {
   it('requires a validator for every capability and rejects duplicate identifiers', () => {
-    expect(() => createObjectModelGeometryCapabilityRegistry([{ primitive: 'box', descriptor: 'optional' } as any))
+    expect(() => createObjectModelGeometryCapabilityRegistry([{ primitive: 'box', descriptor: 'optional' } as any]))
       .toThrow('valid primitive, descriptor contract and validator');
     expect(() => createObjectModelGeometryCapabilityRegistry([
       { primitive: 'box', descriptor: 'optional', validateDescriptor() {} },

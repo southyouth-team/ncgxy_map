@@ -3,6 +3,9 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { createObjectSculptModel } from '../three/reconstruction/createObjectSculptModel.js'
+import { buildCampusGeoJSON, getCampusSpatialLayers, mergeCampusSceneFeatureCollections } from '../data/campus/campusGeoJSON.js'
+import { CAMPUS_PLAN_REFERENCE } from '../data/campus/campusLayout.js'
+import { toCampusFeatureCollection } from '../editor/campusFeatureCollection.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -182,15 +185,95 @@ function executeTask() {
   command.value = ''
   syncObjects()
 }
+async function loadCampusSceneOptions() {
+  let planDocument = null
+  const headers = { 'X-Dev-User-Id': DEV_USER_ID }
+  const request = async path => {
+    const response = await fetch(API_BASE + path, { headers })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || '校园数据请求失败：HTTP ' + response.status)
+    return payload
+  }
+
+  // 与首页保持一致：优先读取服务端保存的南昌工学院主地图方案。
+  try {
+    const campuses = await request('/campuses')
+    const campus = campuses.find(item => item.slug === 'ncgxy')
+    if (campus) {
+      const maps = await request('/campuses/' + campus.id + '/maps')
+      const map = maps.find(item => item.slug === 'main') || maps[0]
+      if (map) {
+        const saved = await request('/campuses/' + campus.id + '/maps/' + map.id + '/scene/plan')
+        if (saved.document?.coordinateSystem === 'campus-plan-pixel') planDocument = saved.document
+      }
+    }
+  } catch (error) {
+    console.warn('[WorldSandbox] 读取保存的校园方案失败，回退基础校园数据：', error?.message || error)
+  }
+
+  // 没有保存方案时，使用首页相同的校园空间图层构造默认预览文档。
+  if (!planDocument) {
+    const layers = getCampusSpatialLayers()
+    const bounds = CAMPUS_PLAN_REFERENCE.mapBounds
+    planDocument = {
+      schemaVersion: 2,
+      coordinateSystem: 'campus-plan-pixel',
+      units: 'pixel',
+      workspaceBounds: { minX: bounds.left, minY: bounds.top, maxX: bounds.right, maxY: bounds.bottom },
+      areas: layers.areas,
+      roads: layers.roads,
+      buildings: layers.buildings.map(building => ({ ...building, footprint: building.polygon })),
+    }
+  }
+
+  const editorCollection = planDocument.featureCollection?.type === 'FeatureCollection'
+    ? planDocument.featureCollection
+    : toCampusFeatureCollection(planDocument)
+  const featureCollection = mergeCampusSceneFeatureCollections(buildCampusGeoJSON(), {
+    ...editorCollection,
+    deletedFeatureIds: [...new Set([
+      ...(editorCollection.deletedFeatureIds || []),
+      ...(planDocument.deletedFeatureIds || []),
+    ].map(String))],
+  })
+
+  // 与首页共用建筑模板和正式视觉资产清单，避免沙盒出现另一套建筑外观。
+  let assetManifest = null
+  let buildingTemplates = []
+  try {
+    const response = await fetch(API_BASE + '/assets/building-templates')
+    if (response.ok) {
+      const payload = await response.json()
+      buildingTemplates = (payload.templates || []).filter(item => item.status === 'ready')
+    }
+  } catch (error) {
+    console.warn('[WorldSandbox] 建筑模板暂不可用，使用内置模板：', error?.message || error)
+  }
+  try {
+    const response = await fetch(API_BASE + '/assets/visual-assets/manifest')
+    if (response.ok) assetManifest = await response.json()
+  } catch (error) {
+    console.warn('[WorldSandbox] 视觉资产清单暂不可用，使用程序化建筑：', error?.message || error)
+  }
+
+  return { featureCollection, assetManifest, buildingTemplates, assetBaseUrl: API_BASE }
+}
+
 onMounted(async () => {
   disposed = false
-  engine = createCampusEngine(viewport.value, {
-    onReady: () => { message.value = 'RPG 校园场景已就绪，使用 WASD 或方向键移动人物。' },
-    onError: error => { message.value = '校园场景初始化失败：' + (error?.message || '未知错误') },
-    onSandboxModelsChange: list => { objects.value = list },
-    onSandboxModelSelected: handleModelSelected,
-  }, { sceneType: 'campus', isometricRpg: true, viewMode: '2.5d' })
   try {
+    const campusSceneOptions = await loadCampusSceneOptions()
+    engine = createCampusEngine(viewport.value, {
+      onReady: () => { message.value = 'RPG 校园场景已就绪，使用 WASD 或方向键移动人物。' },
+      onError: error => { message.value = '校园场景初始化失败：' + (error?.message || '未知错误') },
+      onSandboxModelsChange: list => { objects.value = list },
+      onSandboxModelSelected: handleModelSelected,
+    }, {
+      sceneType: 'campus',
+      isometricRpg: true,
+      viewMode: '2.5d',
+      ...campusSceneOptions,
+    })
     await engine.init()
     if (disposed) return
     engine.setMode('thirdPerson')

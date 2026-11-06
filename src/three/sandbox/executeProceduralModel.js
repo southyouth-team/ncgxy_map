@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import threeModuleSource from 'three/build/three.module.js?raw'
+import threeModuleSource from 'three?raw'
 
 const RESULT_CHANNEL = 'ncgxy-procedural-model-result'
 const MAX_SOURCE_LENGTH = 120000

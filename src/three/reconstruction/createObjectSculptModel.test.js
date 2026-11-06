@@ -97,7 +97,8 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const spec={schemaVersion:'3.0',materials:{stone:{color:'#888888',roughness:0.8,metalness:0}},componentTree:[{id:'root',kind:'group'},{id:'body',parent:'root',primitive:'box',material:'stone',dimensions:{width:2,height:2,depth:2}},{id:'window',parent:'root',primitive:'box',material:'stone',dimensions:{width:0.5,height:0.6,depth:0.1}}]};
     const model=createObjectSculptModel(THREE,spec),body=model.userData.componentGroups.get('body'),window=model.userData.componentGroups.get('window');
     const next=structuredClone(model.userData.objectSculptSpec);
-    const changeSetResult={objectModelSpec:next,changes:[{type:'replace-component',nodeId:'body',component:next.componentTree[1]}],affectedNodeIds:['body'],affectedMaterialIds:[]};
+    next.componentTree.find(node=>node.id==='body').dimensions.width=3;
+    const changeSetResult={objectModelSpec:next,changes:[{type:'replace-component',nodeId:'body',component:next.componentTree.find(node=>node.id==='body')}],affectedNodeIds:['body'],affectedMaterialIds:[]};
     applyObjectSculptComponentChanges(THREE,model,next,changeSetResult);
     expect(model.userData.componentGroups.get('body')).not.toBe(body);
     expect(model.userData.componentGroups.get('window')).toBe(window);

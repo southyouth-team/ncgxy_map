@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
+import { validateObjectModelSpecV3 } from '../../../../../shared/object-model-spec-v3';
 
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
 const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
@@ -235,6 +236,9 @@ export class BuildingDesignService {
       || Object.prototype.hasOwnProperty.call(current, 'generators') || Object.prototype.hasOwnProperty.call(current, 'constraints')) {
       throw new BadRequestException('当前 ObjectSculptSpec 无效');
     }
+    try { validateObjectModelSpecV3(current); } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
+    }
     if (!instruction) throw new BadRequestException('请描述希望新增的模型参数');
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
@@ -325,8 +329,12 @@ export class BuildingDesignService {
         throw new ServiceUnavailableException('AI 参数设计不得修改或删除已有参数：' + item.id);
       }
     }
+    const resultSpec = { ...current, componentTree, parameterSchema, operations };
+    try { validateObjectModelSpecV3(resultSpec); } catch (error) {
+      throw new ServiceUnavailableException(error instanceof Error ? error.message : '参数设计后的 ObjectModelSpec 3.0 无效');
+    }
     return {
-      objectSculptSpec: { ...current, componentTree, parameterSchema, operations },
+      objectSculptSpec: resultSpec,
       addedParameters: parameterSchema.filter((item: any) => !previous.some((old: any) => old.id === item.id)),
       unsupported: Array.isArray(parsed.unsupported) ? parsed.unsupported.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
     };

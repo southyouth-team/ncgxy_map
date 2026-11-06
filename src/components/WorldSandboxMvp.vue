@@ -367,7 +367,7 @@ async function restoreSandbox() {
 function updateEnvironment() {
   if (!engine) return
   engine.setEnvironment({
-    timeOfDay: Number(time.value) < 6 || Number(time.value) >= 18 ? 'night' : 'day',
+    time: Number(time.value),
     weather: weather.value === 'rain' ? 'rain' : 'clear',
     wind: Number(wind.value) / 100,
   })

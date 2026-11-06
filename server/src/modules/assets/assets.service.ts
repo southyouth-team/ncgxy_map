@@ -275,7 +275,7 @@ export class AssetsService {
       || Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')
       || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 300
       || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
-      throw new BadRequestException('ObjectSculptSpec 结构无效，无法保存');
+      throw new BadRequestException('ObjectModelSpec 3.0 结构无效，无法保存');
     }
     const serialized = JSON.stringify(spec);
     if (Buffer.byteLength(serialized, 'utf8') > 2 * 1024 * 1024) throw new BadRequestException('结构化资产数据不能超过 2 MB');
@@ -515,6 +515,11 @@ export class AssetsService {
     try {
       const content = await readFile(absolutePath, 'utf8');
       const spec = JSON.parse(content);
+      if (!spec || spec.schemaVersion !== '3.0'
+        || Object.prototype.hasOwnProperty.call(spec, 'generators')
+        || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
+        throw new NotFoundException('结构化资产不是有效的 ObjectModelSpec 3.0');
+      }
       if (createHash('sha256').update(content).digest('hex') !== record.checksumSha256) throw new NotFoundException('结构化资产校验失败');
       return { ...record, spec };
     } catch (error) {

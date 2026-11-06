@@ -579,12 +579,19 @@ export class ImageGenerationService {
       this.logger.log('参考图片视觉分析完成：' + model + '，识别组件 ' + analysisObject.components.length + ' 项');
     }
 
+    // 生成任务可能包含大量通用网格顶点数据；等待响应头和读取响应体共用总超时。
+    // 默认 10 分钟，并允许部署环境通过 VISION_REQUEST_TIMEOUT_MS 调整，不限制模型输出结构或几何能力。
+    const configuredTimeout = Number(this.config.get<string>('VISION_REQUEST_TIMEOUT_MS') || 600000);
+    const requestTimeoutMs = Number.isFinite(configuredTimeout)
+      ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout)))
+      : 600000;
+    const requestStartedAt = Date.now();
     let response: Response;
     try {
       response = await fetch(baseUrl + '/chat/completions', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(180000),
+        signal: AbortSignal.timeout(requestTimeoutMs),
         body: JSON.stringify({
           model,
           temperature: 0.2,
@@ -600,7 +607,7 @@ export class ImageGenerationService {
                 'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。只声明能精确绑定到当前 componentTree 真实存在的标量属性的可选参数；对于 indexed-mesh 或没有可编辑标量字段的节点，不得虚构 dimensions/geometryDescriptor 属性；无法确认合法 target 时直接省略该可选参数，不能让参数声明阻断模型生成。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 使用点分隔的真实数据路径，可指向当前节点 dimensions、transform、geometryDescriptor 中存在的标量字段，或当前材质中存在的标量字段；geometry.primitive 和 visibility.visible 为专用语义目标。不得预先穷举属性字段，也不得虚构节点中不存在的字段；服务端按目标实际数据类型校验 number/color/boolean/select。禁止访问 id、parent、kind 等结构身份字段及原型链字段；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
                 'componentTree 按对象复杂度包含 1-100 个有意义的独立组件；简单对象可以只有一个组件，复杂对象应按真实结构拆分，不得为了凑数量拆出无意义零件。节点字段：id（唯一英文 ID）、name、role、kind（group 或 mesh，省略时为 mesh）、parent（唯一根节点省略，其余组件必填）、material（materials 中的键）、transform（position/rotation/scale 三个三维数组）。Mesh 几何优先使用通用 geometry：{type:"indexed-mesh",positions:[x,y,z,...],indices:[a,b,c,...]}，positions 是局部空间顶点坐标，indices 每三个整数定义一个三角形；不需要 dimensions、primitive 或 geometryDescriptor。它可以表达任意网格外形，不受预置几何类型限制。数据必须形成有效三角网格；不要为了节省数据而把复杂物体错误简化成基础形状。只有在形状确实适合现有参数化构造时，才使用 primitive + dimensions + geometryDescriptor 兼容表达。',
                 '旧式 geometryDescriptor 仍可用于兼容构造：polygon 使用 points，tube 使用 path/radius，lathe 使用 profile，sweep 使用 path/profile，loft 使用 sections。通用 indexed-mesh 不使用这些描述符；不要把通用网格退化成受限轮廓点、路径点或截面数量。',
-'重复结构必须用通用 operations 描述，不得使用 repeat/grid 专用生成器。operations 项格式：{id,type:"instance",sourceRootId,count:{parameterId},transform:{position:[表达式,表达式,表达式],rotation:[表达式,表达式,表达式],scale:[表达式,表达式,表达式]}}。sourceRootId 指向 componentTree 中作为复制根节点的组件及其完整子树（Group 或 Mesh 均可）；count.parameterId 指向 parameterSchema 中的整数参数。表达式只允许数字常量或 AST：{op:"constant",value}、{op:"index"}、{op:"count"}、{op:"parameter",id}、{op:"add"|"subtract"|"multiply"|"divide",left,right}、{op:"sin"|"cos"|"negate",value}。index 是当前实例索引，count 是实例总数；角度使用弧度。通过三角函数、向量分量和旋转表达式描述任意轴向/圆周/螺旋/非均匀分布，不得把这些分布固化成专用类型。数量参数 targets=[]，由 operation 控制。禁止输出 JavaScript、函数体、eval 或未声明的表达式操作。',
+                '重复结构必须用通用 operations 描述，不得使用 repeat/grid 专用生成器。operations 项格式：{id,type:"instance",sourceRootId,count:{parameterId},transform:{position:[表达式,表达式,表达式],rotation:[表达式,表达式,表达式],scale:[表达式,表达式,表达式]}}。sourceRootId 指向 componentTree 中作为复制根节点的组件及其完整子树（Group 或 Mesh 均可）；count.parameterId 指向 parameterSchema 中的整数参数。表达式只允许数字常量或 AST：{op:"constant",value}、{op:"index"}、{op:"count"}、{op:"parameter",id}、{op:"add"|"subtract"|"multiply"|"divide",left,right}、{op:"sin"|"cos"|"negate",value}。index 是当前实例索引，count 是实例总数；角度使用弧度。通过三角函数、向量分量和旋转表达式描述任意轴向/圆周/螺旋/非均匀分布，不得把这些分布固化成专用类型。数量参数 targets=[]，由 operation 控制。禁止输出 JavaScript、函数体、eval 或未声明的表达式操作。',
                 '所有重复、旋转、路径和空间分布均通过 operations 与受限表达式声明；不得输出 generators 或 constraints。',
                 ...(generationProfileInstruction ? [generationProfileInstruction] : []),
                 '单个资产的装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表该对象的核心主体（例如建筑主体、树干/主枝、车身、人体躯干、家具主框架或机械机架）；其余组件必须通过 parent 连接到该根节点，形成一棵连通树。不要把单个资产拆成互不关联的多个根对象。',
@@ -609,7 +616,7 @@ export class ImageGenerationService {
                 'parent 只定义层级，不会自动吸附几何体。必须根据 Mesh 的 dimensions、连接点和局部坐标计算 position；不要把所有子组件堆在原点，也不要将子组件误用世界坐标。',
                 '坐标约定：Y 轴向上，根节点位于对象整体中心附近，rotation 使用弧度；地面接触类对象底部约为 Y=0，悬空/飞行类对象按其自身中心定位。整体尺寸建议在 2-20 个场景单位。',
                 '材质颜色必须贴合提示词和对象类别，不允许全部白色或灰色。禁止重复 ID、缺失父节点和循环层级。使用通用 geometry 时不得再声明 primitive。',
-                '参考图片结构分析（必须优先遵循；不确定项不得臆造）：' + (visualAnalysis || '无参考图片分析') ,
+                '参考图片结构分析（必须优先遵循；不确定项不得臆造）：' + (visualAnalysis || '无参考图片分析'),
                 '目标对象类型：' + objectType + '；视觉风格：' + visualStyle + '；用户要求：' + prompt,
               ].join('\\n'),
             },
@@ -627,34 +634,52 @@ export class ImageGenerationService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('提示词 3D 模型生成连接失败：' + message);
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      const elapsedMs = Date.now() - requestStartedAt;
+      this.logger.error('提示词 3D 模型生成请求失败（' + errorName + '，' + elapsedMs + 'ms）：' + message);
+      if (errorName === 'TimeoutError' || errorName === 'AbortError') {
+        throw new ServiceUnavailableException('视觉模型等待响应超时（' + Math.round(requestTimeoutMs / 1000) + ' 秒）');
+      }
       throw new ServiceUnavailableException('无法连接视觉模型，请检查后端网络连接');
     }
-    if (!response.ok) {
-      let detail = '';
-      try {
-        // 响应头返回不代表响应体已经完整到达；读取响应体也受同一个 180 秒超时信号控制。
-        detail = (await response.text()).slice(0, 1000);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.error('提示词 3D 模型生成 API 错误响应体读取失败：' + message);
-        throw new ServiceUnavailableException('视觉模型 API 错误响应体读取超时或连接中断');
-      }
-      this.logger.warn('提示词 3D 模型生成 API HTTP ' + response.status + '：' + detail);
-      throw new ServiceUnavailableException('提示词 3D 模型生成失败（HTTP ' + response.status + '）');
-    }
-    let payload: any;
+
+    const headersReceivedAt = Date.now();
+    this.logger.log('提示词 3D 模型生成已收到响应头：HTTP ' + response.status
+      + '，等待响应头 ' + (headersReceivedAt - requestStartedAt) + 'ms');
+
+    let responseText = '';
     try {
-      // fetch() 在收到响应头后即可完成；JSON 响应体仍可能持续传输并触发 AbortSignal 超时。
-      payload = await response.json() as any;
+      responseText = await response.text();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const errorName = error instanceof Error ? error.name : 'UnknownError';
-      this.logger.error('提示词 3D 模型生成响应体读取/JSON 解析失败（' + errorName + '）：' + message);
+      const bodyElapsedMs = Date.now() - headersReceivedAt;
+      this.logger.error('提示词 3D 模型生成响应体读取失败（' + errorName + '，响应头等待 ' 
+        + (headersReceivedAt - requestStartedAt) + 'ms，响应体读取 ' + bodyElapsedMs + 'ms，总计 '
+        + (Date.now() - requestStartedAt) + 'ms）：' + message);
       if (errorName === 'TimeoutError' || errorName === 'AbortError') {
-        throw new ServiceUnavailableException('视觉模型生成响应超时：模型可能尚未完成输出，或响应体传输过慢');
+        throw new ServiceUnavailableException('视觉模型响应体读取超时（总超时 ' + Math.round(requestTimeoutMs / 1000) + ' 秒）');
       }
-      throw new ServiceUnavailableException('视觉模型生成响应不是有效 JSON：' + message.slice(0, 300));
+      throw new ServiceUnavailableException('视觉模型响应体读取失败：' + message.slice(0, 300));
+    }
+
+    const responseBytes = Buffer.byteLength(responseText, 'utf8');
+    this.logger.log('提示词 3D 模型生成响应体读取完成：HTTP ' + response.status
+      + '，响应体 ' + responseBytes + ' bytes，响应体读取 ' + (Date.now() - headersReceivedAt)
+      + 'ms，总计 ' + (Date.now() - requestStartedAt) + 'ms');
+
+    if (!response.ok) {
+      this.logger.warn('提示词 3D 模型生成 API HTTP ' + response.status + '：' + responseText.slice(0, 1000));
+      throw new ServiceUnavailableException('提示词 3D 模型生成失败（HTTP ' + response.status + '）');
+    }
+
+    let payload: any;
+    try {
+      payload = JSON.parse(responseText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('提示词 3D 模型生成 API JSON 解析失败（响应体 ' + responseBytes + ' bytes）：' + message);
+      throw new ServiceUnavailableException('视觉模型 API 返回的响应不是有效 JSON：' + message.slice(0, 300));
     }
     const raw = payload?.choices?.[0]?.message?.content;
     let spec: any;

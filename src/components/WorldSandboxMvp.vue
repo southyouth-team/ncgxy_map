@@ -392,6 +392,16 @@ onBeforeUnmount(() => {
   weatherPoints?.material.dispose()
   ground?.geometry.dispose()
   ground?.material.dispose()
+  const campusTextures = new Set()
+  campusRoot?.traverse(node => {
+    node.geometry?.dispose?.()
+    const materials = Array.isArray(node.material) ? node.material : node.material ? [node.material] : []
+    materials.forEach(material => {
+      for (const value of Object.values(material)) if (value?.isTexture) campusTextures.add(value)
+      material.dispose?.()
+    })
+  })
+  campusTextures.forEach(texture => texture.dispose())
   renderer?.dispose()
   if (renderer?.domElement.parentNode === viewport.value) viewport.value.removeChild(renderer.domElement)
 })

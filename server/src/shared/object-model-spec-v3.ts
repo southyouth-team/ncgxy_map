@@ -40,7 +40,7 @@ export function getObjectModelGeometryCapability(primitive: unknown) {
 }
 
 
-function fail(message: string) {
+function fail(message: string): never {
   throw new TypeError(message);
 }
 

@@ -106,6 +106,16 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     expect(() => validateObjectModelSpecV3(compiled, { mode: 'compiled' })).not.toThrow();
   });
 
+  it('rejects unregistered primitives in dynamic geometry type parameters', () => {
+    const spec = createRadialSpec();
+    spec.parameterSchema.push({
+      id: 'rib-primitive', label: 'Primitive', type: 'select', value: 'tube',
+      options: [{ label: 'Tube', value: 'tube' }, { label: 'Custom', value: 'custom-geometry' }],
+      targets: [{ nodeId: 'rib', property: 'geometry.primitive', mode: 'set' }],
+    });
+    expect(() => validateObjectModelSpecV3(spec)).toThrow('几何类型参数包含未注册的 primitive');
+  });
+
   it('rejects duplicate operation IDs and invalid operation parameter references', () => {
     const duplicate = createRadialSpec();
     duplicate.operations.push({ ...duplicate.operations[0] });

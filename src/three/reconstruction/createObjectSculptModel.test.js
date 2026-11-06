@@ -187,7 +187,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   it('rejects legacy 2.0 specs and generator fields at the runtime boundary', () => {
     const legacyVersion = castleSpec();
     legacyVersion.schemaVersion = '2.0';
-    expect(() => createObjectSculptModel(THREE, legacyVersion)).toThrow('仅支持 ObjectModelSpec 3.0');
+    expect(() => createObjectSculptModel(THREE, legacyVersion)).toThrow('ObjectModelSpec 3.0 无效');
 
     const legacyGenerator = castleSpec();
     legacyGenerator.generators = [];

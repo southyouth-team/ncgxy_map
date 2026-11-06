@@ -1379,6 +1379,40 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('exposes geometry descriptor scalars as dynamic parameters in ObjectModelSpec 3.0', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      targetName: 'steel-frame',
+      materials: { steel: { color: '#777777', roughness: 0.6, metalness: 0.7 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        {
+          id: 'rib', parent: 'root', primitive: 'tube',
+          dimensions: { width: 1, height: 1, depth: 1 },
+          geometryDescriptor: {
+            path: [[0, 0, 0], [0, 1, 0]],
+            radius: 0.08,
+            tubularSegments: 12,
+            radialSegments: 6,
+          },
+          material: 'steel',
+        },
+      ],
+      parameterSchema: [{
+        id: 'rib-radius', label: '钢丝管径', type: 'number',
+        value: 0.08, min: 0.04, max: 0.12, step: 0.005,
+        targets: [{ nodeId: 'rib', property: 'geometryDescriptor.radius', mode: 'set' }],
+      }],
+      operations: [],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const mesh = model.userData.componentGroups.get('rib').getObjectByName('rib:mesh');
+    expect(mesh.geometry.parameters.radius).toBeCloseTo(0.08);
+    applyObjectSculptParameter(THREE, model, 'rib-radius', 0.1);
+    expect(model.userData.objectSculptSpec.componentTree.find((node: any) => node.id === 'rib').geometryDescriptor.radius).toBeCloseTo(0.1);
+    expect(model.userData.componentGroups.get('rib').getObjectByName('rib:mesh').geometry.parameters.radius).toBeCloseTo(0.1);
+  });
+
   it('allows independent generators to share one parameter identity and expands both templates', () => {
     const spec = {
       schemaVersion: '2.0',

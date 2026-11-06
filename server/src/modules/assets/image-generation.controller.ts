@@ -59,6 +59,21 @@ export class ImageGenerationController {
     return this.service.generateProceduralObjectFromPrompt(prompt, objectType, visualStyle, imageDataUrl);
   }
 
+  @Post('modify-procedural-object')
+  @ApiOperation({ summary: '通过对话修改 Three.js 程序化模型、动态参数和部件结构' })
+  modifyProceduralObject(
+    @Body('source') source: string,
+    @Body('parameters') parameters: unknown,
+    @Body('parts') parts: unknown,
+    @Body('selectedPartId') selectedPartId: string,
+    @Body('instruction') instruction: string,
+    @Body('objectType') objectType: string,
+  ) {
+    return this.service.modifyProceduralObjectFromInstruction(
+      source, parameters, parts, selectedPartId, instruction, objectType,
+    );
+  }
+
   @Post('generate-object')
   @ApiOperation({ summary: '根据提示词直接生成受控 Three.js ObjectSculptSpec' })
   generateObject(

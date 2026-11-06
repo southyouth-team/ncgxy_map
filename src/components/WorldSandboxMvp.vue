@@ -143,7 +143,7 @@ async function generateAiModel() {
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(payload.message || '模型生成失败：HTTP ' + response.status)
-    const spec = payload.data || payload.result || payload
+    const spec = payload.objectSculptSpec || payload.data?.objectSculptSpec || payload.result?.objectSculptSpec || payload.data || payload.result || payload
     const group = createObjectSculptModel(THREE, spec, { source: 'world-sandbox-ai' })
     registerModel(group, spec.targetName || 'AI 建模组 ' + (objectId + 1))
     aiPrompt.value = ''
@@ -169,7 +169,7 @@ async function modifyAiModel() {
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(payload.message || '模型修改失败：HTTP ' + response.status)
     const result = payload.data || payload.result || payload
-    const nextSpec = result.objectSculptSpec || result.spec || result
+    const nextSpec = result.objectSculptSpec || result.spec || result.data?.objectSculptSpec || result
     const replacement = createObjectSculptModel(THREE, nextSpec, { source: 'world-sandbox-ai-edit' })
     replacement.position.copy(selected.position)
     replacement.rotation.copy(selected.rotation)

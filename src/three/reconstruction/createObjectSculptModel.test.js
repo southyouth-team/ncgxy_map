@@ -114,6 +114,48 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('new-part').parent).toBe(model.userData.componentGroups.get('root'));
   });
 
+  it('preserves migrated descendants when a parent subtree is removed by a server ChangeSet', () => {
+    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'assembly',kind:'group',parent:'root'},{id:'shell',parent:'assembly',primitive:'box',dimensions:{width:2,height:2,depth:2}},{id:'detail',parent:'shell',primitive:'sphere',dimensions:{width:0.5,height:0.5,depth:0.5}}]};
+    const model=createObjectSculptModel(THREE,spec);
+    const assembly=model.userData.componentGroups.get('assembly');
+    const shell=model.userData.componentGroups.get('shell');
+    const detail=model.userData.componentGroups.get('detail');
+    const next=structuredClone(model.userData.objectSculptSpec);
+    next.componentTree=next.componentTree.filter(node=>node.id!=='assembly');
+    next.componentTree.find(node=>node.id==='shell').parent='root';
+    const changeSetResult={
+      objectModelSpec:next,
+      changes:[
+        {type:'replace-component',nodeId:'shell',component:next.componentTree.find(node=>node.id==='shell')},
+        {type:'remove-component',nodeId:'assembly',cascade:true},
+      ],
+      affectedNodeIds:['shell','assembly'],
+      affectedMaterialIds:[],
+    };
+    applyObjectSculptComponentChanges(THREE,model,next,changeSetResult);
+    expect(model.userData.componentGroups.has('assembly')).toBe(false);
+    expect(model.userData.componentGroups.get('shell')).toBe(shell);
+    expect(model.userData.componentGroups.get('detail')).toBe(detail);
+    expect(shell.parent).toBe(model.userData.componentGroups.get('root'));
+    expect(detail.parent).toBe(shell);
+    expect(assembly.parent).toBe(null);
+  });
+
+  it('attaches nested additions in parent-first order from a server ChangeSet', () => {
+    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'}]};
+    const model=createObjectSculptModel(THREE,spec);
+    const next=structuredClone(model.userData.objectSculptSpec);
+    const branch={id:'branch',kind:'group',parent:'root'};
+    const leaf={id:'leaf',parent:'branch',primitive:'box',dimensions:{width:1,height:2,depth:1}};
+    next.componentTree.push(branch,leaf);
+    const changeSetResult={objectModelSpec:next,changes:[
+      {type:'add-component',component:branch},
+      {type:'add-component',component:leaf},
+    ],affectedNodeIds:['branch','leaf'],affectedMaterialIds:[]};
+    applyObjectSculptComponentChanges(THREE,model,next,changeSetResult);
+    expect(model.userData.componentGroups.get('branch').parent).toBe(model.userData.componentGroups.get('root'));
+    expect(model.userData.componentGroups.get('leaf').parent).toBe(model.userData.componentGroups.get('branch'));
+  });
   it('reparents an unchanged component without replacing its Group', () => {
     const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'a',kind:'group',parent:'root'},{id:'b',kind:'group',parent:'root'},{id:'leaf',parent:'a',primitive:'box',dimensions:{width:1,height:1,depth:1}}]};
     const model=createObjectSculptModel(THREE,spec),leaf=model.userData.componentGroups.get('leaf'),next=structuredClone(model.userData.objectSculptSpec);

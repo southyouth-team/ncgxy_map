@@ -150,6 +150,48 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => createObjectSculptModel(THREE, invalid)).toThrow('二维坐标');
   });
 
+
+  it('executes cylinder, cone, sphere, ellipsoid and torus through registered capabilities', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'cylinder', parent: 'root', primitive: 'cylinder', dimensions: { width: 2, height: 4, depth: 1 }, geometryDescriptor: { segments: 12 } },
+        { id: 'cone', parent: 'root', primitive: 'cone', dimensions: { width: 3, height: 5, depth: 2 }, geometryDescriptor: { segments: 10 } },
+        { id: 'sphere', parent: 'root', primitive: 'sphere', dimensions: { width: 2, height: 3, depth: 4 }, geometryDescriptor: { segments: 12 } },
+        { id: 'ellipsoid', parent: 'root', primitive: 'ellipsoid', dimensions: { width: 4, height: 2, depth: 3 }, geometryDescriptor: { segments: 14 } },
+        { id: 'torus', parent: 'root', primitive: 'torus', dimensions: { width: 4, height: 1, depth: 2 }, geometryDescriptor: { segments: 20, tube: 0.2 } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const cylinder = model.getObjectByName('cylinder:mesh').geometry;
+    const cone = model.getObjectByName('cone:mesh').geometry;
+    const sphere = model.getObjectByName('sphere:mesh').geometry;
+    const ellipsoid = model.getObjectByName('ellipsoid:mesh').geometry;
+    const torus = model.getObjectByName('torus:mesh').geometry;
+    expect(cylinder.type).toBe('CylinderGeometry');
+    expect(cylinder.parameters).toMatchObject({ radiusTop: 1, radiusBottom: 0.5, height: 4, radialSegments: 12 });
+    expect(cone.type).toBe('ConeGeometry');
+    expect(cone.parameters).toMatchObject({ radius: 1.5, height: 5, radialSegments: 10 });
+    expect(sphere.type).toBe('SphereGeometry');
+    expect(sphere.boundingBox.getSize(new THREE.Vector3()).toArray()).toEqual([2, 3, 4]);
+    expect(ellipsoid.type).toBe('SphereGeometry');
+    expect(ellipsoid.boundingBox.getSize(new THREE.Vector3()).toArray()).toEqual([4, 2, 3]);
+    expect(torus.type).toBe('TorusGeometry');
+    expect(torus.parameters).toMatchObject({ radius: 1.8, tube: 0.2, radialSegments: 16, tubularSegments: 20 });
+  });
+
+  it('rejects torus tube values outside the existing geometry bounds', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      componentTree: [{
+        id: 'torus', primitive: 'torus', dimensions: { width: 2, height: 1, depth: 2 },
+        geometryDescriptor: { tube: 0.9 },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('torus.tube 超出允许范围');
+  });
+
   it('applies hidden visibility and preserves locked metadata on component groups', () => {
     const spec = castleSpec();
     spec.componentTree[0].hidden = true;

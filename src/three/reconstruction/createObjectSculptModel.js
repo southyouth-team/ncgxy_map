@@ -279,9 +279,40 @@ function createBoxGeometry({ THREE, node, width, height, depth, segments, descri
   return geometry;
 }
 
+function createCylinderGeometry({ THREE, width, height, depth, segments }) {
+  return new THREE.CylinderGeometry(width / 2, depth / 2, height, segments);
+}
+
+function createConeGeometry({ THREE, width, height, depth, segments }) {
+  return new THREE.ConeGeometry(Math.max(width, depth) / 2, height, segments);
+}
+
+function createSphereGeometry({ THREE, width, height, depth, segments }) {
+  const geometry = new THREE.SphereGeometry(0.5, segments, Math.max(4, Math.floor(segments * 0.66)));
+  geometry.scale(width, height, depth);
+  return geometry;
+}
+
+function createTorusGeometry({ THREE, node, width, height, depth, segments, descriptor }) {
+  const radius = Math.max(width, depth) / 2;
+  const tube = boundedNumber(
+    descriptor.tube,
+    Math.min(width, depth) * 0.12,
+    0.01,
+    radius * 0.45,
+    node.id + '.tube',
+  );
+  return new THREE.TorusGeometry(radius - tube, tube, Math.min(16, segments), segments);
+}
+
 const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
   { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
   { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
+  { primitive: 'cylinder', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createCylinderGeometry },
+  { primitive: 'cone', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createConeGeometry },
+  { primitive: 'sphere', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createSphereGeometry },
+  { primitive: 'ellipsoid', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createSphereGeometry },
+  { primitive: 'torus', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createTorusGeometry },
 ], getObjectModelGeometryCapability);
 
 export function auditObjectModelGeometryCapabilityCoverage() {
@@ -510,21 +541,6 @@ function createGeometry(THREE, node) {
       const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
       geometry.translate(0, 0, -depth / 2);
       return geometry;
-    }
-    case 'cylinder':
-      return new THREE.CylinderGeometry(width / 2, depth / 2, height, segments);
-    case 'cone':
-      return new THREE.ConeGeometry(Math.max(width, depth) / 2, height, segments);
-    case 'sphere':
-    case 'ellipsoid': {
-      const geometry = new THREE.SphereGeometry(0.5, segments, Math.max(4, Math.floor(segments * 0.66)));
-      geometry.scale(width, height, depth);
-      return geometry;
-    }
-    case 'torus': {
-      const radius = Math.max(width, depth) / 2;
-      const tube = boundedNumber(descriptor.tube, Math.min(width, depth) * 0.12, 0.01, radius * 0.45, node.id + '.tube');
-      return new THREE.TorusGeometry(radius - tube, tube, Math.min(16, segments), segments);
     }
     case 'lathe': {
       const profile = descriptor.profile;

@@ -271,7 +271,8 @@ export class AssetsService {
   async saveObjectSculptAsset(userId: string, input: Record<string, unknown>) {
     if (!userId) throw new BadRequestException('缺少资产保存用户身份');
     const spec = input?.objectSculptSpec as Record<string, any> | undefined;
-    if (!spec || typeof spec !== 'object' || Array.isArray(spec) || !['2.0','3.0'].includes(spec.schemaVersion)
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec) || spec.schemaVersion !== '3.0'
+      || Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')
       || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 300
       || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
       throw new BadRequestException('ObjectSculptSpec 结构无效，无法保存');
@@ -395,191 +396,6 @@ export class AssetsService {
     }
     if (spec.componentTree.filter((node: any) => !node.parent).length !== 1) throw new BadRequestException('结构化资产必须只有一个主体根节点');
     if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) throw new BadRequestException('资产参数 Schema 无效');
-    if (spec.schemaVersion === '2.0') {
-    const generators = spec.generators === undefined ? [] : spec.generators;
-    if (!Array.isArray(generators) || generators.length > 30) throw new BadRequestException('资产结构生成器数量无效');
-    const generatorIds = new Set<string>();
-    const claimedTemplateNodeIds = new Set<string>();
-    let estimatedExpandedCount = spec.componentTree.length;
-    for (const generator of generators) {
-      if (!generator || typeof generator !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(generator.id || '')
-        || generatorIds.has(generator.id) || !['repeat','grid'].includes(generator.type) || !byId.has(generator.templateRootId)) {
-        throw new BadRequestException('资产结构生成器定义无效');
-      }
-      generatorIds.add(generator.id);
-      const subtree = spec.componentTree.filter((node: any) => {
-        let current = node.id;
-        while (current) {
-          if (current === generator.templateRootId) return true;
-          current = byId.get(current)?.parent;
-        }
-        return false;
-      });
-      if (!subtree.length) throw new BadRequestException('资产结构生成器模板子树为空：' + generator.id);
-      for (const node of subtree) {
-        if (claimedTemplateNodeIds.has(node.id)) throw new BadRequestException('暂不支持嵌套或重叠的资产结构生成器：' + generator.id);
-        claimedTemplateNodeIds.add(node.id);
-      }
-      let maximumInstances = 0;
-      if (generator.type === 'repeat') {
-        if (!['x','y','z'].includes(generator.axis) || !Number.isFinite(generator.spacing) || Math.abs(generator.spacing) > 100
-          || !Number.isInteger(generator.maxCount) || generator.maxCount < 1 || generator.maxCount > 100
-          || !Number.isInteger(generator.defaultCount) || generator.defaultCount < 1 || generator.defaultCount > generator.maxCount
-          || (generator.followers !== undefined && (!Array.isArray(generator.followers) || generator.followers.length > 30))) {
-          throw new BadRequestException('资产 repeat 生成器定义无效：' + generator.id);
-        }
-        for (const follower of generator.followers || []) {
-          if (!byId.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis) || !Number.isFinite(Number(follower.offset ?? 0))
-            || subtree.some((node: any) => node.id === follower.nodeId)) throw new BadRequestException('资产结构生成器跟随规则无效：' + generator.id);
-        }
-        const parameter = (spec.parameterSchema || []).find((item: any) => item.id === generator.countParameterId);
-        if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
-          || parameter.min < 1 || parameter.max > generator.maxCount || generator.defaultCount < parameter.min || generator.defaultCount > parameter.max) {
-          throw new BadRequestException('资产结构生成器缺少有效的整数数量参数：' + generator.id);
-        }
-        maximumInstances = generator.maxCount;
-      } else {
-        if (![generator.spacingX,generator.spacingZ].every((value: unknown) => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 100)
-          || !Number.isInteger(generator.maxRows) || !Number.isInteger(generator.maxColumns)
-          || !Number.isInteger(generator.defaultRows) || !Number.isInteger(generator.defaultColumns)
-          || generator.defaultRows < 1 || generator.defaultColumns < 1 || generator.maxRows < generator.defaultRows
-          || generator.maxColumns < generator.defaultColumns || generator.maxRows > 100 || generator.maxColumns > 100) {
-          throw new BadRequestException('资产 grid 生成器行列或间距无效：' + generator.id);
-        }
-        if (generator.rowParameterId === generator.columnParameterId) throw new BadRequestException('资产 grid 生成器行列参数不能相同：' + generator.id);
-        const gridParameters: Array<[string, number, number]> = [
-          [generator.rowParameterId, generator.maxRows, generator.defaultRows],
-          [generator.columnParameterId, generator.maxColumns, generator.defaultColumns],
-        ];
-        for (const [parameterId, maxValue, defaultValue] of gridParameters) {
-          const parameter = (spec.parameterSchema || []).find((item: any) => item.id === parameterId);
-          if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min) || !Number.isInteger(parameter.max)
-            || parameter.min < 1 || parameter.max > maxValue || defaultValue < parameter.min || defaultValue > parameter.max) {
-            throw new BadRequestException('资产 grid 生成器缺少有效的行列参数：' + generator.id);
-          }
-        }
-        maximumInstances = generator.maxRows * generator.maxColumns;
-      }
-      estimatedExpandedCount += subtree.length * (maximumInstances - 1);
-      if (estimatedExpandedCount > 300) throw new BadRequestException('资产结构生成器最大展开数量超过 300：' + generator.id);
-    }
-
-    const constraints = spec.constraints === undefined ? [] : spec.constraints;
-    if (!Array.isArray(constraints) || constraints.length > 60) throw new BadRequestException('资产结构约束数量无效');
-    const generatorIdSet = new Set(generators.map((item: any) => item.id));
-    const claimedConstraintTargets = new Set<string>();
-    const templateNodeIds = new Set<string>();
-    for (const generator of generators) {
-      for (const node of spec.componentTree) {
-        let current = node.id;
-        while (current) {
-          if (current === generator.templateRootId) { templateNodeIds.add(node.id); break; }
-          current = byId.get(current)?.parent;
-        }
-      }
-    }
-    const constraintIds = new Set<string>();
-    const cutoutRegions = new Map<string, Array<{ centerX: number; centerY: number; width: number; height: number }>>();
-    for (const constraint of constraints) {
-      if (!constraint || typeof constraint !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(constraint.id || '')
-        || constraintIds.has(constraint.id) || !['follow','span','attach','adjacency','cutout'].includes(constraint.type)) {
-        throw new BadRequestException('资产结构约束 ID 或类型无效');
-      }
-      constraintIds.add(constraint.id);
-      if (constraint.type === 'cutout') {
-        const target = byId.get(constraint.targetNodeId), cutter = byId.get(constraint.cutterNodeId);
-        if (!target || !cutter || target.id === cutter.id || templateNodeIds.has(target.id) || templateNodeIds.has(cutter.id)
-          || (target.kind || 'mesh') !== 'mesh' || (cutter.kind || 'mesh') !== 'mesh'
-          || !['box','cuboid'].includes(String(target.primitive).toLowerCase())
-          || !['box','cuboid'].includes(String(cutter.primitive).toLowerCase())
-          || target.parent !== cutter.parent || constraint.operation !== 'subtract' || constraint.axis !== 'z'
-          || (target.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
-          || (cutter.transform?.rotation || [0,0,0]).some((value: unknown) => Math.abs(Number(value)) > 0.0001)
-        || (target.transform?.scale || [1,1,1]).some((value: unknown) => Math.abs(Number(value) - 1) > 0.0001)
-        || (cutter.transform?.scale || [1,1,1]).some((value: unknown) => Math.abs(Number(value) - 1) > 0.0001)
-          || Number(cutter.dimensions?.depth) < Number(target.dimensions?.depth) + 0.02) {
-          throw new BadRequestException('资产 cutout 目前仅支持同级、未旋转盒体沿 Z 轴贯穿的矩形减法：' + constraint.id);
-        }
-        const centerX = Number(cutter.transform?.position?.[0] || 0) - Number(target.transform?.position?.[0] || 0);
-        const centerY = Number(cutter.transform?.position?.[1] || 0) - Number(target.transform?.position?.[1] || 0);
-        if (!Number.isFinite(centerX) || !Number.isFinite(centerY)
-          || Math.abs(centerX) + Number(cutter.dimensions.width) / 2 > Number(target.dimensions.width) / 2
-          || Math.abs(centerY) + Number(cutter.dimensions.height) / 2 > Number(target.dimensions.height) / 2) {
-          throw new BadRequestException('资产 cutout 开口必须完整位于目标 Mesh 边界内：' + constraint.id);
-        }
-        const regions = cutoutRegions.get(target.id) || [];
-        const width = Number(cutter.dimensions.width), height = Number(cutter.dimensions.height);
-        for (const region of regions) {
-          const overlapsX = Math.abs(centerX - region.centerX) <= (width + region.width) / 2 + 0.0001;
-          const overlapsY = Math.abs(centerY - region.centerY) <= (height + region.height) / 2 + 0.0001;
-          if (overlapsX && overlapsY) throw new BadRequestException('资产 cutout 开口不能重叠或边界接触：' + constraint.id);
-        }
-        regions.push({ centerX, centerY, width, height });
-        cutoutRegions.set(target.id, regions);
-        continue;
-      }
-      if (constraint.type === 'attach' || constraint.type === 'adjacency') {
-        const sourceNode = byId.get(constraint.sourceNodeId), targetNode = byId.get(constraint.targetNodeId);
-        if (!sourceNode || !targetNode || sourceNode.id === targetNode.id || templateNodeIds.has(sourceNode.id) || templateNodeIds.has(targetNode.id)) {
-          throw new BadRequestException('资产组件连接关系引用无效：' + constraint.id);
-        }
-        if (constraint.type === 'attach') {
-          if ((sourceNode.kind || 'mesh') !== 'mesh' || (targetNode.kind || 'mesh') !== 'mesh'
-            || sourceNode.parent !== targetNode.parent || !['x','y','z'].includes(constraint.axis)
-            || ![-1,1].includes(Number(constraint.sourceSide)) || ![-1,1].includes(Number(constraint.targetSide))
-            || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
-            throw new BadRequestException('资产 attach 必须连接同一父级下的 Mesh 面：' + constraint.id);
-          }
-          const attachTargetKey = targetNode.id + ':attach:' + constraint.axis;
-          if (claimedConstraintTargets.has(attachTargetKey)) throw new BadRequestException('资产 attach 目标轴重复绑定：' + constraint.id);
-          claimedConstraintTargets.add(attachTargetKey);
-        } else if (!['adjacent','connects'].includes(constraint.relation)) {
-          throw new BadRequestException('资产 adjacency 关系类型无效：' + constraint.id);
-        }
-        continue;
-      }
-      if (!generatorIdSet.has(constraint.sourceGeneratorId) || !ids.has(constraint.targetNodeId)
-        || templateNodeIds.has(constraint.targetNodeId) || !['x','y','z'].includes(constraint.axis)) {
-        throw new BadRequestException('资产结构约束引用无效');
-      }
-      const targetNode = byId.get(constraint.targetNodeId);
-      if (constraint.type === 'span' && (!['dimensions.width','dimensions.height','dimensions.depth'].includes(constraint.property) || targetNode?.kind === 'group')) {
-        throw new BadRequestException('资产 span 约束目标属性无效：' + constraint.id);
-      }
-      if (constraint.type === 'follow' && constraint.property !== undefined) throw new BadRequestException('资产 follow 约束不能声明 property：' + constraint.id);
-      const sourceGenerator = generators.find((item: any) => item.id === constraint.sourceGeneratorId);
-      const expectedAxis = ({ 'dimensions.width': 'x', 'dimensions.height': 'y', 'dimensions.depth': 'z' } as Record<string, string>)[constraint.property];
-      if (!['rows','columns','repeat'].includes(constraint.measure || 'repeat')
-        || (sourceGenerator?.type === 'grid' && !['rows','columns'].includes(constraint.measure))
-        || (sourceGenerator?.type === 'repeat' && constraint.measure !== 'repeat')
-        || (constraint.type === 'span' && expectedAxis !== constraint.axis)
-        || !Number.isFinite(Number(constraint.factor ?? 1)) || Math.abs(Number(constraint.factor ?? 1)) > 10
-        || !Number.isFinite(Number(constraint.offset ?? 0)) || Math.abs(Number(constraint.offset ?? 0)) > 100) {
-        throw new BadRequestException('资产结构约束计算规则无效：' + constraint.id);
-      }
-      const targetKey = constraint.targetNodeId + ':' + constraint.type + ':' + (constraint.property || constraint.axis);
-      if (claimedConstraintTargets.has(targetKey)) throw new BadRequestException('资产结构约束重复管理同一目标：' + constraint.id);
-      claimedConstraintTargets.add(targetKey);
-    }
-
-    const attachmentGraph = new Map<string, Set<string>>();
-    for (const constraint of constraints) if (constraint.type === 'attach') {
-      const sources = attachmentGraph.get(constraint.targetNodeId) || new Set<string>();
-      sources.add(constraint.sourceNodeId);
-      attachmentGraph.set(constraint.targetNodeId, sources);
-    }
-    const visitingAttachments = new Set<string>(), visitedAttachments = new Set<string>();
-    const visitAttachment = (nodeId: string) => {
-      if (visitingAttachments.has(nodeId)) throw new BadRequestException('资产 attach 关系存在循环依赖：' + nodeId);
-      if (visitedAttachments.has(nodeId)) return;
-      visitingAttachments.add(nodeId);
-      for (const sourceId of attachmentGraph.get(nodeId) || []) visitAttachment(sourceId);
-      visitingAttachments.delete(nodeId);
-      visitedAttachments.add(nodeId);
-    };
-    for (const nodeId of attachmentGraph.keys()) visitAttachment(nodeId);
-
-    } else {
       const operations = spec.operations === undefined ? [] : spec.operations;
       if (!Array.isArray(operations) || operations.length > 40) throw new BadRequestException('资产 operations 数量无效');
       const operationIds = new Set<string>(), operationRoots = new Set<string>(), claimedSourceNodes = new Set<string>();
@@ -649,7 +465,6 @@ export class AssetsService {
           vector.forEach((value: any) => validateExpression(value));
         }
       }
-    }
 
     const assetId = randomUUID();
     const directory = resolve(this.storageDir, 'campus-visual-assets', 'objects');

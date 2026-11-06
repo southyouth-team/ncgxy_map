@@ -3,7 +3,7 @@
  * Only application code can register validators and Three.js executors; model data
  * supplies a primitive identifier and descriptor, never executable code.
  */
-export function createGeometryCapabilityRegistry(initialCapabilities = []) {
+export function createGeometryCapabilityRegistry(initialCapabilities = [], resolveProtocolContract = null) {
   const capabilities = new Map();
 
   const register = capability => {
@@ -17,10 +17,21 @@ export function createGeometryCapabilityRegistry(initialCapabilities = []) {
       throw new TypeError('Geometry capability requires a trusted validator and executor');
     }
     const primitive = capability.primitive.toLowerCase();
+    const descriptor = capability.descriptor || 'custom';
+    if (resolveProtocolContract) {
+      const contract = resolveProtocolContract(primitive);
+      if (!contract || contract.id !== primitive || contract.primitive !== primitive) {
+        throw new TypeError('Geometry capability has no matching protocol contract: ' + primitive);
+      }
+      if (contract.descriptor !== descriptor) {
+        throw new TypeError('Geometry capability descriptor contract mismatch: ' + primitive);
+      }
+    }
     if (capabilities.has(primitive)) throw new TypeError('Geometry capability already registered: ' + primitive);
     capabilities.set(primitive, Object.freeze({
+      id: primitive,
       primitive,
-      descriptor: capability.descriptor || 'custom',
+      descriptor,
       validateDescriptor: capability.validateDescriptor,
       createGeometry: capability.createGeometry,
     }));
@@ -36,7 +47,7 @@ export function createGeometryCapabilityRegistry(initialCapabilities = []) {
       return typeof primitive === 'string' ? capabilities.get(primitive.toLowerCase()) || null : null;
     },
     list() {
-      return [...capabilities.values()].map(({ primitive, descriptor }) => ({ primitive, descriptor }));
+      return [...capabilities.values()].map(({ id, primitive, descriptor }) => ({ id, primitive, descriptor }));
     },
     create(primitive, context) {
       const capability = api.get(primitive);

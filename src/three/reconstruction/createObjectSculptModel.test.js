@@ -743,6 +743,108 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('estimates tube buffers against actual TubeGeometry for multiple segment configurations', () => {
+    for (const tubularSegments of [3, 12, 48]) {
+      for (const radialSegments of [3, 8, 16]) {
+        const descriptor = {
+          path: [[-0.4, 0, 0], [0, 0.25, 0.1], [0.4, 0, 0]],
+          tubularSegments,
+          radialSegments,
+        };
+        const estimate = estimateObjectSculptPrimitiveGeometry('tube', descriptor);
+        const node = {
+          id: 'estimated-tube-' + tubularSegments + '-' + radialSegments,
+          primitive: 'tube',
+          dimensions: { width: 2, height: 3, depth: 2 },
+          geometryDescriptor: descriptor,
+        };
+        const component = createObjectSculptComponentGroup(THREE, node);
+        const geometry = component.getObjectByName(node.id + ':mesh').geometry;
+        const actualAttributeBytes = Object.values(geometry.attributes)
+          .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+        const actualIndex = geometry.getIndex();
+        expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+        expect(estimate.indexCount).toBe(actualIndex.count);
+        expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+        expect(estimate.indexBytes).toBe(actualIndex.array.byteLength);
+        expect(estimate.indexBytesPerElement).toBe(actualIndex.array.BYTES_PER_ELEMENT);
+        expect(estimate.bufferBytes).toBe(actualAttributeBytes + actualIndex.array.byteLength);
+        component.traverse(object => {
+          object.geometry?.dispose?.();
+          object.material?.dispose?.();
+        });
+      }
+    }
+  });
+
+  it('estimates sweep buffers against actual generated geometry for multiple path/profile sizes', () => {
+    for (const steps of [3, 12, 32]) {
+      for (const profileCount of [3, 4, 6]) {
+        const profile = Array.from({ length: profileCount }, (_, index) => {
+          const angle = Math.PI * 2 * index / profileCount;
+          return [Math.cos(angle) * 0.3, Math.sin(angle) * 0.3];
+        });
+        const descriptor = {
+          path: [[-0.4, 0, 0], [0, 0.15, 0.1], [0.4, 0, 0]],
+          profile,
+          steps,
+        };
+        const estimate = estimateObjectSculptPrimitiveGeometry('sweep', descriptor);
+        const node = {
+          id: 'estimated-sweep-' + steps + '-' + profileCount,
+          primitive: 'sweep',
+          dimensions: { width: 2, height: 2, depth: 2 },
+          geometryDescriptor: descriptor,
+        };
+        const component = createObjectSculptComponentGroup(THREE, node);
+        const geometry = component.getObjectByName(node.id + ':mesh').geometry;
+        const actualAttributeBytes = Object.values(geometry.attributes)
+          .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+        const actualIndex = geometry.getIndex();
+        expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+        expect(estimate.indexCount).toBe(actualIndex.count);
+        expect(estimate.attributeComponents).toBe(6);
+        expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+        expect(estimate.indexBytes).toBe(actualIndex.array.byteLength);
+        expect(estimate.indexBytesPerElement).toBe(actualIndex.array.BYTES_PER_ELEMENT);
+        expect(estimate.bufferBytes).toBe(actualAttributeBytes + actualIndex.array.byteLength);
+        component.traverse(object => {
+          object.geometry?.dispose?.();
+          object.material?.dispose?.();
+        });
+      }
+    }
+  });
+
+  it('estimates lathe buffers against actual LatheGeometry for multiple profile/segment sizes', () => {
+    const profile = [[0.12, -0.5], [0.38, -0.3], [0.32, 0.25], [0.1, 0.5]];
+    for (const segments of [3, 12, 32]) {
+      const descriptor = { profile, segments };
+      const estimate = estimateObjectSculptPrimitiveGeometry('lathe', descriptor);
+      const node = {
+        id: 'estimated-lathe-' + segments,
+        primitive: 'lathe',
+        dimensions: { width: 2, height: 3, depth: 2 },
+        geometryDescriptor: descriptor,
+      };
+      const component = createObjectSculptComponentGroup(THREE, node);
+      const geometry = component.getObjectByName(node.id + ':mesh').geometry;
+      const actualAttributeBytes = Object.values(geometry.attributes)
+        .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+      const actualIndex = geometry.getIndex();
+      expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+      expect(estimate.indexCount).toBe(actualIndex.count);
+      expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+      expect(estimate.indexBytes).toBe(actualIndex.array.byteLength);
+      expect(estimate.indexBytesPerElement).toBe(actualIndex.array.BYTES_PER_ELEMENT);
+      expect(estimate.bufferBytes).toBe(actualAttributeBytes + actualIndex.array.byteLength);
+      component.traverse(object => {
+        object.geometry?.dispose?.();
+        object.material?.dispose?.();
+      });
+    }
+  });
+
   it('does not claim an estimate for extruded box geometry or uncalibrated primitives', () => {
     expect(() => estimateObjectSculptPrimitiveGeometry('box', { openings: [{}] }))
       .toThrow('当前估算器不支持');

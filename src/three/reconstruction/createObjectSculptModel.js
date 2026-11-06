@@ -701,6 +701,39 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
       attributeComponents = 6;
       break;
     }
+    case 'tube': {
+      const path = options.path;
+      if (!Array.isArray(path) || path.length < 2) throw new TypeError('tube path 格式无效');
+      const tubularSegments = Math.round(boundedNumber(options.tubularSegments, 32, 3, 128, 'tube.tubularSegments'));
+      const radialSegments = Math.round(boundedNumber(options.radialSegments, 8, 3, 24, 'tube.radialSegments'));
+      vertexCount = (tubularSegments + 1) * (radialSegments + 1);
+      indexCount = tubularSegments * radialSegments * 6;
+      maxIndex = vertexCount - 1;
+      break;
+    }
+    case 'sweep': {
+      const path = options.path;
+      const profile = options.profile;
+      if (!Array.isArray(path) || path.length < 2 || !Array.isArray(profile) || profile.length < 3) {
+        throw new TypeError('sweep path/profile 格式无效');
+      }
+      const steps = Math.round(boundedNumber(options.steps, 32, 3, 128, 'sweep.steps'));
+      const ringSize = profile.length;
+      const capTriangleCount = ringSize - 2;
+      vertexCount = 2 * ringSize * (steps + 1) + 6 * capTriangleCount;
+      indexCount = 6 * ringSize * steps + 6 * capTriangleCount;
+      maxIndex = vertexCount - 1;
+      attributeComponents = 6;
+      break;
+    }
+    case 'lathe': {
+      const profile = options.profile;
+      if (!Array.isArray(profile) || profile.length < 2) throw new TypeError('lathe profile 格式无效');
+      vertexCount = profile.length * (segments + 1);
+      indexCount = (profile.length - 1) * segments * 6;
+      maxIndex = vertexCount - 1;
+      break;
+    }
     default:
       throw new RangeError('当前几何类型没有经过校准的资源估算：' + type);
   }

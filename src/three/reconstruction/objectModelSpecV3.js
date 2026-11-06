@@ -88,6 +88,7 @@ export function compileObjectModelSpec(spec) {
   const parameters = new Map((spec.parameterSchema || []).map(item => [item.id, item.value]));
   const sourceNodes = spec.componentTree;
   const operationRoots = new Set();
+  const claimedSourceNodes = new Set();
   let estimatedCount = sourceNodes.length;
   const expanded = sourceNodes.map(node => JSON.parse(JSON.stringify(node)));
   for (const operation of operations) {
@@ -99,6 +100,10 @@ export function compileObjectModelSpec(spec) {
     const sourceRoot = sourceNodes.find(node => node.id === operation.sourceRootId);
     if (!sourceRoot || (sourceRoot.kind || 'mesh') !== 'group') throw new TypeError('instance 源节点必须是 Group：' + operation.id);
     const subtree = collectSubtree(sourceNodes, operation.sourceRootId);
+    for (const node of subtree) {
+      if (claimedSourceNodes.has(node.id)) throw new TypeError('instance 操作的源子树不能重叠：' + operation.id);
+      claimedSourceNodes.add(node.id);
+    }
     const countParameter = parameters.get(operation.count?.parameterId);
     const countDefinition = (spec.parameterSchema || []).find(item => item.id === operation.count?.parameterId);
     if (!countDefinition || countDefinition.type !== 'number' || !Number.isInteger(Number(countParameter))) {
@@ -109,7 +114,7 @@ export function compileObjectModelSpec(spec) {
     if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max > MAX_INSTANCES_PER_OPERATION || count < min || count > max) {
       throw new RangeError('instance 数量参数范围无效：' + operation.id);
     }
-    estimatedCount += subtree.length * (count - 1);
+    estimatedCount += subtree.length * (max - 1);
     if (estimatedCount > MAX_COMPONENTS) throw new RangeError('展开后的组件数量超过 ' + MAX_COMPONENTS);
     const transform = operation.transform || {};
     const evaluateVector = (values, fallback, context, label) => {

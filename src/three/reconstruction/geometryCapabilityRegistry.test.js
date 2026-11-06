@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createGeometryCapabilityRegistry } from './geometryCapabilityRegistry.js';
+import { auditGeometryCapabilityCoverage, createGeometryCapabilityRegistry } from './geometryCapabilityRegistry.js';
 
 describe('trusted geometry capability registry', () => {
   it('requires both a descriptor validator and a trusted executor', () => {
@@ -39,7 +39,6 @@ describe('trusted geometry capability registry', () => {
 
 
   it('audits missing, unknown and mismatched runtime executors without hiding partial coverage', () => {
-    const { auditGeometryCapabilityCoverage } = require('./geometryCapabilityRegistry.js');
     const result = auditGeometryCapabilityCoverage([
       { id: 'box', primitive: 'box', descriptor: 'optional' },
       { id: 'tube', primitive: 'tube', descriptor: 'path-radius' },
@@ -61,7 +60,6 @@ describe('trusted geometry capability registry', () => {
   });
 
   it('reports full coverage only when IDs, primitives and descriptor contracts match', () => {
-    const { auditGeometryCapabilityCoverage } = require('./geometryCapabilityRegistry.js');
     expect(auditGeometryCapabilityCoverage(
       [{ id: 'box', primitive: 'box', descriptor: 'optional' }],
       [{ id: 'box', primitive: 'box', descriptor: 'optional' }],

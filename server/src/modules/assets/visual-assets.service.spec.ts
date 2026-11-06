@@ -132,9 +132,9 @@ describe('AssetsService visual asset persistence', () => {
     expect(loaded.spec.constraints.map((item: any) => item.cutterNodeId).sort()).toEqual(['left-opening', 'right-opening']);
   });
 
-  it('persists and owner-scopes a complete structured ObjectSculptSpec', async () => {
+  it('persists and owner-scopes a complete ObjectModelSpec 3.0', async () => {
     const objectSculptSpec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       targetName: '参数化教学楼',
       category: 'building',
       objectType: '教学楼',
@@ -145,6 +145,7 @@ describe('AssetsService visual asset persistence', () => {
         { id: 'body', parent: 'body-group', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 10, depth: 6 } },
       ],
       parameterSchema: [{ id: 'height', label: '整体高度', type: 'number', value: 10, min: 5, max: 20, targets: [{ nodeId: 'body', property: 'dimensions.height', mode: 'set' }] }],
+      operations: [],
     };
     const saved = await service.saveObjectSculptAsset('owner-1', { name: '教学楼', objectSculptSpec });
     expect(saved.assetId).toMatch(/^[a-f0-9-]{36}$/i);
@@ -152,6 +153,18 @@ describe('AssetsService visual asset persistence', () => {
     expect(loaded.spec).toEqual(objectSculptSpec);
     expect(loaded.spec.componentTree[0].kind).toBe('group');
     await expect(service.getObjectSculptAsset('owner-2', saved.assetId)).rejects.toThrow('无权读取');
+  });
+
+  it('rejects ObjectSculptSpec 2.0 and legacy generator fields when saving', async () => {
+    const legacy = {
+      schemaVersion: '2.0',
+      materials: { wall: { color: '#e7d2a5', roughness: 0.8, metalness: 0, opacity: 1 } },
+      componentTree: [{ id: 'body', primitive: 'box', material: 'wall', dimensions: { width: 2, height: 2, depth: 2 } }],
+    };
+    await expect(service.saveObjectSculptAsset('owner-1', { objectSculptSpec: legacy })).rejects.toThrow('结构无效');
+
+    const generatorSpec = { ...legacy, schemaVersion: '3.0', generators: [] };
+    await expect(service.saveObjectSculptAsset('owner-1', { objectSculptSpec: generatorSpec })).rejects.toThrow('结构无效');
   });
 
 });

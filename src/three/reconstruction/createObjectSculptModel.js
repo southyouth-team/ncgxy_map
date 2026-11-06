@@ -681,6 +681,8 @@ export function validateObjectSculptSpec(spec) {
  */
 export function createObjectSculptComponentGroup(THREE, node, materialSpecs = {}) {
   const group = new THREE.Group();
+  let pendingGeometry = null;
+  let pendingMaterial = null;
   try {
     group.name = String(node.name || node.id).slice(0, 120);
     group.userData.componentId = node.id;
@@ -691,17 +693,20 @@ export function createObjectSculptComponentGroup(THREE, node, materialSpecs = {}
     group.userData.componentLocked = node.locked === true;
     group.visible = node.hidden !== true;
     if ((node.kind || 'mesh') === 'mesh' && !node.structuralCutter) {
-      const geometry = createGeometry(THREE, node);
+      pendingGeometry = createGeometry(THREE, node);
       const materialKey = typeof node.material === 'string' ? node.material : 'default';
-      const material = normalizeMaterial(THREE,
+      pendingMaterial = normalizeMaterial(THREE,
         Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL);
-      const mesh = new THREE.Mesh(geometry, material);
+      const mesh = new THREE.Mesh(pendingGeometry, pendingMaterial);
       mesh.name = node.id + ':mesh';
       mesh.userData.componentId = node.id;
       mesh.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);
+      // The group now owns these resources and its disposer will release them.
+      pendingGeometry = null;
+      pendingMaterial = null;
     }
     group.userData.componentKind = node.kind || 'mesh';
     const [px, py, pz] = finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
@@ -715,8 +720,10 @@ export function createObjectSculptComponentGroup(THREE, node, materialSpecs = {}
     group.scale.set(sx, sy, sz);
     return group;
   } catch (error) {
-    // Construction is staged before the live component tree is touched.
-    // Release any geometry/material already attached to this incomplete group.
+    // Resources created before Mesh attachment are not reachable by traversal.
+    pendingGeometry?.dispose();
+    pendingMaterial?.dispose();
+    // Release resources already attached to this incomplete group.
     disposeComponentGroup(group);
     throw error;
   }

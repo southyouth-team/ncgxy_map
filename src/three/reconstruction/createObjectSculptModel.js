@@ -358,44 +358,13 @@ function createArchGeometry({ THREE, node, width, height, depth, segments, descr
   return geometry;
 }
 
-const noopGeometryDescriptorValidator = () => {};
-
-const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
-  { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
-  { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
-  { primitive: 'polygon', descriptor: 'points', validateDescriptor: validatePolygonGeometryDescriptor, createGeometry: ({ THREE, descriptor, width, height, depth, segments }) => createPolygonOutlineGeometry(THREE, descriptor.points, width, height, depth, segments) },
-  { primitive: 'wedge', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createWedgeGeometry },
-  { primitive: 'arch', descriptor: 'optional', validateDescriptor: validateArchGeometryDescriptor, createGeometry: createArchGeometry },
-  { primitive: 'cylinder', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createCylinderGeometry },
-  { primitive: 'cone', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createConeGeometry },
-  { primitive: 'sphere', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createSphereGeometry },
-  { primitive: 'ellipsoid', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createSphereGeometry },
-  { primitive: 'torus', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createTorusGeometry },
-], getObjectModelGeometryCapability);
-
-export function auditObjectModelGeometryCapabilityCoverage() {
-  const protocolCapabilities = Object.entries(OBJECT_MODEL_GEOMETRY_CAPABILITIES).map(([primitive, capability]) => ({
-    id: capability.id,
-    primitive,
-    descriptor: capability.descriptor,
-  }));
-  return auditGeometryCapabilityCoverage(protocolCapabilities, runtimeGeometryCapabilities.list());
+function validateRuntimeGeometryDescriptor({ node }) {
+  const runtimeNode = { ...node };
+  delete runtimeNode.parent;
+  validateObjectModelSpecV3({ schemaVersion: '3.0', componentTree: [runtimeNode] });
 }
 
-function createGeometry(THREE, node) {
-  if (!getObjectModelGeometryCapability(node.primitive)) {
-    throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
-  }
-  const dimensions = node.dimensions || {};
-  const width = boundedNumber(dimensions.width, 1, 0.02, MAX_DIMENSION, node.id + '.width');
-  const height = boundedNumber(dimensions.height, 1, 0.02, MAX_DIMENSION, node.id + '.height');
-  const depth = boundedNumber(dimensions.depth, 1, 0.02, MAX_DIMENSION, node.id + '.depth');
-  const descriptor = node.geometryDescriptor || {};
-  const segments = Math.round(boundedNumber(descriptor.segments, 16, 3, MAX_SEGMENTS, node.id + '.segments'));
-  if (runtimeGeometryCapabilities.has(node.primitive)) {
-    return runtimeGeometryCapabilities.create(node.primitive, { THREE, node, width, height, depth, segments, descriptor });
-  }
-  if (String(node.primitive || '').toLowerCase() === 'tube') {
+function createTubeGeometry({ THREE, node, width, height, depth, descriptor }) {
     const points = descriptor.path;
     if (!Array.isArray(points) || points.length < 2 || points.length > 32) {
       throw new RangeError(node.id + '.geometryDescriptor.path 必须包含 2 到 32 个路径点');
@@ -412,9 +381,10 @@ function createGeometry(THREE, node) {
     const radialSegments = Math.round(boundedNumber(descriptor.radialSegments, 8, 3, 24, node.id + '.geometryDescriptor.radialSegments'));
     const curve = new THREE.CatmullRomCurve3(vectors, descriptor.closed === true, 'centripetal');
     return new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, descriptor.closed === true);
-  }
+  
+}
 
-  if (String(node.primitive || '').toLowerCase() === 'sweep') {
+function createSweepGeometry({ THREE, node, width, height, depth, descriptor }) {
     const path = descriptor.path;
     const profile = descriptor.profile;
     if (!Array.isArray(path) || path.length < 2 || path.length > 32) {
@@ -451,9 +421,10 @@ function createGeometry(THREE, node) {
       createParallelTransportSweepGeometry(THREE, curve, profilePoints, steps, node.id + '.sweep'),
       node.id + '.sweep',
     );
-  }
+  
+}
 
-  if (String(node.primitive || '').toLowerCase() === 'loft') {
+function createLoftGeometry({ THREE, node, width, height, depth, descriptor }) {
     const sections = descriptor.sections;
     if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) {
       throw new RangeError(node.id + '.geometryDescriptor.sections 必须包含 2 到 12 个截面');
@@ -543,10 +514,10 @@ function createGeometry(THREE, node) {
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     return validateGeneratedGeometry(geometry, node.id + '.loft');
-  }
+  
+}
 
-  switch (String(node.primitive || 'box').toLowerCase()) {
-    case 'lathe': {
+function createLatheGeometry({ THREE, node, width, height, depth, segments, descriptor }) {
       const profile = descriptor.profile;
       if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32) {
         throw new RangeError(node.id + '.geometryDescriptor.profile 必须包含 2 到 32 个旋转截面点');
@@ -565,10 +536,48 @@ function createGeometry(THREE, node) {
       const geometry = new THREE.LatheGeometry(points, segments);
       geometry.scale(1, 1, depth / width);
       return geometry;
-    }
-    default:
-      throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
+    
+}
+
+const noopGeometryDescriptorValidator = () => {};
+
+const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
+  { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
+  { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
+  { primitive: 'polygon', descriptor: 'points', validateDescriptor: validatePolygonGeometryDescriptor, createGeometry: ({ THREE, descriptor, width, height, depth, segments }) => createPolygonOutlineGeometry(THREE, descriptor.points, width, height, depth, segments) },
+  { primitive: 'wedge', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createWedgeGeometry },
+  { primitive: 'arch', descriptor: 'optional', validateDescriptor: validateArchGeometryDescriptor, createGeometry: createArchGeometry },
+  { primitive: 'cylinder', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createCylinderGeometry },
+  { primitive: 'cone', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createConeGeometry },
+  { primitive: 'sphere', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createSphereGeometry },
+  { primitive: 'ellipsoid', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createSphereGeometry },
+  { primitive: 'torus', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createTorusGeometry },
+  { primitive: 'tube', descriptor: 'path-radius', validateDescriptor: validateRuntimeGeometryDescriptor, createGeometry: createTubeGeometry },
+  { primitive: 'sweep', descriptor: 'path-profile', validateDescriptor: validateRuntimeGeometryDescriptor, createGeometry: createSweepGeometry },
+  { primitive: 'loft', descriptor: 'sections', validateDescriptor: validateRuntimeGeometryDescriptor, createGeometry: createLoftGeometry },
+  { primitive: 'lathe', descriptor: 'profile', validateDescriptor: validateRuntimeGeometryDescriptor, createGeometry: createLatheGeometry },
+], getObjectModelGeometryCapability);
+
+export function auditObjectModelGeometryCapabilityCoverage() {
+  const protocolCapabilities = Object.entries(OBJECT_MODEL_GEOMETRY_CAPABILITIES).map(([primitive, capability]) => ({
+    id: capability.id,
+    primitive,
+    descriptor: capability.descriptor,
+  }));
+  return auditGeometryCapabilityCoverage(protocolCapabilities, runtimeGeometryCapabilities.list());
+}
+
+function createGeometry(THREE, node) {
+  if (!getObjectModelGeometryCapability(node.primitive)) {
+    throw new TypeError('不支持的重建几何 primitive：' + node.primitive);
   }
+  const dimensions = node.dimensions || {};
+  const width = boundedNumber(dimensions.width, 1, 0.02, MAX_DIMENSION, node.id + '.width');
+  const height = boundedNumber(dimensions.height, 1, 0.02, MAX_DIMENSION, node.id + '.height');
+  const depth = boundedNumber(dimensions.depth, 1, 0.02, MAX_DIMENSION, node.id + '.depth');
+  const descriptor = node.geometryDescriptor || {};
+  const segments = Math.round(boundedNumber(descriptor.segments, 16, 3, MAX_SEGMENTS, node.id + '.segments'));
+  return runtimeGeometryCapabilities.create(node.primitive, { THREE, node, width, height, depth, segments, descriptor });
 }
 
 /**

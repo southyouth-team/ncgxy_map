@@ -39,9 +39,8 @@ describe('trusted geometry capability registry', () => {
   });
 
 
-  it('exposes the real protocol-to-runtime coverage gap during staged migration', () => {
+  it('reports complete protocol-to-runtime geometry capability coverage', () => {
     expect(auditObjectModelGeometryCapabilityCoverage()).toEqual({
-      complete: false,
       complete: true,
       protocolCount: 14,
       runtimeCount: 14,
@@ -49,11 +48,8 @@ describe('trusted geometry capability registry', () => {
       unknownExecutorIds: [],
       descriptorMismatches: [],
       primitiveMismatches: [],
-      unknownExecutorIds: [],
-      descriptorMismatches: [],
-      primitiveMismatches: [],
     });
-  });
+  }));
 
   it('audits missing, unknown and mismatched runtime executors without hiding partial coverage', () => {
     const result = auditGeometryCapabilityCoverage([

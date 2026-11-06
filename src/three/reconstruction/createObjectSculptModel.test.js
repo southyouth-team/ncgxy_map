@@ -320,6 +320,19 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('body')).not.toBe(body);expect(model.userData.componentGroups.get('window')).toBe(window);
     expect(model.userData.componentGroups.get('body').getObjectByName('body:mesh').geometry.parameters.width).toBe(3);
   });
+  it('rebuilds linked parameter targets while retaining unrelated component Groups', () => {
+    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'body',parent:'root',primitive:'box',dimensions:{width:2,height:2,depth:2}},{id:'window-a',parent:'body',primitive:'box',dimensions:{width:0.5,height:1,depth:0.1}},{id:'window-b',parent:'body',primitive:'box',dimensions:{width:0.5,height:1,depth:0.1}},{id:'door',parent:'body',primitive:'box',dimensions:{width:0.8,height:1.8,depth:0.1}}],parameterSchema:[{id:'window-height',type:'number',value:1,min:0.5,max:2,step:0.1,targets:[{nodeId:'window-a',property:'dimensions.height'},{nodeId:'window-b',property:'dimensions.height'}]}]};
+    const model=createObjectSculptModel(THREE,spec);
+    const before=new Map(['body','window-a','window-b','door'].map(id=>[id,model.userData.componentGroups.get(id)]));
+    const resources=['window-a','window-b'].map(id=>{const mesh=before.get(id).getObjectByName(id+':mesh');return {geometry:mesh.geometry,material:mesh.material,geometryDisposals:0,materialDisposals:0};});
+    resources.forEach(resource=>{resource.geometry.addEventListener('dispose',()=>resource.geometryDisposals++);resource.material.addEventListener('dispose',()=>resource.materialDisposals++);});
+    applyObjectSculptParameter(THREE,model,'window-height',1.6);
+    for(const id of ['window-a','window-b']){const group=model.userData.componentGroups.get(id);expect(group).not.toBe(before.get(id));expect(group.getObjectByName(id+':mesh').geometry.parameters.height).toBe(1.6);}
+    expect(model.userData.componentGroups.get('body')).toBe(before.get('body'));
+    expect(model.userData.componentGroups.get('door')).toBe(before.get('door'));
+    expect(resources.map(({geometryDisposals,materialDisposals})=>[geometryDisposals,materialDisposals])).toEqual([[1,1],[1,1]]);
+  });
+
   it('updates selected indexed-mesh vertices in place and preserves unrelated Three.js objects', () => {
     const spec = {
       schemaVersion: '3.0',

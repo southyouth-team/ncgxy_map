@@ -264,4 +264,219 @@ describe('Campus map API (PostGIS integration)', () => {
       .expect(409);
   });
 
+  it('persists indoor building layouts with revision history and access control', async () => {
+    const buildingId = 'west-north-01';
+    const url = `${base}/campuses/${campusId}/maps/${mapId}/scene/indoor-buildings/${buildingId}`;
+    const empty = await request(app.getHttpServer()).get(url).set(auth).expect(200);
+    expect(Number(empty.body.revision)).toBe(0);
+    expect(empty.body.definition).toBeNull();
+
+    const definition = {
+      id: buildingId,
+      name: '西北组团 01',
+      floorHeight: 3.6,
+      exterior: { roofStyle: 'flat' },
+      footprintSize: { width: 12, depth: 8 },
+      footprint: {
+        type: 'polygon',
+        source: 'campus-plan',
+        bounds: { minX: -6, maxX: 6, minZ: -4, maxZ: 4 },
+        polygon: [
+          { x: -6, z: -4 }, { x: 6, z: -4 },
+          { x: 6, z: 4 }, { x: -6, z: 4 },
+        ],
+        expansion: { north: 0, south: 0, east: 2, west: 0 },
+      },
+      layoutStatus: 'procedural-template',
+      floors: [{
+        level: 1, width: 12, depth: 12, rooms: [], walls: [], doors: [],
+        stairPoint: { x: 4, z: 0, direction: 'south' },
+      }],
+    };
+    const saved = await request(app.getHttpServer())
+      .put(url).set(auth).send({ revision: 0, definition }).expect(200);
+    expect(Number(saved.body.revision)).toBe(1);
+    expect(saved.body.definition.id).toBe(buildingId);
+    expect(saved.body.definition.exterior.roofStyle).toBe('flat');
+
+    await request(app.getHttpServer())
+      .put(url).set(auth)
+      .send({ revision: 1, definition: { ...definition, exterior: { roofStyle: 'unsupported' } } })
+      .expect(400);
+
+    const loaded = await request(app.getHttpServer()).get(url).set(auth).expect(200);
+    expect(Number(loaded.body.revision)).toBe(1);
+    expect(loaded.body.definition.floors[0].stairPoint.x).toBe(4);
+
+    const secondDefinition = { ...definition, name: '西北组团 01 · 更新' };
+    await request(app.getHttpServer())
+      .put(url).set(auth).send({ revision: 1, definition: secondDefinition }).expect(200);
+    const versions = await request(app.getHttpServer())
+      .get(url + '/versions').set(auth).expect(200);
+    expect(versions.body).toHaveLength(2);
+    expect(Number(versions.body[0].revision)).toBe(2);
+    const firstVersion = await request(app.getHttpServer())
+      .get(url + '/versions/1').set(auth).expect(200);
+    expect(firstVersion.body.definition.name).toBe('西北组团 01');
+
+    await request(app.getHttpServer())
+      .put(url).set(auth).send({ revision: 0, definition }).expect(409);
+
+    const viewerId = `e2e-indoor-viewer-${Date.now()}`;
+    await db.query("INSERT INTO campus_member (campus_id,user_id,role) VALUES ($1,$2,'viewer')", [campusId, viewerId]);
+    await request(app.getHttpServer()).get(url).set('X-Dev-User-Id', viewerId).expect(200);
+    await request(app.getHttpServer())
+      .put(url).set('X-Dev-User-Id', viewerId)
+      .send({ revision: 1, definition }).expect(403);
+  });
+
+
+  it('persists schema v4 canonical FeatureCollection without dropping unknown features or tombstones', async () => {
+    const planUrl = `${base}/campuses/${campusId}/maps/${mapId}/scene/plan`;
+    const unknownFeature = {
+      type: 'Feature',
+      id: 'future-zone-01',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [[0, 0], [20, 0], [20, 20], [0, 0]],
+          [[4, 4], [8, 4], [8, 8], [4, 4]],
+        ],
+      },
+      properties: {
+        featureType: 'future-zone',
+        source: 'survey-v2',
+        confidence: 'high',
+        verificationStatus: 'verified',
+        vendorData: { model: 'future', revision: 9 },
+      },
+    };
+    const multiPolygonFeature = {
+      ...unknownFeature,
+      id: 'future-multipolygon-01',
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [[[[30, 30], [40, 30], [40, 40], [30, 30]]]],
+      },
+    };
+    const geometryCollectionFeature = {
+      ...unknownFeature,
+      id: 'future-geometry-collection-01',
+      geometry: {
+        type: 'GeometryCollection',
+        geometries: [
+          { type: 'Point', coordinates: [50, 50] },
+          { type: 'LineString', coordinates: [[50, 50], [60, 60]] },
+        ],
+      },
+    };
+    const document = {
+      schemaVersion: 4,
+      mapId,
+      coordinateSystem: 'campus-plan-pixel',
+      units: 'pixel',
+      deletedFeatureIds: ['removed-gate-01'],
+      buildings: [],
+      areas: [],
+      roads: [],
+      objects: [],
+      featureCollection: {
+        type: 'FeatureCollection',
+        features: [unknownFeature, multiPolygonFeature, geometryCollectionFeature],
+        deletedFeatureIds: ['removed-gate-01'],
+        metadata: {
+          dataset: 'campus-baseline-v2',
+          catalogue: {
+            pois: [{ id: 'library', name: '图书馆' }],
+            editorNotes: [{ id: 'note-1', text: '保留编辑器扩展目录' }],
+          },
+        },
+        vendorCollectionMeta: { preserve: true },
+      },
+    };
+
+    const saved = await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 0, document })
+      .expect(200);
+    expect(Number(saved.body.revision)).toBe(1);
+    expect(Number(saved.body.schemaVersion)).toBe(4);
+
+    const loaded = await request(app.getHttpServer())
+      .get(planUrl).set(auth).expect(200);
+    expect(Number(loaded.body.revision)).toBe(1);
+    expect(Number(loaded.body.schema_version || loaded.body.schemaVersion)).toBe(4);
+    expect(loaded.body.document.featureCollection).toEqual(document.featureCollection);
+    expect(loaded.body.document.deletedFeatureIds).toEqual(['removed-gate-01']);
+
+    const persisted = await db.query(
+      'SELECT schema_version,document FROM campus_plan_document WHERE campus_id=$1 AND map_id=$2',
+      [campusId, mapId],
+    );
+    expect(Number(persisted[0].schema_version)).toBe(4);
+    expect(persisted[0].document.featureCollection.features[0].properties.vendorData).toEqual({ model: 'future', revision: 9 });
+
+    await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 0, document }).expect(409);
+
+    const invalid = {
+      ...document,
+      featureCollection: {
+        ...document.featureCollection,
+        features: [unknownFeature, unknownFeature],
+      },
+    };
+    await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 1, document: invalid }).expect(400);
+
+    const invalidGeometries = [
+      { type: 'MultiPolygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 0]]] },
+      { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10]]] },
+      { type: 'GeometryCollection', geometries: [{ type: 'Point', coordinates: [0, Number.NaN] }] },
+      { type: 'UnknownGeometry', coordinates: [[0, 0], [1, 1]] },
+    ];
+    for (const [index, geometry] of invalidGeometries.entries()) {
+      await request(app.getHttpServer())
+        .put(planUrl).set(auth)
+        .send({
+          revision: 1,
+          document: {
+            ...document,
+            featureCollection: {
+              ...document.featureCollection,
+              features: [{ ...unknownFeature, id: `invalid-geometry-${index}`, geometry }],
+            },
+          },
+        })
+        .expect(400);
+    }
+
+    const afterInvalid = await request(app.getHttpServer())
+      .get(planUrl).set(auth).expect(200);
+    expect(Number(afterInvalid.body.revision)).toBe(1);
+    expect(afterInvalid.body.document.featureCollection.features).toHaveLength(3);
+  });
+
+  it('continues accepting legacy schema v2 plan documents', async () => {
+    const planUrl = `${base}/campuses/${campusId}/maps/${mapId}/scene/plan`;
+    const legacyDocument = {
+      schemaVersion: 2,
+      mapId,
+      coordinateSystem: 'campus-plan-pixel',
+      buildings: [],
+      areas: [],
+      roads: [],
+      objects: [],
+    };
+    const saved = await request(app.getHttpServer())
+      .put(planUrl).set(auth)
+      .send({ revision: 1, document: legacyDocument }).expect(200);
+    expect(Number(saved.body.revision)).toBe(2);
+    expect(Number(saved.body.schemaVersion)).toBe(2);
+    const loaded = await request(app.getHttpServer()).get(planUrl).set(auth).expect(200);
+    expect(loaded.body.document.schemaVersion).toBe(2);
+  });
+
 });

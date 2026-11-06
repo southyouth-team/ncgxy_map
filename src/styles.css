@@ -12,18 +12,66 @@ html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 button { font: inherit; }
 .app-shell { position: relative; width: 100%; height: 100%; overflow: hidden; background: #101b20; }
 .scene-viewport { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+
+/* RPG 样板独立占满当前浏览器视口；不受通用页面流式布局高度影响。 */
+.app-shell.is-rpg-sample {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+.app-shell.is-rpg-sample .scene-viewport {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.app-shell.is-rpg-sample .scene-viewport canvas {
+  width: 100%;
+  height: 100%;
+}
+.app-shell.is-rpg-sample .bottom-bar {
+  display: none;
+}
+.app-shell.is-rpg-sample .mode-switcher {
+  bottom: max(16px, env(safe-area-inset-bottom));
+}
+@media (pointer: coarse), (max-width: 760px) {
+  .app-shell.is-rpg-sample {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .app-shell.is-rpg-sample .mode-switcher {
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .app-shell.is-rpg-sample .view-mode-switcher {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+}
+
 .scene-viewport canvas { display: block; width: 100%; height: 100%; outline: none; }
 .topbar { position: absolute; z-index: 3; top: 0; left: 0; right: 0; height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 0 42px; background: linear-gradient(180deg, rgba(9,18,21,.82), transparent); pointer-events: none; }
 .brand-lockup { display: flex; align-items: center; gap: 13px; }
 .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(221,196,139,.7); color: #ddc48b; font-size: 12px; font-weight: 800; letter-spacing: -1px; }
 .brand-title { font-size: 15px; font-weight: 700; letter-spacing: 2px; }
 .brand-subtitle { margin-top: 4px; font: 9px 'DM Mono', monospace; letter-spacing: 1.1px; color: rgba(236,232,217,.56); }
+.showcase-actions { display: flex; align-items: center; gap: 14px; pointer-events: auto; }
+.showcase-back { padding: 8px 13px; border: 1px solid rgba(239,236,222,.42); border-radius: 3px; color: #f3edda; background: rgba(17,35,31,.72); font: inherit; font-size: 11px; cursor: pointer; transition: background .18s ease, border-color .18s ease; }
+.showcase-back:hover { background: rgba(54,85,63,.9); border-color: #d7bd82; }
 .topbar-status { font: 10px 'DM Mono', monospace; letter-spacing: 1.2px; color: rgba(239,236,222,.78); }
 .status-dot, .coordinate-dot { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: #b9c99c; box-shadow: 0 0 12px #b9c99c; vertical-align: 1px; }
 .intro-card { position: absolute; z-index: 2; left: 5.1%; top: 27%; width: 270px; pointer-events: none; }
-/* 上帝视角以地图浏览为主，隐藏大标题与说明面板，避免遮挡校园主体。 */
+/* 总览模式隐藏装饰性标题，但保留操作指南，确保交互说明可见。 */
 .app-shell.is-overview .intro-card,
-.app-shell.is-overview .control-card { display: none; }
+.app-shell.is-rpg-sample .intro-card { display: none; }
 
 .eyebrow { color: #d7bd82; font: 10px 'DM Mono', monospace; letter-spacing: 2px; }
 .intro-card h1 { margin: 20px 0 13px; font-size: clamp(34px, 4vw, 48px); line-height: 1.3; font-weight: 600; letter-spacing: 2px; }
@@ -33,6 +81,8 @@ button { font: inherit; }
 .intro-rule span { display: block; width: 45px; height: 1px; background: #d7bd82; }
 .intro-foot { color: rgba(239,236,222,.42); font: 9px 'DM Mono', monospace; letter-spacing: 1.8px; }
 .mode-switcher { position: absolute; z-index: 4; left: 50%; bottom: 38px; transform: translateX(-50%); display: flex; gap: 5px; padding: 5px; border: 1px solid rgba(232,225,204,.18); background: rgba(14,25,29,.84); backdrop-filter: blur(18px); }
+.app-shell.is-rpg-sample .view-mode-switcher { bottom: 92px; }
+.app-shell.is-rpg-sample .camera-mode-switcher { bottom: 16px; }
 .mode-button { min-width: 112px; padding: 10px 16px; border: 1px solid transparent; color: rgba(242,239,226,.65); background: transparent; cursor: pointer; text-align: left; transition: .2s ease; }
 .mode-button:hover { color: #fff; background: rgba(255,255,255,.06); }
 .mode-button.active { border-color: rgba(215,189,130,.55); color: #e4cc98; background: rgba(215,189,130,.1); }
@@ -46,7 +96,7 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 .control-foot { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(232,225,204,.12); color: rgba(242,239,226,.35); font-size: 9px; }
 .help-panel:not(.is-visible) { display: none; }
 .bottom-bar { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; height: 30px; display: flex; justify-content: space-between; align-items: center; padding: 0 42px; color: rgba(239,236,222,.48); font: 9px 'DM Mono', monospace; letter-spacing: 1px; pointer-events: none; }
-.reset-button { border: 0; color: #d7bd82; background: transparent; cursor: pointer; font: 10px 'Noto Sans SC', sans-serif; pointer-events: auto; }
+.reset-button { position: absolute; z-index: 5; right: 28px; bottom: 22px; padding: 7px 11px; border: 1px solid rgba(215,189,130,.38); border-radius: 4px; color: #d7bd82; background: rgba(14,25,29,.86); cursor: pointer; font: 11px 'Noto Sans SC', sans-serif; pointer-events: auto; backdrop-filter: blur(10px); }
 .reset-button span { margin-right: 5px; font-size: 15px; }
 .loading-screen { position: absolute; z-index: 10; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #eee8d8; background: #101b20; font-size: 13px; letter-spacing: 2px; transition: opacity .4s; }
 .loading-screen span { color: rgba(238,232,216,.4); font: 9px 'DM Mono', monospace; letter-spacing: 2px; }
@@ -56,9 +106,11 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 .first-person-hint { position: absolute; z-index: 2; left: 50%; bottom: 130px; transform: translateX(-50%); padding: 8px 13px; color: rgba(255,255,255,.72); background: rgba(10,20,22,.6); font-size: 10px; pointer-events: none; }
 @media (max-width: 760px) {
   .topbar { height: 68px; padding: 0 18px; }
-  .brand-subtitle, .topbar-status, .intro-card, .control-card { display: none; }
-  .mode-switcher { bottom: 42px; width: calc(100% - 24px); justify-content: center; }
-  .mode-button { min-width: 0; flex: 1; padding: 10px 7px; text-align: center; }
+  .brand-subtitle, .topbar-status, .intro-card { display: none; }
+  .mode-switcher { width: auto; max-width: calc(100% - 20px); justify-content: center; gap: 3px; padding: 3px; }
+  .mode-button { min-width: 0; flex: 0 0 auto; padding: 7px 12px; text-align: center; }
+  .mode-hint { display: none; }
+  .editor-entry { display: none !important; }
   .mode-label { font-size: 11px; }
   .bottom-bar { padding: 0 15px; }
 }
@@ -93,4 +145,210 @@ kbd { min-width: 48px; padding: 4px 5px; border: 1px solid rgba(232,225,204,.17)
 }
 @media (pointer: coarse) and (orientation: landscape) {
   .mobile-controls .look-hint { top: auto; bottom: 18px; right: 18px; }
+}
+
+/* Lightweight 2D pixel campus experience */
+.pixel-campus {
+  position: absolute; inset: 0; overflow: hidden;
+  color: #34483b; background: #d8dfc4;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+.pixel-map-canvas {
+  position: absolute; inset: 0; display: block;
+  width: 100%; height: 100%; touch-action: none;
+  cursor: grab; image-rendering: pixelated;
+}
+.pixel-map-canvas:active { cursor: grabbing; }
+
+.pixel-mobile-pad { display: none; }
+@media (pointer: coarse), (max-width: 640px) {
+  .pixel-mobile-pad {
+    display: grid;
+    position: absolute;
+    z-index: 6;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(34px, calc(env(safe-area-inset-bottom) + 28px));
+    width: 126px;
+    height: 126px;
+    grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+    pointer-events: none;
+  }
+  .pixel-mobile-key {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid rgba(75, 98, 72, .55);
+    border-radius: 9px;
+    color: #405648;
+    background: rgba(248, 247, 226, .88);
+    box-shadow: 2px 2px 0 rgba(64, 86, 72, .2);
+    font-size: 14px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: auto;
+  }
+  .pixel-mobile-key:active {
+    color: #fffbe8;
+    background: #607d5d;
+  }
+  .pixel-key-up { grid-area: 1 / 2; }
+  .pixel-key-left { grid-area: 2 / 1; }
+  .pixel-key-down { grid-area: 3 / 2; }
+  .pixel-key-right { grid-area: 2 / 3; }
+  .pixel-map-legend { display: none; }
+  .pixel-footer span:last-child { display: none; }
+}
+
+.pixel-header {
+  position: absolute; z-index: 4; top: 0; left: 0; right: 0;
+  height: 76px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 34px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(244,241,220,.94), rgba(244,241,220,.72) 70%, transparent);
+}
+.pixel-brand { display: flex; align-items: center; gap: 12px; }
+.pixel-emblem {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border: 2px solid #647d5d; color: #496746; background: #e8e8c9;
+  box-shadow: 3px 3px 0 #9eae82; font: 800 12px 'DM Mono', monospace;
+}
+.pixel-brand strong { display: block; font-size: 16px; letter-spacing: 2px; }
+.pixel-brand span { display: block; margin-top: 3px; color: #77866a; font: 8px 'DM Mono', monospace; letter-spacing: 1px; }
+.pixel-header-actions { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+.pixel-explore-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 32px; padding: 0 12px; border-radius: 4px;
+  color: #405d47; background: #e7eddf; border: 1px solid #9eae96;
+  font-size: 12px; font-weight: 700; text-decoration: none;
+  box-shadow: 0 2px 6px rgba(48,65,48,.10);
+}
+.pixel-explore-link:hover { color: #fff; background: #526f57; border-color: #405d47; }
+.pixel-build-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 32px; padding: 0 12px; border-radius: 4px;
+  color: #f8f6e8; background: #526f57; border: 1px solid #405d47;
+  font-size: 12px; font-weight: 700; text-decoration: none;
+  box-shadow: 0 2px 6px rgba(48,65,48,.14);
+}
+.pixel-build-link:hover { background: #405d47; }
+.pixel-showcase-link { pointer-events: auto; }
+.pixel-showcase-link { padding: 8px 12px; border: 1px solid #9eae91; border-radius: 4px; color: #405648; background: rgba(250,248,232,.76); font-size: 11px; cursor: pointer; }
+.pixel-showcase-link:hover { color: #fff8df; border-color: #536f55; background: #536f55; }
+.pixel-header-tag { color: #627b5a; font-size: 11px; letter-spacing: 1px; }
+.pixel-header-tag i { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #7f9e68; }
+.pixel-map-controls {
+  position: absolute; z-index: 4; right: 24px; bottom: 58px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.pixel-map-controls button {
+  min-width: 38px; height: 36px; padding: 0 9px;
+  border: 1px solid #aab697; border-radius: 3px;
+  color: #52684b; background: rgba(248,247,226,.94);
+  box-shadow: 2px 2px 0 rgba(83,105,73,.18); cursor: pointer;
+}
+.pixel-map-controls button:hover { background: #fffbe2; }
+.pixel-map-controls button.active {
+  color: #fffdf0; background: #58765c; border-color: #405d47;
+  box-shadow: inset 0 1px 2px rgba(24,45,29,.2);
+}
+.pixel-map-controls label {
+  min-height: 30px; justify-content: space-between;
+  border: 1px solid rgba(170,182,151,.8); border-radius: 3px;
+  color: #52684b; background: rgba(248,247,226,.96);
+}
+.pixel-map-controls input[type="range"] { cursor: ew-resize; }
+.pixel-map-legend {
+  position: absolute; z-index: 4; left: 24px; bottom: 52px;
+  display: flex; flex-wrap: wrap; gap: 12px; padding: 9px 12px;
+  border: 1px solid rgba(120,142,103,.45); border-radius: 3px;
+  color: #5b7054; background: rgba(248,247,226,.9); font-size: 10px;
+}
+.pixel-map-legend span { display: flex; align-items: center; gap: 5px; }
+.pixel-map-legend i { width: 10px; height: 10px; display: inline-block; border: 1px solid rgba(57,76,57,.25); }
+.legend-building { background: #89999b; }
+.legend-water { background: #76b8c0; }
+.legend-road { background: #687579; }
+.legend-sports { background: #7fa477; }
+.pixel-selection {
+  position: absolute; z-index: 5; top: 94px; right: 24px; width: 218px;
+  display: flex; flex-direction: column; gap: 7px; padding: 16px 17px;
+  border: 1px solid #aab697; border-radius: 3px; color: #3d5543;
+  background: rgba(250,249,231,.96); box-shadow: 3px 4px 0 rgba(83,105,73,.15);
+}
+.pixel-selection small { color: #87957a; font: 8px 'DM Mono', monospace; letter-spacing: 1px; }
+.pixel-selection strong { font-size: 15px; }
+.pixel-selection span { color: #71816a; font-size: 11px; }
+.pixel-selection em { color: #a17c4d; font-size: 10px; font-style: normal; }
+.pixel-selection-close {
+  position: absolute; top: 7px; right: 9px; border: 0;
+  color: #7a8b70; background: transparent; font-size: 19px; cursor: pointer;
+}
+.pixel-footer {
+  position: absolute; z-index: 4; left: 0; right: 0; bottom: 0;
+  height: 29px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; color: #829074; background: rgba(244,241,220,.88);
+  font: 8px 'DM Mono', monospace; letter-spacing: .7px; pointer-events: none;
+}
+@media (max-width: 640px) {
+  .pixel-header { height: 62px; padding: 0 14px; }
+  .pixel-brand strong { font-size: 13px; }
+  .pixel-brand span { font-size: 6px; }
+  .pixel-header-tag { font-size: 9px; }
+  .pixel-map-legend { left: 10px; bottom: 43px; gap: 7px; padding: 7px 8px; font-size: 9px; }
+  .pixel-map-controls { right: 10px; bottom: 48px; max-height: calc(100% - 150px); overflow-y: auto; padding: 4px; }
+  .pixel-map-controls label { min-width: 176px; font-size: 10px !important; }
+  .pixel-selection { top: 72px; right: 10px; width: 180px; padding: 12px; }
+  .pixel-footer { height: 25px; padding: 0 10px; font-size: 7px; }
+}
+
+/* 建筑占地扩建工具 */
+.indoor-footprint-tools{margin:8px 0;padding:10px;background:#f2f5f0;border:1px solid #dce4dc;border-radius:5px}.indoor-footprint-tools strong{display:block;font-size:12px;color:#405548}.indoor-footprint-tools small{display:block;margin-top:5px;font-size:10px;color:#748176}.indoor-expansion-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.indoor-expansion-buttons button{padding:6px 9px;border:1px solid #cbd7cc;border-radius:4px;background:#fff;color:#42604b;font-size:11px;cursor:pointer}
+
+
+/* 手机端不展示操作指南，完整地图区域优先。 */
+@media (pointer: coarse), (max-width: 760px) {
+  .app-shell.is-overview .control-card {
+    display: none !important;
+    top: 58px;
+    right: 10px;
+    width: min(270px, calc(100vw - 20px));
+    max-height: calc(100dvh - 142px);
+    overflow-y: auto;
+    padding: 11px 12px;
+    background: rgba(14,25,29,.9);
+  }
+  .app-shell.is-overview .control-heading { margin-bottom: 8px; }
+  .app-shell.is-overview .control-row { gap: 7px; margin: 7px 0; font-size: 9px; }
+  .app-shell.is-overview kbd { min-width: 0; font-size: 8px; }
+  .app-shell.is-overview .control-foot { margin-top: 8px; padding-top: 7px; }
+}
+
+
+/* 手机端将视图与漫游模式入口压缩为两条轻量工具条，避免遮挡地图。 */
+@media (pointer: coarse), (max-width: 760px) {
+  .app-shell.is-mobile .view-mode-switcher {
+    bottom: calc(58px + env(safe-area-inset-bottom)); left: 50%; width: auto; min-width: 0;
+    max-width: calc(100vw - 20px); transform: translateX(-50%);
+  }
+  .app-shell.is-mobile .camera-mode-switcher {
+    bottom: max(8px, env(safe-area-inset-bottom)); left: 50%; width: auto; min-width: 0;
+    max-width: calc(100vw - 20px); transform: translateX(-50%);
+  }
+  .app-shell.is-mobile .mode-button { min-width: 54px; padding: 6px 10px; }
+  .app-shell.is-mobile .mode-label { font-size: 10px; white-space: nowrap; }
+  .app-shell.is-mobile .mode-hint { display: none; }
+  .app-shell.is-mobile .reset-button { top: 58px; right: auto; bottom: auto; left: 10px; padding: 6px 9px; font-size: 10px; }
+  .app-shell.is-mobile .editor-entry { display: none !important; }
+}
+
+
+/* 手机端所有漫游模式均不显示操作指南，不依赖 is-overview 状态类。 */
+@media (pointer: coarse), (max-width: 760px) {
+  .control-card { display: none !important; }
+}
+
+@media (max-width: 760px) {
+  .asset-workshop-entry { display: none; }
 }

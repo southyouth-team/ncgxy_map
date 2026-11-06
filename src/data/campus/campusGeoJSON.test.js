@@ -1,0 +1,303 @@
+import { describe, expect, it } from 'vitest'
+import { CAMPUS_AREAS, CAMPUS_BUILDING_FOOTPRINTS, CAMPUS_ROAD_CENTERLINES } from './campusLayout.js'
+import { buildCampusGeoJSON, getCampusSpatialLayers, validateCampusGeoJSON, CAMPUS_SPATIAL_DATASET, mergeCampusSceneFeatureCollections } from './campusGeoJSON.js'
+import { CAMPUS_GATES, CAMPUS_POIS, CAMPUS_SITE_AREAS, CAMPUS_BUILDING_METADATA, buildCampusRoadGraph } from './campusInventory.js'
+import { toCampusFeatureCollection } from '../../editor/campusFeatureCollection.js'
+import { getDefaultWalkable } from './walkability.js'
+
+describe('统一校园空间数据出口', () => {
+  it('明确使用同一套参考图像像素坐标，不伪装成测绘坐标', () => {
+    expect(CAMPUS_SPATIAL_DATASET.coordinateSystem).toBe('NCGXY_REFERENCE_IMAGE_PIXEL')
+    expect(CAMPUS_SPATIAL_DATASET.coordinateUnit).toBe('pixel')
+    expect(CAMPUS_SPATIAL_DATASET.accuracyNote).toContain('非测绘成果')
+  })
+
+  it('按要素类型提供默认通行策略，并允许显式覆盖', () => {
+    expect(getDefaultWalkable('area', { category: 'vegetation' })).toBe(true)
+    expect(getDefaultWalkable('area', { category: 'plaza' })).toBe(true)
+    expect(getDefaultWalkable('area', { category: 'water' })).toBe(false)
+    expect(getDefaultWalkable('building')).toBe(false)
+    expect(getDefaultWalkable('object', { objectType: 'tree' })).toBe(false)
+    expect(getDefaultWalkable('object', { objectType: 'flower' })).toBe(true)
+    expect(getDefaultWalkable('object', { objectType: 'tree', walkable: true })).toBe(true)
+    expect(getDefaultWalkable('water', { walkable: true })).toBe(true)
+  })
+
+  it('将现有区域、道路和建筑输出为唯一 FeatureCollection', () => {
+    const collection = buildCampusGeoJSON()
+    expect(collection.type).toBe('FeatureCollection')
+    expect(collection.features).toHaveLength(
+      CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length + 96,
+    )
+    const ids = collection.features.map(feature => feature.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(collection.features.filter(feature => feature.properties.featureType === 'building')).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
+    expect(collection.features.filter(feature => feature.properties.featureType === 'road')).toHaveLength(CAMPUS_ROAD_CENTERLINES.length)
+  })
+
+  it('所有面几何闭合，中央湖区洞区作为内环保留', () => {
+    const collection = buildCampusGeoJSON()
+    for (const feature of collection.features.filter(item => item.geometry.type === 'Polygon')) {
+      for (const ring of feature.geometry.coordinates) {
+        expect(ring.length).toBeGreaterThanOrEqual(4)
+        expect(ring[0]).toEqual(ring[ring.length - 1])
+      }
+    }
+    const lake = collection.features.find(feature => feature.id === 'central-lake')
+    expect(lake.geometry.coordinates).toHaveLength(2)
+  })
+
+  it('所有要素均携带来源、置信度和核验状态', () => {
+    for (const feature of buildCampusGeoJSON().features) {
+      expect(feature.properties.source).toBeTruthy()
+      expect(['low', 'medium', 'high']).toContain(feature.properties.confidence)
+      expect(['verified', 'unverified']).toContain(feature.properties.verificationStatus)
+    }
+  })
+
+  it('2D 与 2.5D 共用同一份派生图层，不再维护独立几何副本', () => {
+    const collection = buildCampusGeoJSON()
+    const layers = getCampusSpatialLayers(collection)
+    expect(layers.boundary).toBeTruthy()
+    expect(layers.gates).toHaveLength(CAMPUS_GATES.length)
+    expect(layers.areas).toHaveLength(CAMPUS_AREAS.length)
+    expect(layers.roads).toHaveLength(CAMPUS_ROAD_CENTERLINES.length)
+    expect(layers.buildings).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
+    expect(layers.roads[0].points).toEqual(collection.features.find(feature => feature.id === layers.roads[0].id).geometry.coordinates)
+    expect(layers.buildings[0].polygon[0]).toEqual(collection.features.find(feature => feature.id === layers.buildings[0].id).geometry.coordinates[0][0])
+  })
+
+
+
+  it('将原场景环境装饰纳入统一 FeatureCollection，避免渲染器硬编码坐标', () => {
+    const collection = buildCampusGeoJSON()
+    const objects = collection.features.filter(feature => feature.properties.featureType === 'object')
+    expect(objects.length).toBe(96)
+    expect(objects.some(feature => feature.properties.objectType === 'tree')).toBe(true)
+    expect(objects.some(feature => feature.properties.objectType === 'flower')).toBe(true)
+    expect(objects.some(feature => feature.properties.objectType === 'bench')).toBe(true)
+    expect(objects.some(feature => feature.properties.objectType === 'streetlight')).toBe(true)
+    expect(objects.every(feature => feature.geometry.type === 'Point' && feature.properties.qualityStatus === 'unverified')).toBe(true)
+  })
+
+  it('将编辑器保存的 FeatureCollection 直接归一化为校园渲染图层', () => {
+    const edited = toCampusFeatureCollection({
+      buildings: [{ id: 'edit-building', label: '新教学楼', footprint: [[10, 10], [30, 10], [30, 25]], floors: 6, confidence: 'medium' }],
+      roads: [{ id: 'edit-road', name: '新支路', points: [[0, 20], [20, 30]], width: 9, confidence: 'high' }],
+      areas: [{ id: 'edit-water', name: '景观水池', type: 'water', footprint: [[40, 40], [60, 40], [60, 60]], confidence: 'medium' }],
+      objects: [{ id: 'edit-tree', type: 'tree', name: '香樟树', geometry: { type: 'Point', coordinates: [70, 80] }, properties: { rotation: 45, scale: 1.4 } }],
+    })
+    const layers = getCampusSpatialLayers(edited)
+    const qualityReport = validateCampusGeoJSON(edited)
+    expect(qualityReport.valid).toBe(true)
+    expect(qualityReport.errorCount).toBe(0)
+    expect(edited.features.every(feature => ['low', 'medium', 'high'].includes(feature.properties.confidence))).toBe(true)
+    expect(edited.features.every(feature => ['verified', 'unverified'].includes(feature.properties.verificationStatus))).toBe(true)
+    expect(layers.buildings[0]).toMatchObject({ id: 'edit-building', label: '新教学楼', floors: 6 })
+    expect(layers.roads[0]).toMatchObject({ id: 'edit-road', name: '新支路', width: 9 })
+    expect(layers.areas[0]).toMatchObject({ id: 'edit-water', name: '景观水池', type: 'water', walkable: false })
+    expect(layers.objects[0]).toMatchObject({ id: 'edit-tree', type: 'tree', position: [70, 80], rotation: 45, scale: 1.4, walkable: false })
+  })
+
+
+  it('统一数据通过坐标、拓扑、来源和属性质检', () => {
+    const report = validateCampusGeoJSON()
+    expect(report.valid).toBe(true)
+    expect(report.errorCount).toBe(0)
+    expect(report.featureCount).toBe(CAMPUS_AREAS.length + CAMPUS_ROAD_CENTERLINES.length + CAMPUS_BUILDING_FOOTPRINTS.length + 1 + CAMPUS_GATES.length + 96)
+  })
+
+  it('质检能识别越界坐标、重复 ID 和无效道路宽度', () => {
+    const collection = buildCampusGeoJSON()
+    const invalid = structuredClone(collection)
+    invalid.features[0].geometry.coordinates[0][0] = [-1, 900]
+    invalid.features[1].id = invalid.features[0].id
+    const road = invalid.features.find(feature => feature.properties.featureType === 'road')
+    road.properties.width = 0
+    const report = validateCampusGeoJSON(invalid)
+    expect(report.valid).toBe(false)
+    expect(report.errors.map(error => error.code)).toContain('COORDINATE_OUT_OF_BOUNDS')
+    expect(report.errors.map(error => error.code)).toContain('DUPLICATE_FEATURE_ID')
+    expect(report.errors.map(error => error.code)).toContain('INVALID_ROAD_WIDTH')
+  })
+
+
+  it('质检覆盖全部对象类型的几何契约，并拒绝缺失或未知类型', () => {
+    const invalid = structuredClone(buildCampusGeoJSON())
+    const water = invalid.features.find(feature => feature.properties.featureType === 'area')
+    water.properties.category = 'water'
+    water.geometry.type = 'Point'
+    water.geometry.coordinates = [120, 120]
+    const tree = invalid.features.find(feature => feature.properties.objectType === 'tree')
+    tree.geometry.type = 'Polygon'
+    tree.geometry.coordinates = [[[100, 100], [120, 100], [120, 120], [100, 120], [100, 100]]]
+    const unknownType = invalid.features.find(feature => feature.properties.featureType === 'boundary')
+    unknownType.properties.featureType = 'unknown-custom-type'
+    const report = validateCampusGeoJSON(invalid)
+    expect(report.errors.map(error => error.code)).toContain('GEOMETRY_TYPE_MISMATCH')
+    expect(report.errors.map(error => error.code)).toContain('UNSUPPORTED_FEATURE_TYPE')
+  })
+
+  it('质检能识别自交面和要素类型不匹配', () => {
+    const invalid = structuredClone(buildCampusGeoJSON())
+    const polygon = invalid.features.find(feature => feature.geometry.type === 'Polygon')
+    polygon.geometry.coordinates = [[[100, 100], [120, 120], [100, 120], [120, 100], [100, 100]]]
+    const road = invalid.features.find(feature => feature.properties.featureType === 'road')
+    road.geometry.type = 'Polygon'
+    road.geometry.coordinates = [[[200, 200], [220, 200], [220, 220], [200, 220], [200, 200]]]
+    const report = validateCampusGeoJSON(invalid)
+    expect(report.errors.map(error => error.code)).toContain('SELF_INTERSECTING_POLYGON_RING')
+    expect(report.errors.map(error => error.code)).toContain('GEOMETRY_TYPE_MISMATCH')
+  })
+
+
+  it('输出校园边界与东门、南门 Point 要素，并保留低置信度标记', () => {
+    const collection = buildCampusGeoJSON()
+    const boundary = collection.features.find(feature => feature.properties.featureType === 'boundary')
+    expect(boundary.geometry.type).toBe('Polygon')
+    expect(boundary.properties.boundaryStatus).toBe('reference-outline-not-surveyed')
+    for (const gate of CAMPUS_GATES) {
+      const feature = collection.features.find(item => item.id === gate.id)
+      expect(feature.geometry.type).toBe('Point')
+      expect(feature.properties.verificationStatus).toBe('unverified')
+    }
+  })
+
+  it('绿地和广场进入场地台账，未完成定位的记录保持待核验', () => {
+    expect(CAMPUS_SITE_AREAS.map(area => area.category)).toContain('green-space')
+    expect(CAMPUS_SITE_AREAS.map(area => area.category)).toContain('plaza')
+    expect(CAMPUS_SITE_AREAS.every(area => area.geometry === null)).toBe(true)
+  })
+
+  it('POI 名称可追溯，未定位对象不得伪造坐标或建筑关联', () => {
+    expect(CAMPUS_POIS.length).toBeGreaterThanOrEqual(8)
+    expect(CAMPUS_POIS.every(poi => poi.nameStatus === 'source-confirmed')).toBe(true)
+    expect(CAMPUS_POIS.every(poi => poi.position === null && poi.buildingId === null && poi.locationStatus === 'pending')).toBe(true)
+  })
+
+  it('现有建筑 footprint 全部具备待核验元数据，不伪造正式楼栋名称', () => {
+    expect(Object.keys(CAMPUS_BUILDING_METADATA)).toHaveLength(CAMPUS_BUILDING_FOOTPRINTS.length)
+    for (const metadata of Object.values(CAMPUS_BUILDING_METADATA)) {
+      expect(metadata.canonicalName).toBeNull()
+      expect(metadata.buildingNumber).toBeNull()
+      expect(metadata.identityStatus).toBe('pending')
+      expect(metadata.footprintStatus).toBe('approximate')
+    }
+  })
+
+  it('道路中心线可以派生连通图，边记录来源道路与长度', () => {
+    const graph = buildCampusRoadGraph()
+    expect(graph.nodes.length).toBeGreaterThan(0)
+    expect(graph.edges.length).toBeGreaterThan(0)
+    expect(graph.edges.every(edge => edge.length > 0 && edge.roadId && edge.from && edge.to)).toBe(true)
+    expect(graph.status).toBe('approximate-needs-field-verification')
+    expect(graph.gateLinks.map(link => link.gateId).sort()).toEqual(CAMPUS_GATES.map(gate => gate.id).sort())
+  })
+
+  it('道路输出为 LineString，建筑 footprint 输出为 Polygon', () => {
+    const features = buildCampusGeoJSON().features
+    expect(features.find(feature => feature.id === CAMPUS_ROAD_CENTERLINES[0].id).geometry.type).toBe('LineString')
+    expect(features.find(feature => feature.id === CAMPUS_BUILDING_FOOTPRINTS[0].id).geometry.type).toBe('Polygon')
+  })
+  it('按稳定 ID 合并首页基础 Feature 与编辑器覆盖，并执行删除标记', () => {
+    const base = {
+      type: 'FeatureCollection',
+      metadata: { dataset: 'campus-baseline', catalogue: { pois: [{ id: 'poi-library' }] } },
+      deletedFeatureIds: ['base-deleted-obsolete-feature'],
+      features: [
+        { type: 'Feature', id: 'campus-boundary', properties: { featureType: 'boundary', name: '校界' }, geometry: { type: 'Polygon', coordinates: [] } },
+        { type: 'Feature', id: 'campus-gate-east', properties: { featureType: 'gate', name: '东门' }, geometry: { type: 'Point', coordinates: [1, 1] } },
+        { type: 'Feature', id: 'campus-building-001', properties: { featureType: 'building', name: '教学楼' }, geometry: { type: 'Polygon', coordinates: [[[2,2],[4,2],[4,4],[2,4],[2,2]]] } },
+        { type: 'Feature', id: 'campus-road-001', properties: { featureType: 'road', name: '主路', width: 8 }, geometry: { type: 'LineString', coordinates: [[1,1],[5,5]] } },
+        { type: 'Feature', id: 'campus-water-001', properties: { featureType: 'area', category: 'water', name: '湖泊' }, geometry: { type: 'Polygon', coordinates: [[[6,6],[8,6],[8,8],[6,8],[6,6]]] } },
+        { type: 'Feature', id: 'campus-tree-001', properties: { featureType: 'object', name: '旧树木', source: 'legacy-scene-decoration' }, geometry: { type: 'Point', coordinates: [2, 2] } },
+      ],
+    }
+    const editor = {
+      type: 'FeatureCollection',
+      metadata: { editorRevision: 7, catalogue: { editorNotes: [{ id: 'note-1' }] } },
+      features: [
+        { type: 'Feature', id: 'campus-tree-001', properties: { featureType: 'object', name: '已校准树木' }, geometry: { type: 'Point', coordinates: [3, 3] } },
+        { type: 'Feature', id: 'editor-bench-001', properties: { featureType: 'object', name: '新增座椅' }, geometry: { type: 'Point', coordinates: [4, 4] } },
+      ],
+      deletedFeatureIds: ['campus-gate-east', 'campus-road-001'],
+    }
+    const merged = mergeCampusSceneFeatureCollections(base, editor)
+    expect(merged.features.map(feature => feature.id)).toEqual(['campus-boundary', 'campus-building-001', 'campus-water-001', 'campus-tree-001', 'editor-bench-001'])
+    expect(merged.features.find(feature => feature.id === 'campus-tree-001').properties.name).toBe('已校准树木')
+    expect(merged.deletedFeatureIds).toEqual(['base-deleted-obsolete-feature', 'campus-gate-east', 'campus-road-001'])
+    expect(merged.metadata).toMatchObject({
+      dataset: 'campus-baseline',
+      editorRevision: 7,
+      catalogue: {
+        pois: [{ id: 'poi-library' }],
+        editorNotes: [{ id: 'note-1' }],
+      },
+    })
+  })
+
+
+  it('将未定位 POI 与场地台账保存在 FeatureCollection catalogue 中，不伪造空间几何', () => {
+    const collection = buildCampusGeoJSON()
+    expect(collection.metadata.catalogue.pois).toEqual(CAMPUS_POIS)
+    expect(collection.metadata.catalogue.siteAreas).toEqual(CAMPUS_SITE_AREAS)
+    expect(collection.metadata.catalogue.pois.every(poi => poi.position === null || Array.isArray(poi.position))).toBe(true)
+    expect(collection.features.some(feature => feature.id === 'poi-zhiyuan-building')).toBe(false)
+    const layers = getCampusSpatialLayers(collection)
+    expect(layers.pois).toEqual(CAMPUS_POIS)
+    expect(layers.siteAreas).toEqual(CAMPUS_SITE_AREAS)
+  })
+
+  it('编辑器 FeatureCollection 的置信度与核验状态可通过统一数据质检', () => {
+    const collection = toCampusFeatureCollection({
+      buildings: [{
+        id: 'quality-check-building',
+        label: '待核验建筑',
+        footprint: [[100, 100], [120, 100], [120, 120], [100, 120]],
+        confidence: 'high',
+        qualityStatus: 'unverified',
+        verificationStatus: 'unverified',
+      }],
+      roads: [{
+        id: 'quality-check-road',
+        name: '已核验道路',
+        points: [[100, 140], [120, 140]],
+        width: 8,
+        confidence: 'medium',
+        qualityStatus: 'verified',
+        verificationStatus: 'verified',
+      }],
+      areas: [{
+        id: 'quality-check-water',
+        name: '待核验水域',
+        type: 'water',
+        footprint: [[140, 100], [160, 100], [160, 120], [140, 120]],
+        confidence: 'low',
+        qualityStatus: 'unverified',
+        verificationStatus: 'unverified',
+      }],
+      objects: [{
+        id: 'quality-check-tree',
+        type: 'tree',
+        name: '待核验树木',
+        geometry: { type: 'Point', coordinates: [180, 180] },
+        properties: { confidence: 'low', verificationStatus: 'unverified', scale: 1.1 },
+        qualityStatus: 'unverified',
+        source: 'manual',
+      }],
+    })
+
+    const report = validateCampusGeoJSON(collection)
+    expect(report.valid).toBe(true)
+    expect(report.errors).toEqual([])
+    expect(collection.features.map(feature => feature.properties)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ confidence: 'high', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+      expect.objectContaining({ confidence: 'medium', qualityStatus: 'verified', verificationStatus: 'verified' }),
+      expect.objectContaining({ confidence: 'low', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+      expect.objectContaining({ featureType: 'object', objectType: 'tree', confidence: 'low', qualityStatus: 'unverified', verificationStatus: 'unverified' }),
+    ]))
+  })
+
+
+
+})

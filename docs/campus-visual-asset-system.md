@@ -1,0 +1,155 @@
+# 校园视觉资产统一管理方案（第一阶段）
+
+## 目标与边界
+
+本阶段建立 AI 生成素材优先、专业建模导入兼容的统一资产数据契约。它是资产管理基础，不是完整的 AI 生图服务，也不改变当前校园渲染结果。
+
+**空间数据与视觉资产必须解耦：**
+
+- FeatureCollection 继续独占空间位置、建筑 footprint、旋转/尺寸语义、碰撞、道路连接和 `walkable`。
+- 资产清单只记录视觉素材、来源、审核状态、视角变体和 Feature 绑定。
+- 替换素材不得改写 Feature geometry/properties，也不得重新生成碰撞。
+- AI 生成、Blender/GLB 导入、程序化生成最终都进入同一资产契约。
+
+## 资产模型
+
+`public/data/campus-assets.json` 使用 schemaVersion 1。
+
+### Asset
+
+| 字段 | 含义 |
+|---|---|
+| assetId | 全局稳定资产 ID，不使用文件名作为主键 |
+| name / category | 名称与资产类别 |
+| sourceType | ai_generated / manual_model / procedural / external |
+| status | draft / review / ready / rejected / archived |
+| files | 一个资产可包含多个视角与用途文件 |
+| provenance | 可选来源记录：provider、prompt、reference、license、createdAt、notes；AI 资产建议至少填写 provider 与 prompt |
+
+### File variant
+
+- `viewMode`: `2.5d`、`3d` 或明确共享的 `shared`。
+- `role`: primary、thumbnail、albedo、normal、roughness、emissive。
+- `mediaType`: image、spritesheet、texture、glb。
+- `url`: 受控公共资产目录中的路径，禁止路径穿越。
+
+2.5D 主素材通常使用透明背景 WebP/PNG 等图片；3D 主素材使用 GLB。一个 assetId 可以同时关联两种视角素材，也可以只有一种视角素材。**不会把 2.5D 图片自动当成 3D 模型，也不会把 GLB 当成 2.5D 图片。**
+
+### Binding
+
+`featureId -> assetId` 是视觉替换关系。绑定以规范空间 Feature ID 为唯一锚点，不复制位置或碰撞字段。
+
+## 解析规则
+
+1. 仅 `status=ready` 的资产可以进入运行时。
+2. 优先使用当前视角的 `primary` 文件。
+3. 只有显式登记 `shared` primary 才能作为视角 fallback。
+4. 找不到素材时返回结构化原因，由当前程序化资产继续兜底。
+5. 不自动跨视角降级，不自动修改空间 Feature。
+6. GLB 的空间摆放仍由建筑空间数据和既有建筑清单负责；视觉资产清单不覆盖位置/旋转真值。
+
+## AI 生成与人工建模的接入约定
+
+- AI 生成素材进入 `draft`，记录生成 provider 和 prompt；审核尺寸、透明边缘、风格、比例、授权后转为 `ready`。校验器会对缺失来源信息给出 warning。
+- 人工建模导入 GLB 使用相同 assetId/binding；模型结构、三角面、材质和包围盒继续走既有 GLB 审计。
+- 程序化资产可以登记为 `procedural` 来源，但现阶段不强制把现有全部程序化 Mesh 迁移进清单。
+- AI 输出文件先落入受控目录，再由清单引用；不能把临时生成 URL 当作长期资产地址。
+
+## 本阶段交付与未交付
+
+已交付：统一 schema、纯函数校验器、按视角解析器、自动化测试、空清单模板和架构说明。
+
+未交付：AI 图像/3D 生成 API 接入、素材工坊 UI、上传存储、图像处理、模型自动转换、编辑器资产选择器、真实资产导入和浏览器视觉验收。当前清单为空，因此现有画面不应发生变化。
+
+
+## 第二阶段：AI 素材工坊最小闭环
+
+入口：`/asset-workshop`。当前先实现不绑定供应商的工作流：提示词由工坊按 Feature ID 与视角规则生成，用户可在任意 AI 工具中生成候选，再导入审核。
+
+- 2.5D 输入：PNG / WebP / JPEG；3D 输入：GLB。
+- 文件暂存在浏览器 IndexedDB，候选记录保存在 localStorage。它们不是服务器资产库，也不会跨设备同步。
+- 审核状态：draft → review → ready；审核也可驳回为 rejected。点击“审核通过并自动入库”后，文件自动上传服务端，不再要求手动复制到仓库 `public` 目录。
+- 同一 Feature 的 2.5D 和 3D 文件合并到同一个稳定 assetId；不同视角不会互相降级。
+- GLB 可暂存并在审核通过后上传服务端；当前页面仍未提供 GLB 实时预览。团队级权限审核和多副本对象存储留待后续阶段。
+- 当前校园建筑 ID 是参考平面图人工近似编号。没有真实照片或建筑资料时，生成素材仅是统一风格的视觉占位，不能标记为真实复原。
+
+
+## 第三阶段：服务端 AI 图片生成接入
+
+素材工坊通过 `POST /api/v1/assets/ai-image/generate` 调用服务端接口。服务端使用 OpenAI 兼容的 `/images/generations` 路径，默认模型为 `gpt-image-2`。
+
+### 配置与隔离
+
+- 图片生成优先使用 `IMAGE_API_KEY`、`IMAGE_API_BASE_URL`、`IMAGE_MODEL`。
+- 如果没有独立图片配置，鉴权和 Base URL 回退复用 `VISION_API_KEY`、`VISION_API_BASE_URL`；图片模型仍默认为 `gpt-image-2`。
+- 图片识图继续使用 `VISION_MODEL`，当前模型为 `deepseek-flash`。两条模型配置互不覆盖。
+- API Key 只在服务端读取，浏览器请求只发送提示词，不读取或传递密钥。
+- 容器部署时，Base URL 必须是后端容器可访问的地址；容器内的 `localhost` 指向容器自身，不等于宿主机。
+
+### 当前生成闭环
+
+1. 素材工坊根据所选校园 Feature 和视角构建提示词，用户可编辑。
+2. 素材工坊调用服务端图片生成接口，生成结果返回 Base64 data URL 并在工坊预览；参考图不会直接显示在校园地图中。
+3. 用户检查风格、透明背景、轮廓和细节后，将文件保存为本地候选；文件进入 IndexedDB，元数据进入 localStorage。
+4. 用户点击“审核通过并自动入库”，素材自动上传到服务端持久化目录，服务端登记正式 manifest。
+
+### 能力边界
+
+- 图片生成接口负责产生建筑外观参考图；参考图随后由现有 `VISION_MODEL` 识别为参数化建筑结构，Three.js 代码生成器直接生成 3D 几何。人工 GLB 导入仍是可选兼容路径，不再是获得 3D 建筑的前置条件。
+- 支持 Base64 图片响应；URL 响应只允许从配置 API 的同源地址回源，拒绝跨域 URL，降低 SSRF 风险。
+- 尚未审核通过的候选仍存储在浏览器本地，不是服务器持久化资产；清理浏览器站点数据可能丢失未入库候选。
+- 生成图片不会自动覆盖现有程序化建筑，不会修改 Feature geometry、位置、碰撞或 walkable。
+- GitHub CI 通过只代表构建和单元测试通过；必须在本地部署环境调用真实 API，才能确认服务地址、模型权限和响应格式兼容。
+
+
+## 审核通过后自动入库
+
+- 素材工坊候选仍在浏览器 IndexedDB 暂存，审核动作由用户明确触发；点击“审核通过并自动入库”后，浏览器将文件以 multipart/form-data 上传至 `POST /api/v1/assets/visual-assets`。
+- 服务端校验 Feature ID、视角、来源类型、文件真实签名和大小，生成唯一文件 ID 与 SHA-256 校验值；素材写入 `ASSET_STORAGE_DIR/campus-visual-assets/files/`，元数据清单原子更新至 `ASSET_STORAGE_DIR/campus-visual-assets/manifest.json`。
+- 同一空间 Feature 的 2.5D/3D 文件合并到稳定 `assetId`，同视角再次审核通过时替换该视角主文件引用；历史文件不会被自动删除，避免并发页面仍引用时产生断链。
+- `GET /api/v1/assets/visual-assets/manifest` 提供正式清单；`GET /api/v1/assets/visual-assets/:fileId/content` 提供素材文件。读取接口用于场景加载，不要求浏览器附加开发身份头。
+- `ASSET_STORAGE_DIR` 必须挂载到持久化磁盘卷，并纳入备份策略；容器重建但未挂载持久卷会导致素材丢失。当前实现是单实例文件清单写入队列，不适用于多副本共享同一存储目录的并发写入；多副本部署应迁移到对象存储或数据库事务/分布式锁。
+- 首页启动时读取服务端 manifest；2.5D 与 3D 始终显示同一套由 `createPixelBuilding` 生成的真实 3D Mesh；相机投影、观察角度和交互方式按视角模式切换。AI 参考图只保存在资产库中，用于识别、审核和追溯，不加载为场景 Sprite；旧 `buildings.json` GLB 仍可作为外部模型兼容轨道。空间位置、footprint、碰撞和 walkable 不变。
+
+
+### 部署与权限限制
+
+- 当前上传接口复用项目现有 `DevIdentityGuard`，仅适用于 `NODE_ENV` 非 production 的开发联调；生产环境会拒绝该开发身份请求。正式上线前必须接入项目正式用户认证和资产管理权限校验。
+- Dockerfile 声明了 `/data/campus-map-assets` 数据卷，部署时仍应显式绑定命名卷/宿主机持久目录，并将该目录纳入备份。不能依赖容器可写层。
+
+
+### 2.5D 图片与 3D 模型的显示边界
+
+- `gpt-image-2` 生成的是 2D 建筑参考图，不直接生成 3D 几何。参考图由 `VISION_MODEL`（当前配置 `deepseek-flash`）提取楼层、屋顶、窗户、门、墙面配色等结构参数。
+- Three.js 参数化生成器依据结构参数创建墙体、楼层窗户、入口、屋顶等真实 Mesh。2.5D 与 3D 均展示该实体几何；2.5D 使用固定斜俯视正交相机，3D 使用可旋转透视相机。两种视角绑定同一空间 Feature ID。
+- 结构参数只控制视觉几何，不覆盖建筑 footprint、位置、碰撞、walkable 或真实测绘尺寸。识别结果带置信度、证据和限制说明；高度以场景视觉单位估算并明确标记为非实测值。
+- GLB 仍是人工建模/外部工具导入的可选高精度替代方案，不是 AI 图片生成后的必经步骤。
+- 建筑参考图不加入校园场景树，避免把二维参考素材误用为建筑实体；场景中其他独立标注 Sprite 仍按各自用途使用。
+
+
+## 第四阶段：AI 建筑参考图驱动参数化 3D 生成
+
+### 工作链路
+
+1. 素材工坊调用 `gpt-image-2` 生成单栋建筑参考图，要求同时呈现正面立面、侧面和屋顶，便于结构识别。
+2. 用户点击“识别参考图并生成3D参数”，服务端将图片发送给 `VISION_MODEL`（沿用现有 `VISION_API_KEY`、`VISION_API_BASE_URL` 和 `VISION_MODEL` 配置，不改变图片生成模型配置）。
+3. 识图接口返回受限 JSON：建筑模板、楼层数、屋顶类型/坡度、窗户密度/尺寸、门宽、墙面色板、置信度、可见证据和识别限制。
+4. 参数随 2.5D 参考图一起保存到候选记录；审核入库时，服务端将参数写入同一 Feature 绑定的视觉资产 manifest。
+5. `createCampusScene` 读取已审核资产的 `buildingDesign`，将参数传给现有 `createPixelBuilding` 生成器。2.5D 与 3D 都显示真实墙体、屋顶、门窗 Mesh；模式切换只调整相机投影和交互规则。参考图不作为地图显示素材。
+
+### 数据和精度边界
+
+- 识图接口不生成或修改校园空间坐标、footprint、真实建筑尺寸、碰撞或通行属性。
+- `height` 是按识别楼层数换算的场景视觉单位，`heightBasis=estimated-scene-units-not-surveyed`；不得作为真实高度或测绘数据使用。
+- 单张参考图无法确定背面、内部结构、被遮挡立面和真实比例。接口返回 confidence/evidence/limitations；低置信度结果必须人工复核，参数仅作为视觉生成输入。
+- 人工 GLB 上传保留为可选高精度模型来源。未来可按需增加模型细节、材质贴图和多视图校准，但不应把 AI 参考图误当作 3D 文件。
+- 识图图片 Base64 请求限制为 10 MB，避免 JSON 编码后超过服务端请求体限额。
+
+
+## 32. 编辑器模板套用与 AI 工坊双视角预览（2026-11-05）
+
+- 建筑模板的选择与套用属于地图编辑器：选中建筑后选择模板，编辑器一次性应用模板的高度、楼层、屋顶、门窗和墙面预设，并纳入撤销/重做与自动保存。
+- 模板套用只更新建筑视觉参数，不改空间 Feature ID、位置、footprint、碰撞或 walkable。
+- AI 素材工坊负责参考图生成、结构识别、参数审核和候选入库；不负责编辑地图建筑模板。
+- 工坊并排展示 2.5D 固定斜俯视正交预览和 3D 透视预览。两侧都由同一 `createPixelBuilding` 调用生成真实 Three.js Mesh，不使用参考图 Sprite。
+- AI 参考图仅作视觉识别与审核证据；识别参数更新后双视角同步重建。GLB 保留为人工/外部导入的可选高精度模型轨道。

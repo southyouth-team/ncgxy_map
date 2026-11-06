@@ -1,7 +1,25 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "units": "meters",
   "coordinateSystem": "local-campus-meter",
-  "status": "survey-pending",
-  "buildings": []
+  "modelRoot": "/models/buildings/",
+  "status": "inventory-derived-models-pending",
+  "buildings": [],
+  "entrySchema": {
+    "buildingId": "string; must match canonical campus building Feature id",
+    "name": "string",
+    "status": "ready | pending-model | pending-survey",
+    "modelUrl": "ready entries only; /models/buildings/<file>.glb",
+    "position": "[x, y, z]; campus-local meters; model origin at footprint ground center",
+    "positionVerified": "boolean; true only after placement is checked against source data",
+    "rotationY": "number in radians; must be explicitly set before status=ready",
+    "rotationVerified": "boolean; true only after orientation is checked",
+    "source": "asset provenance or survey reference",
+    "notes": "optional review notes"
+  },
+  "notes": [
+    "The canonical building inventory is generated from campus spatial Features at runtime.",
+    "No GLB model files or verified model placements are currently registered; do not invent modelUrl, position, or rotation values.",
+    "A building may be switched to status=ready only when its GLB file exists and position and rotationY are explicitly confirmed."
+  ]
 }

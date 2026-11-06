@@ -1,30 +1,31 @@
 /**
- * 南昌工学院校园平面图第一版空间标注。
+ * 南昌工学院像素校园主空间底图。
  *
- * 坐标来源：用户提供的《南昌工学院平面图》（640 × 480 示意图）。
- * pixel 坐标以原图左上角为原点；不是 GIS 测绘坐标。
- * 当前建筑仅标注可辨识的轮廓/区域，名称不清晰的暂用功能区编号。
+ * 空间参考：南昌工学院《2026级新生报到指南》校园平面图。
+ * 参考图按 1000 × 500 图像像素建立坐标，图框范围为 mapBounds。
+ * 当前坐标为人工数字化近似值，不是测绘坐标；楼栋编号为视觉对象 ID，
+ * 未核实的楼栋名称、尺寸和层数不在此处伪造。
  *
- * 校准策略：
- * - mapBounds：校园主体图框在原图中的像素范围。
- * - worldWidth：将图框映射到 Three.js XZ 平面的宽度（演示比例，非真实米制）。
- * - mapPixelToWorld：统一执行像素坐标到世界坐标转换，避免各模块重复计算。
+ * 原图仅用于空间结构参考，不作为公开项目贴图再分发。
  */
 
 export const CAMPUS_PLAN_REFERENCE = {
   image: {
-    width: 640,
-    height: 480,
-    source: '南昌工学院平面图（用户提供）',
+    width: 1000,
+    height: 500,
+    source: '南昌工学院2026级新生报到指南·校园平面图（reference-only）',
+    publishedAt: '2026-08-28',
+    sourcePageUrl: 'https://app.gaokaozhitongche.com/newsguide/h/Rg1KJO0N',
+    sourceImageUrl: 'https://mmbiz.qpic.cn/sz_mmbiz_jpg/I7CrcZW85viauJhPE5oxIic650acadic3zicLbM1kQ4eHcz4fbdYMNw0QliaiapzFkyBOakxlRcZINmMyD2DO1ib6Da2agZD6iaKM9RhmA1mkh3H8Pc/640?from=appmsg&wx_fmt=jpeg',
   },
   mapBounds: {
-    left: 36,
-    top: 92,
-    right: 612,
-    bottom: 460,
+    left: 153,
+    top: 49,
+    right: 844,
+    bottom: 466,
   },
+  // 仅为 Three.js 场景比例单位，不代表真实米制距离。
   worldWidth: 150,
-  // 图框宽高比约 1.565；按同一比例计算深度，保持平面图不变形。
   get worldDepth() {
     return this.worldWidth
       * (this.mapBounds.bottom - this.mapBounds.top)
@@ -35,12 +36,65 @@ export const CAMPUS_PLAN_REFERENCE = {
 const bounds = CAMPUS_PLAN_REFERENCE.mapBounds
 const scale = CAMPUS_PLAN_REFERENCE.worldWidth / (bounds.right - bounds.left)
 
+/** 将道路/路径中心线转换为 Three.js 地面坐标点列。 */
+export function mapPolylineToWorld(points) {
+  if (!Array.isArray(points)) return []
+  return points.map(([x, y]) => mapPixelToWorld(x, y))
+}
+
+/** 将道路中心线及宽度转换为统一世界空间数据，供 3D 渲染、碰撞和寻路复用。 */
+export function mapRoadToWorld(road) {
+  if (!road || !Array.isArray(road.points)) return null
+  return {
+    id: road.id,
+    confidence: road.confidence,
+    points: mapPolylineToWorld(road.points),
+    width: (CAMPUS_ROAD_WIDTHS[road.id] || 12) * scale,
+  }
+}
+
+/** 判断图像坐标点是否落在闭合环内（射线法）。 */
+export function pointInCampusPolygon(point, ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return false
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j]
+    const crosses = (yi > point[1]) !== (yj > point[1])
+    if (crosses && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+/** 判断点是否位于区域主体内；holes 表示主体内部的可通行洞区/岛屿。 */
+export function pointInCampusArea(point, area) {
+  if (area?.rect) {
+    const [left, top, right, bottom] = area.rect
+    return point[0] >= left && point[0] <= right && point[1] >= top && point[1] <= bottom
+  }
+  if (!area?.polygon || !pointInCampusPolygon(point, area.polygon)) return false
+  return !(area.holes || []).some(hole => pointInCampusPolygon(point, hole))
+}
+
+/** 获取建筑 footprint 的图像坐标包围盒，兼容旧 rect 与新 polygon。 */
+export function getCampusFootprintBounds(footprint) {
+  if (Array.isArray(footprint?.rect) && footprint.rect.length === 4) return [...footprint.rect]
+  if (!Array.isArray(footprint?.polygon) || footprint.polygon.length < 3) return null
+  const xs = footprint.polygon.map(point => point[0])
+  const ys = footprint.polygon.map(point => point[1])
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+}
+
 /** 原图像素坐标 -> Three.js 地面坐标（X、Z）。 */
 export function mapPixelToWorld(pixelX, pixelY) {
   return {
     x: (pixelX - (bounds.left + bounds.right) / 2) * scale,
     z: (pixelY - (bounds.top + bounds.bottom) / 2) * scale,
   }
+}
+
+/** 图像坐标多边形 -> Three.js 地面 X/Z 坐标点列。 */
+export function mapPolygonToWorld(polygon) {
+  return mapPolylineToWorld(polygon)
 }
 
 /** 像素矩形 -> 世界中心点、宽度和深度。 */
@@ -54,125 +108,262 @@ export function mapRectToWorld([left, top, right, bottom]) {
 }
 
 /**
- * 第一批可辨识的校园空间要素。
- * polygon 使用原图像素坐标；暂不把模糊文字强行识别成正式建筑名称。
+ * 校园主要地理区域。多边形来自官方平面图的人工近似描绘，
+ * 重点保证整体空间关系；后续可用现场核验数据逐项修正。
  */
+export const CAMPUS_PLAYER_SPAWN_PIXEL = Object.freeze([420, 315])
+
 export const CAMPUS_AREAS = [
   {
     id: 'central-lake',
-    name: '中心湖区',
+    name: '中央湖区',
     type: 'water',
     confidence: 'medium',
-    polygon: [[177, 194], [205, 185], [250, 188], [280, 207], [290, 238], [276, 267], [289, 300], [270, 336], [235, 351], [190, 337], [165, 306], [165, 255]],
+    holes: [[
+      [492, 178], [520, 158], [553, 158], [582, 178], [599, 207],
+      [600, 244], [580, 274], [552, 294], [520, 298], [493, 280],
+      [478, 250], [478, 214],
+    ]],
+    polygon: [
+      [474, 132], [500, 116], [538, 112], [572, 124], [602, 150],
+      [620, 184], [625, 222], [615, 260], [596, 294], [568, 322],
+      [535, 340], [505, 329], [484, 304], [468, 270], [462, 230],
+      [464, 190], [468, 157],
+    ],
+  },
+  {
+    id: 'west-lake',
+    name: '西侧湖区',
+    type: 'water',
+    confidence: 'medium',
+    polygon: [
+      [164, 68], [190, 58], [222, 60], [250, 72], [271, 94],
+      [283, 120], [275, 146], [252, 166], [222, 178],
+      [192, 169], [171, 148], [160, 118],
+    ],
   },
   {
     id: 'north-east-sports-field',
     name: '东北侧运动场',
     type: 'sports',
     confidence: 'high',
-    rect: [535, 111, 601, 220],
+    rect: [770, 57, 834, 151],
   },
   {
-    id: 'south-west-sports-field',
-    name: '西南侧运动场',
+    id: 'south-central-sports-field',
+    name: '南部运动场',
     type: 'sports',
     confidence: 'high',
-    rect: [105, 390, 177, 463],
+    rect: [432, 337, 519, 443],
   },
   {
-    id: 'north-west-residential-zone',
+    id: 'west-north-building-cluster',
     name: '西北建筑组团',
     type: 'building-cluster',
-    confidence: 'high',
-    rect: [39, 99, 190, 190],
+    confidence: 'medium',
+    rect: [158, 132, 255, 302],
   },
   {
-    id: 'west-central-building-zone',
-    name: '西侧建筑组团',
+    id: 'west-south-building-cluster',
+    name: '西南建筑组团',
     type: 'building-cluster',
-    confidence: 'high',
-    rect: [39, 283, 177, 389],
+    confidence: 'medium',
+    rect: [160, 302, 270, 425],
   },
   {
-    id: 'north-central-building-zone',
+    id: 'north-central-building-cluster',
     name: '北部中央建筑组团',
     type: 'building-cluster',
     confidence: 'medium',
-    rect: [207, 99, 349, 191],
+    rect: [326, 54, 478, 148],
   },
   {
-    id: 'north-east-building-zone',
+    id: 'north-east-building-cluster',
     name: '东北建筑组团',
     type: 'building-cluster',
     confidence: 'medium',
-    rect: [383, 99, 525, 187],
+    rect: [606, 54, 770, 153],
   },
   {
-    id: 'east-building-zone',
-    name: '东侧建筑组团',
+    id: 'west-central-building-cluster',
+    name: '西侧中央建筑组团',
     type: 'building-cluster',
     confidence: 'medium',
-    rect: [385, 220, 550, 365],
+    rect: [326, 164, 449, 324],
   },
   {
-    id: 'south-central-building-zone',
+    id: 'east-central-building-cluster',
+    name: '东侧中央建筑组团',
+    type: 'building-cluster',
+    confidence: 'medium',
+    rect: [655, 166, 807, 326],
+  },
+  {
+    id: 'south-building-cluster',
     name: '南部建筑组团',
     type: 'building-cluster',
     confidence: 'medium',
-    rect: [185, 370, 535, 454],
+    rect: [520, 337, 802, 448],
   },
 ]
 
 /**
- * 道路/通道控制点，按图面中心线粗略标注。
- * 目前作为路径骨架，不代表可直接用于导航的精确路网。
+ * 主干道路与主要步行通道中心线。
+ * 道路宽度按视觉比例渲染；道路控制点是图面近似，不用于精确导航。
  */
 export const CAMPUS_ROAD_CENTERLINES = [
   {
     id: 'north-perimeter-road',
     confidence: 'medium',
-    points: [[44, 95], [190, 95], [350, 95], [520, 95], [604, 110]],
+    points: [[160, 76], [300, 54], [470, 52], [650, 52], [810, 62], [835, 100]],
   },
   {
     id: 'west-perimeter-road',
     confidence: 'medium',
-    points: [[40, 105], [40, 210], [40, 330], [40, 450]],
+    points: [[160, 76], [154, 180], [154, 300], [160, 420], [185, 455]],
   },
   {
     id: 'east-perimeter-road',
     confidence: 'medium',
-    points: [[606, 110], [606, 230], [606, 350], [600, 450]],
+    points: [[835, 100], [842, 205], [838, 320], [830, 420], [805, 455]],
   },
   {
     id: 'south-perimeter-road',
     confidence: 'medium',
-    points: [[45, 455], [180, 455], [340, 455], [500, 455], [600, 455]],
+    points: [[185, 455], [340, 462], [500, 462], [670, 458], [805, 455]],
   },
   {
-    id: 'central-campus-road',
+    id: 'central-lake-loop-road',
+    confidence: 'medium',
+    points: [
+      [450, 145], [465, 112], [500, 94], [545, 92], [588, 110],
+      [620, 142], [642, 184], [650, 228], [638, 274], [610, 316],
+      [570, 348], [525, 358], [480, 342], [448, 310], [430, 270],
+      [426, 222], [432, 180], [450, 145],
+    ],
+  },
+  {
+    id: 'north-campus-connector',
     confidence: 'low',
-    points: [[180, 365], [235, 355], [300, 365], [370, 385], [450, 405], [530, 410]],
+    points: [[280, 150], [330, 150], [380, 150], [430, 150], [462, 165]],
+  },
+  {
+    id: 'west-campus-connector',
+    confidence: 'low',
+    points: [[260, 205], [292, 205], [315, 230], [320, 275], [330, 320]],
+  },
+  {
+    id: 'east-campus-connector',
+    confidence: 'low',
+    points: [[642, 315], [680, 328], [720, 330], [765, 330], [815, 315]],
+  },
+  {
+    id: 'south-campus-connector',
+    confidence: 'low',
+    points: [[425, 315], [455, 335], [500, 337], [545, 337], [620, 337], [730, 337]],
+  },
+  {
+    id: 'south-west-connector',
+    confidence: 'low',
+    points: [[270, 360], [315, 365], [360, 380], [400, 405], [430, 430]],
   },
 ]
 
+/** 道路图面宽度（像素）；统一作为 2D 绘制与 3D 地面宽度的唯一数据源。 */
+export const CAMPUS_ROAD_WIDTHS = Object.freeze(Object.fromEntries(
+  CAMPUS_ROAD_CENTERLINES.map(road => [road.id, road.id.includes('perimeter') ? 15 : 12]),
+))
+
 /**
- * 可辨识建筑矩形的第一批粗略标注。
- * label 暂用区域编号，待高清图/实地照片核实后再绑定正式楼栋名称。
+ * 从平面图中可辨识的建筑轮廓近似标注。
+ * 采用区域编号，不将图面中无法确认的文字转成正式楼栋名称。
  */
 export const CAMPUS_BUILDING_FOOTPRINTS = [
-  { id: 'zone-nw-01', label: '西北组团 01', rect: [43, 102, 129, 116], floors: null, confidence: 'medium' },
-  { id: 'zone-nw-02', label: '西北组团 02', rect: [43, 124, 129, 138], floors: null, confidence: 'medium' },
-  { id: 'zone-nw-03', label: '西北组团 03', rect: [43, 146, 129, 160], floors: null, confidence: 'medium' },
-  { id: 'zone-nw-04', label: '西北组团 04', rect: [43, 168, 129, 182], floors: null, confidence: 'medium' },
-  { id: 'zone-nw-05', label: '西北组团 05', rect: [139, 102, 183, 116], floors: null, confidence: 'medium' },
-  { id: 'zone-nw-06', label: '西北组团 06', rect: [139, 124, 183, 138], floors: null, confidence: 'medium' },
-  { id: 'zone-west-01', label: '西侧组团 01', rect: [43, 289, 127, 303], floors: null, confidence: 'medium' },
-  { id: 'zone-west-02', label: '西侧组团 02', rect: [43, 311, 127, 325], floors: null, confidence: 'medium' },
-  { id: 'zone-west-03', label: '西侧组团 03', rect: [43, 333, 127, 347], floors: null, confidence: 'medium' },
-  { id: 'zone-west-04', label: '西侧组团 04', rect: [43, 355, 127, 369], floors: null, confidence: 'medium' },
-  { id: 'zone-north-01', label: '北部组团 01', rect: [216, 103, 267, 117], floors: null, confidence: 'low' },
-  { id: 'zone-north-02', label: '北部组团 02', rect: [278, 103, 323, 117], floors: null, confidence: 'low' },
-  { id: 'zone-east-01', label: '东侧组团 01', rect: [393, 103, 462, 117], floors: null, confidence: 'low' },
-  { id: 'zone-east-02', label: '东侧组团 02', rect: [393, 126, 462, 140], floors: null, confidence: 'low' },
-  { id: 'zone-east-03', label: '东侧组团 03', rect: [475, 125, 520, 139], floors: null, confidence: 'low' },
+  // 西北侧组团
+  { id: 'west-north-01', label: '西北组团 01', rect: [164, 137, 226, 151], confidence: 'low' },
+  { id: 'west-north-02', label: '西北组团 02', rect: [164, 165, 226, 179], confidence: 'low' },
+  { id: 'west-north-03', label: '西北组团 03', rect: [164, 193, 226, 207], confidence: 'low' },
+  { id: 'west-north-04', label: '西北组团 04', rect: [164, 221, 226, 235], confidence: 'low' },
+  { id: 'west-north-05', label: '西北组团 05', rect: [164, 249, 226, 263], confidence: 'low' },
+  { id: 'west-north-06', label: '西北组团 06', rect: [164, 277, 226, 291], confidence: 'low' },
+  // 西南侧组团
+  { id: 'west-south-01', label: '西南组团 01', rect: [164, 307, 222, 321], confidence: 'low' },
+  { id: 'west-south-02', label: '西南组团 02', rect: [164, 334, 222, 348], confidence: 'low' },
+  { id: 'west-south-03', label: '西南组团 03', rect: [164, 361, 222, 375], confidence: 'low' },
+  { id: 'west-south-04', label: '西南组团 04', rect: [164, 388, 222, 402], confidence: 'low' },
+  // 北部中央组团
+  { id: 'north-center-01', label: '北部组团 01', rect: [333, 62, 378, 76], confidence: 'low' },
+  { id: 'north-center-02', label: '北部组团 02', rect: [333, 87, 378, 101], confidence: 'low' },
+  { id: 'north-center-03', label: '北部组团 03', rect: [333, 112, 378, 126], confidence: 'low' },
+  { id: 'north-center-04', label: '北部组团 04', rect: [391, 62, 440, 76], confidence: 'low' },
+  { id: 'north-center-05', label: '北部组团 05', rect: [391, 87, 440, 101], confidence: 'low' },
+  { id: 'north-center-06', label: '北部组团 06', rect: [391, 112, 440, 126], confidence: 'low' },
+  { id: 'north-center-07', label: '北部组团 07', rect: [447, 62, 474, 76], confidence: 'low' },
+  { id: 'north-center-08', label: '北部组团 08', rect: [447, 87, 474, 101], confidence: 'low' },
+  // 西侧中央组团
+  { id: 'west-center-01', label: '西侧组团 01', rect: [333, 174, 388, 188], confidence: 'low' },
+  { id: 'west-center-02', label: '西侧组团 02', rect: [333, 199, 388, 213], confidence: 'low' },
+  { id: 'west-center-03', label: '西侧组团 03', rect: [333, 224, 388, 238], confidence: 'low' },
+  { id: 'west-center-04', label: '西侧组团 04', rect: [333, 249, 388, 263], confidence: 'low' },
+  { id: 'west-center-05', label: '西侧组团 05', rect: [333, 274, 388, 288], confidence: 'low' },
+  { id: 'west-center-06', label: '西侧组团 06', rect: [397, 174, 440, 188], confidence: 'low' },
+  { id: 'west-center-07', label: '西侧组团 07', rect: [397, 199, 440, 213], confidence: 'low' },
+  { id: 'west-center-08', label: '西侧组团 08', rect: [397, 224, 440, 238], confidence: 'low' },
+  // 东北侧组团
+  { id: 'east-north-01', label: '东北组团 01', rect: [615, 62, 666, 76], confidence: 'low' },
+  { id: 'east-north-02', label: '东北组团 02', rect: [615, 88, 666, 102], confidence: 'low' },
+  { id: 'east-north-03', label: '东北组团 03', rect: [615, 114, 666, 128], confidence: 'low' },
+  { id: 'east-north-04', label: '东北组团 04', rect: [678, 62, 731, 76], confidence: 'low' },
+  { id: 'east-north-05', label: '东北组团 05', rect: [678, 88, 731, 102], confidence: 'low' },
+  { id: 'east-north-06', label: '东北组团 06', rect: [678, 114, 731, 128], confidence: 'low' },
+  { id: 'east-north-07', label: '东北组团 07', rect: [738, 62, 766, 76], confidence: 'low' },
+  { id: 'east-north-08', label: '东北组团 08', rect: [738, 88, 766, 102], confidence: 'low' },
+  // 东侧中央组团
+  { id: 'east-center-01', label: '东侧组团 01', rect: [674, 174, 721, 188], confidence: 'low' },
+  { id: 'east-center-02', label: '东侧组团 02', rect: [674, 200, 721, 214], confidence: 'low' },
+  { id: 'east-center-03', label: '东侧组团 03', rect: [674, 226, 721, 240], confidence: 'low' },
+  { id: 'east-center-04', label: '东侧组团 04', rect: [674, 252, 721, 266], confidence: 'low' },
+  { id: 'east-center-05', label: '东侧组团 05', rect: [737, 176, 786, 190], confidence: 'low' },
+  { id: 'east-center-06', label: '东侧组团 06', rect: [737, 202, 786, 216], confidence: 'low' },
+  { id: 'east-center-07', label: '东侧组团 07', rect: [737, 228, 786, 242], confidence: 'low' },
+  { id: 'east-center-08', label: '东侧组团 08', rect: [737, 254, 786, 268], confidence: 'low' },
+  // 南部组团
+  { id: 'south-center-01', label: '南部组团 01', rect: [528, 350, 580, 364], confidence: 'low' },
+  { id: 'south-center-02', label: '南部组团 02', rect: [528, 376, 580, 390], confidence: 'low' },
+  { id: 'south-center-03', label: '南部组团 03', rect: [528, 402, 580, 416], confidence: 'low' },
+  { id: 'south-center-04', label: '南部组团 04', rect: [594, 350, 646, 364], confidence: 'low' },
+  { id: 'south-center-05', label: '南部组团 05', rect: [594, 376, 646, 390], confidence: 'low' },
+  { id: 'south-center-06', label: '南部组团 06', rect: [594, 402, 646, 416], confidence: 'low' },
+  { id: 'south-east-01', label: '东南组团 01', rect: [660, 350, 712, 364], confidence: 'low' },
+  { id: 'south-east-02', label: '东南组团 02', rect: [660, 376, 712, 390], confidence: 'low' },
+  { id: 'south-east-03', label: '东南组团 03', rect: [660, 402, 712, 416], confidence: 'low' },
+  { id: 'south-east-04', label: '东南组团 04', rect: [726, 350, 778, 364], confidence: 'low' },
+  { id: 'south-east-05', label: '东南组团 05', rect: [726, 376, 778, 390], confidence: 'low' },
 ]
+
+/** 判断圆形角色碰撞体是否与校园多边形相交，避免只采样中心点时擦边穿墙。 */
+export function circleIntersectsCampusPolygon(center, radius, ring) {
+  if (!Array.isArray(center) || center.length < 2 ||
+    !center.every(Number.isFinite) || !Number.isFinite(radius) || radius < 0 ||
+    !Array.isArray(ring) || ring.length < 3) return false
+  if (pointInCampusPolygon(center, ring)) return true
+
+  const [cx, cy] = center
+  const radiusSquared = radius * radius
+  for (let index = 0; index < ring.length; index++) {
+    const [ax, ay] = ring[index]
+    const [bx, by] = ring[(index + 1) % ring.length]
+    const dx = bx - ax
+    const dy = by - ay
+    const lengthSquared = dx * dx + dy * dy
+    const projection = lengthSquared > 0
+      ? Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / lengthSquared))
+      : 0
+    const nearestX = ax + projection * dx
+    const nearestY = ay + projection * dy
+    const distanceX = cx - nearestX
+    const distanceY = cy - nearestY
+    if (distanceX * distanceX + distanceY * distanceY <= radiusSquared) return true
+  }
+  return false
+}

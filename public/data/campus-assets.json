@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "idStrategy": "stable-spatial-feature-id",
+  "assetRoots": [
+    "/assets/campus/",
+    "/models/buildings/"
+  ],
+  "viewModes": [
+    "2.5d",
+    "3d",
+    "shared"
+  ],
+  "sourceTypes": [
+    "ai_generated",
+    "manual_model",
+    "procedural",
+    "external"
+  ],
+  "statuses": [
+    "draft",
+    "review",
+    "ready",
+    "archived"
+  ],
+  "assets": [],
+  "bindings": [],
+  "notes": [
+    "空间 FeatureCollection 是位置、footprint、碰撞和 walkable 的唯一权威数据源；本清单只管理视觉资产。",
+    "AI 生成素材默认进入 draft/review，人工审核后才可设为 ready。",
+    "2.5D 与 3D 可分别登记 primary 文件；只有显式登记 shared primary 时才允许跨视角复用。",
+    "AI 图片、AI 生成 3D、人工 GLB 和程序化资产统一使用 assetId 管理。",
+    "当前为空清单，不会改变现有程序化场景或 GLB 加载行为。"
+  ],
+  "assetSchema": {
+    "assetId": "stable globally unique string",
+    "name": "human-readable asset name",
+    "category": "building | vegetation | facility | road | area | character | decoration | other",
+    "sourceType": "ai_generated | manual_model | procedural | external",
+    "status": "draft | review | ready | archived",
+    "files": "array of { viewMode, role, mediaType, format, url }",
+    "provenance": "optional { provider, prompt, reference, license, createdAt, notes }; AI assets should include provider and prompt"
+  },
+  "bindingSchema": {
+    "featureId": "stable ID from canonical campus FeatureCollection",
+    "assetId": "assetSchema.assetId; one visual asset family per spatial Feature"
+  }
+}

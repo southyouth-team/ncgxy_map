@@ -576,6 +576,82 @@ export function auditObjectModelGeometryCapabilityCoverage() {
   return auditGeometryCapabilityCoverage(protocolCapabilities, runtimeGeometryCapabilities.list());
 }
 
+/**
+ * Estimates persistent BufferAttribute and index-buffer storage for built-in
+ * geometries whose topology is fully determined by the runtime constructor.
+ * Temporary JS arrays, Three.js objects, bounds and allocator overhead are excluded.
+ */
+function estimateGeometryBuffers(vertexCount, indexCount) {
+  if (!Number.isSafeInteger(vertexCount) || vertexCount < 1
+    || !Number.isSafeInteger(indexCount) || indexCount < 0) {
+    throw new RangeError('几何资源估算数量无效');
+  }
+  const indexBytesPerElement = vertexCount > 65536 ? 4 : 2;
+  const attributeBytes = vertexCount * (3 + 3 + 2) * Float32Array.BYTES_PER_ELEMENT;
+  const indexBytes = indexCount * indexBytesPerElement;
+  return {
+    vertexCount,
+    indexCount,
+    attributeBytes,
+    indexBytes,
+    indexBytesPerElement,
+    bufferBytes: attributeBytes + indexBytes,
+  };
+}
+
+/**
+ * Estimates actual runtime buffer sizes for the supported built-in primitives.
+ * Extruded/custom geometries are intentionally excluded until their tessellation
+ * behavior has a separately verified estimator.
+ */
+export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}) {
+  const type = String(primitive || '').toLowerCase();
+  const options = descriptor && typeof descriptor === 'object' ? descriptor : {};
+  const segments = Math.round(boundedNumber(options.segments, 16, 3, MAX_SEGMENTS, type + '.segments'));
+  let vertexCount;
+  let indexCount;
+
+  switch (type) {
+    case 'box':
+    case 'cuboid':
+      if (Array.isArray(options.openings) && options.openings.length > 0) {
+        throw new TypeError(type + ' openings 使用 ExtrudeGeometry，当前估算器不支持');
+      }
+      // BoxGeometry emits four independent vertices and six indices per face.
+      vertexCount = 6 * 4;
+      indexCount = 6 * 6;
+      break;
+    case 'cylinder':
+      // One side grid plus independently-owned top and bottom cap centers/rims.
+      vertexCount = 2 * (segments + 1) + 2 * (2 * segments + 1);
+      indexCount = 12 * segments;
+      break;
+    case 'cone':
+      // CylinderGeometry(radiusTop=0) omits the top cap and one side triangle per segment.
+      vertexCount = 2 * (segments + 1) + (2 * segments + 1);
+      indexCount = 6 * segments;
+      break;
+    case 'sphere':
+    case 'ellipsoid': {
+      const heightSegments = Math.max(4, Math.floor(segments * 0.66));
+      vertexCount = (segments + 1) * (heightSegments + 1);
+      // The two pole bands emit one triangle per cell; inner bands emit two.
+      indexCount = 6 * segments * (heightSegments - 1);
+      break;
+    }
+    case 'torus': {
+      const radialSegments = Math.min(16, segments);
+      vertexCount = (radialSegments + 1) * (segments + 1);
+      indexCount = 6 * radialSegments * segments;
+      break;
+    }
+    default:
+      throw new RangeError('当前几何类型没有经过校准的资源估算：' + type);
+  }
+
+  return estimateGeometryBuffers(vertexCount, indexCount);
+}
+
 function createGeometry(THREE, node) {
   if (node.geometry?.type === 'indexed-mesh') {
     const geometry = new THREE.BufferGeometry();

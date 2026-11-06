@@ -654,6 +654,44 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => createObjectSculptModel(THREE, spec)).toThrow('arch.inset 超出允许范围');
   });
 
+  it('estimates built-in primitive buffers against actual Three.js geometry', () => {
+    const cases = ['box', 'cuboid', 'cylinder', 'cone', 'sphere', 'ellipsoid', 'torus'];
+    for (const primitive of cases) {
+      for (const segments of [3, 12, 48]) {
+        const node = {
+          id: 'estimate-' + primitive + '-' + segments,
+          primitive,
+          dimensions: { width: 2, height: 3, depth: 4 },
+          geometryDescriptor: { segments },
+        };
+        const estimate = estimateObjectSculptPrimitiveGeometry(primitive, node.geometryDescriptor);
+        const component = createObjectSculptComponentGroup(THREE, node);
+        const geometry = component.getObjectByName(node.id + ':mesh').geometry;
+        const actualAttributeBytes = Object.values(geometry.attributes)
+          .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+        const actualIndex = geometry.getIndex();
+
+        expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+        expect(estimate.indexCount).toBe(actualIndex.count);
+        expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+        expect(estimate.indexBytes).toBe(actualIndex.array.byteLength);
+        expect(estimate.indexBytesPerElement).toBe(actualIndex.array.BYTES_PER_ELEMENT);
+        expect(estimate.bufferBytes).toBe(actualAttributeBytes + actualIndex.array.byteLength);
+        component.traverse(object => {
+          object.geometry?.dispose?.();
+          object.material?.dispose?.();
+        });
+      }
+    }
+  });
+
+  it('does not claim an estimate for extruded box geometry or uncalibrated primitives', () => {
+    expect(() => estimateObjectSculptPrimitiveGeometry('box', { openings: [{}] }))
+      .toThrow('当前估算器不支持');
+    expect(() => estimateObjectSculptPrimitiveGeometry('polygon', {}))
+      .toThrow('没有经过校准');
+  });
+
   it('executes cylinder, cone, sphere, ellipsoid and torus through registered capabilities', () => {
     const spec = {
       schemaVersion: '3.0',

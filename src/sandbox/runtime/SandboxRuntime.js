@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 
 const WEATHER = ['clear', 'cloudy', 'rain', 'snow', 'fog']
 
@@ -14,6 +16,7 @@ export class SandboxRuntime {
     this.environment = { time: 14, weather: 'clear', wind: 0.2 }
     this.clock = new THREE.Clock()
     this.loader = new GLTFLoader()
+    this.exporter = new GLTFExporter()
     this.raycaster = new THREE.Raycaster()
     this.pointer = new THREE.Vector2()
     this.disposed = false
@@ -193,7 +196,7 @@ export class SandboxRuntime {
 
   duplicateSelected() {
     if (!this.selected) return null
-    const copy = this.selected.clone(true)
+    const copy = this.cloneObject(this.selected)
     copy.name = this.selected.name + ' Copy'
     copy.userData = { ...this.selected.userData, objectId: crypto.randomUUID(), sandboxObject: true }
     copy.position.x += 2
@@ -201,6 +204,55 @@ export class SandboxRuntime {
     this.objects.set(copy.userData.objectId, copy)
     this.select(copy)
     return copy
+  }
+
+  cloneObject(source) {
+    const copy = cloneSkinned(source)
+    copy.traverse(node => {
+      if (!node.isMesh) return
+      node.geometry = node.geometry?.clone()
+      if (Array.isArray(node.material)) node.material = node.material.map(material => material.clone())
+      else if (node.material) node.material = node.material.clone()
+    })
+    return copy
+  }
+
+  async exportObject(object = this.selected) {
+    if (!object) throw new Error('请先选择一个模型')
+    const exportRoot = this.cloneObject(object)
+    exportRoot.position.set(0, 0, 0)
+    exportRoot.rotation.set(0, 0, 0)
+    exportRoot.scale.set(1, 1, 1)
+    exportRoot.updateMatrixWorld(true)
+    try {
+      const result = await this.exporter.parseAsync(exportRoot, {
+        binary: true,
+        onlyVisible: false,
+        trs: false,
+        embedImages: true,
+      })
+      return result
+    } finally {
+      this.disposeObject(exportRoot)
+    }
+  }
+
+  async exportAllObjects() {
+    if (!this.objects.size) throw new Error('场景中没有可导出的模型')
+    const exportRoot = new THREE.Group()
+    exportRoot.name = 'Sandbox Assets'
+    for (const object of this.objects.values()) exportRoot.add(this.cloneObject(object))
+    exportRoot.updateMatrixWorld(true)
+    try {
+      return await this.exporter.parseAsync(exportRoot, {
+        binary: true,
+        onlyVisible: false,
+        trs: false,
+        embedImages: true,
+      })
+    } finally {
+      this.disposeObject(exportRoot)
+    }
   }
 
   applyEnvironment(config = {}) {

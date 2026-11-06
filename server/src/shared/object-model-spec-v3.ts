@@ -126,21 +126,21 @@ function validateSimpleGeometryProfile(points: number[][], node: any, field: str
     if (Math.hypot(current[0] - next[0], current[1] - next[1]) < 1e-4) geometryFail(node, field, '不能包含重复点或零长度边');
     twiceArea += current[0] * next[1] - next[0] * current[1];
   }
-  if (Math.abs(twiceArea) < 1e-4) geometryFail(node, field, '轮廓面积不能为零');
   for (let i = 0; i < points.length; i += 1) {
     for (let j = i + 1; j < points.length; j += 1) {
       if (j === i + 1 || (i === 0 && j === points.length - 1)) continue;
       if (geometrySegmentsIntersect(points[i], points[(i + 1) % points.length], points[j], points[(j + 1) % points.length])) {
-        geometryFail(node, field, '轮廓不能自相交');
+        geometryFail(node, field, '存在自相交边（轮廓不能自相交）');
       }
     }
   }
+  if (Math.abs(twiceArea) < 1e-4) geometryFail(node, field, '轮廓面积不能为零');
   return Math.sign(twiceArea);
 }
 function validateGeometryPath(path: any[], node: any, field: string, enforceCurvature = false) {
   for (let index = 1; index < path.length; index += 1) {
     const distance = Math.hypot(...path[index].map((value: number, axis: number) => value - path[index - 1][axis]));
-    if (distance < 1e-4) geometryFail(node, field, '不能包含重复点或零长度路径段');
+    if (distance < 1e-4) geometryFail(node, field, '存在重复或零长度路径段');
   }
   if (!enforceCurvature) return;
   for (let index = 1; index < path.length - 1; index += 1) {
@@ -161,13 +161,13 @@ function validateGeometryDescriptor(node: any) {
   if (primitive === 'polygon') {
     const points = descriptor.points;
     if (!Array.isArray(points) || points.length < 3 || points.length > 32 || !points.every((point: any) => geometryPoint(point, 2))) {
-      geometryFail(node, 'points', '必须包含 3-32 个位于 [-0.5,0.5] 的二维点');
+      geometryFail(node, 'points', '必须包含 3-32 个 [-0.5,0.5] 范围内的二维坐标');
     }
     validateSimpleGeometryProfile(points.map((point: number[]) => point.map(Number)), node, 'points');
   } else if (primitive === 'tube' || primitive === 'sweep') {
     const path = descriptor.path;
     if (!Array.isArray(path) || path.length < 2 || path.length > 32 || !path.every((point: any) => geometryPoint(point, 3))) {
-      geometryFail(node, 'path', '必须包含 2-32 个位于 [-0.5,0.5] 的三维点');
+      geometryFail(node, 'path', '必须包含 2-32 个必须是 [-0.5,0.5] 范围内的三维坐标');
     }
     validateGeometryPath(path.map((point: number[]) => point.map(Number)), node, 'path', primitive === 'sweep');
     if (descriptor.radius !== undefined && descriptor.radius !== null
@@ -183,10 +183,10 @@ function validateGeometryDescriptor(node: any) {
         geometryFail(node, 'segments', 'tubularSegments 必须为 3-128、radialSegments 必须为 3-24，closed 必须为布尔值');
       }
     } else {
-      if (descriptor.closed === true) geometryFail(node, 'closed', '当前不支持闭合扫掠路径');
+      if (descriptor.closed === true) geometryFail(node, 'closed', '暂不支持闭合扫掠路径');
       if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 3 || descriptor.profile.length > 24
         || !descriptor.profile.every((point: any) => geometryPoint(point, 2))) {
-        geometryFail(node, 'profile', '必须包含 3-24 个合法二维截面点');
+        geometryFail(node, 'profile', '必须是 [-0.5,0.5] 范围内的二维坐标，且包含 3-24 个合法截面点');
       }
       validateSimpleGeometryProfile(descriptor.profile.map((point: number[]) => point.map(Number)), node, 'profile');
       const steps = Number(descriptor.steps ?? 32);
@@ -198,7 +198,7 @@ function validateGeometryDescriptor(node: any) {
       || !profile.every((point: any) => Array.isArray(point) && point.length === 2
         && Number.isFinite(Number(point[0])) && Number(point[0]) >= 0 && Number(point[0]) <= 0.5
         && Number.isFinite(Number(point[1])) && Number(point[1]) >= -0.5 && Number(point[1]) <= 0.5)) {
-      geometryFail(node, 'profile', '必须包含 2-32 个合法 [半径,高度] 归一化点');
+      geometryFail(node, 'profile', '必须是 [0,0.5] 半径与 [-0.5,0.5] 高度范围内的 2-32 个归一化点');
     }
     if (profile.some((point: number[], index: number) => index > 0
       && Math.hypot(Number(point[0]) - Number(profile[index - 1][0]), Number(point[1]) - Number(profile[index - 1][1])) < 1e-4)) {
@@ -216,7 +216,7 @@ function validateGeometryDescriptor(node: any) {
       }
       if (index === 0) pointCount = section.points.length;
       if (section.points.length !== pointCount || Number(section.height) <= previousHeight + 1e-4) {
-        geometryFail(node, 'sections', '所有截面点数必须一致且 height 必须严格递增');
+        geometryFail(node, 'sections', '所有截面必须具有相同数量的轮廓点，且 height 必须严格递增');
       }
       const currentOrientation = validateSimpleGeometryProfile(section.points.map((point: number[]) => point.map(Number)), node, 'sections[' + index + '].points');
       if (orientation && currentOrientation !== orientation) geometryFail(node, 'sections', '所有截面必须保持一致的轮廓绕序');

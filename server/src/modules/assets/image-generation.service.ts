@@ -508,7 +508,7 @@ export class ImageGenerationService {
       throw new BadRequestException('不支持的 3D 资产生成配置：' + generationProfile);
     }
     const generationProfileInstruction = generationProfile === WORLD_MVP_TEACHING_BUILDING_PROFILE
-      ? '【World Sandbox MVP 建筑目标】生成一栋可从外部观察并可进入的完整两层教学楼。请根据建筑设计自行决定 componentTree 的层级、几何类型、构件数量和重复结构；不要求固定节点 ID、固定 Group、固定 primitive 或固定 operations。重点保证几何实际拼装：窗框/玻璃位于墙面开口内并与墙面贴合，不能漂浮在墙前或离开立面；门窗尺寸与墙体开口匹配；首层墙体、楼板、二层墙体和屋顶连续承接；主体底部与同一地面基准接触，不得整体悬空。允许使用任意合法 indexed-mesh、primitive、geometryDescriptor、层级组合和 instance operations 实现，不得为了满足某种协议形式牺牲建筑外观。输出前逐项检查构件的局部坐标和父子变换，确认上述空间关系在累积变换后的对象坐标系中成立。'
+      ? '【World Sandbox MVP 建筑目标】生成一栋可从外部观察并可进入的完整两层教学楼。请根据建筑设计自行决定 componentTree 的层级、几何类型、构件数量和重复结构；不要求固定节点 ID、固定 Group、固定 primitive 或固定 operations。重点保证几何实际拼装：窗框/玻璃位于墙面开口内并与墙面贴合，不能漂浮在墙前或离开立面；门窗尺寸与墙体开口匹配；首层墙体、楼板、二层墙体和屋顶连续承接；主体底部与同一地面基准接触，不得整体悬空。允许使用任意合法 indexed-mesh、primitive、geometryDescriptor 和层级组合实现；重复窗户、栏杆、立柱等结构直接展开为普通组件节点，不输出 instance operations，不得为了满足某种协议形式牺牲建筑外观。输出前逐项检查构件的局部坐标和父子变换，确认上述空间关系在累积变换后的对象坐标系中成立。'
       : '';
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
@@ -607,8 +607,8 @@ export class ImageGenerationService {
                 'parameterSchema 必须根据本次对象真实结构动态声明，不得套用固定类别参数清单。只声明能精确绑定到当前 componentTree 真实存在的标量属性的可选参数；对于 indexed-mesh 或没有可编辑标量字段的节点，不得虚构 dimensions/geometryDescriptor 属性；无法确认合法 target 时直接省略该可选参数，不能让参数声明阻断模型生成。每项包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options；targets 每项包含 nodeId、property、mode。property 使用点分隔的真实数据路径，可指向当前节点 dimensions、transform、geometryDescriptor 中存在的标量字段，或当前材质中存在的标量字段；geometry.primitive 和 visibility.visible 为专用语义目标。不得预先穷举属性字段，也不得虚构节点中不存在的字段；服务端按目标实际数据类型校验 number/color/boolean/select。禁止访问 id、parent、kind 等结构身份字段及原型链字段；mode 为 set/multiply/add，visibility.visible 还允许 visible-from/visible-through 并提供 threshold，材质仅 set。一个参数可绑定多个节点实现联动。优先声明对对象语义有意义的参数，例如树高/树冠尺寸/树冠层数、车身长度/轮距/轮胎半径、建筑层数/开间/窗户数量、桌面尺寸/桌腿高度；这些只是示例，必须根据当前对象结构决定是否声明，不能机械添加。',
                 'componentTree 按对象复杂度包含 1-100 个有意义的独立组件；简单对象可以只有一个组件，复杂对象应按真实结构拆分，不得为了凑数量拆出无意义零件。节点字段：id（唯一英文 ID）、name、role、kind（group 或 mesh，省略时为 mesh）、parent（唯一根节点省略，其余组件必填）、material（materials 中的键）、transform（position/rotation/scale 三个三维数组）。Mesh 几何优先使用通用 geometry：{type:"indexed-mesh",positions:[x,y,z,...],indices:[a,b,c,...]}，positions 是局部空间顶点坐标，indices 每三个整数定义一个三角形；不需要 dimensions、primitive 或 geometryDescriptor。它可以表达任意网格外形，不受预置几何类型限制。数据必须形成有效三角网格；不要为了节省数据而把复杂物体错误简化成基础形状。只有在形状确实适合现有参数化构造时，才使用 primitive + dimensions + geometryDescriptor 兼容表达。',
                 '旧式 geometryDescriptor 仍可用于兼容构造：polygon 使用 points，tube 使用 path/radius，lathe 使用 profile，sweep 使用 path/profile，loft 使用 sections。通用 indexed-mesh 不使用这些描述符；不要把通用网格退化成受限轮廓点、路径点或截面数量。',
-                '重复结构必须用通用 operations 描述，不得使用 repeat/grid 专用生成器。operations 项格式：{id,type:"instance",sourceRootId,count:{parameterId},transform:{position:[表达式,表达式,表达式],rotation:[表达式,表达式,表达式],scale:[表达式,表达式,表达式]}}。sourceRootId 指向 componentTree 中作为复制根节点的组件及其完整子树（Group 或 Mesh 均可）；count.parameterId 指向 parameterSchema 中的整数参数。表达式只允许数字常量或 AST：{op:"constant",value}、{op:"index"}、{op:"count"}、{op:"parameter",id}、{op:"add"|"subtract"|"multiply"|"divide",left,right}、{op:"sin"|"cos"|"negate",value}。index 是当前实例索引，count 是实例总数；角度使用弧度。通过三角函数、向量分量和旋转表达式描述任意轴向/圆周/螺旋/非均匀分布，不得把这些分布固化成专用类型。数量参数 targets=[]，由 operation 控制。禁止输出 JavaScript、函数体、eval 或未声明的表达式操作。',
-                '所有重复、旋转、路径和空间分布均通过 operations 与受限表达式声明；不得输出 generators 或 constraints。',
+                'MVP 生成阶段不使用 instance operations、sourceRootId 或表达式参数绑定。重复窗户、栏杆、立柱、车轮、叶片等结构必须直接展开为 componentTree 中的普通组件节点，并通过 parent 组成完整对象；不要为了减少 JSON 长度引入实例化操作。',
+                '所有空间结构直接由 componentTree 中的普通节点及其局部 transform 表达；operations 必须省略或返回空数组，不得输出 generators 或 constraints。',
                 ...(generationProfileInstruction ? [generationProfileInstruction] : []),
                 '单个资产的装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表该对象的核心主体（例如建筑主体、树干/主枝、车身、人体躯干、家具主框架或机械机架）；其余组件必须通过 parent 连接到该根节点，形成一棵连通树。不要把单个资产拆成互不关联的多个根对象。',
                 '所有子组件 position 必须是相对直接 parent 的局部坐标。先确定对象整体中心、尺度和局部坐标系，再按类别安排部件：建筑的屋顶/塔楼/门窗连接主体；树木的枝干连接树干、树冠叶簇连接枝条；车辆的车轮连接车轴/底盘、车门连接车身；人物的头部和四肢连接躯干/关节；家具的面板、桌腿、靠背连接主框架；机械的轴、齿轮、外壳连接机架或传动组件。',
@@ -744,6 +744,12 @@ export class ImageGenerationService {
     if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
       throw new ServiceUnavailableException('ObjectModelSpec 3.0 不接受 generators/constraints；请使用 operations 声明结构运算');
     }
+    // MVP 先验证纯组件树到 Three.js 的完整链路，不依赖 AI instance/sourceRootId 协议。
+    // 即使模型仍输出旧式 instance operations，也直接忽略，由模型提示词要求其展开为普通组件节点。
+    if (Array.isArray(spec.operations) && spec.operations.length > 0) {
+      this.logger.warn('MVP 生成结果包含 instance operations，已忽略并仅使用 componentTree；重复结构应由模型直接展开为普通组件节点');
+    }
+    spec.operations = [];
     const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
     spec.operations = operationValidation.operations;
     const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);

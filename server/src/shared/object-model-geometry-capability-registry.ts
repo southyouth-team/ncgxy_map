@@ -1,4 +1,5 @@
 export interface ObjectModelGeometryCapability<TNode = any, TDescriptor = any> {
+  id: string;
   primitive: string;
   descriptor: string;
   validateDescriptor: (node: TNode, descriptor: TDescriptor) => void;
@@ -15,8 +16,11 @@ export function createObjectModelGeometryCapabilityRegistry<TNode = any, TDescri
       throw new TypeError('Geometry capability requires a valid primitive, descriptor contract and validator');
     }
     const primitive = definition.primitive.toLowerCase();
+    if (definition.id !== undefined && definition.id !== primitive) {
+      throw new TypeError('Geometry capability ID must match primitive: ' + primitive);
+    }
     if (capabilities.has(primitive)) throw new TypeError('Duplicate geometry capability: ' + primitive);
-    capabilities.set(primitive, Object.freeze({ ...definition, primitive }));
+    capabilities.set(primitive, Object.freeze({ ...definition, id: primitive, primitive }));
   }
   return Object.freeze({
     get(primitive: unknown) {
@@ -31,7 +35,7 @@ export function createObjectModelGeometryCapabilityRegistry<TNode = any, TDescri
       capability.validateDescriptor(node, descriptor);
     },
     list() {
-      return [...capabilities.values()].map(({ primitive, descriptor }) => ({ primitive, descriptor }));
+      return [...capabilities.values()].map(({ id, primitive, descriptor }) => ({ id, primitive, descriptor }));
     },
   });
 }

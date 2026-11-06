@@ -1390,7 +1390,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
           id: 'rib', parent: 'root', primitive: 'tube',
           dimensions: { width: 1, height: 1, depth: 1 },
           geometryDescriptor: {
-            path: [[0, 0, 0], [0, 1, 0]],
+            path: [[0, -0.5, 0], [0, 0.5, 0]],
             radius: 0.08,
             tubularSegments: 12,
             radialSegments: 6,

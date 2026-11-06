@@ -13,6 +13,32 @@ const MAX_DEPTH = 16;
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const FORBIDDEN_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
 
+/**
+ * Canonical geometry capability registry.
+ * Descriptor validation lives below; runtime adapters provide the actual Three.js builders.
+ */
+export const OBJECT_MODEL_GEOMETRY_CAPABILITIES = Object.freeze({
+  box: Object.freeze({ descriptor: 'optional' }),
+  cuboid: Object.freeze({ descriptor: 'optional' }),
+  polygon: Object.freeze({ descriptor: 'points' }),
+  wedge: Object.freeze({ descriptor: 'optional' }),
+  arch: Object.freeze({ descriptor: 'optional' }),
+  cylinder: Object.freeze({ descriptor: 'optional' }),
+  cone: Object.freeze({ descriptor: 'optional' }),
+  sphere: Object.freeze({ descriptor: 'optional' }),
+  ellipsoid: Object.freeze({ descriptor: 'optional' }),
+  torus: Object.freeze({ descriptor: 'optional' }),
+  tube: Object.freeze({ descriptor: 'path-radius' }),
+  lathe: Object.freeze({ descriptor: 'profile' }),
+  sweep: Object.freeze({ descriptor: 'path-profile' }),
+  loft: Object.freeze({ descriptor: 'sections' }),
+});
+export function getObjectModelGeometryCapability(primitive: unknown) {
+  if (typeof primitive !== 'string') return null;
+  return OBJECT_MODEL_GEOMETRY_CAPABILITIES[primitive.toLowerCase() as keyof typeof OBJECT_MODEL_GEOMETRY_CAPABILITIES] || null;
+}
+
+
 function fail(message: string) {
   throw new TypeError(message);
 }
@@ -243,6 +269,7 @@ export function validateObjectModelSpecV3(spec: any) {
     if (!['group', 'mesh'].includes(kind)) fail('组件 kind 无效：' + node.id);
     if (kind === 'mesh') {
       if (typeof node.primitive !== 'string' || !node.primitive) fail('Mesh 组件缺少 primitive：' + node.id);
+      if (!getObjectModelGeometryCapability(node.primitive)) fail('组件几何类型不受支持：' + node.primitive);
       validateGeometryDescriptor(node);
       if (!isRecord(node.dimensions)) fail('Mesh 组件缺少 dimensions：' + node.id);
       for (const key of ['width', 'height', 'depth']) {

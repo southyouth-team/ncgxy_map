@@ -43,7 +43,7 @@ function validateGeneratedGeometryDescriptors(componentTree: any[]) {
 function isGeneratedParameterTargetValid(node: any, materials: Record<string, any>, property: unknown, parameterType: string) {
   if (!node || typeof property !== 'string' || property.length > 160) return false;
   const parts = property.split('.');
-  if (parts.some(part => !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(part) || ['__proto__','prototype','constructor'].includes(part))) return false;
+  if (parts.some(part => !/^(?:[a-zA-Z][a-zA-Z0-9_]{0,39}|0|[1-9][0-9]{0,2})$/.test(part) || ['__proto__','prototype','constructor'].includes(part))) return false;
   let kind = '';
   if (property === 'visibility.visible') kind = 'boolean';
   else if (property === 'geometry.primitive') kind = 'select';
@@ -58,8 +58,15 @@ function isGeneratedParameterTargetValid(node: any, materials: Record<string, an
   } else if (['dimensions','geometryDescriptor'].includes(parts[0]) && parts.length >= 2 && parts.length <= 4) {
     let value = node[parts[0]];
     for (const part of parts.slice(1)) {
-      if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, part)) return false;
-      value = value[part];
+      if (!value || typeof value !== 'object') return false;
+      if (Array.isArray(value)) {
+        const index = Number(part);
+        if (!Number.isInteger(index) || index < 0 || index >= value.length || index > 127) return false;
+        value = value[index];
+      } else {
+        if (!Object.prototype.hasOwnProperty.call(value, part)) return false;
+        value = value[part];
+      }
     }
     if (value === null || typeof value === 'object') return false;
     kind = typeof value === 'number' && Number.isFinite(value) ? 'number'

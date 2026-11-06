@@ -70,8 +70,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       schemaVersion: '3.0',
       materials: { shared: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
       componentTree: [
-        { id: 'left', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
-        { id: 'right', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 }, transform: { position: [2, 0, 0] } },
+        { id: 'root', kind: 'group' },
+        { id: 'left', parent: 'root', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'right', parent: 'root', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 }, transform: { position: [2, 0, 0] } },
       ],
     };
     const model = createObjectSculptModel(THREE, spec);
@@ -89,8 +90,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       schemaVersion: '3.0',
       materials: { stone: { color: '#d8c39a' } },
       componentTree: [
-        { id: 'arch', primitive: 'arch', material: 'stone', dimensions: { width: 3, height: 4, depth: 0.5 }, geometryDescriptor: { inset: 0.35 } },
-        { id: 'gable', primitive: 'wedge', material: 'stone', dimensions: { width: 5, height: 2, depth: 3 } },
+        { id: 'root', kind: 'group' },
+        { id: 'arch', parent: 'root', primitive: 'arch', material: 'stone', dimensions: { width: 3, height: 4, depth: 0.5 }, geometryDescriptor: { inset: 0.35 } },
+        { id: 'gable', parent: 'root', primitive: 'wedge', material: 'stone', dimensions: { width: 5, height: 2, depth: 3 } },
       ],
     };
     const result = createObjectSculptModel(THREE, spec);

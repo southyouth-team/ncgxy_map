@@ -73,9 +73,10 @@ setTimeout(() => finish({ ok: false, error: '模型代码执行超时' }), ${tim
   frame.setAttribute('aria-hidden', 'true')
   frame.tabIndex = -1
   frame.style.cssText = 'position:fixed;width:1px;height:1px;left:-10px;top:-10px;border:0;opacity:0;pointer-events:none'
+  const safeFrameBootstrap = frameBootstrap.replaceAll('</script', '<\\/script')
   frame.srcdoc = `<!doctype html>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; connect-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; navigate-to 'none'">
-<script>${frameBootstrap.replace(/<\\/script/gi, '<\\\\/script')}<\\/script>`
+<script>${safeFrameBootstrap}</script>`
 
   return new Promise((resolve, reject) => {
     let settled = false

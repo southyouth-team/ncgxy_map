@@ -52,7 +52,7 @@ function syncPreview() {
   parameterValues.value = { ...(props.model.userData.proceduralModelParameterValues || {}) }
   selectedPartId.value = ''
   selectedPartName.value = '整体模型'
-  frame = requestAnimationFrame(render)
+  render()
 }
 function resize() {
   if (!renderer || !canvasHost.value) return
@@ -67,7 +67,10 @@ function render() {
   if (!renderer || !scene || !camera) return
   controls?.update()
   renderer.render(scene, camera)
-  frame = requestAnimationFrame(render)
+}
+function animate() {
+  render()
+  frame = requestAnimationFrame(animate)
 }
 function selectPart(event) {
   if (!renderer || !previewRoot) return
@@ -115,13 +118,13 @@ onMounted(() => {
   controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
   controls.dampingFactor = 0.08
-  controls.addEventListener('change', render)
   raycaster = new THREE.Raycaster()
   renderer.domElement.addEventListener('dblclick', selectPart)
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(canvasHost.value)
   syncPreview()
   resize()
+  frame = requestAnimationFrame(animate)
 })
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame)

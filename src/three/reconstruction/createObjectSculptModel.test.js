@@ -654,6 +654,29 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'window-shape').value).toBe('arch');
   });
 
+  it('applies boolean visibility parameter defaults on the initial build', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      targetName: 'core-visibility',
+      materials: { concrete: { color: '#888888', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'core', parent: 'root', primitive: 'box', material: 'concrete',
+          dimensions: { width: 1, height: 4, depth: 1 }, hidden: true },
+      ],
+      parameterSchema: [{
+        id: 'coreVisible', label: '核心筒显示', type: 'boolean', value: true,
+        targets: [{ nodeId: 'core', property: 'visibility.visible', mode: 'set' }],
+      }],
+      operations: [],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    expect(model.userData.componentGroups.get('core').visible).toBe(true);
+    applyObjectSculptParameter(THREE, model, 'coreVisible', false);
+    expect(model.userData.componentGroups.get('core').visible).toBe(false);
+    expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(false);
+  });
+
   it('rebuilds operation instances when an operation count parameter changes', () => {
     const spec = {
       schemaVersion: '3.0',

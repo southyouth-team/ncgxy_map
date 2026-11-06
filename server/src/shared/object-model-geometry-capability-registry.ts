@@ -1,5 +1,5 @@
 export interface ObjectModelGeometryCapability<TNode = any, TDescriptor = any> {
-  id: string;
+  id?: string;
   primitive: string;
   descriptor: string;
   validateDescriptor: (node: TNode, descriptor: TDescriptor) => void;

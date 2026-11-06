@@ -72,4 +72,42 @@ describe('ImageGenerationService procedural generation', () => {
     await expect(service.generateProceduralObjectFromPrompt('一个物体', '物体', 'stylized'))
       .rejects.toBeInstanceOf(ServiceUnavailableException);
   });
+
+  it('returns a parameterized model update from conversational edit context', async () => {
+    const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
+    const source = 'export const modelParameters = []; export const modelParts = []; export function createModel(THREE, params = {}) { const group = new THREE.Group(); return group; }';
+    const generatedCode = 'export const modelParameters = [{ id: "roofColor", label: "屋顶颜色", type: "color", default: "#223355" }]; export const modelParts = [{ id: "roof", name: "屋顶" }]; export function createModel(THREE, params = {}) { const group = new THREE.Group(); return group; }';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        generatedCode,
+        parameters: [{ id: 'roofColor', label: '屋顶颜色', type: 'color', default: '#223355' }],
+        parts: [{ id: 'roof', name: '屋顶' }],
+        changeSummary: '新增屋顶颜色控制',
+      }) } }] }),
+    });
+    global.fetch = fetchMock as never;
+
+    const result = await service.modifyProceduralObjectFromInstruction(
+      source,
+      [],
+      { oldColor: '#ffffff' },
+      [{ id: 'roof', name: '屋顶' }],
+      'roof',
+      '新增一个屋顶颜色控制参数',
+      '教学楼',
+    );
+
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const context = JSON.parse(request.messages[1].content);
+    expect(context.currentParameterValues.oldColor).toBe('#ffffff');
+    expect(context.selectedPartId).toBe('roof');
+    expect(result).toMatchObject({
+      generatedCode,
+      parameters: [{ id: 'roofColor', type: 'color' }],
+      parts: [{ id: 'roof', name: '屋顶' }],
+      changeSummary: '新增屋顶颜色控制',
+    });
+  });
+
 });

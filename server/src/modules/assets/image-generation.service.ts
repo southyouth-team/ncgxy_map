@@ -3,44 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-function validateGeneratedGeometryDescriptors(componentTree: any[]) {
-  const point = (value: any, size: number, min = -0.5, max = 0.5) =>
-    Array.isArray(value) && value.length === size && value.every(item => Number.isFinite(Number(item)) && Number(item) >= min && Number(item) <= max);
-  for (const node of componentTree) {
-    if ((node?.kind || 'mesh') !== 'mesh') continue;
-    const primitive = String(node?.primitive || 'box').toLowerCase(), descriptor = node?.geometryDescriptor || {};
-    const fail = (field: string, reason: string): never => { throw new Error('ObjectSculptSpec 几何协议错误：' + node.id + '.geometryDescriptor.' + field + ' ' + reason); };
-    if (primitive === 'polygon') {
-      if (!Array.isArray(descriptor.points) || descriptor.points.length < 3 || descriptor.points.length > 32 || !descriptor.points.every((v: any) => point(v, 2))) fail('points', '必须包含 3-32 个合法二维点');
-    } else if (primitive === 'tube' || primitive === 'sweep') {
-      if (!Array.isArray(descriptor.path) || descriptor.path.length < 2 || descriptor.path.length > 32 || !descriptor.path.every((v: any) => point(v, 3))) fail('path', '必须包含 2-32 个合法三维点');
-      // Keep the server contract aligned with Three.js Runtime. Catch invalid radii
-      // before returning the first-generation spec so the existing targeted repair
-      // flow can correct only this descriptor instead of failing in the browser.
-      if (descriptor.radius !== undefined && descriptor.radius !== null
-        && (!Number.isFinite(Number(descriptor.radius)) || Number(descriptor.radius) < 0.01 || Number(descriptor.radius) > 10)) {
-        fail('radius', '必须是 0.01-10 范围内的有限数值');
-      }
-      if (primitive === 'sweep' && (!Array.isArray(descriptor.profile) || descriptor.profile.length < 3 || descriptor.profile.length > 24 || !descriptor.profile.every((v: any) => point(v, 2)))) fail('profile', '必须包含 3-24 个合法二维点');
-    } else if (primitive === 'lathe') {
-      if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 2 || descriptor.profile.length > 32 || !descriptor.profile.every((v: any) => Array.isArray(v) && v.length === 2 && Number.isFinite(Number(v[0])) && Number(v[0]) >= 0 && Number(v[0]) <= 0.5 && Number.isFinite(Number(v[1])) && Number(v[1]) >= -0.5 && Number(v[1]) <= 0.5)) fail('profile', '必须包含 2-32 个合法旋转截面点');
-    } else if (primitive === 'loft') {
-      const sections = descriptor.sections;
-      if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) fail('sections', '必须包含 2-12 个截面');
-      let count: number | null = null, previous = -Infinity;
-      sections.forEach((section: any, index: number) => {
-        if (!section || typeof section !== 'object' || !Number.isFinite(Number(section.height)) || Number(section.height) < -0.5 || Number(section.height) > 0.5
-          || !Array.isArray(section.points) || section.points.length < 3 || section.points.length > 24 || !section.points.every((v: any) => point(v, 2))) {
-          throw new Error('ObjectSculptSpec 几何协议错误：' + node.id + '.geometryDescriptor.sections[' + index + '] 格式无效');
-        }
-        if (count === null) count = section.points.length;
-        if (section.points.length !== count) fail('sections', '所有截面必须具有相同数量的轮廓点');
-        if (Number(section.height) <= previous) fail('sections', 'height 必须严格递增');
-        previous = Number(section.height);
-      });
-    }
-  }
-}
 function isGeneratedParameterTargetValid(node: any, materials: Record<string, any>, property: unknown, parameterType: string) {
   if (!node || typeof property !== 'string' || property.length > 160) return false;
   const parts = property.split('.');
@@ -659,7 +621,6 @@ export class ImageGenerationService {
       }
     }
     try {
-      validateGeneratedGeometryDescriptors(spec.componentTree);
     } catch (error) {
       if (!allowGeometryRepair || !(error instanceof Error)) throw error;
       this.logger.warn('ObjectSculptSpec 几何校验失败，执行一次定向修复：' + error.message);

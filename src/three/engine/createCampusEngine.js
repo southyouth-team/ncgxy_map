@@ -7,6 +7,7 @@ import { CameraRig } from '../camera/CameraRig.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
+import { getVirtualSunState } from './solarPosition.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -122,7 +123,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let rainEffect = null
   let rainParticleCount = 360
   let windSwayTargets = []
-  let environmentConfig = { timeOfDay: 'day', weather: 'clear', wind: 0 }
+  let environmentConfig = { time: 14, timeOfDay: 'day', weather: 'clear', wind: 0 }
 
   /**
    * Generated asset definitions stay independent from the sandbox. This group stores
@@ -519,35 +520,42 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function setEnvironment(config = {}) {
-    const timeOfDay = ['day', 'night'].includes(config.timeOfDay) ? config.timeOfDay : environmentConfig.timeOfDay
+    const requestedTime = config.time === undefined
+      ? (config.timeOfDay === 'night' ? 22 : config.timeOfDay === 'day' ? 14 : environmentConfig.time)
+      : Number(config.time)
+    const time = Number.isFinite(requestedTime) ? Math.max(0, Math.min(24, requestedTime)) : environmentConfig.time
+    const solar = getVirtualSunState(time)
+    const timeOfDay = solar.isNight ? 'night' : 'day'
     const weather = ['clear', 'rain'].includes(config.weather) ? config.weather : environmentConfig.weather
     const windValue = config.wind === undefined ? environmentConfig.wind : Number(config.wind)
     const wind = Number.isFinite(windValue) ? Math.max(0, Math.min(1, windValue)) : environmentConfig.wind
-    environmentConfig = { timeOfDay, weather, wind }
+    environmentConfig = { time, timeOfDay, weather, wind }
     if (!scene) return { ...environmentConfig }
-    if (indoorGroup) {
-      if (rainEffect) rainEffect.visible = false
-      return { ...environmentConfig }
-    }
 
-    const night = timeOfDay === 'night'
+    const night = solar.isNight
     const rainy = weather === 'rain'
-    scene.background = new THREE.Color(night ? '#111d31' : rainy ? '#788894' : '#b9d0c2')
+    const nightSky = new THREE.Color('#111d31')
+    const dawnSky = new THREE.Color('#e4a77e')
+    const daySky = new THREE.Color('#b9d0c2')
+    const sky = night ? nightSky : dawnSky.lerp(daySky, solar.daylight)
+    if (rainy) sky.lerp(new THREE.Color('#788894'), 0.55)
+    scene.background = sky
     scene.fog = rainy
       ? new THREE.Fog(night ? '#303e51' : '#87939b', 24, 125)
       : night ? new THREE.Fog('#17243a', 48, 180) : null
     if (hemisphereLight) {
       hemisphereLight.color.set(night ? '#7187b0' : '#fff2d8')
       hemisphereLight.groundColor.set(night ? '#202b3a' : '#71865e')
-      hemisphereLight.intensity = night ? 0.48 : 2.2
+      hemisphereLight.intensity = night ? 0.48 : 0.55 + solar.daylight * 1.65
     }
     if (directionalLight) {
-      directionalLight.color.set(night ? '#91a9d6' : '#ffe2b2')
-      directionalLight.intensity = night ? 0.38 : 2.7
-      directionalLight.position.set(night ? -24 : -55, night ? 34 : 90, night ? 18 : 45)
+      const daylightColor = new THREE.Color('#fff2d8').lerp(new THREE.Color('#ffe0bd'), 1 - solar.daylight)
+      directionalLight.color.copy(night ? new THREE.Color('#91a9d6') : daylightColor)
+      directionalLight.intensity = night ? 0.38 : 0.25 + solar.daylight * 2.45
+      directionalLight.position.set(solar.direction[0] * 90, solar.direction[1] * 90, solar.direction[2] * 90)
     }
     ensureRainEffect()
-    rainEffect.visible = rainy
+    rainEffect.visible = !indoorGroup && rainy
     invalidateShadowMap()
     requestFrame()
     return { ...environmentConfig }

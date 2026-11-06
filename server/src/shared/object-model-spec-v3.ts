@@ -163,6 +163,22 @@ function validateSimpleGeometryProfile(points: number[][], node: any, field: str
   if (Math.abs(twiceArea) < 1e-4) geometryFail(node, field, '轮廓面积不能为零');
   return Math.sign(twiceArea);
 }
+
+function validateSimpleOpenGeometryProfile(points: number[][], node: any, field: string) {
+  for (let index = 1; index < points.length; index += 1) {
+    if (Math.hypot(points[index][0] - points[index - 1][0], points[index][1] - points[index - 1][1]) < 1e-4) {
+      geometryFail(node, field, '不能包含重复或零长度轮廓段');
+    }
+  }
+  for (let i = 0; i < points.length - 1; i += 1) {
+    for (let j = i + 2; j < points.length - 1; j += 1) {
+      if (geometrySegmentsIntersect(points[i], points[i + 1], points[j], points[j + 1])) {
+        geometryFail(node, field, '旋转截面不能自相交');
+      }
+    }
+  }
+}
+
 function validateGeometryPath(path: any[], node: any, field: string, enforceCurvature = false) {
   for (let index = 1; index < path.length; index += 1) {
     const distance = Math.hypot(...path[index].map((value: number, axis: number) => value - path[index - 1][axis]));
@@ -226,10 +242,7 @@ function validateGeometryDescriptor(node: any) {
         && Number.isFinite(Number(point[1])) && Number(point[1]) >= -0.5 && Number(point[1]) <= 0.5)) {
       geometryFail(node, 'profile', '必须是 [0,0.5] 半径与 [-0.5,0.5] 高度范围内的 2-32 个归一化点');
     }
-    if (profile.some((point: number[], index: number) => index > 0
-      && Math.hypot(Number(point[0]) - Number(profile[index - 1][0]), Number(point[1]) - Number(profile[index - 1][1])) < 1e-4)) {
-      geometryFail(node, 'profile', '不能包含重复或零长度轮廓段');
-    }
+    validateSimpleOpenGeometryProfile(profile.map((point: number[]) => point.map(Number)), node, 'profile');
   } else if (primitive === 'loft') {
     const sections = descriptor.sections;
     if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) geometryFail(node, 'sections', '必须包含 2-12 个截面');
@@ -252,7 +265,9 @@ function validateGeometryDescriptor(node: any) {
   }
 }
 
-export function validateObjectModelSpecV3(spec: any) {
+export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | 'compiled' } = {}) {
+  const mode = options.mode || 'raw';
+  if (mode !== 'raw' && mode !== 'compiled') fail('ObjectModelSpec Validator mode 无效');
   if (!isRecord(spec) || spec.schemaVersion !== '3.0') fail('ObjectModelSpec 3.0 无效：仅接受 3.0 JSON 对象');
   if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
     fail('ObjectModelSpec 3.0 不接受 generators/constraints');
@@ -304,6 +319,7 @@ export function validateObjectModelSpecV3(spec: any) {
   if (!Array.isArray(parameters) || parameters.length > MAX_PARAMETERS) fail('parameterSchema 最多允许 100 个参数');
   const parameterById = new Map();
   for (const parameter of parameters) {
+    if (mode === 'raw' && Object.prototype.hasOwnProperty.call(parameter || {}, 'operationControl')) fail('原始 ObjectModelSpec 不允许包含内部字段 operationControl：' + String(parameter?.id));
     if (!isRecord(parameter) || typeof parameter.id !== 'string' || !ID_PATTERN.test(parameter.id) || parameterById.has(parameter.id)) fail('参数 ID 无效或重复');
     if (!['number', 'color', 'boolean', 'select'].includes(parameter.type)) fail('参数类型不受支持：' + parameter.id);
     if (parameter.type === 'number') {
@@ -374,7 +390,7 @@ export function validateObjectModelSpecV3(spec: any) {
     for (const key of ['position', 'rotation', 'scale']) (operation.transform?.[key] || []).forEach(collect);
   }
   for (const parameter of parameters) {
-    if (!parameter.targets.length && parameter.operationControl !== true && !operationParameterIds.has(parameter.id)) fail('参数没有有效目标：' + parameter.id);
+    if (!parameter.targets.length && !(mode === 'compiled' && parameter.operationControl === true) && !operationParameterIds.has(parameter.id)) fail('参数没有有效目标：' + parameter.id);
     for (const target of parameter.targets) {
       const node = nodes.get(target?.nodeId);
       if (!node) fail('参数目标组件不存在：' + String(target?.nodeId));

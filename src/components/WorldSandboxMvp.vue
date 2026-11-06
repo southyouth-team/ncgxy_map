@@ -191,13 +191,21 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   const current = editingModel.value
   if (!current) throw new Error('当前没有正在编辑的模型')
   const id = current.userData.sandboxModelId
-  const replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: values })
+  let replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: values })
+  const moduleDefinitions = Array.isArray(replacement.userData?.proceduralModelParameters) ? replacement.userData.proceduralModelParameters : []
+  const moduleParts = Array.isArray(replacement.userData?.proceduralModelParts) ? replacement.userData.proceduralModelParts : []
+  const resolvedDefinitions = Array.isArray(definitions) && definitions.length ? definitions : moduleDefinitions
+  const resolvedParts = Array.isArray(parts) && parts.length ? parts : moduleParts
+  const resolvedValues = modelParameterDefaults(resolvedDefinitions, values)
+  if (JSON.stringify(resolvedValues) !== JSON.stringify(values || {})) {
+    replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: resolvedValues })
+  }
   replacement.userData = {
     ...(replacement.userData || {}),
     proceduralModelSource: source,
-    proceduralModelParameters: Array.isArray(definitions) && definitions.length ? definitions : replacement.userData.proceduralModelParameters || [],
-    proceduralModelParts: Array.isArray(parts) && parts.length ? parts : replacement.userData.proceduralModelParts || [],
-    proceduralModelParameterValues: { ...(values || {}) },
+    proceduralModelParameters: resolvedDefinitions,
+    proceduralModelParts: resolvedParts,
+    proceduralModelParameterValues: resolvedValues,
     proceduralModelConfig: { ...(current.userData.proceduralModelConfig || {}), updatedAt: new Date().toISOString() },
     interactionRadius: Number(current.userData.interactionRadius) || 4.5,
   }
@@ -242,9 +250,9 @@ async function handleModelEdit(payload) {
     const body = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(body.message || 'AI 模型编辑失败：HTTP ' + response.status)
     const result = body.data || body.result || body
-    const definitions = Array.isArray(result.parameters) ? result.parameters : []
-    const nextValues = modelParameterDefaults(definitions, values)
-    await replaceEditedModel(result.generatedCode, nextValues, definitions, result.parts, result.changeSummary || 'AI 已完成模型调整')
+    const definitions = Array.isArray(result.parameters) ? result.parameters : (Array.isArray(result.modelParameters) ? result.modelParameters : [])
+    const parts = Array.isArray(result.parts) ? result.parts : (Array.isArray(result.modelParts) ? result.modelParts : [])
+    await replaceEditedModel(result.generatedCode, values, definitions, parts, result.changeSummary || 'AI 已完成模型调整')
   } catch (error) {
     editError.value = error?.message || '模型调整失败'
   } finally {

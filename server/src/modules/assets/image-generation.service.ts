@@ -751,7 +751,7 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException('视觉模型未返回有效 ObjectSculptSpec JSON');
     }
     if (!spec || typeof spec !== 'object' || Array.isArray(spec)
-      || spec.schemaVersion !== '3.0' || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
+      || !['2.0','3.0'].includes(spec.schemaVersion) || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
       || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
       throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 结构无效');
     }
@@ -796,11 +796,25 @@ export class ImageGenerationService {
       this.logger.warn('ObjectSculptSpec 几何校验失败，执行一次定向修复：' + error.message);
       return this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
     }
-    const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
-    spec.operations = operationValidation.operations;
-    const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
-    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
-    validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
+    if (spec.schemaVersion === '3.0') {
+      const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
+      spec.operations = operationValidation.operations;
+      const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
+      spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
+      validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
+    } else {
+      // Transitional read path for existing 2.0 templates. New generation prompts and
+      // all new procedural authoring use 3.0 operations; legacy templates remain editable.
+      const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
+      spec.generators = generatorValidation.generators;
+      normalizeGeneratorTemplateRoots(spec.componentTree, spec.generators);
+      spec.parameterSchema = validateGeneratedParameterSchema(
+        normalizeGeneratedParameterBindings(spec.parameterSchema),
+        spec.componentTree,
+        generatorValidation.parameterIds,
+        spec.materials,
+      );
+    }
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };
   }

@@ -87,6 +87,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const bodyMesh = bodyGroup.getObjectByName('body:mesh');
     const bodyGeometry = bodyMesh.geometry;
     const bodyPosition = bodyGeometry.getAttribute('position');
+    const bodyPositionVersion = bodyPosition.version;
     const windowGroup = model.userData.componentGroups.get('window');
     const windowMesh = windowGroup.getObjectByName('window:mesh');
     const resultSpec = structuredClone(model.userData.objectSculptSpec);
@@ -105,7 +106,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(bodyMesh.geometry).toBe(bodyGeometry);
     expect(bodyMesh.geometry.getAttribute('position')).toBe(bodyPosition);
     expect(bodyPosition.getY(2)).toBe(1.5);
-    expect(bodyPosition.needsUpdate).toBe(true);
+    expect(bodyPosition.version).toBeGreaterThan(bodyPositionVersion);
     expect(bodyGeometry.getAttribute('normal').count).toBe(3);
     expect(bodyGeometry.boundingSphere).not.toBeNull();
     expect(model.userData.componentGroups.get('window')).toBe(windowGroup);

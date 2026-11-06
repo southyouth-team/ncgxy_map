@@ -1,4 +1,4 @@
-import { validateObjectModelSpecV3 } from '../../../shared/object-model-spec-v3.ts';
+import { validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
 /**
  * Bounded ObjectSculptSpec -> Three.js runtime adapter.

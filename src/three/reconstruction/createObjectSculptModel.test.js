@@ -654,6 +654,36 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'window-shape').value).toBe('arch');
   });
 
+  it('rebuilds operation instances when an operation count parameter changes', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      targetName: 'linear-ribs',
+      materials: { steel: { color: '#777777', roughness: 0.5, metalness: 0.8 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'rib-unit', kind: 'group', parent: 'root' },
+        { id: 'rib', parent: 'rib-unit', primitive: 'tube', material: 'steel',
+          dimensions: { width: 1, height: 1, depth: 1 },
+          geometryDescriptor: { path: [[0, -0.5, 0], [0, 0.5, 0]], radius: 0.025 } },
+      ],
+      parameterSchema: [{
+        id: 'rib-count', label: '肋条数量', type: 'number', value: 4, min: 1, max: 12, step: 1, targets: [],
+      }],
+      operations: [{
+        id: 'rib-array', type: 'instance', sourceRootId: 'rib-unit',
+        count: { parameterId: 'rib-count' },
+        transform: { position: [{ op: 'index' }, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const countInstances = () => [...model.userData.componentGroups.values()]
+      .filter(group => group.userData.componentSourceId === 'rib').length;
+    expect(countInstances()).toBe(4);
+    applyObjectSculptParameter(THREE, model, 'rib-count', 7);
+    expect(countInstances()).toBe(7);
+    expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(7);
+  });
+
   it('exposes geometry descriptor scalars as dynamic parameters in ObjectModelSpec 3.0', () => {
     const spec = {
       schemaVersion: '3.0',

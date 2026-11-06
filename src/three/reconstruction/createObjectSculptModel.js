@@ -681,38 +681,45 @@ export function validateObjectSculptSpec(spec) {
  */
 export function createObjectSculptComponentGroup(THREE, node, materialSpecs = {}) {
   const group = new THREE.Group();
-  group.name = String(node.name || node.id).slice(0, 120);
-  group.userData.componentId = node.id;
-  group.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
-  group.userData.componentRole = String(node.role || 'component').slice(0, 80);
-  group.userData.componentRelations = Array.isArray(node.relations) ? JSON.parse(JSON.stringify(node.relations)) : [];
-  group.userData.componentHidden = node.hidden === true;
-  group.userData.componentLocked = node.locked === true;
-  group.visible = node.hidden !== true;
-  if ((node.kind || 'mesh') === 'mesh' && !node.structuralCutter) {
-    const geometry = createGeometry(THREE, node);
-    const materialKey = typeof node.material === 'string' ? node.material : 'default';
-    const material = normalizeMaterial(THREE,
-      Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL);
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = node.id + ':mesh';
-    mesh.userData.componentId = node.id;
-    mesh.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
+  try {
+    group.name = String(node.name || node.id).slice(0, 120);
+    group.userData.componentId = node.id;
+    group.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
+    group.userData.componentRole = String(node.role || 'component').slice(0, 80);
+    group.userData.componentRelations = Array.isArray(node.relations) ? JSON.parse(JSON.stringify(node.relations)) : [];
+    group.userData.componentHidden = node.hidden === true;
+    group.userData.componentLocked = node.locked === true;
+    group.visible = node.hidden !== true;
+    if ((node.kind || 'mesh') === 'mesh' && !node.structuralCutter) {
+      const geometry = createGeometry(THREE, node);
+      const materialKey = typeof node.material === 'string' ? node.material : 'default';
+      const material = normalizeMaterial(THREE,
+        Object.prototype.hasOwnProperty.call(materialSpecs, materialKey) ? materialSpecs[materialKey] : DEFAULT_MATERIAL);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = node.id + ':mesh';
+      mesh.userData.componentId = node.id;
+      mesh.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    group.userData.componentKind = node.kind || 'mesh';
+    const [px, py, pz] = finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
+    const [rx, ry, rz] = finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
+    const [sx, sy, sz] = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
+    if ([sx, sy, sz].some(value => Math.abs(value) < 0.001 || Math.abs(value) > 20)) {
+      throw new RangeError(node.id + '.scale 超出允许范围');
+    }
+    group.position.set(px, py, pz);
+    group.rotation.set(rx, ry, rz);
+    group.scale.set(sx, sy, sz);
+    return group;
+  } catch (error) {
+    // Construction is staged before the live component tree is touched.
+    // Release any geometry/material already attached to this incomplete group.
+    disposeComponentGroup(group);
+    throw error;
   }
-  group.userData.componentKind = node.kind || 'mesh';
-  const [px, py, pz] = finiteVector(node.transform?.position, [0, 0, 0], node.id + '.position');
-  const [rx, ry, rz] = finiteVector(node.transform?.rotation, [0, 0, 0], node.id + '.rotation');
-  const [sx, sy, sz] = finiteVector(node.transform?.scale, [1, 1, 1], node.id + '.scale');
-  if ([sx, sy, sz].some(value => Math.abs(value) < 0.001 || Math.abs(value) > 20)) {
-    throw new RangeError(node.id + '.scale 超出允许范围');
-  }
-  group.position.set(px, py, pz);
-  group.rotation.set(rx, ry, rz);
-  group.scale.set(sx, sy, sz);
-  return group;
 }
 
 /**

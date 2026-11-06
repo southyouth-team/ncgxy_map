@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { createObjectSculptModel, createObjectSculptComponentGroup, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, applyObjectSculptComponentChanges, resolveEditableParameterTarget } from './createObjectSculptModel.js';
 import { createObjectModelParameterContractCases } from '../../../server/src/shared/object-model-parameter-contract.fixtures.ts';
@@ -43,6 +43,24 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(group.position.toArray()).toEqual([1, 2, 3]);
     expect(group.getObjectByName('isolated-body:mesh')?.isMesh).toBe(true);
     expect(group.getObjectByName('isolated-body:mesh')?.geometry.isBufferGeometry).toBe(true);
+  });
+
+  it('disposes partially constructed geometry and material when component construction fails', () => {
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose');
+    const materialDispose = vi.spyOn(THREE.MeshStandardMaterial.prototype, 'dispose');
+    try {
+      expect(() => createObjectSculptComponentGroup(THREE, {
+        id: 'broken-component',
+        primitive: 'box',
+        dimensions: { width: 2, height: 2, depth: 2 },
+        transform: { scale: [0, 1, 1] },
+      })).toThrow('broken-component.scale 超出允许范围');
+      expect(geometryDispose).toHaveBeenCalledTimes(1);
+      expect(materialDispose).toHaveBeenCalledTimes(1);
+    } finally {
+      geometryDispose.mockRestore();
+      materialDispose.mockRestore();
+    }
   });
 
   it('builds an arbitrary indexed mesh without requiring a registered primitive', () => {

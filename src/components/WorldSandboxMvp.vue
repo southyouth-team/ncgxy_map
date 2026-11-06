@@ -81,7 +81,12 @@ function deleteSelected() {
 function duplicateSelected() {
   if (!selected) return
   const newId = engine?.duplicateSandboxModel(selected.userData.sandboxModelId)
-  if (newId) message.value = '已复制模型组'
+  if (newId) {
+    const copy = engine.getSandboxModel(newId)
+    if (copy) { objectsById.set(newId, copy); selected = copy; engine.selectSandboxModel(newId) }
+    syncObjects()
+    message.value = '已复制模型组'
+  }
 }
 async function generateAiModel() {
   const prompt = aiPrompt.value.trim()

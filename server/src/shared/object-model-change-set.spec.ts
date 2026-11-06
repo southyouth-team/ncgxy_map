@@ -60,6 +60,50 @@ describe('ObjectModelChangeSet 1.0', () => {
     expect(result.affectedNodeIds).toEqual(['body']);
   });
 
+  it('updates selected indexed-mesh vertices without changing topology or unrelated components', () => {
+    const base = baseSpec();
+    base.componentTree[1] = {
+      id: 'body', parent: 'root', material: 'stone',
+      geometry: {
+        type: 'indexed-mesh',
+        positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+        indices: [0, 1, 2],
+      },
+    };
+    base.componentTree.push({ id: 'window', parent: 'body', primitive: 'box',
+      dimensions: { width: 0.5, height: 0.6, depth: 0.1 } });
+    const result = applyObjectModelChangeSet(base, changeSet(base, [{
+      type: 'update-mesh-vertices',
+      nodeId: 'body',
+      updates: [{ index: 2, position: [0, 1.5, 0] }],
+    }]));
+    const body = result.objectModelSpec.componentTree.find((node: any) => node.id === 'body');
+    expect(body.geometry.positions).toEqual([0, 0, 0, 1, 0, 0, 0, 1.5, 0]);
+    expect(body.geometry.indices).toEqual([0, 1, 2]);
+    expect(result.affectedNodeIds).toEqual(['body']);
+    expect(result.geometryVertexUpdates).toEqual([{
+      nodeId: 'body', updates: [{ index: 2, position: [0, 1.5, 0] }],
+    }]);
+    expect(result.objectModelSpec.componentTree.find((node: any) => node.id === 'window').primitive).toBe('box');
+    expect(base.componentTree[1].geometry.positions[7]).toBe(1);
+  });
+
+  it('rejects vertex updates for non-indexed geometry and invalid vertex indices', () => {
+    const base = baseSpec();
+    expect(() => applyObjectModelChangeSet(base, changeSet(base, [{
+      type: 'update-mesh-vertices', nodeId: 'body',
+      updates: [{ index: 0, position: [0, 0, 0] }],
+    }]))).toThrow('仅支持 indexed-mesh');
+    base.componentTree[1] = {
+      id: 'body', parent: 'root',
+      geometry: { type: 'indexed-mesh', positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], indices: [0, 1, 2] },
+    };
+    expect(() => applyObjectModelChangeSet(base, changeSet(base, [{
+      type: 'update-mesh-vertices', nodeId: 'body',
+      updates: [{ index: 3, position: [0, 0, 0] }],
+    }]))).toThrow('顶点更新索引超出范围');
+  });
+
   it('rejects invalid indexed mesh topology through the canonical validator', () => {
     const base = baseSpec();
     expect(() => applyObjectModelChangeSet(base, changeSet(base, [{

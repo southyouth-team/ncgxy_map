@@ -758,6 +758,78 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
  * Apply one AI-declared parameter through a bounded property binding list.
  * Every edit starts from the immutable baseline spec to avoid cumulative drift.
  */
+/**
+ * Apply a server-validated indexed-mesh vertex ChangeSet result in place.
+ * Only listed vertex positions are written; component groups and Mesh objects
+ * remain stable, while normals and spatial bounds are refreshed for that mesh.
+ */
+export function applyObjectSculptMeshVertexUpdates(THREE, root, changeSetResult) {
+  if (!root?.userData?.componentGroups || !root.userData?.parameterBaseSpec) {
+    throw new TypeError('目标不是可编辑的 ObjectModelSpec 3.0 资产');
+  }
+  if (!changeSetResult || !changeSetResult.objectModelSpec
+    || !Array.isArray(changeSetResult.geometryVertexUpdates)
+    || changeSetResult.geometryVertexUpdates.length < 1) {
+    throw new TypeError('ChangeSet 结果缺少有效的几何顶点更新');
+  }
+  const candidate = JSON.parse(JSON.stringify(changeSetResult.objectModelSpec));
+  validateObjectModelSpecV3(candidate);
+  const prepared = changeSetResult.geometryVertexUpdates.map(change => {
+    if (!change || typeof change.nodeId !== 'string' || !Array.isArray(change.updates) || !change.updates.length) {
+      throw new TypeError('几何顶点更新记录格式无效');
+    }
+    const node = candidate.componentTree.find(item => item.id === change.nodeId);
+    const group = root.userData.componentGroups.get(change.nodeId);
+    const mesh = group?.getObjectByName(change.nodeId + ':mesh');
+    const position = mesh?.geometry?.getAttribute?.('position');
+    const index = mesh?.geometry?.getIndex?.();
+    if (!node || node.geometry?.type !== 'indexed-mesh' || !position || !index
+      || position.count !== node.geometry.positions.length / 3
+      || index.count !== node.geometry.indices.length) {
+      throw new TypeError('目标组件运行时网格与 ChangeSet 结果不一致：' + change.nodeId);
+    }
+    for (let offset = 0; offset < index.count; offset += 1) {
+      if (index.getX(offset) !== node.geometry.indices[offset]) {
+        throw new TypeError('目标组件拓扑已变化，不能应用顶点局部更新：' + change.nodeId);
+      }
+    }
+    const vertexIndices = new Set();
+    for (const update of change.updates) {
+      if (!update || !Number.isInteger(update.index) || update.index < 0 || update.index >= position.count
+        || vertexIndices.has(update.index)) {
+        throw new TypeError('顶点局部更新索引无效或重复：' + change.nodeId);
+      }
+      vertexIndices.add(update.index);
+      const offset = update.index * 3;
+      const expected = node.geometry.positions.slice(offset, offset + 3);
+      if (!Array.isArray(update.position) || update.position.length !== 3
+        || update.position.some((value, axis) => !Number.isFinite(value) || value !== expected[axis])) {
+        throw new TypeError('顶点局部更新坐标与 ChangeSet 结果不一致：' + change.nodeId);
+      }
+    }
+    return { nodeId: change.nodeId, node, mesh, position, vertexIndices };
+  });
+
+  for (const item of prepared) {
+    for (const vertexIndex of item.vertexIndices) {
+      const offset = vertexIndex * 3;
+      item.position.setXYZ(
+        vertexIndex,
+        item.node.geometry.positions[offset],
+        item.node.geometry.positions[offset + 1],
+        item.node.geometry.positions[offset + 2],
+      );
+    }
+    item.position.needsUpdate = true;
+    item.mesh.geometry.computeVertexNormals();
+    item.mesh.geometry.computeBoundingBox();
+    item.mesh.geometry.computeBoundingSphere();
+  }
+  root.userData.objectSculptSpec = candidate;
+  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(candidate));
+  return root.userData.objectSculptSpec;
+}
+
 export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) {
   if (!root?.userData?.parameterBaseSpec || !root.userData?.componentGroups) throw new TypeError('目标不是可编辑的 ObjectModelSpec 3.0 资产');
   const baseline = root.userData.parameterBaseSpec;

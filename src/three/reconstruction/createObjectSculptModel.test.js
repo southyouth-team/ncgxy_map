@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptParameter, resolveEditableParameterTarget } from './createObjectSculptModel.js';
+import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, resolveEditableParameterTarget } from './createObjectSculptModel.js';
 import { createObjectModelParameterContractCases } from '../../../server/src/shared/object-model-parameter-contract.fixtures.ts';
 
 function castleSpec() {
@@ -62,6 +62,77 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       }],
     };
     expect(() => createObjectSculptModel(THREE, spec)).toThrow('索引超出顶点范围');
+  });
+
+  it('updates selected indexed-mesh vertices in place and preserves unrelated Three.js objects', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      materials: { stone: { color: '#888888', roughness: 0.8, metalness: 0 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        {
+          id: 'body', parent: 'root', material: 'stone',
+          geometry: {
+            type: 'indexed-mesh',
+            positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+            indices: [0, 1, 2],
+          },
+        },
+        { id: 'window', parent: 'root', primitive: 'box', material: 'stone',
+          dimensions: { width: 0.5, height: 0.6, depth: 0.1 } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const bodyGroup = model.userData.componentGroups.get('body');
+    const bodyMesh = bodyGroup.getObjectByName('body:mesh');
+    const bodyGeometry = bodyMesh.geometry;
+    const bodyPosition = bodyGeometry.getAttribute('position');
+    const windowGroup = model.userData.componentGroups.get('window');
+    const windowMesh = windowGroup.getObjectByName('window:mesh');
+    const resultSpec = structuredClone(model.userData.objectSculptSpec);
+    resultSpec.componentTree.find(node => node.id === 'body').geometry.positions[7] = 1.5;
+
+    applyObjectSculptMeshVertexUpdates(THREE, model, {
+      objectModelSpec: resultSpec,
+      geometryVertexUpdates: [{
+        nodeId: 'body',
+        updates: [{ index: 2, position: [0, 1.5, 0] }],
+      }],
+    });
+
+    expect(model.userData.componentGroups.get('body')).toBe(bodyGroup);
+    expect(bodyGroup.getObjectByName('body:mesh')).toBe(bodyMesh);
+    expect(bodyMesh.geometry).toBe(bodyGeometry);
+    expect(bodyMesh.geometry.getAttribute('position')).toBe(bodyPosition);
+    expect(bodyPosition.getY(2)).toBe(1.5);
+    expect(bodyPosition.needsUpdate).toBe(true);
+    expect(bodyGeometry.getAttribute('normal').count).toBe(3);
+    expect(bodyGeometry.boundingSphere).not.toBeNull();
+    expect(model.userData.componentGroups.get('window')).toBe(windowGroup);
+    expect(windowGroup.getObjectByName('window:mesh')).toBe(windowMesh);
+    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'body').geometry.positions[7]).toBe(1.5);
+  });
+
+  it('rejects vertex updates when the live component topology no longer matches the ChangeSet result', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      componentTree: [{
+        id: 'body',
+        geometry: {
+          type: 'indexed-mesh',
+          positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+          indices: [0, 1, 2],
+        },
+      }],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    model.userData.componentGroups.get('body').getObjectByName('body:mesh').geometry.setIndex([0, 2, 1]);
+    const resultSpec = structuredClone(model.userData.objectSculptSpec);
+    resultSpec.componentTree[0].geometry.positions[7] = 1.5;
+    expect(() => applyObjectSculptMeshVertexUpdates(THREE, model, {
+      objectModelSpec: resultSpec,
+      geometryVertexUpdates: [{ nodeId: 'body', updates: [{ index: 2, position: [0, 1.5, 0] }] }],
+    })).toThrow('拓扑已变化');
   });
 
   it('reconstructs a hierarchical castle as real Three.js meshes', () => {

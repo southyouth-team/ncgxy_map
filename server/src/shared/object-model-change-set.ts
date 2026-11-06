@@ -12,6 +12,7 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 export type ObjectModelChange =
   | { type: 'add-component'; component: Record<string, any> }
   | { type: 'replace-component'; nodeId: string; component: Record<string, any> }
+  | { type: 'update-mesh-vertices'; nodeId: string; updates: Array<{ index: number; position: [number, number, number] }> }
   | { type: 'remove-component'; nodeId: string; cascade?: boolean }
   | { type: 'upsert-material'; materialId: string; material: Record<string, any> }
   | { type: 'remove-material'; materialId: string }
@@ -127,7 +128,7 @@ function collectDescendantIds(tree: any[], rootId: string): Set<string> {
   return descendants;
 }
 
-function applyChange(spec: Record<string, any>, rawChange: any, affectedNodeIds: Set<string>, affectedMaterialIds: Set<string>) {
+function applyChange(spec: Record<string, any>, rawChange: any, affectedNodeIds: Set<string>, affectedMaterialIds: Set<string>, geometryVertexUpdates: Array<{ nodeId: string; updates: Array<{ index: number; position: [number, number, number] }> }>) {
   if (!isRecord(rawChange) || typeof rawChange.type !== 'string') {
     fail('invalid_change', 'ChangeSet 每项必须包含 type');
   }
@@ -155,6 +156,43 @@ function applyChange(spec: Record<string, any>, rawChange: any, affectedNodeIds:
       }
       const index = findComponentIndex(spec.componentTree, nodeId);
       spec.componentTree[index] = cloneJson(rawChange.component, 'component');
+      affectedNodeIds.add(nodeId);
+      return;
+    }
+    case 'update-mesh-vertices': {
+      assertOnlyKeys(rawChange, ['type', 'nodeId', 'updates'], 'update-mesh-vertices');
+      const nodeId = requireId(rawChange.nodeId, 'nodeId');
+      const index = findComponentIndex(spec.componentTree, nodeId);
+      const node = spec.componentTree[index];
+      if (!isRecord(node.geometry) || node.geometry.type !== 'indexed-mesh'
+        || !Array.isArray(node.geometry.positions)) {
+        fail('invalid_change', '顶点局部编辑仅支持 indexed-mesh 组件：' + nodeId);
+      }
+      if (!Array.isArray(rawChange.updates) || rawChange.updates.length < 1) {
+        fail('invalid_change', 'update-mesh-vertices.updates 必须是非空数组');
+      }
+      const seen = new Set<number>();
+      const updates = rawChange.updates.map((update: any, updateIndex: number) => {
+        if (!isRecord(update)) fail('invalid_change', '顶点更新项必须是对象：' + nodeId + '.updates[' + updateIndex + ']');
+        assertOnlyKeys(update, ['index', 'position'], '顶点更新项');
+        if (!Number.isInteger(update.index) || update.index < 0 || update.index >= node.geometry.positions.length / 3) {
+          fail('invalid_change', '顶点更新索引超出范围：' + nodeId + '.updates[' + updateIndex + '].index');
+        }
+        if (seen.has(update.index)) fail('invalid_change', '同一 ChangeSet 操作不能重复更新顶点：' + nodeId + '.updates[' + updateIndex + ']');
+        seen.add(update.index);
+        if (!Array.isArray(update.position) || update.position.length !== 3
+          || update.position.some((value: any) => typeof value !== 'number' || !Number.isFinite(value))) {
+          fail('invalid_change', '顶点新坐标必须是三个有限数值：' + nodeId + '.updates[' + updateIndex + '].position');
+        }
+        return { index: update.index, position: [...update.position] as [number, number, number] };
+      });
+      for (const update of updates) {
+        const offset = update.index * 3;
+        node.geometry.positions[offset] = update.position[0];
+        node.geometry.positions[offset + 1] = update.position[1];
+        node.geometry.positions[offset + 2] = update.position[2];
+      }
+      geometryVertexUpdates.push({ nodeId, updates });
       affectedNodeIds.add(nodeId);
       return;
     }
@@ -247,13 +285,14 @@ export function applyObjectModelChangeSet(baseSpecInput: unknown, changeSetInput
   const candidate = cloneJson(baseSpec, 'candidate');
   const affectedNodeIds = new Set<string>();
   const affectedMaterialIds = new Set<string>();
+  const geometryVertexUpdates: Array<{ nodeId: string; updates: Array<{ index: number; position: [number, number, number] }> }> = [];
   let parameterSchemaChanged = false;
   let operationsChanged = false;
 
   for (const change of changeSet.changes) {
     if (change?.type === 'replace-parameter-schema') parameterSchemaChanged = true;
     if (change?.type === 'replace-operations') operationsChanged = true;
-    applyChange(candidate, change, affectedNodeIds, affectedMaterialIds);
+    applyChange(candidate, change, affectedNodeIds, affectedMaterialIds, geometryVertexUpdates);
   }
 
   try {
@@ -269,6 +308,7 @@ export function applyObjectModelChangeSet(baseSpecInput: unknown, changeSetInput
     appliedChangeCount: changeSet.changes.length,
     affectedNodeIds: [...affectedNodeIds],
     affectedMaterialIds: [...affectedMaterialIds],
+    geometryVertexUpdates,
     parameterSchemaChanged,
     operationsChanged,
   };

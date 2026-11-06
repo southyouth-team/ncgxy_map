@@ -43,8 +43,8 @@ describe('trusted geometry capability registry', () => {
     expect(auditObjectModelGeometryCapabilityCoverage()).toEqual({
       complete: false,
       protocolCount: 14,
-      runtimeCount: 7,
-      missingExecutorIds: ['arch', 'lathe', 'loft', 'polygon', 'sweep', 'tube', 'wedge'],
+      runtimeCount: 10,
+      missingExecutorIds: ['lathe', 'loft', 'sweep', 'tube'],
       unknownExecutorIds: [],
       descriptorMismatches: [],
       primitiveMismatches: [],

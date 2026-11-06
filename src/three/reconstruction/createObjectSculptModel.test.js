@@ -151,6 +151,38 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   });
 
 
+  it('rejects self-intersecting and zero-area polygon outlines before execution', () => {
+    const base = {
+      schemaVersion: '3.0',
+      componentTree: [{
+        id: 'outline', primitive: 'polygon', dimensions: { width: 4, height: 3, depth: 0.6 },
+        geometryDescriptor: { points: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]] },
+      }],
+    };
+    const selfIntersecting = structuredClone(base);
+    selfIntersecting.componentTree[0].geometryDescriptor.points = [
+      [-0.5, -0.5], [0.5, 0.5], [-0.5, 0.5], [0.5, -0.5],
+    ];
+    expect(() => createObjectSculptModel(THREE, selfIntersecting)).toThrow(/自相交/);
+
+    const zeroArea = structuredClone(base);
+    zeroArea.componentTree[0].geometryDescriptor.points = [
+      [-0.5, 0], [-0.25, 0], [0, 0], [0.25, 0],
+    ];
+    expect(() => createObjectSculptModel(THREE, zeroArea)).toThrow(/面积不能为零/);
+  });
+
+  it('rejects arch insets outside the trusted runtime bounds', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      componentTree: [{
+        id: 'arch', primitive: 'arch', dimensions: { width: 3, height: 4, depth: 0.5 },
+        geometryDescriptor: { inset: 1.3 },
+      }],
+    };
+    expect(() => createObjectSculptModel(THREE, spec)).toThrow('arch.inset 超出允许范围');
+  });
+
   it('executes cylinder, cone, sphere, ellipsoid and torus through registered capabilities', () => {
     const spec = {
       schemaVersion: '3.0',

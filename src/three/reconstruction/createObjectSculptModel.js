@@ -305,11 +305,67 @@ function createTorusGeometry({ THREE, node, width, height, depth, segments, desc
   return new THREE.TorusGeometry(radius - tube, tube, Math.min(16, segments), segments);
 }
 
+function validatePolygonGeometryDescriptor({ node, descriptor }) {
+  const points = descriptor.points;
+  if (!Array.isArray(points) || points.length < 3 || points.length > 32) {
+    throw new RangeError(node.id + '.points 必须包含 3 到 32 个轮廓点');
+  }
+  const normalized = points.map((point, index) => {
+    if (!Array.isArray(point) || point.length !== 2
+      || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {
+      throw new TypeError(node.id + '.points[' + index + '] 必须是 [-0.5,0.5] 范围内的二维坐标');
+    }
+    return [Number(point[0]), Number(point[1])];
+  });
+  validateSimpleProfile(normalized, node.id + '.points');
+}
+
+function validateArchGeometryDescriptor({ node, width, height, descriptor }) {
+  boundedNumber(descriptor.inset, Math.min(width, height) * 0.12, 0.02, Math.min(width, height) * 0.4, node.id + '.inset');
+}
+
+function createWedgeGeometry({ THREE, width, height, depth, segments }) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, -height / 2);
+  shape.lineTo(width / 2, -height / 2);
+  shape.lineTo(0, height / 2);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
+  geometry.translate(0, 0, -depth / 2);
+  return geometry;
+}
+
+function createArchGeometry({ THREE, node, width, height, depth, segments, descriptor }) {
+  const shape = new THREE.Shape();
+  const spring = height * 0.08;
+  shape.moveTo(-width / 2, -height / 2);
+  shape.lineTo(-width / 2, spring);
+  shape.quadraticCurveTo(-width / 2, height / 2, 0, height / 2);
+  shape.quadraticCurveTo(width / 2, height / 2, width / 2, spring);
+  shape.lineTo(width / 2, -height / 2);
+  shape.closePath();
+  const inset = boundedNumber(descriptor.inset, Math.min(width, height) * 0.12, 0.02, Math.min(width, height) * 0.4, node.id + '.inset');
+  const opening = new THREE.Path();
+  opening.moveTo(-width / 2 + inset, -height / 2);
+  opening.lineTo(-width / 2 + inset, spring);
+  opening.quadraticCurveTo(-width / 2 + inset, height / 2 - inset, 0, height / 2 - inset);
+  opening.quadraticCurveTo(width / 2 - inset, height / 2 - inset, width / 2 - inset, spring);
+  opening.lineTo(width / 2 - inset, -height / 2);
+  opening.closePath();
+  shape.holes.push(opening);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
+  geometry.translate(0, 0, -depth / 2);
+  return geometry;
+}
+
 const noopGeometryDescriptorValidator = () => {};
 
 const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
   { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
   { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
+  { primitive: 'polygon', descriptor: 'points', validateDescriptor: validatePolygonGeometryDescriptor, createGeometry: ({ THREE, descriptor, width, height, depth, segments }) => createPolygonOutlineGeometry(THREE, descriptor.points, width, height, depth, segments) },
+  { primitive: 'wedge', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createWedgeGeometry },
+  { primitive: 'arch', descriptor: 'optional', validateDescriptor: validateArchGeometryDescriptor, createGeometry: createArchGeometry },
   { primitive: 'cylinder', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createCylinderGeometry },
   { primitive: 'cone', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createConeGeometry },
   { primitive: 'sphere', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator, createGeometry: createSphereGeometry },
@@ -490,60 +546,6 @@ function createGeometry(THREE, node) {
   }
 
   switch (String(node.primitive || 'box').toLowerCase()) {
-    case 'polygon': {
-      const points = descriptor.points;
-      if (!Array.isArray(points) || points.length < 3 || points.length > 32) throw new RangeError(node.id + '.points 必须包含 3 到 32 个轮廓点');
-      const normalized = points.map((point, index) => {
-        if (!Array.isArray(point) || point.length !== 2 || point.some(value => !Number.isFinite(Number(value)) || Number(value) < -0.5 || Number(value) > 0.5)) {
-          throw new TypeError(node.id + '.points[' + index + '] 必须是 [-0.5,0.5] 范围内的二维坐标');
-        }
-        return [Number(point[0]) * width, Number(point[1]) * height];
-      });
-      const area = normalized.reduce((sum, point, index) => {
-        const next = normalized[(index + 1) % normalized.length];
-        return sum + point[0] * next[1] - next[0] * point[1];
-      }, 0) / 2;
-      if (Math.abs(area) < 0.0001) throw new RangeError(node.id + '.points 轮廓面积不能为零');
-      const shape = new THREE.Shape();
-      shape.moveTo(normalized[0][0], normalized[0][1]);
-      for (const point of normalized.slice(1)) shape.lineTo(point[0], point[1]);
-      shape.closePath();
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
-      geometry.translate(0, 0, -depth / 2);
-      return geometry;
-    }
-    case 'wedge': {
-      const shape = new THREE.Shape();
-      shape.moveTo(-width / 2, -height / 2);
-      shape.lineTo(width / 2, -height / 2);
-      shape.lineTo(0, height / 2);
-      shape.closePath();
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
-      geometry.translate(0, 0, -depth / 2);
-      return geometry;
-    }
-    case 'arch': {
-      const shape = new THREE.Shape();
-      const spring = height * 0.08;
-      shape.moveTo(-width / 2, -height / 2);
-      shape.lineTo(-width / 2, spring);
-      shape.quadraticCurveTo(-width / 2, height / 2, 0, height / 2);
-      shape.quadraticCurveTo(width / 2, height / 2, width / 2, spring);
-      shape.lineTo(width / 2, -height / 2);
-      shape.closePath();
-      const inset = boundedNumber(descriptor.inset, Math.min(width, height) * 0.12, 0.02, Math.min(width, height) * 0.4, node.id + '.inset');
-      const opening = new THREE.Path();
-      opening.moveTo(-width / 2 + inset, -height / 2);
-      opening.lineTo(-width / 2 + inset, spring);
-      opening.quadraticCurveTo(-width / 2 + inset, height / 2 - inset, 0, height / 2 - inset);
-      opening.quadraticCurveTo(width / 2 - inset, height / 2 - inset, width / 2 - inset, spring);
-      opening.lineTo(width / 2 - inset, -height / 2);
-      opening.closePath();
-      shape.holes.push(opening);
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: segments });
-      geometry.translate(0, 0, -depth / 2);
-      return geometry;
-    }
     case 'lathe': {
       const profile = descriptor.profile;
       if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32) {

@@ -21,6 +21,15 @@ function finiteVector(value, fallback, label) {
   return value.map(Number);
 }
 
+function stableObjectJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableObjectJson).join(',') + ']';
+  if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableObjectJson(value[key])).join(',') + '}';
+  return JSON.stringify(value);
+}
+function disposeComponentGroup(group) {
+  group?.traverse?.(item => { item.geometry?.dispose?.(); if (Array.isArray(item.material)) item.material.forEach(material => material?.dispose?.()); else item.material?.dispose?.(); });
+}
+
 function boundedNumber(value, fallback, min, max, label) {
   const number = value === undefined || value === null ? fallback : Number(value);
   if (!Number.isFinite(number) || number < min || number > max) {
@@ -748,6 +757,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     groups.set(node.id, group);
   }
   root.userData.componentGroups = groups;
+  root.userData.renderObjectSculptSpec = JSON.parse(JSON.stringify(renderSpec));
   // Keep the editable declarative state separate from the immutable baseline.
   // The public spec reflects parameter values applied to component data; the
   // baseline retains original component data so subsequent edits never drift.
@@ -772,6 +782,52 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
  * Only listed vertex positions are written; component groups and Mesh objects
  * remain stable, while normals and spatial bounds are refreshed for that mesh.
  */
+/** Apply declarative changes and retain all unchanged component Group references. */
+export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput) {
+  if (!root?.userData?.componentGroups || !root.userData?.parameterBaseSpec || !root.userData?.renderObjectSculptSpec) throw new TypeError('目标不是支持组件级增量编辑的 ObjectModelSpec 3.0 资产');
+  if (!THREE?.Group || !THREE?.Mesh || !THREE?.MeshStandardMaterial) throw new TypeError('Three.js runtime is required');
+  const candidate = JSON.parse(JSON.stringify(nextSpecInput));
+  const compatibleSpec = { ...candidate, parameterSchema: normalizeObjectModelMaterialParameterAliases(candidate.parameterSchema) };
+  validateObjectModelSpecV3(compatibleSpec);
+  const parameterizedSpec = applyObjectModelParameterValues(compatibleSpec);
+  const renderSpec = compileObjectModelSpec(parameterizedSpec);
+  const validation = validateObjectSculptSpec(renderSpec);
+  const previousRenderSpec = root.userData.renderObjectSculptSpec, previousGroups = root.userData.componentGroups;
+  const previousNodes = new Map(previousRenderSpec.componentTree.map(node => [node.id, node]));
+  const nextNodes = new Map(renderSpec.componentTree.map(node => [node.id, node]));
+  const oldMaterials = previousRenderSpec.materials || {}, nextMaterials = renderSpec.materials || {};
+  const nextGroups = new Map(), createdGroups = [];
+  try {
+    for (const node of renderSpec.componentTree) {
+      const oldNode = previousNodes.get(node.id), oldGroup = previousGroups.get(node.id);
+      if (!oldNode || !oldGroup) { const group = createObjectSculptComponentGroup(THREE,node,nextMaterials); nextGroups.set(node.id,group); createdGroups.push(group); continue; }
+      const oldKey = typeof oldNode.material === 'string' ? oldNode.material : 'default';
+      const newKey = typeof node.material === 'string' ? node.material : 'default';
+      const { parent: oldParent, ...oldContent } = oldNode;
+      const { parent: newParent, ...newContent } = node;
+      const unchanged = stableObjectJson(oldContent) === stableObjectJson(newContent)
+        && stableObjectJson(oldMaterials[oldKey] || DEFAULT_MATERIAL) === stableObjectJson(nextMaterials[newKey] || DEFAULT_MATERIAL);
+      if (unchanged) nextGroups.set(node.id,oldGroup);
+      else { const group = createObjectSculptComponentGroup(THREE,node,nextMaterials); nextGroups.set(node.id,group); createdGroups.push(group); }
+    }
+  } catch(error) { createdGroups.forEach(disposeComponentGroup); throw error; }
+  for (const group of previousGroups.values()) group.parent?.remove(group);
+  const retainedGroups = new Set(nextGroups.values());
+  for (const group of previousGroups.values()) if (!retainedGroups.has(group)) disposeComponentGroup(group);
+  const depthOf = node => { let depth=0, parent=node.parent; while(parent){depth+=1;parent=nextNodes.get(parent)?.parent;} return depth; };
+  for (const node of [...renderSpec.componentTree].sort((a,b)=>depthOf(a)-depthOf(b))) {
+    const parent = node.parent ? nextGroups.get(node.parent) : root;
+    if (!parent) throw new TypeError('组件父节点尚未构建：'+node.id);
+    parent.add(nextGroups.get(node.id));
+  }
+  root.name=String(renderSpec.targetName||renderSpec.name||root.name).slice(0,120);
+  root.userData.componentGroups=nextGroups;
+  root.userData.renderObjectSculptSpec=JSON.parse(JSON.stringify(renderSpec));
+  root.userData.objectSculptSpec=JSON.parse(JSON.stringify(parameterizedSpec));
+  root.userData.parameterBaseSpec=JSON.parse(JSON.stringify(compatibleSpec));
+  root.userData.objectSculpt={...root.userData.objectSculpt,schemaVersion:compatibleSpec.schemaVersion,targetName:root.name,componentCount:validation.componentCount};
+  return root.userData.objectSculptSpec;
+}
 export function applyObjectSculptMeshVertexUpdates(THREE, root, changeSetResult) {
   if (!root?.userData?.componentGroups || !root.userData?.parameterBaseSpec) {
     throw new TypeError('目标不是可编辑的 ObjectModelSpec 3.0 资产');
@@ -836,47 +892,22 @@ export function applyObjectSculptMeshVertexUpdates(THREE, root, changeSetResult)
   }
   root.userData.objectSculptSpec = candidate;
   root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(candidate));
+  root.userData.renderObjectSculptSpec = JSON.parse(JSON.stringify(compileObjectModelSpec(applyObjectModelParameterValues({ ...candidate, parameterSchema: normalizeObjectModelMaterialParameterAliases(candidate.parameterSchema) }))));
   return root.userData.objectSculptSpec;
 }
 
 export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) {
   if (!root?.userData?.parameterBaseSpec || !root.userData?.componentGroups) throw new TypeError('目标不是可编辑的 ObjectModelSpec 3.0 资产');
-  const baseline = root.userData.parameterBaseSpec;
-  const parameter = (baseline.parameterSchema || []).find(item => item.id === parameterId);
-  if (!parameter) throw new TypeError('未声明可编辑参数：' + parameterId);
-  let value = nextValue;
-  if (parameter.type === 'number') {
-    value = Number(value);
-    if (!Number.isFinite(value) || value < parameter.min || value > parameter.max) throw new RangeError('参数值超出范围：' + parameterId);
-  } else if (parameter.type === 'color') {
-    if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) throw new TypeError('颜色参数格式无效：' + parameterId);
-  } else if (parameter.type === 'boolean') {
-    if (typeof value !== 'boolean') throw new TypeError('布尔参数格式无效：' + parameterId);
-  } else if (parameter.type === 'select' && !parameter.options.some(option => option.value === value)) {
-    throw new TypeError('枚举参数值无效：' + parameterId);
-  }
-  const activeSchema = root.userData.objectSculptSpec?.parameterSchema || baseline.parameterSchema || [];
-  const activeValues = new Map(activeSchema.map(item => [item.id, item.value]));
-  activeValues.set(parameterId, value);
-  const spec = JSON.parse(JSON.stringify(baseline));
-  for (const item of spec.parameterSchema || []) {
-    if (activeValues.has(item.id)) item.value = activeValues.get(item.id);
-  }
-  const rebuilt = createObjectSculptModel(THREE, spec, { source: 'object-model-parameter' });
-  for (const child of [...root.children]) {
-    root.remove(child);
-    child.traverse?.(item => {
-      item.geometry?.dispose?.();
-      if (Array.isArray(item.material)) item.material.forEach(material => material.dispose?.());
-      else item.material?.dispose?.();
-    });
-  }
-  for (const child of [...rebuilt.children]) root.add(child);
-  root.userData = {
-    ...root.userData,
-    ...rebuilt.userData,
-    objectSculptSpec: rebuilt.userData.objectSculptSpec,
-    parameterBaseSpec: baseline,
-  };
-  return root.userData.objectSculptSpec;
+  const baseline=root.userData.parameterBaseSpec, parameter=(baseline.parameterSchema||[]).find(item=>item.id===parameterId);
+  if(!parameter)throw new TypeError('未声明可编辑参数：'+parameterId);
+  let value=nextValue;
+  if(parameter.type==='number'){value=Number(value);if(!Number.isFinite(value)||value<parameter.min||value>parameter.max)throw new RangeError('参数值超出范围：'+parameterId);}
+  else if(parameter.type==='color'){if(typeof value!=='string'||!/^#[0-9a-f]{6}$/i.test(value))throw new TypeError('颜色参数格式无效：'+parameterId);}
+  else if(parameter.type==='boolean'){if(typeof value!=='boolean')throw new TypeError('布尔参数格式无效：'+parameterId);}
+  else if(parameter.type==='select'&&!parameter.options.some(option=>option.value===value))throw new TypeError('枚举参数值无效：'+parameterId);
+  const activeSchema=root.userData.objectSculptSpec?.parameterSchema||baseline.parameterSchema||[],activeValues=new Map(activeSchema.map(item=>[item.id,item.value]));
+  activeValues.set(parameterId,value);
+  const spec=JSON.parse(JSON.stringify(baseline));
+  for(const item of spec.parameterSchema||[])if(activeValues.has(item.id))item.value=activeValues.get(item.id);
+  return applyObjectSculptComponentChanges(THREE,root,spec);
 }

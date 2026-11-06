@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createObjectSculptModel, createObjectSculptComponentGroup, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, resolveEditableParameterTarget } from './createObjectSculptModel.js';
+import { createObjectSculptModel, createObjectSculptComponentGroup, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, applyObjectSculptComponentChanges, resolveEditableParameterTarget } from './createObjectSculptModel.js';
 import { createObjectModelParameterContractCases } from '../../../server/src/shared/object-model-parameter-contract.fixtures.ts';
 
 function castleSpec() {
@@ -82,6 +82,42 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(() => createObjectSculptModel(THREE, spec)).toThrow('索引超出顶点范围');
   });
 
+  it('rebuilds only changed component Groups and preserves unrelated references', () => {
+    const spec={schemaVersion:'3.0',materials:{stone:{color:'#888888',roughness:0.8,metalness:0}},componentTree:[{id:'root',kind:'group'},{id:'body',parent:'root',primitive:'box',material:'stone',dimensions:{width:2,height:2,depth:2}},{id:'window',parent:'root',primitive:'box',material:'stone',dimensions:{width:0.5,height:0.6,depth:0.1}}]};
+    const model=createObjectSculptModel(THREE,spec),body=model.userData.componentGroups.get('body'),window=model.userData.componentGroups.get('window');
+    const windowMesh=window.getObjectByName('window:mesh'),next=structuredClone(model.userData.objectSculptSpec);
+    next.componentTree.find(node=>node.id==='body').dimensions.width=3;
+    applyObjectSculptComponentChanges(THREE,model,next);
+    expect(model.userData.componentGroups.get('body')).not.toBe(body);expect(model.userData.componentGroups.get('window')).toBe(window);
+    expect(model.userData.componentGroups.get('window').getObjectByName('window:mesh')).toBe(windowMesh);
+    expect(model.userData.componentGroups.get('body').getObjectByName('body:mesh').geometry.parameters.width).toBe(3);
+  });
+
+  it('adds and removes components without replacing surviving component Groups', () => {
+    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'left',parent:'root',primitive:'box',dimensions:{width:1,height:1,depth:1}},{id:'right',parent:'root',primitive:'box',dimensions:{width:1,height:1,depth:1}}]};
+    const model=createObjectSculptModel(THREE,spec),left=model.userData.componentGroups.get('left'),right=model.userData.componentGroups.get('right');
+    const next=structuredClone(model.userData.objectSculptSpec);next.componentTree=next.componentTree.filter(node=>node.id!=='left');
+    next.componentTree.push({id:'new-part',parent:'root',primitive:'sphere',dimensions:{width:1,height:1,depth:1}});
+    applyObjectSculptComponentChanges(THREE,model,next);
+    expect(model.userData.componentGroups.has('left')).toBe(false);expect(model.userData.componentGroups.has('new-part')).toBe(true);
+    expect(model.userData.componentGroups.get('right')).toBe(right);expect(model.userData.componentGroups.get('left')).not.toBe(left);
+    expect(model.userData.componentGroups.get('new-part').parent).toBe(model.userData.componentGroups.get('root'));
+  });
+
+  it('reparents an unchanged component without replacing its Group', () => {
+    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'a',kind:'group',parent:'root'},{id:'b',kind:'group',parent:'root'},{id:'leaf',parent:'a',primitive:'box',dimensions:{width:1,height:1,depth:1}}]};
+    const model=createObjectSculptModel(THREE,spec),leaf=model.userData.componentGroups.get('leaf'),next=structuredClone(model.userData.objectSculptSpec);
+    next.componentTree.find(node=>node.id==='leaf').parent='b';applyObjectSculptComponentChanges(THREE,model,next);
+    expect(model.userData.componentGroups.get('leaf')).toBe(leaf);expect(leaf.parent).toBe(model.userData.componentGroups.get('b'));
+  });
+
+  it('updates parameter targets without replacing unrelated component Groups', () => {
+    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'body',parent:'root',primitive:'box',dimensions:{width:2,height:2,depth:2}},{id:'window',parent:'root',primitive:'box',dimensions:{width:0.5,height:0.5,depth:0.1}}],parameterSchema:[{id:'body-width',label:'主体宽度',type:'number',value:2,min:1,max:4,step:1,targets:[{nodeId:'body',property:'dimensions.width'}]}]};
+    const model=createObjectSculptModel(THREE,spec),body=model.userData.componentGroups.get('body'),window=model.userData.componentGroups.get('window');
+    applyObjectSculptParameter(THREE,model,'body-width',3);
+    expect(model.userData.componentGroups.get('body')).not.toBe(body);expect(model.userData.componentGroups.get('window')).toBe(window);
+    expect(model.userData.componentGroups.get('body').getObjectByName('body:mesh').geometry.parameters.width).toBe(3);
+  });
   it('updates selected indexed-mesh vertices in place and preserves unrelated Three.js objects', () => {
     const spec = {
       schemaVersion: '3.0',

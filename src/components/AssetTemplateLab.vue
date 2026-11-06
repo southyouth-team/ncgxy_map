@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { createCampusAssetTemplateRuntime } from '../three/world/campus/createCampusAssetTemplateRuntime.js'
-import { createObjectSculptModel, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates } from '../three/reconstruction/createObjectSculptModel.js'
+import { createObjectSculptModel, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, applyObjectSculptComponentChanges } from '../three/reconstruction/createObjectSculptModel.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const wizardStep = ref(1), templateName = ref(''), templateCategory = ref('building')
@@ -360,20 +360,8 @@ async function modifySelectedAsset() {
       status.value = targetNodeId ? '部件局部几何修改完成：' + targetLabel : '模型局部几何修改完成'
       return
     }
-    const position = root.position.clone(), rotation = root.rotation.clone(), objectScale = root.scale.clone()
     clearComponentHighlight()
-    scene.remove(root)
-    root.traverse(child => {
-      child.geometry?.dispose?.()
-      if (Array.isArray(child.material)) child.material.forEach(material => material.dispose?.())
-      else child.material?.dispose?.()
-    })
-    const nextRoot = createObjectSculptModel(THREE, nextSpec, { source: 'ai-object-edit' })
-    nextRoot.position.copy(position); nextRoot.rotation.copy(rotation); nextRoot.scale.copy(objectScale)
-    nextRoot.userData.assetInstanceId = root.userData.assetInstanceId
-    nextRoot.userData.assetTemplate = root.userData.assetTemplate
-    scene.add(nextRoot)
-    objects.set(selectedInstanceId.value, nextRoot)
+    applyObjectSculptComponentChanges(THREE, root, nextSpec)
     selectedComponentId.value = targetNodeId && nextSpec.componentTree.some(node => node.id === targetNodeId) ? targetNodeId : ''
     editorRevision.value += 1
     modifyInstruction.value = ''
@@ -393,22 +381,8 @@ async function addParametersFromConversation() {
       objectSculptSpec: selectedSpec.value,
       instruction: parameterInstruction.value.trim(),
     })
-    const position = root.position.clone(), rotation = root.rotation.clone(), objectScale = root.scale.clone()
-    const assetInstanceId = root.userData.assetInstanceId
-    const assetTemplate = root.userData.assetTemplate
     clearComponentHighlight()
-    scene.remove(root)
-    root.traverse(child => {
-      child.geometry?.dispose?.()
-      if (Array.isArray(child.material)) child.material.forEach(material => material.dispose?.())
-      else child.material?.dispose?.()
-    })
-    const nextRoot = createObjectSculptModel(THREE, result.objectSculptSpec, { source: 'ai-parameterized-template' })
-    nextRoot.position.copy(position); nextRoot.rotation.copy(rotation); nextRoot.scale.copy(objectScale)
-    nextRoot.userData.assetInstanceId = assetInstanceId
-    nextRoot.userData.assetTemplate = assetTemplate
-    scene.add(nextRoot)
-    objects.set(selectedInstanceId.value, nextRoot)
+    applyObjectSculptComponentChanges(THREE, root, result.objectSculptSpec)
     editorRevision.value += 1
     parameterInstruction.value = ''
     const added = (result.addedParameters || []).map(item => item.label).join('、')

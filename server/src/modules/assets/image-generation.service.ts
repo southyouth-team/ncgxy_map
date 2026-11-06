@@ -229,7 +229,7 @@ function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   if (input == null) return { operations: [], parameterIds: new Set<string>() };
   if (!Array.isArray(input) || input.length > 40) throw new ServiceUnavailableException('AI operations 必须是最多 40 项的数组');
   const byId = new Map(componentTree.map(node => [node.id, node]));
-  const ids = new Set<string>(), roots = new Set<string>(), parameterIds = new Set<string>();
+  const ids = new Set<string>(), roots = new Set<string>(), parameterIds = new Set<string>(), expressionParameterIds = new Set<string>();
   let estimatedExpandedCount = componentTree.length;
   const subtreeFor = (rootId: string) => componentTree.filter(node => {
     let current = node;
@@ -249,6 +249,10 @@ function validateGeneratedOperations(input: unknown, componentTree: any[]) {
     if (expression.op === 'constant') {
       if (!Number.isFinite(Number(expression.value)) || Math.abs(Number(expression.value)) > 10000) throw new ServiceUnavailableException('AI 表达式常量无效');
     } else if (expression.op === 'index' || expression.op === 'count') {
+      return;
+    } else if (expression.op === 'parameter') {
+      if (typeof expression.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(expression.id)) throw new ServiceUnavailableException('AI 表达式参数引用无效');
+      expressionParameterIds.add(expression.id);
       return;
     } else if (['add','subtract','multiply','divide'].includes(expression.op)) {
       validateExpression(expression.left, depth + 1);
@@ -292,12 +296,15 @@ function validateGeneratedOperations(input: unknown, componentTree: any[]) {
     estimatedExpandedCount += subtree.length;
   }
   if (estimatedExpandedCount > 300) throw new ServiceUnavailableException('AI operations 基础展开规模超过 300 个组件');
-  return { operations, parameterIds };
+  return { operations, parameterIds, expressionParameterIds };
 }
 
-function validateOperationParameterBindings(operations: any[], parameterSchema: any[], componentTree: any[]) {
+function validateOperationParameterBindings(operations: any[], parameterSchema: any[], componentTree: any[], expressionParameterIds = new Set<string>()) {
   const byId = new Map(parameterSchema.map(item => [item.id, item]));
   const byNode = new Map(componentTree.map(node => [node.id, node]));
+  for (const parameterId of expressionParameterIds) {
+    if (byId.get(parameterId)?.type !== 'number') throw new ServiceUnavailableException('空间表达式只能引用数值参数：' + parameterId);
+  }
   let expandedCount = componentTree.length;
   for (const operation of operations) {
     const parameter = byId.get(operation.count.parameterId);
@@ -754,8 +761,9 @@ export class ImageGenerationService {
     }
     const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
     spec.operations = operationValidation.operations;
-    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationValidation.parameterIds);
-    validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree);
+    const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
+    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds);
+    validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };
   }

@@ -175,6 +175,18 @@ export function compileObjectModelSpec(spec) {
     return true;
   });
   const operationParameterIds = new Set(operations.map(operation => operation.count?.parameterId));
+  const collectExpressionParameters = expression => {
+    if (!expression || typeof expression !== 'object' || Array.isArray(expression)) return;
+    if (expression.op === 'parameter' && typeof expression.id === 'string') operationParameterIds.add(expression.id);
+    collectExpressionParameters(expression.left);
+    collectExpressionParameters(expression.right);
+    collectExpressionParameters(expression.value);
+  };
+  for (const operation of operations) {
+    for (const vector of [operation.transform?.position, operation.transform?.rotation, operation.transform?.scale]) {
+      if (Array.isArray(vector)) vector.forEach(collectExpressionParameters);
+    }
+  }
   const parameterSchema = (spec.parameterSchema || []).map(parameter => operationParameterIds.has(parameter.id)
     ? { ...parameter, generatorControl: true }
     : parameter);

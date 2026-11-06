@@ -303,7 +303,20 @@ export class BuildingDesignService {
     if (parsed.generators !== undefined || parsed.constraints !== undefined) {
       throw new ServiceUnavailableException('ObjectModelSpec 3.0 不接受 generators/constraints，请使用 operations');
     }
-    const operationParameterIds = new Set(operations.map((operation: any) => operation?.count?.parameterId).filter((id: unknown) => typeof id === 'string'));
+    const operationParameterIds = new Set<string>();
+    const collectExpressionParameterIds = (expression: any) => {
+      if (!expression || typeof expression !== 'object' || Array.isArray(expression)) return;
+      if (expression.op === 'parameter' && typeof expression.id === 'string') operationParameterIds.add(expression.id);
+      collectExpressionParameterIds(expression.left);
+      collectExpressionParameterIds(expression.right);
+      collectExpressionParameterIds(expression.value);
+    };
+    for (const operation of operations) {
+      if (typeof operation?.count?.parameterId === 'string') operationParameterIds.add(operation.count.parameterId);
+      for (const vector of [operation.transform?.position, operation.transform?.rotation, operation.transform?.scale]) {
+        if (Array.isArray(vector)) vector.forEach(collectExpressionParameterIds);
+      }
+    }
     const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, current.materials || {}, operationParameterIds);
     const previous = current.parameterSchema || [];
     const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));

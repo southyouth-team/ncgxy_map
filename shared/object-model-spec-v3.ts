@@ -13,15 +13,15 @@ const MAX_DEPTH = 16;
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const FORBIDDEN_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
 
-function fail(message) {
+function fail(message: string) {
   throw new TypeError(message);
 }
 
-function isRecord(value) {
+function isRecord(value: any) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function validateExpression(expression, parameterById, depth = 0) {
+function validateExpression(expression: any, parameterById: Map<string, any>, depth = 0) {
   if (depth > MAX_DEPTH) fail('表达式嵌套层级超过 16 层');
   if (typeof expression === 'number') {
     if (!Number.isFinite(expression) || Math.abs(expression) > 10000) fail('表达式常量超出范围');
@@ -57,7 +57,7 @@ function validateExpression(expression, parameterById, depth = 0) {
   }
 }
 
-function resolveTargetKind(node, materials, property) {
+function resolveTargetKind(node: any, materials: Record<string, any>, property: any) {
   if (typeof property !== 'string' || property.length > 160) return null;
   const parts = property.split('.');
   if (parts.some(part => !/^(?:[a-zA-Z][a-zA-Z0-9_]{0,39}|0|[1-9][0-9]{0,2})$/.test(part) || FORBIDDEN_PATH_PARTS.has(part))) return null;
@@ -92,7 +92,7 @@ function resolveTargetKind(node, materials, property) {
   return null;
 }
 
-export function validateObjectModelSpecV3(spec) {
+export function validateObjectModelSpecV3(spec: any) {
   if (!isRecord(spec) || spec.schemaVersion !== '3.0') fail('仅接受 ObjectModelSpec 3.0 JSON 对象');
   if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
     fail('ObjectModelSpec 3.0 不接受 generators/constraints');
@@ -161,7 +161,7 @@ export function validateObjectModelSpecV3(spec) {
   const operationRoots = new Set();
   const claimedNodes = new Set();
   let expandedCount = spec.componentTree.length;
-  const subtreeFor = rootId => spec.componentTree.filter(node => {
+  const subtreeFor = (rootId: string) => spec.componentTree.filter(node => {
     let current = node;
     while (current) {
       if (current.id === rootId) return true;
@@ -199,7 +199,7 @@ export function validateObjectModelSpecV3(spec) {
   const operationParameterIds = new Set();
   for (const operation of operations) {
     operationParameterIds.add(operation.count.parameterId);
-    const collect = expression => {
+    const collect = (expression: any) => {
       if (!isRecord(expression)) return;
       if (expression.op === 'parameter') operationParameterIds.add(expression.id);
       collect(expression.left);
@@ -209,7 +209,7 @@ export function validateObjectModelSpecV3(spec) {
     for (const key of ['position', 'rotation', 'scale']) (operation.transform?.[key] || []).forEach(collect);
   }
   for (const parameter of parameters) {
-    if (!parameter.targets.length && !operationParameterIds.has(parameter.id)) fail('参数没有有效目标：' + parameter.id);
+    if (!parameter.targets.length && parameter.operationControl !== true && !operationParameterIds.has(parameter.id)) fail('参数没有有效目标：' + parameter.id);
     for (const target of parameter.targets) {
       const node = nodes.get(target?.nodeId);
       if (!node) fail('参数目标组件不存在：' + String(target?.nodeId));

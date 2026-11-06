@@ -550,7 +550,7 @@ describe('BuildingDesignService', () => {
     }) as never;
     const result = await service.addObjectParameters(current, '增加一个楼层数调整变量，默认三层，最高八层');
     expect(result.objectSculptSpec.parameterSchema).toMatchObject([{ id: 'floor-count', value: 3, targets: [] }]);
-    expect(result.objectSculptSpec?.generators).toMatchObject([{ id: 'floor-repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count', axis: 'y', maxCount: 8 }]);
+    expect((result.objectSculptSpec as any)?.generators).toMatchObject([{ id: 'floor-repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count', axis: 'y', maxCount: 8 }]);
     expect(result.addedGenerators).toHaveLength(1);
   });
 

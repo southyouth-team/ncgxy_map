@@ -985,7 +985,7 @@ export class BuildingDesignService {
               '只返回 JSON：{ "objectSculptSpec": <完整更新后的 ObjectSculptSpec> }。不要输出代码、Markdown、解释。',
               '只允许修改 allowedNodeIds 中的节点及其 geometry/material/transform/hidden/locked 属性。其他节点必须逐字段保持完全不变；不允许删除或新增节点，不允许修改未授权节点。',
               '允许修改目标节点 primitive、dimensions、geometryDescriptor、transform、material；materials 可新增材质或修改仅被授权节点使用的材质。若共享材质会影响未授权节点，必须创建独立材质并只重新绑定授权节点。',
-              '保留所有节点 ID、parent 关系、未授权节点、parameterSchema 和 generators；不得修改或删除已有生成器定义。若原参数目标因修改失效，删除或修正对应参数定义。组件仍需保持唯一根节点、无循环和完整父级引用。',
+              '保留所有节点 ID、parent 关系、未授权节点和 parameterSchema。对于 2.0 保留 generators；对于 3.0 必须逐字段保留 operations，不得修改或删除任何 operation。若原参数目标因修改失效，删除或修正对应参数定义。组件仍需保持唯一根节点、无循环和完整父级引用。',
               'AI 仅返回结构化 JSON，不得生成或执行 JavaScript。',
             ].join('\n') },
             { role: 'user', content: JSON.stringify({ instruction, allowedNodeIds: [...allowedIds], objectSculptSpec: current }) },

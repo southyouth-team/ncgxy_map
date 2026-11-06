@@ -93,7 +93,7 @@ function resolveTargetKind(node: any, materials: Record<string, any>, property: 
 }
 
 export function validateObjectModelSpecV3(spec: any) {
-  if (!isRecord(spec) || spec.schemaVersion !== '3.0') fail('仅接受 ObjectModelSpec 3.0 JSON 对象');
+  if (!isRecord(spec) || spec.schemaVersion !== '3.0') fail('ObjectModelSpec 3.0 无效：仅接受 3.0 JSON 对象');
   if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
     fail('ObjectModelSpec 3.0 不接受 generators/constraints');
   }
@@ -103,7 +103,8 @@ export function validateObjectModelSpecV3(spec: any) {
   const materials = isRecord(spec.materials) ? spec.materials : {};
   const nodes = new Map();
   for (const node of spec.componentTree) {
-    if (!isRecord(node) || typeof node.id !== 'string' || !ID_PATTERN.test(node.id) || nodes.has(node.id)) fail('组件 ID 无效或重复：' + String(node?.id));
+    if (!isRecord(node) || typeof node.id !== 'string' || !ID_PATTERN.test(node.id)) fail('组件 id 无效：' + String(node?.id));
+    if (nodes.has(node.id)) fail('组件 id 重复：' + node.id);
     const kind = node.kind || 'mesh';
     if (!['group', 'mesh'].includes(kind)) fail('组件 kind 无效：' + node.id);
     if (kind === 'mesh') {
@@ -111,17 +112,17 @@ export function validateObjectModelSpecV3(spec: any) {
       if (!isRecord(node.dimensions)) fail('Mesh 组件缺少 dimensions：' + node.id);
       for (const key of ['width', 'height', 'depth']) {
         const value = Number(node.dimensions[key]);
-        if (!Number.isFinite(value) || value < 0.02 || value > 100) fail('组件尺寸无效：' + node.id + '.' + key);
+        if (!Number.isFinite(value) || value < 0.02 || value > 100) fail('组件尺寸超出允许范围：' + node.id + '.' + key);
       }
-      if (node.material !== undefined && (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(materials, node.material))) fail('组件材质引用无效：' + node.id);
     }
-    for (const [key, fallback] of [['position', [0, 0, 0]], ['rotation', [0, 0, 0]], ['scale', [1, 1, 1]]]) {
+    const transformKeys: Array<[string, number[]]> = [['position', [0, 0, 0]], ['rotation', [0, 0, 0]], ['scale', [1, 1, 1]]];
+    for (const [key, fallback] of transformKeys) {
       const vector = node.transform?.[key] ?? fallback;
       if (!Array.isArray(vector) || vector.length !== 3 || vector.some(value => !Number.isFinite(Number(value)))) fail('组件 transform.' + key + ' 必须是三个有限数值：' + node.id);
     }
     nodes.set(node.id, node);
   }
-  const roots = spec.componentTree.filter(node => node.parent === undefined || node.parent === null || node.parent === '');
+  const roots = spec.componentTree.filter((node: any) => node.parent === undefined || node.parent === null || node.parent === '');
   if (roots.length !== 1) fail('ObjectModelSpec 必须只有一个主体根节点');
   for (const node of spec.componentTree) {
     if (node.parent !== undefined && node.parent !== null && node.parent !== '' && !nodes.has(node.parent)) fail('组件父节点不存在：' + node.id);
@@ -148,7 +149,7 @@ export function validateObjectModelSpecV3(spec: any) {
       if (typeof parameter.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(parameter.value)) fail('颜色参数无效：' + parameter.id);
     } else if (parameter.type === 'boolean') {
       if (typeof parameter.value !== 'boolean') fail('布尔参数无效：' + parameter.id);
-    } else if (!Array.isArray(parameter.options) || !parameter.options.some(option => option?.value === parameter.value)) {
+    } else if (!Array.isArray(parameter.options) || !parameter.options.some((option: any) => option?.value === parameter.value)) {
       fail('枚举参数无效：' + parameter.id);
     }
     if (!Array.isArray(parameter.targets) || parameter.targets.length > 100) fail('参数 targets 格式无效：' + parameter.id);
@@ -161,7 +162,7 @@ export function validateObjectModelSpecV3(spec: any) {
   const operationRoots = new Set();
   const claimedNodes = new Set();
   let expandedCount = spec.componentTree.length;
-  const subtreeFor = (rootId: string) => spec.componentTree.filter(node => {
+  const subtreeFor = (rootId: string) => spec.componentTree.filter((node: any) => {
     let current = node;
     while (current) {
       if (current.id === rootId) return true;
@@ -189,10 +190,11 @@ export function validateObjectModelSpecV3(spec: any) {
     expandedCount += subtree.length * (countParameter.max - 1);
     if (expandedCount > MAX_COMPONENTS) fail('operations 最大展开组件数量超过 300：' + operation.id);
     const transform = operation.transform || {};
-    for (const [key, fallback] of [['position', [0, 0, 0]], ['rotation', [0, 0, 0]], ['scale', [1, 1, 1]]]) {
+    const operationTransformKeys: Array<[string, number[]]> = [['position', [0, 0, 0]], ['rotation', [0, 0, 0]], ['scale', [1, 1, 1]]];
+    for (const [key, fallback] of operationTransformKeys) {
       const vector = transform[key] ?? fallback;
       if (!Array.isArray(vector) || vector.length !== 3) fail('instance transform.' + key + ' 必须是三维表达式数组：' + operation.id);
-      vector.forEach(value => validateExpression(value, parameterById));
+      vector.forEach((value: any) => validateExpression(value, parameterById));
     }
   }
 
@@ -216,7 +218,8 @@ export function validateObjectModelSpecV3(spec: any) {
       if ((node.kind || 'mesh') === 'group' && !String(target.property || '').startsWith('transform.') && target.property !== 'visibility.visible') fail('Group 节点仅支持变换和显隐参数：' + node.id);
       const kind = resolveTargetKind(node, materials, target.property);
       const visibilityThreshold = target.property === 'visibility.visible' && ['visible-from', 'visible-through'].includes(target.mode);
-      if (!kind || (parameter.type !== kind && !(parameter.type === 'number' && visibilityThreshold))) fail('参数类型与目标属性不匹配：' + parameter.id + '.' + target.property);
+      if (!kind) fail('参数目标属性不受支持或不存在：' + parameter.id + '.' + target.property);
+      if (parameter.type !== kind && !(parameter.type === 'number' && visibilityThreshold)) fail('参数类型与目标属性的数据类型不匹配：' + parameter.id + '.' + target.property);
       const mode = target.mode || 'set';
       if (!['set', 'multiply', 'add', 'visible-from', 'visible-through'].includes(mode)) fail('参数目标运算不受支持：' + parameter.id);
       if (target.property.startsWith('material.') && mode !== 'set') fail('材质参数仅支持 set：' + parameter.id);

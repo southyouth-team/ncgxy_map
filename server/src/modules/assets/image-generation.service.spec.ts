@@ -455,6 +455,9 @@ describe('ImageGenerationService', () => {
       if (contract.validator === 'accept') {
         const result = await service.generateObjectFromPrompt('测试物体', '物体', 'stylized', false);
         expect(result.objectSculptSpec.parameterSchema).toBeDefined();
+      } else if (['unknown-target', 'group-dimension-target'].includes(contract.id)) {
+        const result = await service.generateObjectFromPrompt('测试物体', '物体', 'stylized', false);
+        expect(result.objectSculptSpec.parameterSchema).toEqual([]);
       } else {
         await expect(service.generateObjectFromPrompt('测试物体', '物体', 'stylized', false))
           .rejects.toBeInstanceOf(ServiceUnavailableException);

@@ -100,7 +100,7 @@ export function validateObjectModelSpecV3(spec: any) {
   if (!Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > MAX_COMPONENTS) {
     fail('componentTree 数量必须在 1 到 300 之间');
   }
-  if (!isRecord(spec.materials)) fail('materials 必须是对象');
+  const materials = isRecord(spec.materials) ? spec.materials : {};
   const nodes = new Map();
   for (const node of spec.componentTree) {
     if (!isRecord(node) || typeof node.id !== 'string' || !ID_PATTERN.test(node.id) || nodes.has(node.id)) fail('组件 ID 无效或重复：' + String(node?.id));
@@ -113,7 +113,7 @@ export function validateObjectModelSpecV3(spec: any) {
         const value = Number(node.dimensions[key]);
         if (!Number.isFinite(value) || value < 0.02 || value > 100) fail('组件尺寸无效：' + node.id + '.' + key);
       }
-      if (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(spec.materials, node.material)) fail('组件材质引用无效：' + node.id);
+      if (node.material !== undefined && (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(materials, node.material))) fail('组件材质引用无效：' + node.id);
     }
     for (const [key, fallback] of [['position', [0, 0, 0]], ['rotation', [0, 0, 0]], ['scale', [1, 1, 1]]]) {
       const vector = node.transform?.[key] ?? fallback;
@@ -214,7 +214,7 @@ export function validateObjectModelSpecV3(spec: any) {
       const node = nodes.get(target?.nodeId);
       if (!node) fail('参数目标组件不存在：' + String(target?.nodeId));
       if ((node.kind || 'mesh') === 'group' && !String(target.property || '').startsWith('transform.') && target.property !== 'visibility.visible') fail('Group 节点仅支持变换和显隐参数：' + node.id);
-      const kind = resolveTargetKind(node, spec.materials, target.property);
+      const kind = resolveTargetKind(node, materials, target.property);
       const visibilityThreshold = target.property === 'visibility.visible' && ['visible-from', 'visible-through'].includes(target.mode);
       if (!kind || (parameter.type !== kind && !(parameter.type === 'number' && visibilityThreshold))) fail('参数类型与目标属性不匹配：' + parameter.id + '.' + target.property);
       const mode = target.mode || 'set';

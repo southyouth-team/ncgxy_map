@@ -309,7 +309,7 @@ describe('BuildingDesignService', () => {
       const current = { ...contract.spec, parameterSchema: [] };
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema: contract.spec.parameterSchema }) }] }),
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema: contract.spec.parameterSchema }) } }] }),
       }) as never;
       if (contract.validator === 'accept') {
         const result = await service.addObjectParameters(current, '为部件添加参数');

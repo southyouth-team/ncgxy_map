@@ -15,16 +15,16 @@ describe('ObjectModelSpec cross-layer parameter contract', () => {
         if (contract.normalizedTarget) expect(normalizedParameters[0].targets[0]).toEqual(contract.normalizedTarget);
         const normalizedSpec = { ...spec, parameterSchema: normalizedParameters };
         if (contract.validator === 'accept') {
-          expect(() => validateObjectModelSpecV3(normalizedSpec), contract.id + ' normalized validator').not.toThrow();
+          expect(() => validateObjectModelSpecV3(normalizedSpec)).not.toThrow();
         } else {
-          expect(() => validateObjectModelSpecV3(normalizedSpec), contract.id + ' normalized validator').toThrow();
+          expect(() => validateObjectModelSpecV3(normalizedSpec)).toThrow();
         }
       } else {
-        expect(normalize, contract.id + ' normalizer').toThrow();
+        expect(normalize).toThrow();
       }
 
-      if (contract.validator === 'accept') expect(validateRaw, contract.id + ' raw validator').not.toThrow();
-      else expect(validateRaw, contract.id + ' raw validator').toThrow();
+      if (contract.validator === 'accept') expect(validateRaw).not.toThrow();
+      else expect(validateRaw).toThrow();
     }
   });
 });

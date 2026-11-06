@@ -282,7 +282,7 @@ function createBoxGeometry({ THREE, node, width, height, depth, segments, descri
 const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
   { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
   { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
-]);
+], getObjectModelGeometryCapability);
 
 function createGeometry(THREE, node) {
   if (!getObjectModelGeometryCapability(node.primitive)) {

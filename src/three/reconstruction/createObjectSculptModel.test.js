@@ -678,3 +678,4 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('rib').getObjectByName('rib:mesh').geometry.parameters.radius).toBeCloseTo(0.1);
   });
 
+});

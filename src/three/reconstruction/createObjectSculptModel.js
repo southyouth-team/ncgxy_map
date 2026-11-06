@@ -762,7 +762,59 @@ function createGeometry(THREE, node) {
  * The upstream spec may contain richer fields; this adapter intentionally consumes only
  * a bounded subset and preserves the original spec outside the runtime object.
  */
-export function validateObjectSculptSpec(spec) {
+export function resolveEditableParameterTarget(node, materials, property) {
+  if (!node || typeof property !== 'string' || property.length > 160) return null;
+  const parts = property.split('.');
+  if (parts.some(part => !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(part) || ['__proto__','prototype','constructor'].includes(part))) return null;
+  if (property === 'visibility.visible') return { value: node.hidden !== true, kind: 'boolean' };
+  if (property === 'geometry.primitive') return typeof node.primitive === 'string' ? { value: node.primitive, kind: 'select' } : null;
+  const root = parts[0];
+  if (root === 'material' && parts.length === 2 && typeof node.material === 'string') {
+    const material = materials?.[node.material];
+    if (!material || !Object.prototype.hasOwnProperty.call(material, parts[1])) return null;
+    const value = material[parts[1]];
+    if (value === null || typeof value === 'object') return null;
+    return { value, kind: typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? 'color' : typeof value };
+  }
+  if (root === 'transform' && ['position','rotation','scale'].includes(parts[1]) && parts.length === 3 && ['x','y','z'].includes(parts[2])) {
+    const index = 'xyz'.indexOf(parts[2]);
+    const value = node.transform?.[parts[1]]?.[index] ?? (parts[1] === 'scale' ? 1 : 0);
+    return Number.isFinite(Number(value)) ? { value: Number(value), kind: 'number' } : null;
+  }
+  if (!['dimensions','geometryDescriptor'].includes(root) || parts.length < 2 || parts.length > 4) return null;
+  let value = node[root];
+  for (const part of parts.slice(1)) {
+    if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, part)) return null;
+    value = value[part];
+  }
+  if (value === null || typeof value === 'object') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return { value, kind: 'number' };
+  if (typeof value === 'boolean') return { value, kind: 'boolean' };
+  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return { value, kind: 'color' };
+  if (typeof value === 'string') return { value, kind: 'select' };
+  return null;
+}
+
+function setEditableParameterTarget(node, materials, property, value) {
+  const parts = property.split('.');
+  if (parts[0] === 'material') {
+    const material = materials[node.material];
+    material[parts[1]] = value;
+    return;
+  }
+  if (parts[0] === 'transform') {
+    const index = 'xyz'.indexOf(parts[2]);
+    node.transform = node.transform || {};
+    node.transform[parts[1]] = node.transform[parts[1]] || (parts[1] === 'scale' ? [1,1,1] : [0,0,0]);
+    node.transform[parts[1]][index] = value;
+    return;
+  }
+  let target = node[parts[0]];
+  for (const part of parts.slice(1, -1)) target = target[part];
+  target[parts[parts.length - 1]] = value;
+}
+
+function validateObjectSculptSpec(spec) {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new TypeError('ObjectSculptSpec 必须是 JSON 对象');
   if (![1, 2, '2.0', '2.0.0'].includes(spec.schemaVersion)) throw new TypeError('ObjectSculptSpec schemaVersion 不受支持');
   if (!Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > MAX_COMPONENTS) {
@@ -999,9 +1051,12 @@ export function validateObjectSculptSpec(spec) {
     for (const target of parameter.targets) {
       if (!nodes.has(target.nodeId)) throw new TypeError('参数目标组件不存在：' + target.nodeId);
       if (nodes.get(target.nodeId).kind === 'group' && !target.property.startsWith('transform.') && target.property !== 'visibility.visible') throw new TypeError('Group 节点仅支持变换和显隐参数：' + target.nodeId);
-      if (!['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible'].includes(target.property)) {
-        throw new TypeError('参数目标属性不受支持：' + target.property);
-      }
+      const binding = resolveEditableParameterTarget(nodes.get(target.nodeId), spec.materials || {}, target.property);
+      if (!binding) throw new TypeError('参数目标属性不存在、不可编辑或不是标量：' + target.property);
+      if (parameter.type === 'number' && binding.kind !== 'number'
+        || parameter.type === 'color' && binding.kind !== 'color'
+        || parameter.type === 'boolean' && binding.kind !== 'boolean'
+        || parameter.type === 'select' && binding.kind !== 'select') throw new TypeError('参数类型与目标属性的数据类型不匹配：' + target.property);
       if (!['set','multiply','add','visible-from','visible-through'].includes(target.mode || 'set')) throw new TypeError('参数目标运算不受支持：' + target.mode);
       if (target.property.startsWith('material.') && target.mode !== 'set') throw new TypeError('材质参数仅支持 set');
       if (['visible-from','visible-through'].includes(target.mode) && target.property !== 'visibility.visible') throw new TypeError('可见性阈值运算只能用于 visibility.visible');

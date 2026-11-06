@@ -1078,8 +1078,8 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     groups.set(node.id, group);
   }
   root.userData.componentGroups = groups;
-  root.userData.objectSculptSpec = JSON.parse(JSON.stringify(effectiveSpec));
-  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(effectiveSpec));
+  root.userData.objectSculptSpec = JSON.parse(JSON.stringify(spec));
+  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(spec));
   root.userData.objectSculpt = {
     schemaVersion: effectiveSpec.schemaVersion,
     targetName: root.name,

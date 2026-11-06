@@ -6,7 +6,7 @@ import {
 
 describe('ObjectModelSpec parameter schema normalization', () => {
   const tree = [
-    { id: 'root', kind: 'group' },
+    { id: 'root', kind: 'group', dimensions: { width: 1 } },
     { id: 'panel', parent: 'root', primitive: 'box', material: 'lattice', dimensions: { width: 2, height: 1, depth: 0.1 } },
   ];
   const materials = { lattice: { color: '#8a623d', roughness: 0.8, metalness: 0.1, opacity: 1 } };
@@ -56,7 +56,7 @@ describe('ObjectModelSpec parameter schema normalization', () => {
     ], tree, materials)).toThrow('参数目标无效');
 
     expect(() => normalizeObjectModelParameterSchema([
-      { id: 'group-material', type: 'color', value: '#aabbcc', targets: [{ nodeId: 'root', property: 'material.color' }] },
+      { id: 'group-dimension', type: 'number', value: 1, min: 0, max: 2, targets: [{ nodeId: 'root', property: 'dimensions.width' }] },
     ], tree, materials)).toThrow('Group 节点仅支持变换和显隐参数');
 
     expect(() => normalizeObjectModelParameterSchema([

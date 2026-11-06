@@ -15,29 +15,6 @@ export class BuildingDesignController {
     return this.service.approveReference(imageDataUrl);
   }
 
-  @Post('reconstruct-object')
-  @ApiOperation({ summary: '从已确认参考图生成受约束的 ObjectSculptSpec 组件树' })
-  reconstructObject(
-    @Body('category') category: string,
-    @Body('objectType') objectType: string,
-    @Body('visualStyle') visualStyle: string,
-    @Body('imageDataUrl') imageDataUrl: string,
-    @Body('approvalToken') approvalToken: string,
-    @Body('prompt') prompt?: string,
-  ) {
-    return this.service.reconstructObjectReference(category, objectType, visualStyle, imageDataUrl, approvalToken, prompt);
-  }
-
-  @Post('review-object-design')
-  @ApiOperation({ summary: '审核编辑后的 ObjectSculptSpec 组件树并签发最终发布凭证' })
-  reviewObjectDesign(
-    @Body('design') design: Record<string, unknown>,
-    @Body('designToken') designToken: string,
-    @Body('objectSculptSpec') objectSculptSpec: Record<string, unknown>,
-  ) {
-    return this.service.reviewObjectDesign(design, designToken, objectSculptSpec);
-  }
-
   @Post('add-object-parameters')
   @ApiOperation({ summary: '通过自然语言为当前结构化模型动态新增可调参数' })
   addObjectParameters(
@@ -45,16 +22,6 @@ export class BuildingDesignController {
     @Body('instruction') instruction: string,
   ) {
     return this.service.addObjectParameters(objectSculptSpec, instruction);
-  }
-
-  @Post('modify-object')
-  @ApiOperation({ summary: '对选中组件执行受约束的 AI 局部修改' })
-  modifyObject(
-    @Body('objectSculptSpec') objectSculptSpec: Record<string, unknown>,
-    @Body('selectedNodeIds') selectedNodeIds: string[],
-    @Body('instruction') instruction: string,
-  ) {
-    return this.service.modifyObjectDesign(objectSculptSpec, selectedNodeIds, instruction);
   }
 
   @Post('analyze-building')

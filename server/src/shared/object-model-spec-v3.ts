@@ -1,5 +1,6 @@
 import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from './object-model-property-resolver';
 import { normalizeObjectModelMaterialParameterProperty } from './object-model-parameter-schema';
+import { createObjectModelGeometryCapabilityRegistry } from './object-model-geometry-capability-registry';
 /**
  * Canonical ObjectModelSpec 3.0 structural validator.
  *
@@ -14,30 +15,6 @@ const MAX_INSTANCES = 100;
 const MAX_DEPTH = 16;
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 
-/**
- * Canonical geometry capability registry.
- * Descriptor validation lives below; runtime adapters provide the actual Three.js builders.
- */
-export const OBJECT_MODEL_GEOMETRY_CAPABILITIES = Object.freeze({
-  box: Object.freeze({ descriptor: 'optional' }),
-  cuboid: Object.freeze({ descriptor: 'optional' }),
-  polygon: Object.freeze({ descriptor: 'points' }),
-  wedge: Object.freeze({ descriptor: 'optional' }),
-  arch: Object.freeze({ descriptor: 'optional' }),
-  cylinder: Object.freeze({ descriptor: 'optional' }),
-  cone: Object.freeze({ descriptor: 'optional' }),
-  sphere: Object.freeze({ descriptor: 'optional' }),
-  ellipsoid: Object.freeze({ descriptor: 'optional' }),
-  torus: Object.freeze({ descriptor: 'optional' }),
-  tube: Object.freeze({ descriptor: 'path-radius' }),
-  lathe: Object.freeze({ descriptor: 'profile' }),
-  sweep: Object.freeze({ descriptor: 'path-profile' }),
-  loft: Object.freeze({ descriptor: 'sections' }),
-});
-export function getObjectModelGeometryCapability(primitive: unknown) {
-  if (typeof primitive !== 'string') return null;
-  return OBJECT_MODEL_GEOMETRY_CAPABILITIES[primitive.toLowerCase() as keyof typeof OBJECT_MODEL_GEOMETRY_CAPABILITIES] || null;
-}
 
 
 function fail(message: string): never {
@@ -160,74 +137,107 @@ function validateGeometryPath(path: any[], node: any, field: string, enforceCurv
     }
   }
 }
+function validatePolygonGeometryDescriptor(node: any, descriptor: any) {
+  const points = descriptor.points;
+  if (!Array.isArray(points) || points.length < 3 || points.length > 32 || !points.every((point: any) => geometryPoint(point, 2))) {
+    geometryFail(node, 'points', '必须包含 3-32 个 [-0.5,0.5] 范围内的二维坐标');
+  }
+  validateSimpleGeometryProfile(points.map((point: number[]) => point.map(Number)), node, 'points');
+}
+
+function validateTubeOrSweepGeometryDescriptor(node: any, descriptor: any, primitive: 'tube' | 'sweep') {
+  const path = descriptor.path;
+  if (!Array.isArray(path) || path.length < 2 || path.length > 32 || !path.every((point: any) => geometryPoint(point, 3))) {
+    geometryFail(node, 'path', '必须包含 2-32 个必须是 [-0.5,0.5] 范围内的三维坐标');
+  }
+  validateGeometryPath(path.map((point: number[]) => point.map(Number)), node, 'path', primitive === 'sweep');
+  if (descriptor.radius !== undefined && descriptor.radius !== null
+    && (!Number.isFinite(Number(descriptor.radius)) || Number(descriptor.radius) < 0.01 || Number(descriptor.radius) > 10)) {
+    geometryFail(node, 'radius', '必须是 0.01-10 范围内的有限数值');
+  }
+  if (primitive === 'tube') {
+    const tubularSegments = Number(descriptor.tubularSegments ?? 32);
+    const radialSegments = Number(descriptor.radialSegments ?? 8);
+    if (!Number.isInteger(tubularSegments) || tubularSegments < 3 || tubularSegments > 128
+      || !Number.isInteger(radialSegments) || radialSegments < 3 || radialSegments > 24
+      || (descriptor.closed !== undefined && typeof descriptor.closed !== 'boolean')) {
+      geometryFail(node, 'segments', 'tubularSegments 必须为 3-128、radialSegments 必须为 3-24，closed 必须为布尔值');
+    }
+  } else {
+    if (descriptor.closed === true) geometryFail(node, 'closed', '暂不支持闭合扫掠路径');
+    if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 3 || descriptor.profile.length > 24
+      || !descriptor.profile.every((point: any) => geometryPoint(point, 2))) {
+      geometryFail(node, 'profile', '必须是 [-0.5,0.5] 范围内的二维坐标，且包含 3-24 个合法截面点');
+    }
+    validateSimpleGeometryProfile(descriptor.profile.map((point: number[]) => point.map(Number)), node, 'profile');
+    const steps = Number(descriptor.steps ?? 32);
+    if (!Number.isInteger(steps) || steps < 3 || steps > 128) geometryFail(node, 'steps', '必须是 3-128 的整数');
+  }
+}
+
+function validateLatheGeometryDescriptor(node: any, descriptor: any) {
+  const profile = descriptor.profile;
+  if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32
+    || !profile.every((point: any) => Array.isArray(point) && point.length === 2
+      && Number.isFinite(Number(point[0])) && Number(point[0]) >= 0 && Number(point[0]) <= 0.5
+      && Number.isFinite(Number(point[1])) && Number(point[1]) >= -0.5 && Number(point[1]) <= 0.5)) {
+    geometryFail(node, 'profile', '必须是 [0,0.5] 半径与 [-0.5,0.5] 高度范围内的 2-32 个归一化点');
+  }
+  validateSimpleOpenGeometryProfile(profile.map((point: number[]) => point.map(Number)), node, 'profile');
+}
+
+function validateLoftGeometryDescriptor(node: any, descriptor: any) {
+  const sections = descriptor.sections;
+  if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) geometryFail(node, 'sections', '必须包含 2-12 个截面');
+  let pointCount = 0, previousHeight = -Infinity, orientation = 0;
+  sections.forEach((section: any, index: number) => {
+    if (!isRecord(section) || !Number.isFinite(Number(section.height)) || Number(section.height) < -0.5 || Number(section.height) > 0.5
+      || !Array.isArray(section.points) || section.points.length < 3 || section.points.length > 24
+      || !section.points.every((point: any) => geometryPoint(point, 2))) {
+      geometryFail(node, 'sections[' + index + ']', '截面结构或坐标无效');
+    }
+    if (index === 0) pointCount = section.points.length;
+    if (section.points.length !== pointCount || Number(section.height) <= previousHeight + 1e-4) {
+      geometryFail(node, 'sections', '所有截面必须具有相同数量的轮廓点，且 height 必须严格递增');
+    }
+    const currentOrientation = validateSimpleGeometryProfile(section.points.map((point: number[]) => point.map(Number)), node, 'sections[' + index + '].points');
+    if (orientation && currentOrientation !== orientation) geometryFail(node, 'sections', '所有截面必须保持一致的轮廓绕序');
+    orientation = currentOrientation;
+    previousHeight = Number(section.height);
+  });
+}
+
+const noopGeometryDescriptorValidator = () => {};
+const geometryCapabilityDefinitions = [
+  { primitive: 'box', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'polygon', descriptor: 'points', validateDescriptor: validatePolygonGeometryDescriptor },
+  { primitive: 'wedge', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'arch', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'cylinder', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'cone', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'sphere', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'ellipsoid', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'torus', descriptor: 'optional', validateDescriptor: noopGeometryDescriptorValidator },
+  { primitive: 'tube', descriptor: 'path-radius', validateDescriptor: (node: any, descriptor: any) => validateTubeOrSweepGeometryDescriptor(node, descriptor, 'tube') },
+  { primitive: 'lathe', descriptor: 'profile', validateDescriptor: validateLatheGeometryDescriptor },
+  { primitive: 'sweep', descriptor: 'path-profile', validateDescriptor: (node: any, descriptor: any) => validateTubeOrSweepGeometryDescriptor(node, descriptor, 'sweep') },
+  { primitive: 'loft', descriptor: 'sections', validateDescriptor: validateLoftGeometryDescriptor },
+] as const;
+
+const geometryCapabilityRegistry = createObjectModelGeometryCapabilityRegistry(geometryCapabilityDefinitions);
+export const OBJECT_MODEL_GEOMETRY_CAPABILITIES = Object.freeze(Object.fromEntries(geometryCapabilityDefinitions.map(({ primitive, descriptor }) => [primitive, Object.freeze({ descriptor })])));
+export function getObjectModelGeometryCapability(primitive: unknown) {
+  return geometryCapabilityRegistry.get(primitive);
+}
+
 function validateGeometryDescriptor(node: any) {
   if ((node.kind || 'mesh') !== 'mesh') return;
   const primitive = String(node.primitive || '').toLowerCase();
   const descriptor = node.geometryDescriptor ?? {};
   if (!isRecord(descriptor)) geometryFail(node, '', '必须是对象');
-  if (primitive === 'polygon') {
-    const points = descriptor.points;
-    if (!Array.isArray(points) || points.length < 3 || points.length > 32 || !points.every((point: any) => geometryPoint(point, 2))) {
-      geometryFail(node, 'points', '必须包含 3-32 个 [-0.5,0.5] 范围内的二维坐标');
-    }
-    validateSimpleGeometryProfile(points.map((point: number[]) => point.map(Number)), node, 'points');
-  } else if (primitive === 'tube' || primitive === 'sweep') {
-    const path = descriptor.path;
-    if (!Array.isArray(path) || path.length < 2 || path.length > 32 || !path.every((point: any) => geometryPoint(point, 3))) {
-      geometryFail(node, 'path', '必须包含 2-32 个必须是 [-0.5,0.5] 范围内的三维坐标');
-    }
-    validateGeometryPath(path.map((point: number[]) => point.map(Number)), node, 'path', primitive === 'sweep');
-    if (descriptor.radius !== undefined && descriptor.radius !== null
-      && (!Number.isFinite(Number(descriptor.radius)) || Number(descriptor.radius) < 0.01 || Number(descriptor.radius) > 10)) {
-      geometryFail(node, 'radius', '必须是 0.01-10 范围内的有限数值');
-    }
-    if (primitive === 'tube') {
-      const tubularSegments = Number(descriptor.tubularSegments ?? 32);
-      const radialSegments = Number(descriptor.radialSegments ?? 8);
-      if (!Number.isInteger(tubularSegments) || tubularSegments < 3 || tubularSegments > 128
-        || !Number.isInteger(radialSegments) || radialSegments < 3 || radialSegments > 24
-        || (descriptor.closed !== undefined && typeof descriptor.closed !== 'boolean')) {
-        geometryFail(node, 'segments', 'tubularSegments 必须为 3-128、radialSegments 必须为 3-24，closed 必须为布尔值');
-      }
-    } else {
-      if (descriptor.closed === true) geometryFail(node, 'closed', '暂不支持闭合扫掠路径');
-      if (!Array.isArray(descriptor.profile) || descriptor.profile.length < 3 || descriptor.profile.length > 24
-        || !descriptor.profile.every((point: any) => geometryPoint(point, 2))) {
-        geometryFail(node, 'profile', '必须是 [-0.5,0.5] 范围内的二维坐标，且包含 3-24 个合法截面点');
-      }
-      validateSimpleGeometryProfile(descriptor.profile.map((point: number[]) => point.map(Number)), node, 'profile');
-      const steps = Number(descriptor.steps ?? 32);
-      if (!Number.isInteger(steps) || steps < 3 || steps > 128) geometryFail(node, 'steps', '必须是 3-128 的整数');
-    }
-  } else if (primitive === 'lathe') {
-    const profile = descriptor.profile;
-    if (!Array.isArray(profile) || profile.length < 2 || profile.length > 32
-      || !profile.every((point: any) => Array.isArray(point) && point.length === 2
-        && Number.isFinite(Number(point[0])) && Number(point[0]) >= 0 && Number(point[0]) <= 0.5
-        && Number.isFinite(Number(point[1])) && Number(point[1]) >= -0.5 && Number(point[1]) <= 0.5)) {
-      geometryFail(node, 'profile', '必须是 [0,0.5] 半径与 [-0.5,0.5] 高度范围内的 2-32 个归一化点');
-    }
-    validateSimpleOpenGeometryProfile(profile.map((point: number[]) => point.map(Number)), node, 'profile');
-  } else if (primitive === 'loft') {
-    const sections = descriptor.sections;
-    if (!Array.isArray(sections) || sections.length < 2 || sections.length > 12) geometryFail(node, 'sections', '必须包含 2-12 个截面');
-    let pointCount = 0, previousHeight = -Infinity, orientation = 0;
-    sections.forEach((section: any, index: number) => {
-      if (!isRecord(section) || !Number.isFinite(Number(section.height)) || Number(section.height) < -0.5 || Number(section.height) > 0.5
-        || !Array.isArray(section.points) || section.points.length < 3 || section.points.length > 24
-        || !section.points.every((point: any) => geometryPoint(point, 2))) {
-        geometryFail(node, 'sections[' + index + ']', '截面结构或坐标无效');
-      }
-      if (index === 0) pointCount = section.points.length;
-      if (section.points.length !== pointCount || Number(section.height) <= previousHeight + 1e-4) {
-        geometryFail(node, 'sections', '所有截面必须具有相同数量的轮廓点，且 height 必须严格递增');
-      }
-      const currentOrientation = validateSimpleGeometryProfile(section.points.map((point: number[]) => point.map(Number)), node, 'sections[' + index + '].points');
-      if (orientation && currentOrientation !== orientation) geometryFail(node, 'sections', '所有截面必须保持一致的轮廓绕序');
-      orientation = currentOrientation;
-      previousHeight = Number(section.height);
-    });
-  }
+  if (!geometryCapabilityRegistry.has(primitive)) return;
+  geometryCapabilityRegistry.validate(primitive, node, descriptor);
 }
 
 export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | 'compiled' } = {}) {

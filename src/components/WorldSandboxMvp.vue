@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
       <section>
         <h2>02 · 沙盒资产放置</h2>
         <p v-if="placementActive">移动鼠标选择位置，点击确认放置；Q/E 旋转 15°，Esc 取消。</p>
-        <p v-else>点击资产可选中；使用移动重新选址，旋转按钮调整朝向。WASD 用于角色漫游。</p>
+        <p v-else>点击已放置资产可选中；也可从列表直接移动、旋转或删除。WASD 用于角色漫游。</p>
         <div v-if="generatedAssets.length" class="world-mvp__asset-list">
           <div v-for="asset in generatedAssets" :key="asset.id" class="world-mvp__asset-row" :class="{ active: selectedAssetId === asset.id }">
             <span>{{ asset.name }} · {{ asset.dimensions.width.toFixed(1) }}×{{ asset.dimensions.depth.toFixed(1) }}m</span>

@@ -1231,7 +1231,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function onScenePointerDown(event) {
-    if (event.button !== 0 || (!placementState && cameraRig?.mode !== 'overview' && !indoorGroup)) { pointerStart = null; return }
+    if (event.button !== 0 || (!placementState && cameraRig?.mode !== 'overview' && !indoorGroup && generatedAssets.size === 0)) { pointerStart = null; return }
     pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
   }
 
@@ -1249,7 +1249,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       return
     }
     if (moved > 5) return
-    if (cameraRig?.mode !== 'overview' && !indoorGroup) return
+    if (cameraRig?.mode !== 'overview' && !indoorGroup && generatedAssets.size === 0) return
     const rect = renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return
     pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)

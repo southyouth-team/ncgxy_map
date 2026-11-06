@@ -167,7 +167,7 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('positions:[x,y,z,...],indices:[a,b,c,...]');
     expect(systemPrompt).toContain('旧式 geometryDescriptor 仍可用于兼容构造');
     expect(systemPrompt).toContain('operations');
-    expect(systemPrompt).toContain('sourceRootId 指向 componentTree 中完整的 Group 子树');
+    expect(systemPrompt).toContain('sourceRootId 指向 componentTree 中作为复制根节点的组件及其完整子树（Group 或 Mesh 均可）');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
     expect(systemPrompt).toContain('不受预置几何类型限制');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');

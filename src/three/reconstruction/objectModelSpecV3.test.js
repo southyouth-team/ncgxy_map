@@ -1,3 +1,4 @@
+import { validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
 import { describe, expect, it } from 'vitest';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
 
@@ -40,6 +41,39 @@ function createRadialSpec(count = 8) {
     }],
   };
 }
+
+describe('canonical ObjectModelSpec 3.0 validator', () => {
+  it('accepts a valid source spec and reports bounded expansion size', () => {
+    const result = validateObjectModelSpecV3(createRadialSpec(8));
+    expect(result.componentCount).toBe(3);
+    expect(result.expandedComponentCount).toBe(3 + 2 * 7);
+  });
+
+  it('rejects duplicate operation IDs and invalid operation parameter references', () => {
+    const duplicate = createRadialSpec();
+    duplicate.operations.push({ ...duplicate.operations[0] });
+    expect(() => validateObjectModelSpecV3(duplicate)).toThrow('instance operation ID');
+
+    const missingParameter = createRadialSpec();
+    missingParameter.operations[0].count.parameterId = 'missing-count';
+    expect(() => validateObjectModelSpecV3(missingParameter)).toThrow('整数数量参数');
+  });
+
+  it('rejects parameter targets that do not resolve to a real scalar field', () => {
+    const invalid = createRadialSpec();
+    invalid.parameterSchema.push({
+      id: 'fake-field', label: 'Fake', type: 'number', value: 1, min: 0, max: 2,
+      targets: [{ nodeId: 'rib', property: 'geometryDescriptor.fakeRadius', mode: 'set' }],
+    });
+    expect(() => validateObjectModelSpecV3(invalid)).toThrow('参数类型与目标属性不匹配');
+  });
+
+  it('rejects legacy protocol fields at the canonical boundary', () => {
+    const legacy = createRadialSpec();
+    legacy.generators = [];
+    expect(() => validateObjectModelSpecV3(legacy)).toThrow('不接受 generators/constraints');
+  });
+});
 
 describe('ObjectModelSpec 3.0 compiler', () => {
   it('expands arbitrary axis-angle instance distributions from expressions', () => {

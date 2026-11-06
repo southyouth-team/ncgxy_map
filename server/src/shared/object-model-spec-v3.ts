@@ -11,7 +11,7 @@ const MAX_PARAMETERS = 100;
 const MAX_INSTANCES = 100;
 const MAX_DEPTH = 16;
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
-const FORBIDDEN_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
+import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from './object-model-property-resolver';
 
 /**
  * Canonical geometry capability registry.
@@ -82,42 +82,6 @@ function validateExpression(expression: any, parameterById: Map<string, any>, de
       fail('表达式运算不受支持：' + String(expression.op));
   }
 }
-
-function resolveTargetKind(node: any, materials: Record<string, any>, property: any) {
-  if (typeof property !== 'string' || property.length > 160) return null;
-  const parts = property.split('.');
-  if (parts.some(part => !/^(?:[a-zA-Z][a-zA-Z0-9_]{0,39}|0|[1-9][0-9]{0,2})$/.test(part) || FORBIDDEN_PATH_PARTS.has(part))) return null;
-  if (property === 'visibility.visible') return 'boolean';
-  if (property === 'geometry.primitive') return typeof node.primitive === 'string' ? 'select' : null;
-  if (parts[0] === 'material' && parts.length === 2 && typeof node.material === 'string') {
-    const material = materials[node.material];
-    if (!isRecord(material) || !Object.prototype.hasOwnProperty.call(material, parts[1])) return null;
-    const value = material[parts[1]];
-    if (value === null || typeof value === 'object') return null;
-    if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return 'color';
-    return typeof value === 'number' && Number.isFinite(value) ? 'number' : typeof value;
-  }
-  if (parts[0] === 'transform' && ['position', 'rotation', 'scale'].includes(parts[1]) && parts.length === 3 && ['x', 'y', 'z'].includes(parts[2])) return 'number';
-  if (!['dimensions', 'geometryDescriptor'].includes(parts[0]) || parts.length < 2 || parts.length > 4) return null;
-  let value = node[parts[0]];
-  for (const part of parts.slice(1)) {
-    if (!value || typeof value !== 'object') return null;
-    if (Array.isArray(value)) {
-      const index = Number(part);
-      if (!Number.isInteger(index) || index < 0 || index >= value.length || index > 127) return null;
-      value = value[index];
-    } else {
-      if (!Object.prototype.hasOwnProperty.call(value, part)) return null;
-      value = value[part];
-    }
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) return 'number';
-  if (typeof value === 'boolean') return 'boolean';
-  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return 'color';
-  if (typeof value === 'string') return 'select';
-  return null;
-}
-
 
 const GEOMETRY_POINT_MIN = -0.5;
 const GEOMETRY_POINT_MAX = 0.5;
@@ -395,11 +359,10 @@ export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | '
       const node = nodes.get(target?.nodeId);
       if (!node) fail('参数目标组件不存在：' + String(target?.nodeId));
       if ((node.kind || 'mesh') === 'group' && !String(target.property || '').startsWith('transform.') && target.property !== 'visibility.visible') fail('Group 节点仅支持变换和显隐参数：' + node.id);
-      const kind = resolveTargetKind(node, materials, target.property);
-      const visibilityThreshold = target.property === 'visibility.visible' && ['visible-from', 'visible-through'].includes(target.mode);
-      if (!kind) fail('参数目标属性不受支持或不存在：' + parameter.id + '.' + target.property);
-      if (parameter.type !== kind && !(parameter.type === 'number' && visibilityThreshold)) fail('参数类型与目标属性的数据类型不匹配：' + parameter.id + '.' + target.property);
+      const resolvedTarget = resolveObjectModelParameterTarget(node, materials, target.property);
       const mode = target.mode || 'set';
+      if (!resolvedTarget) fail('参数目标属性不受支持或不存在：' + parameter.id + '.' + target.property);
+      if (!isObjectModelParameterTargetTypeCompatible(parameter.type, resolvedTarget, mode, target.property)) fail('参数类型与目标属性的数据类型不匹配：' + parameter.id + '.' + target.property);
       if (!['set', 'multiply', 'add', 'visible-from', 'visible-through'].includes(mode)) fail('参数目标运算不受支持：' + parameter.id);
       if (target.property.startsWith('material.') && mode !== 'set') fail('材质参数仅支持 set：' + parameter.id);
       if (['visible-from', 'visible-through'].includes(mode) && (target.property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) fail('可见性阈值参数无效：' + parameter.id);

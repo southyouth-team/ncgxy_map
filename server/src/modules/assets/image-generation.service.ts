@@ -1,46 +1,9 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
+import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from '../../shared/object-model-property-resolver';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-function isGeneratedParameterTargetValid(node: any, materials: Record<string, any>, property: unknown, parameterType: string) {
-  if (!node || typeof property !== 'string' || property.length > 160) return false;
-  const parts = property.split('.');
-  if (parts.some(part => !/^(?:[a-zA-Z][a-zA-Z0-9_]{0,39}|0|[1-9][0-9]{0,2})$/.test(part) || ['__proto__','prototype','constructor'].includes(part))) return false;
-  let kind = '';
-  if (property === 'visibility.visible') kind = 'boolean';
-  else if (property === 'geometry.primitive') kind = 'select';
-  else if (parts[0] === 'material' && parts.length === 2 && typeof node.material === 'string') {
-    const material = materials[node.material];
-    if (!material || !Object.prototype.hasOwnProperty.call(material, parts[1])) return false;
-    const value = material[parts[1]];
-    if (value === null || typeof value === 'object') return false;
-    kind = typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? 'color' : typeof value;
-  } else if (parts[0] === 'transform' && ['position','rotation','scale'].includes(parts[1]) && parts.length === 3 && ['x','y','z'].includes(parts[2])) {
-    kind = 'number';
-  } else if (['dimensions','geometryDescriptor'].includes(parts[0]) && parts.length >= 2 && parts.length <= 4) {
-    let value = node[parts[0]];
-    for (const part of parts.slice(1)) {
-      if (!value || typeof value !== 'object') return false;
-      if (Array.isArray(value)) {
-        const index = Number(part);
-        if (!Number.isInteger(index) || index < 0 || index >= value.length || index > 127) return false;
-        value = value[index];
-      } else {
-        if (!Object.prototype.hasOwnProperty.call(value, part)) return false;
-        value = value[part];
-      }
-    }
-    if (value === null || typeof value === 'object') return false;
-    kind = typeof value === 'number' && Number.isFinite(value) ? 'number'
-      : typeof value === 'boolean' ? 'boolean'
-        : typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? 'color'
-          : typeof value === 'string' ? 'select' : '';
-  }
-  if (!kind) return false;
-  return parameterType === kind || (property === 'visibility.visible' && parameterType === 'number');
-}
-
 
 /**
  * AI 有时会把材质参数写成语义化别名（如 lattice_color），但 Runtime 协议
@@ -78,8 +41,12 @@ function validateGeneratedParameterSchema(input: unknown, componentTree: any[], 
     if (!Array.isArray(item.targets) || item.targets.length > 100 || (!item.targets.length && !generatorParameterIds.has(item.id))) throw new ServiceUnavailableException('AI 参数目标无效：' + item.id);
     for (const target of item.targets) {
       const targetNode = componentTree.find(node => node.id === target?.nodeId);
-      if (!nodes.has(target?.nodeId) || !isGeneratedParameterTargetValid(targetNode, materials, target?.property, item.type)) throw new ServiceUnavailableException('AI 参数目标引用无效或数据类型不匹配：' + item.id);
+      const resolvedTarget = resolveObjectModelParameterTarget(targetNode, materials, target?.property);
       const mode = target.mode || 'set';
+      if (!nodes.has(target?.nodeId) || !resolvedTarget
+        || !isObjectModelParameterTargetTypeCompatible(item.type, resolvedTarget, mode, target?.property)) {
+        throw new ServiceUnavailableException('AI 参数目标引用无效或数据类型不匹配：' + item.id);
+      }
       if (!['set','multiply','add','visible-from','visible-through'].includes(mode)) throw new ServiceUnavailableException('AI 参数目标运算无效：' + item.id);
       if (['visible-from','visible-through'].includes(mode) && (target.property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) throw new ServiceUnavailableException('AI 参数可见性阈值无效：' + item.id);
       if (target.property === 'geometry.primitive' && item.type !== 'select') throw new ServiceUnavailableException('几何类型参数必须是枚举：' + item.id);

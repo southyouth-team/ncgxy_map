@@ -617,9 +617,9 @@ function getMaximumGeometryIndex(indices) {
 }
 
 /**
- * Estimates actual runtime buffer sizes for the supported built-in primitives.
- * Extruded/custom geometries are intentionally excluded until their tessellation
- * behavior has a separately verified estimator.
+ * Estimates persistent BufferAttribute and index-buffer sizes for calibrated
+ * runtime geometry types. Temporary construction arrays and Three.js object
+ * overhead are intentionally excluded.
  */
 export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}) {
   const type = String(primitive || '').toLowerCase();
@@ -671,8 +671,8 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
     }
     case 'polygon': {
       const points = options.points;
-      if (!Array.isArray(points) || points.length < 3) {
-        throw new TypeError('polygon points 格式无效');
+      if (!Array.isArray(points) || points.length < 3 || points.length > 32) {
+        throw new TypeError('polygon points 必须包含 3 到 32 个轮廓点');
       }
       const pointCount = points.length;
       // Three.js r180 ExtrudeGeometry with bevel disabled and one depth step

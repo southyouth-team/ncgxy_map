@@ -719,6 +719,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
         object.material?.dispose?.();
       });
     }
+    expect(() => estimateObjectSculptPrimitiveGeometry('polygon', {
+      points: Array.from({ length: 33 }, (_, index) => [Math.cos(index), Math.sin(index)]),
+    })).toThrow('3 到 32 个轮廓点');
   });
 
   it('estimates indexed-mesh buffers from actual positions and maximum index', () => {

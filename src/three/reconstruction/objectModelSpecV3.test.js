@@ -88,6 +88,12 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     expect(() => validateObjectModelSpecV3(loft)).toThrow('height 必须严格递增');
   });
 
+  it('rejects geometry primitives outside the canonical capability registry', () => {
+    const unsupported = createRadialSpec();
+    unsupported.componentTree[2].primitive = 'lathe-like-custom';
+    expect(() => validateObjectModelSpecV3(unsupported)).toThrow('组件几何类型不受支持：lathe-like-custom');
+  });
+
   it('rejects duplicate operation IDs and invalid operation parameter references', () => {
     const duplicate = createRadialSpec();
     duplicate.operations.push({ ...duplicate.operations[0] });

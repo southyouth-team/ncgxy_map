@@ -1090,7 +1090,7 @@ export class BuildingDesignService {
               '不能为没有合适原型的结构创建生成器；不允许执行脚本、表达式或自定义函数。最大展开组件数量 300。',
               '所有参数 ID 唯一；新增参数不得与现有 ID 冲突。最多 100 个参数，每项最多 100 个目标。',
               '禁止返回 JavaScript/TypeScript。AI 只声明参数数据，服务端会再次校验所有字段与目标。',
-              ...(current.schemaVersion === '3.0' ? ['当前协议是 ObjectModelSpec 3.0：必须原样保留 operations，不得返回 generators，不得修改、删除或重排任何 operation；参数设计只新增/调整 parameterSchema 与必要的逻辑 Group。已有 operation 数量参数必须保留 targets=[]，不得把 operation 改写成 repeat/grid。'] : []),
+              ...(current.schemaVersion === '3.0' ? ['当前协议是 ObjectModelSpec 3.0：以上针对 2.0 的 generators、constraints、repeat、grid 要求全部忽略。必须原样保留 operations，不得返回 generators，不得修改、删除或重排任何 operation；参数设计只新增/调整 parameterSchema 与必要的逻辑 Group。已有 operation 数量参数必须保留 targets=[]，不得把 operation 改写成 repeat/grid。'] : []),
             ].join('\\n') },
             { role: 'user', content: JSON.stringify({ instruction, objectSculptSpec: current }) },
           ],

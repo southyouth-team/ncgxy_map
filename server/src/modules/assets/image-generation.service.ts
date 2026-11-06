@@ -821,7 +821,9 @@ export class ImageGenerationService {
         content: [
           'You are an expert procedural Three.js asset artist using the img2threejs editable procedural-draft approach.',
           'Return JavaScript ES module source code only. Do not return JSON, Markdown fences, explanations, TypeScript annotations, imports, or external dependencies.',
-          'Export exactly one named factory: export function createModel(THREE) { ... }.',
+          'Legacy factory contract: export function createModel(THREE) remains callable. New factory signature: export function createModel(THREE, params = {}) { ... }.',
+          'Export modelParameters and modelParts arrays as named constants. modelParameters describes dynamic controls using id, label, type, default, optional min/max/step/options/group/description. Supported UI types are number, color, boolean, select and text; declare only useful controls for this model. modelParts describes stable part ids, names and parentId values. These arrays are metadata, not a geometry whitelist.',
+          'Every adjustable feature must actually read its value from params inside createModel. Use parameter defaults when a value is absent. Keep stable userData.componentId on part groups so parts can be selected.',
           'The factory must synchronously return one THREE.Group. Build real geometry and materials with Three.js APIs.',
           'Use arbitrary combinations of BufferGeometry, ExtrudeGeometry, LatheGeometry, Shape, curves, custom vertices, meshes, groups and materials as appropriate. Do not restrict yourself to a predefined primitive catalogue.',
           'Keep meaningful parts in nested THREE.Group objects. Set stable descriptive object.name values and userData.componentId on editable part groups. Give the root group userData.assetName.',
@@ -888,6 +890,80 @@ export class ImageGenerationService {
       visualStyle,
       generationMethod: 'img2threejs-procedural',
       generatedCode,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+
+  async modifyProceduralObjectFromInstruction(
+    sourceInput: unknown, parametersInput: unknown, partsInput: unknown,
+    selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown,
+  ): Promise<any> {
+    const source = typeof sourceInput === 'string' ? sourceInput.trim() : '';
+    const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 12000) : '';
+    if (!source || !instruction) throw new BadRequestException('模型源码和调整指令不能为空');
+    if (source.length > 120000) throw new BadRequestException('模型源码超过 120 KB');
+    const parameters = parametersInput && typeof parametersInput === 'object' && !Array.isArray(parametersInput) ? parametersInput : {};
+    const parts = Array.isArray(partsInput) ? partsInput.slice(0, 300) : [];
+    const selectedPartId = typeof selectedPartIdInput === 'string' ? selectedPartIdInput.slice(0, 160) : '';
+    const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    if (!apiKey || !model) throw new ServiceUnavailableException('模型编辑未配置视觉模型服务');
+    const configuredTimeout = Number(this.config.get<string>('VISION_REQUEST_TIMEOUT_MS') || 600000);
+    const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
+    const system = [
+      'You are editing an existing procedural Three.js model for a real-time 3D sandbox.',
+      'Return one valid JSON object only, with keys generatedCode, parameters, parts, changeSummary. Do not use Markdown fences.',
+      'generatedCode must be a complete self-contained JavaScript ES module exporting createModel(THREE, params = {}), modelParameters and modelParts.',
+      'Preserve the existing model identity and visual structure unless the instruction explicitly requests a structural change. Do not replace the whole model unnecessarily.',
+      'For part-scoped edits, change only the selected part and the minimum dependent geometry/material required. Keep all unrelated parts and their stable component IDs.',
+      'For parameter requests, add or update dynamic controls in modelParameters and make createModel read those values from params. Do not invent a fixed global parameter catalogue; declare model-specific controls.',
+      'modelParameters entries should use id, label, type, default, and optional min, max, step, options, group, description. UI types: number, color, boolean, select, text.',
+      'modelParts entries should use stable id, name, and optional parentId. Give editable THREE.Group objects matching userData.componentId values.',
+      'Do not use external dependencies, imports, network, DOM, browser globals, Node APIs, eval, Function, dynamic imports, animation loops or renderers.',
+      'The factory must synchronously return one THREE.Group, use only THREE and params, and keep the model centered near X/Z origin, Y-up, standing on Y=0.',
+      'Avoid unbounded loops and pathological geometry. Do not claim that geometry intersections have been automatically detected.',
+    ].join('\n');
+    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameters: parameters, currentParts: parts, currentSource: source, instruction });
+    let response: Response;
+    try {
+      response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({ model, temperature: 0.2, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('程序化模型 AI 编辑请求失败：' + message);
+      throw new ServiceUnavailableException('模型 AI 编辑服务连接失败');
+    }
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 1000);
+      this.logger.warn('程序化模型 AI 编辑 API HTTP ' + response.status + '：' + detail);
+      throw new ServiceUnavailableException('模型 AI 编辑失败（HTTP ' + response.status + '）');
+    }
+    const payload = await response.json() as any;
+    const raw = payload?.choices?.[0]?.message?.content;
+    if (typeof raw !== 'string' || !raw.trim()) throw new ServiceUnavailableException('AI 未返回模型编辑结果');
+    let result: any;
+    try {
+      const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      result = JSON.parse(cleaned);
+    } catch {
+      throw new ServiceUnavailableException('AI 模型编辑结果不是有效 JSON');
+    }
+    if (!result || typeof result.generatedCode !== 'string' || !result.generatedCode.trim()
+      || result.generatedCode.length > 120000
+      || !/export\s+function\s+createModel\s*\(\s*THREE(?:\s*,[^)]*)?\)/.test(result.generatedCode)) {
+      throw new ServiceUnavailableException('AI 返回的模型源码无效或超过 120 KB');
+    }
+    return {
+      generatedCode: result.generatedCode,
+      parameters: Array.isArray(result.parameters) ? result.parameters : [],
+      parts: Array.isArray(result.parts) ? result.parts : [],
+      changeSummary: typeof result.changeSummary === 'string' ? result.changeSummary : '模型已更新',
       generatedAt: new Date().toISOString(),
     };
   }

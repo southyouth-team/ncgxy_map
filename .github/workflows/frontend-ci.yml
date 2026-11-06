@@ -2,9 +2,9 @@ name: Frontend CI
 
 on:
   push:
-    branches: [feat/multi-campus-data-foundation]
+    branches: [feat/multi-campus-data-foundation, feat/object-model-protocol-p1]
   pull_request:
-    branches: [main, feat/multi-campus-data-foundation]
+    branches: [main, feat/multi-campus-data-foundation, feat/object-model-protocol-p1]
 jobs:
   frontend:
     runs-on: ubuntu-latest

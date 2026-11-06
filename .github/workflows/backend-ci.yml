@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - feat/multi-campus-data-foundation
+      - feat/object-model-protocol-p1
   pull_request:
     branches:
       - main
       - feat/multi-campus-data-foundation
+      - feat/object-model-protocol-p1
 
 jobs:
   backend:

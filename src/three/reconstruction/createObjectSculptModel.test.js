@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { createObjectSculptModel, createObjectSculptComponentGroup, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, applyObjectSculptComponentChanges, resolveEditableParameterTarget } from './createObjectSculptModel.js';
+import { createObjectSculptModel, createObjectSculptComponentGroup, validateObjectSculptSpec, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates, applyObjectSculptComponentChanges, resolveEditableParameterTarget, estimateObjectSculptPrimitiveGeometry } from './createObjectSculptModel.js';
 import { createObjectModelParameterContractCases } from '../../../server/src/shared/object-model-parameter-contract.fixtures.ts';
 
 function castleSpec() {

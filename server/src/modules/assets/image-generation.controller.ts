@@ -48,6 +48,17 @@ export class ImageGenerationController {
     return this.service.reconstructObjectFromImage(imageDataUrl, prompt, objectType, visualStyle);
   }
 
+  @Post('generate-procedural-object')
+  @ApiOperation({ summary: '生成可编辑的 Three.js 程序化模型源码（不执行生成代码）' })
+  generateProceduralObject(
+    @Body('prompt') prompt: string,
+    @Body('objectType') objectType: string,
+    @Body('visualStyle') visualStyle: string,
+    @Body('imageDataUrl') imageDataUrl: string,
+  ) {
+    return this.service.generateProceduralObjectFromPrompt(prompt, objectType, visualStyle, imageDataUrl);
+  }
+
   @Post('generate-object')
   @ApiOperation({ summary: '根据提示词直接生成受控 Three.js ObjectSculptSpec' })
   generateObject(

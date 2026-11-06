@@ -104,6 +104,59 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('restores the previous component hierarchy when candidate attachment fails', () => {
+    const model = createObjectSculptModel(THREE, {
+      schemaVersion: '3.0',
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'left', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'right', parent: 'root', primitive: 'sphere', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+    });
+    const rootGroup = model.userData.componentGroups.get('root');
+    const leftGroup = model.userData.componentGroups.get('left');
+    const rightGroup = model.userData.componentGroups.get('right');
+    const previousGroups = model.userData.componentGroups;
+    const previousSpec = structuredClone(model.userData.parameterBaseSpec);
+    const previousRenderSpec = structuredClone(model.userData.renderObjectSculptSpec);
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose');
+    const materialDispose = vi.spyOn(THREE.MeshStandardMaterial.prototype, 'dispose');
+    const addSpy = vi.spyOn(rootGroup, 'add').mockImplementationOnce(() => {
+      throw new Error('injected component attachment failure');
+    });
+    const next = structuredClone(model.userData.objectSculptSpec);
+    next.componentTree.find(node => node.id === 'left').dimensions.width = 2;
+    next.componentTree.push({
+      id: 'added',
+      parent: 'root',
+      primitive: 'box',
+      dimensions: { width: 0.5, height: 0.5, depth: 0.5 },
+    });
+    try {
+      expect(() => applyObjectSculptComponentChanges(THREE, model, next))
+        .toThrow('injected component attachment failure');
+      expect(model.userData.componentGroups).toBe(previousGroups);
+      expect(model.userData.componentGroups.get('root')).toBe(rootGroup);
+      expect(model.userData.componentGroups.get('left')).toBe(leftGroup);
+      expect(model.userData.componentGroups.get('right')).toBe(rightGroup);
+      expect(rootGroup.parent).toBe(model);
+      expect(rootGroup.children).toEqual([leftGroup, rightGroup]);
+      expect(leftGroup.parent).toBe(rootGroup);
+      expect(rightGroup.parent).toBe(rootGroup);
+      expect(model.userData.parameterBaseSpec).toEqual(previousSpec);
+      expect(model.userData.renderObjectSculptSpec).toEqual(previousRenderSpec);
+      expect(model.userData.objectSculptSpec.componentTree.map(node => node.id))
+        .toEqual(['root', 'left', 'right']);
+      expect(geometryDispose).toHaveBeenCalledTimes(2);
+      expect(materialDispose).toHaveBeenCalledTimes(2);
+      expect(addSpy).toHaveBeenCalled();
+    } finally {
+      addSpy.mockRestore();
+      geometryDispose.mockRestore();
+      materialDispose.mockRestore();
+    }
+  });
+
   it('builds an arbitrary indexed mesh without requiring a registered primitive', () => {
     const spec = {
       schemaVersion: '3.0',

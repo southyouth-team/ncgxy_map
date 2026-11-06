@@ -848,15 +848,50 @@ export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput, ch
       else { const group = createObjectSculptComponentGroup(THREE,node,nextMaterials); nextGroups.set(node.id,group); createdGroups.push(group); }
     }
   } catch(error) { createdGroups.forEach(disposeComponentGroup); throw error; }
-  for (const group of previousGroups.values()) group.parent?.remove(group);
+  const previousPlacements = [...previousGroups.entries()].map(([nodeId, group]) => ({
+    nodeId,
+    group,
+    parent: group.parent,
+    index: group.parent ? group.parent.children.indexOf(group) : -1,
+  }));
   const retainedGroups = new Set(nextGroups.values());
-  for (const group of previousGroups.values()) if (!retainedGroups.has(group)) disposeComponentGroup(group);
-  const depthOf = node => { let depth=0, parent=node.parent; while(parent){depth+=1;parent=nextNodes.get(parent)?.parent;} return depth; };
-  for (const node of [...renderSpec.componentTree].sort((a,b)=>depthOf(a)-depthOf(b))) {
-    const parent = node.parent ? nextGroups.get(node.parent) : root;
-    if (!parent) throw new TypeError('组件父节点尚未构建：'+node.id);
-    parent.add(nextGroups.get(node.id));
+  const depthOf = (node, nodes) => {
+    let depth = 0, parent = node.parent;
+    while (parent) { depth += 1; parent = nodes.get(parent)?.parent; }
+    return depth;
+  };
+  const orderedNextNodes = [...renderSpec.componentTree].sort((a,b) => depthOf(a,nextNodes)-depthOf(b,nextNodes));
+  try {
+    // Keep the previous hierarchy and its resources recoverable until the new
+    // hierarchy has been attached successfully.
+    for (const placement of previousPlacements) placement.group.parent?.remove(placement.group);
+    for (const node of orderedNextNodes) {
+      const parent = node.parent ? nextGroups.get(node.parent) : root;
+      if (!parent) throw new TypeError('组件父节点尚未构建：'+node.id);
+      parent.add(nextGroups.get(node.id));
+    }
+  } catch (error) {
+    // Detach every staged/retained candidate placement, then restore the exact
+    // previous parent-child relationships and sibling order.
+    for (const group of nextGroups.values()) group.parent?.remove(group);
+    const orderedPrevious = previousPlacements
+      .filter(placement => placement.parent)
+      .sort((a,b) => depthOf(previousNodes.get(a.nodeId),previousNodes)-depthOf(previousNodes.get(b.nodeId),previousNodes)
+        || a.index-b.index);
+    for (const placement of orderedPrevious) {
+      placement.parent.add(placement.group);
+      const children = placement.parent.children;
+      const currentIndex = children.indexOf(placement.group);
+      if (currentIndex >= 0 && placement.index >= 0 && currentIndex !== placement.index) {
+        children.splice(currentIndex,1);
+        children.splice(Math.min(placement.index,children.length),0,placement.group);
+      }
+    }
+    createdGroups.forEach(disposeComponentGroup);
+    throw error;
   }
+  // Only dispose removed/replaced old groups after the new hierarchy is live.
+  for (const group of previousGroups.values()) if (!retainedGroups.has(group)) disposeComponentGroup(group);
   root.name=String(renderSpec.targetName||renderSpec.name||root.name).slice(0,120);
   root.userData.componentGroups=nextGroups;
   root.userData.renderObjectSculptSpec=JSON.parse(JSON.stringify(renderSpec));

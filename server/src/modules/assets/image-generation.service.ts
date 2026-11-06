@@ -61,11 +61,12 @@ function createVertexOnlyChangeSetResult(original: any, candidate: any) {
   }
   if (!changes.length) return null;
 
-  return applyObjectModelChangeSet(original, {
+  const result = applyObjectModelChangeSet(original, {
     changeSetVersion: '1.0',
     baseRevision: getObjectModelRevision(original),
     changes,
   });
+  return { ...result, changes };
 }
 
 /**
@@ -123,11 +124,12 @@ function createObjectModelChangeSetResult(original: any, candidate: any) {
     changes.push({ type: 'replace-operations', operations: candidateOperations ?? [] });
   }
   if (!changes.length || changes.length > 200) return null;
-  return applyObjectModelChangeSet(original, {
+  const result = applyObjectModelChangeSet(original, {
     changeSetVersion: '1.0',
     baseRevision: getObjectModelRevision(original),
     changes,
   });
+  return { ...result, changes };
 }
 
 function validateGeneratedOperations(input: unknown, componentTree: any[]) {

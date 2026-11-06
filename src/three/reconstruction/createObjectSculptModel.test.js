@@ -120,6 +120,16 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('leaf')).toBe(leaf);expect(leaf.parent).toBe(model.userData.componentGroups.get('b'));
   });
 
+  it('retains a component Group when a server ChangeSet only reparents it', () => {
+    const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'left',kind:'group',parent:'root'},{id:'right',kind:'group',parent:'root'},{id:'leaf',parent:'left',primitive:'box',dimensions:{width:1,height:1,depth:1}}]};
+    const model=createObjectSculptModel(THREE,spec),leaf=model.userData.componentGroups.get('leaf');
+    const next=structuredClone(model.userData.objectSculptSpec);
+    const moved=next.componentTree.find(node=>node.id==='leaf');moved.parent='right';
+    const changeSetResult={objectModelSpec:next,changes:[{type:'replace-component',nodeId:'leaf',component:moved}],affectedNodeIds:['leaf'],affectedMaterialIds:[]};
+    applyObjectSculptComponentChanges(THREE,model,next,changeSetResult);
+    expect(model.userData.componentGroups.get('leaf')).toBe(leaf);
+    expect(leaf.parent).toBe(model.userData.componentGroups.get('right'));
+  });
   it('updates parameter targets without replacing unrelated component Groups', () => {
     const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'body',parent:'root',primitive:'box',dimensions:{width:2,height:2,depth:2}},{id:'window',parent:'root',primitive:'box',dimensions:{width:0.5,height:0.5,depth:0.1}}],parameterSchema:[{id:'body-width',label:'主体宽度',type:'number',value:2,min:1,max:4,step:1,targets:[{nodeId:'body',property:'dimensions.width'}]}]};
     const model=createObjectSculptModel(THREE,spec),body=model.userData.componentGroups.get('body'),window=model.userData.componentGroups.get('window');

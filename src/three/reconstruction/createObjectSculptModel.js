@@ -793,8 +793,20 @@ export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput, ch
     || !Array.isArray(changeSetResult.affectedMaterialIds))) {
     throw new TypeError('服务端结构 ChangeSet 与模型结果不一致');
   }
-  const affectedNodeIds = new Set(changeSetResult?.affectedNodeIds || []);
   const affectedMaterialIds = new Set(changeSetResult?.affectedMaterialIds || []);
+  // A server replace-component may represent only a parent change. That is a
+  // hierarchy operation, not a geometry replacement: retain its Group and reattach it.
+  const replacedNodeIds = new Set((changeSetResult?.changes || [])
+    .filter(change => change?.type === 'replace-component' && typeof change.nodeId === 'string')
+    .filter(change => {
+      const before = root.userData.renderObjectSculptSpec.componentTree.find(node => node.id === change.nodeId);
+      const after = changeSetResult.objectModelSpec.componentTree.find(node => node.id === change.nodeId);
+      if (!before || !after) return false;
+      const { parent: beforeParent, ...beforeContent } = before;
+      const { parent: afterParent, ...afterContent } = after;
+      return stableObjectJson(beforeContent) !== stableObjectJson(afterContent);
+    })
+    .map(change => change.nodeId));
   const candidate = JSON.parse(JSON.stringify(changeSetResult?.objectModelSpec || nextSpecInput));
   const compatibleSpec = { ...candidate, parameterSchema: normalizeObjectModelMaterialParameterAliases(candidate.parameterSchema) };
   validateObjectModelSpecV3(compatibleSpec);
@@ -814,7 +826,7 @@ export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput, ch
       const newKey = typeof node.material === 'string' ? node.material : 'default';
       const { parent: oldParent, ...oldContent } = oldNode;
       const { parent: newParent, ...newContent } = node;
-      const unchanged = !affectedNodeIds.has(node.id)
+      const unchanged = !replacedNodeIds.has(node.id)
         && !affectedMaterialIds.has(oldKey) && !affectedMaterialIds.has(newKey)
         && stableObjectJson(oldContent) === stableObjectJson(newContent)
         && stableObjectJson(oldMaterials[oldKey] || DEFAULT_MATERIAL) === stableObjectJson(nextMaterials[newKey] || DEFAULT_MATERIAL);

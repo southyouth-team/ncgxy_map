@@ -1120,7 +1120,7 @@ export class BuildingDesignService {
               '你是参数化 3D 模型的参数设计器。根据用户要求和当前 ObjectSculptSpec，为现有模型设计可编辑参数。',
               '只返回 JSON：{ "componentTree": [...], "parameterSchema": [...], "generators": [...], "unsupported": [...] }。componentTree 必须是完整结构树；若无需重构，原样返回当前树。parameterSchema 和 generators 必须返回完整定义，原有定义必须逐字段保持不变。',
               '普通参数包含 id、label、type(number/color/boolean/select)、value、targets；number 另含 min/max/step/unit，select 另含 options。',
-              'targets 只能引用当前 componentTree 中真实存在的 nodeId。property 仅允许 dimensions.width/height/depth、transform.position.x/y/z、transform.scale.x/y/z、material.color/roughness/metalness/opacity、geometry.primitive、geometryDescriptor.inset/tube、visibility.visible。',
+              'targets 只能引用当前 componentTree 中真实存在的 nodeId。property 使用点分隔的真实数据路径，可指向当前节点 dimensions、transform、geometryDescriptor 中存在的标量字段，或当前材质中存在的标量字段；geometry.primitive 和 visibility.visible 为专用语义目标。不得预先穷举属性字段，不得虚构不存在的字段或访问 id、parent、kind 等结构身份字段。服务端按实际目标值的数据类型验证参数。',
               '结构数量参数可以 targets=[]，但必须同时创建一个 generators 项并绑定 countParameterId。禁止把楼层数只映射到预生成节点显隐。',
               '没有可用原型时必须明确返回 unsupported，不能伪造目标或生成器。',
               '如果用户要求楼层数变量而当前楼层是多个独立重复节点，可以在 componentTree 中增加纯 Group 包装节点，把一个完整楼层整理为原型，并将其余静态重复楼层设为 hidden=true；必须保留所有原有节点 ID，不得删除原有节点，不得新增 Mesh，不得改变原有几何、材质、尺寸和 transform。无法可靠识别单层完整子树时，不得强行重构，应返回 unsupported。',

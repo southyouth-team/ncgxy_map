@@ -829,7 +829,7 @@ export class ImageGenerationService {
           'Keep meaningful parts in nested THREE.Group objects. Set stable descriptive object.name values and userData.componentId on editable part groups. Give the root group userData.assetName.',
           'Use local coordinates for child parts. The model should be centered near X/Z origin, Y-up, and stand on Y=0 unless the reference clearly depicts a floating object.',
           'Use procedural geometry and code to reproduce silhouette, proportions, visible structure, material boundaries and small details. Do not use external textures, URLs, network requests, DOM, browser globals, Node APIs, eval, Function, or dynamic imports.',
-          'The code must be self-contained and use only the THREE argument. Do not access window, document, globalThis, fetch, XMLHttpRequest, WebSocket, process, require, or filesystem.',
+          'The code must be self-contained and use only the THREE and params arguments. Do not access window, document, globalThis, fetch, XMLHttpRequest, WebSocket, process, require, or filesystem.',
           'Dispose is managed by the host. Do not start animation loops or create renderers/cameras. Return only the model group.',
           'Prefer visual fidelity over low polygon count, but avoid pathological geometry or unbounded loops. Target a practical real-time asset.',
           'Object type: ' + objectType,

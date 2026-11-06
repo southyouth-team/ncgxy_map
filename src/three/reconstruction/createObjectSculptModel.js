@@ -305,6 +305,8 @@ function createTorusGeometry({ THREE, node, width, height, depth, segments, desc
   return new THREE.TorusGeometry(radius - tube, tube, Math.min(16, segments), segments);
 }
 
+const noopGeometryDescriptorValidator = () => {};
+
 const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
   { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
   { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },

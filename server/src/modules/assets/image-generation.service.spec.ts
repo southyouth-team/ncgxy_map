@@ -425,6 +425,33 @@ describe('ImageGenerationService', () => {
       .rejects.toThrow('组件 ID 无效或重复：body');
   });
 
+  it('reads the provider response body with the configured timeout and records response size', async () => {
+    const service = createService({
+      VISION_API_KEY: 'vision-key',
+      VISION_MODEL: 'vision-test',
+      VISION_REQUEST_TIMEOUT_MS: '450000',
+    });
+    const spec = {
+      schemaVersion: '3.0',
+      materials: { steel: { color: '#777777' } },
+      componentTree: [{ id: 'asset-root', kind: 'group' }],
+    };
+    const responseText = JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(spec) } }],
+    });
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => responseText,
+    });
+    global.fetch = fetchMock as never;
+
+    const result = await service.generateObjectFromPrompt('一个简单物体', '物体', 'stylized', false);
+
+    expect(fetchMock.mock.calls[0][1].signal).toBeDefined();
+    expect(result.objectSculptSpec.componentTree[0].id).toBe('asset-root');
+  });
+
   it('rejects prompt-generated models with disconnected component roots', async () => {
     const service = createService({
       VISION_API_KEY: 'vision-key',

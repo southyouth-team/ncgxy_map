@@ -648,13 +648,25 @@ export class ImageGenerationService {
       + '，等待响应头 ' + (headersReceivedAt - requestStartedAt) + 'ms');
 
     let responseText = '';
+    let payload: any;
+    let payloadAlreadyParsed = false;
     try {
-      responseText = await response.text();
+      // 原生 Fetch Response 提供 text()，先完整读取响应体再统计字节数和解析耗时。
+      // 兼容测试或第三方适配器提供的最小 Response Mock：这类对象可能只实现 json()。
+      if (typeof response.text === 'function') {
+        responseText = await response.text();
+      } else if (typeof response.json === 'function') {
+        payload = await response.json() as any;
+        responseText = JSON.stringify(payload);
+        payloadAlreadyParsed = true;
+      } else {
+        throw new Error('响应对象未提供 text() 或 json() 方法');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const errorName = error instanceof Error ? error.name : 'UnknownError';
       const bodyElapsedMs = Date.now() - headersReceivedAt;
-      this.logger.error('提示词 3D 模型生成响应体读取失败（' + errorName + '，响应头等待 ' 
+      this.logger.error('提示词 3D 模型生成响应体读取失败（' + errorName + '，响应头等待 '
         + (headersReceivedAt - requestStartedAt) + 'ms，响应体读取 ' + bodyElapsedMs + 'ms，总计 '
         + (Date.now() - requestStartedAt) + 'ms）：' + message);
       if (errorName === 'TimeoutError' || errorName === 'AbortError') {
@@ -673,13 +685,17 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException('提示词 3D 模型生成失败（HTTP ' + response.status + '）');
     }
 
-    let payload: any;
-    try {
-      payload = JSON.parse(responseText);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('提示词 3D 模型生成 API JSON 解析失败（响应体 ' + responseBytes + ' bytes）：' + message);
-      throw new ServiceUnavailableException('视觉模型 API 返回的响应不是有效 JSON：' + message.slice(0, 300));
+    if (!payloadAlreadyParsed) {
+      const parseStartedAt = Date.now();
+      try {
+        payload = JSON.parse(responseText);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error('提示词 3D 模型生成 API JSON 解析失败（响应体 ' + responseBytes + ' bytes，解析 '
+          + (Date.now() - parseStartedAt) + 'ms）：' + message);
+        throw new ServiceUnavailableException('视觉模型 API 返回的响应不是有效 JSON：' + message.slice(0, 300));
+      }
+      this.logger.log('提示词 3D 模型生成 JSON 解析完成：解析耗时 ' + (Date.now() - parseStartedAt) + 'ms');
     }
     const raw = payload?.choices?.[0]?.message?.content;
     let spec: any;

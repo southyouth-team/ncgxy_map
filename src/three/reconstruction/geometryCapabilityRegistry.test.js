@@ -37,6 +37,37 @@ describe('trusted geometry capability registry', () => {
     expect(createGeometryCapabilityRegistry([capability], resolveContract).has('box')).toBe(true);
   });
 
+
+  it('audits missing, unknown and mismatched runtime executors without hiding partial coverage', () => {
+    const { auditGeometryCapabilityCoverage } = require('./geometryCapabilityRegistry.js');
+    const result = auditGeometryCapabilityCoverage([
+      { id: 'box', primitive: 'box', descriptor: 'optional' },
+      { id: 'tube', primitive: 'tube', descriptor: 'path-radius' },
+      { id: 'lathe', primitive: 'lathe', descriptor: 'profile' },
+    ], [
+      { id: 'box', primitive: 'box', descriptor: 'optional' },
+      { id: 'tube', primitive: 'tube', descriptor: 'path' },
+      { id: 'custom', primitive: 'custom', descriptor: 'optional' },
+    ]);
+    expect(result).toEqual({
+      complete: false,
+      protocolCount: 3,
+      runtimeCount: 3,
+      missingExecutorIds: ['lathe'],
+      unknownExecutorIds: ['custom'],
+      descriptorMismatches: ['tube'],
+      primitiveMismatches: [],
+    });
+  });
+
+  it('reports full coverage only when IDs, primitives and descriptor contracts match', () => {
+    const { auditGeometryCapabilityCoverage } = require('./geometryCapabilityRegistry.js');
+    expect(auditGeometryCapabilityCoverage(
+      [{ id: 'box', primitive: 'box', descriptor: 'optional' }],
+      [{ id: 'box', primitive: 'box', descriptor: 'optional' }],
+    )).toMatchObject({ complete: true, missingExecutorIds: [], unknownExecutorIds: [] });
+  });
+
   it('rejects duplicate registrations and unregistered primitives', () => {
     const capability = {
       primitive: 'box',

@@ -1,8 +1,8 @@
-import { getObjectModelGeometryCapability, validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
+import { OBJECT_MODEL_GEOMETRY_CAPABILITIES, getObjectModelGeometryCapability, validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
 import { normalizeObjectModelMaterialParameterAliases, normalizeObjectModelMaterialParameterProperty } from '../../../server/src/shared/object-model-parameter-schema.ts';
 import { resolveObjectModelParameterTarget } from '../../../server/src/shared/object-model-property-resolver.ts';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
-import { createGeometryCapabilityRegistry } from './geometryCapabilityRegistry.js';
+import { auditGeometryCapabilityCoverage, createGeometryCapabilityRegistry } from './geometryCapabilityRegistry.js';
 /**
  * Bounded ObjectSculptSpec -> Three.js runtime adapter.
  *
@@ -283,6 +283,15 @@ const runtimeGeometryCapabilities = createGeometryCapabilityRegistry([
   { primitive: 'box', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
   { primitive: 'cuboid', descriptor: 'optional', validateDescriptor: validateBoxGeometryDescriptor, createGeometry: createBoxGeometry },
 ], getObjectModelGeometryCapability);
+
+export function auditObjectModelGeometryCapabilityCoverage() {
+  const protocolCapabilities = Object.entries(OBJECT_MODEL_GEOMETRY_CAPABILITIES).map(([primitive, capability]) => ({
+    id: capability.id,
+    primitive,
+    descriptor: capability.descriptor,
+  }));
+  return auditGeometryCapabilityCoverage(protocolCapabilities, runtimeGeometryCapabilities.list());
+}
 
 function createGeometry(THREE, node) {
   if (!getObjectModelGeometryCapability(node.primitive)) {

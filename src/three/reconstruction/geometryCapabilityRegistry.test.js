@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { auditGeometryCapabilityCoverage, createGeometryCapabilityRegistry } from './geometryCapabilityRegistry.js';
+import { auditObjectModelGeometryCapabilityCoverage } from './createObjectSculptModel.js';
 
 describe('trusted geometry capability registry', () => {
   it('requires both a descriptor validator and a trusted executor', () => {
@@ -37,6 +38,18 @@ describe('trusted geometry capability registry', () => {
     expect(createGeometryCapabilityRegistry([capability], resolveContract).has('box')).toBe(true);
   });
 
+
+  it('exposes the real protocol-to-runtime coverage gap during staged migration', () => {
+    expect(auditObjectModelGeometryCapabilityCoverage()).toEqual({
+      complete: false,
+      protocolCount: 14,
+      runtimeCount: 2,
+      missingExecutorIds: ['arch', 'cone', 'cylinder', 'ellipsoid', 'lathe', 'loft', 'polygon', 'sphere', 'sweep', 'torus', 'tube', 'wedge'],
+      unknownExecutorIds: [],
+      descriptorMismatches: [],
+      primitiveMismatches: [],
+    });
+  });
 
   it('audits missing, unknown and mismatched runtime executors without hiding partial coverage', () => {
     const result = auditGeometryCapabilityCoverage([

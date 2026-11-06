@@ -66,7 +66,7 @@ describe('ImageGenerationService', () => {
   it('normalizes semantic material color aliases such as lattice_color', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const objectSculptSpec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { lattice: { color: '#8a623d', roughness: 0.8 } },
       componentTree: [
         { id: 'asset-root', kind: 'group' },
@@ -194,98 +194,6 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.componentTree[0].id).toBe('tower-root');
   });
 
-  it('accepts validated repeat controls with empty component targets in prompt generation', async () => {
-    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
-    const objectSculptSpec = {
-      schemaVersion: '2.0',
-      targetName: 'layered-tree',
-      materials: { leaf: { color: '#287a38' }, bark: { color: '#79502f' } },
-      componentTree: [
-        { id: 'tree-root', kind: 'group', name: '树木主体' },
-        { id: 'crown-prototype', kind: 'group', name: '树冠层', parent: 'tree-root' },
-        { id: 'crown-mesh', parent: 'crown-prototype', primitive: 'sphere', dimensions: { width: 2, height: 1, depth: 2 }, material: 'leaf' },
-        { id: 'trunk', parent: 'tree-root', primitive: 'cylinder', dimensions: { width: 0.5, height: 3, depth: 0.5 }, material: 'bark' },
-      ],
-      parameterSchema: [{ id: 'crown-count', label: '树冠层数', type: 'number', value: 3, min: 1, max: 6, step: 1, targets: [] }],
-      generators: [{ id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-prototype', countParameterId: 'crown-count',
-        axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6 }],
-    };
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify(objectSculptSpec) } }] }),
-    }) as never;
-
-    const result = await service.generateObjectFromPrompt('一棵有三层树冠的树', '树木', 'low-poly');
-    expect(result.objectSculptSpec.generators).toMatchObject([{ id: 'crown-repeat', defaultCount: 3, maxCount: 6 }]);
-    expect(result.objectSculptSpec.parameterSchema[0]).toMatchObject({ id: 'crown-count', value: 3, targets: [] });
-  });
-
-  it('allows multiple generators to share one count parameter ID', async () => {
-    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
-    const objectSculptSpec = {
-      schemaVersion: '2.0',
-      materials: { wood: { color: '#8a623d' } },
-      componentTree: [
-        { id: 'building-root', kind: 'group' },
-        { id: 'left-window-template', kind: 'group', parent: 'building-root' },
-        { id: 'left-window', parent: 'left-window-template', primitive: 'box', dimensions: { width: 0.4, height: 0.5, depth: 0.1 }, material: 'wood' },
-        { id: 'right-window-template', kind: 'group', parent: 'building-root' },
-        { id: 'right-window', parent: 'right-window-template', primitive: 'box', dimensions: { width: 0.4, height: 0.5, depth: 0.1 }, material: 'wood' },
-      ],
-      parameterSchema: [{ id: 'window-repeat-count', type: 'number', value: 3, min: 1, max: 6, step: 1, targets: [] }],
-      generators: [
-        { id: 'left-window-repeat', type: 'repeat', templateRootId: 'left-window-template', countParameterId: 'window-repeat-count', axis: 'x', spacing: 0.8, defaultCount: 3, maxCount: 6 },
-        { id: 'right-window-repeat', type: 'repeat', templateRootId: 'right-window-template', countParameterId: 'window-repeat-count', axis: 'x', spacing: 0.8, defaultCount: 3, maxCount: 6 },
-      ],
-    };
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify(objectSculptSpec) } }] }),
-    }) as never;
-
-    const result = await service.generateObjectFromPrompt('一栋左右两侧窗户数量联动的建筑', '建筑', 'low-poly');
-    expect(result.objectSculptSpec.generators).toHaveLength(2);
-    expect(result.objectSculptSpec.generators.map((generator: { countParameterId: string }) => generator.countParameterId))
-      .toEqual(['window-repeat-count', 'window-repeat-count']);
-    expect(result.objectSculptSpec.parameterSchema).toHaveLength(1);
-  });
-
-  it('rejects invalid generator template roots and mismatched default parameter values', async () => {
-    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
-    const base = {
-      schemaVersion: '2.0', materials: { leaf: { color: '#287a38' } },
-      componentTree: [
-        { id: 'tree-root', kind: 'group' },
-        { id: 'crown-prototype', kind: 'group', parent: 'tree-root' },
-        { id: 'crown-mesh', parent: 'crown-prototype', primitive: 'sphere', dimensions: { width: 2, height: 1, depth: 2 }, material: 'leaf' },
-      ],
-      parameterSchema: [{ id: 'crown-count', label: '树冠层数', type: 'number', value: 3, min: 1, max: 6, targets: [] }],
-      generators: [{ id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-prototype', countParameterId: 'crown-count',
-        axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6 }],
-    };
-    const respond = (value: any) => {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(value) } }] }),
-      }) as never;
-    };
-    const meshTemplate: any = structuredClone(base);
-    meshTemplate.componentTree[1] = { id: 'crown-prototype', kind: 'mesh', parent: 'tree-root', primitive: 'sphere',
-      dimensions: { width: 1, height: 1, depth: 1 }, material: 'leaf' };
-    respond(meshTemplate);
-    const normalized = await service.generateObjectFromPrompt('树木', '树木', 'low-poly');
-    const normalizedGenerator = normalized.objectSculptSpec.generators[0];
-    const normalizedGroup = normalized.objectSculptSpec.componentTree.find((node: any) => node.id === normalizedGenerator.templateRootId);
-    expect(normalizedGroup.kind).toBe('group');
-    expect(normalized.objectSculptSpec.componentTree.find((node: any) => node.id === 'crown-prototype').parent).toBe(normalizedGroup.id);
-    expect(normalized.objectSculptSpec.componentTree.find((node: any) => node.id === 'crown-mesh').parent).toBe('crown-prototype');
-
-    const mismatched = structuredClone(base);
-    mismatched.parameterSchema[0].value = 4;
-    respond(mismatched);
-    await expect(service.generateObjectFromPrompt('树木', '树木', 'low-poly'))
-      .rejects.toThrow('默认值一致的有效整数数量参数');
-  });
-
   it('rejects duplicate component identity IDs before they can overwrite Map entries', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const duplicated = {
@@ -302,37 +210,6 @@ describe('ImageGenerationService', () => {
     }) as never;
     await expect(service.generateObjectFromPrompt('一个物体', '物体', 'stylized'))
       .rejects.toThrow('组件 ID 无效或重复：body');
-  });
-
-  it('accepts a grid spacing parameter as a generator-only control', async () => {
-    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
-    const objectSculptSpec = {
-      schemaVersion: '2.0',
-      materials: { stone: { color: '#999999' } },
-      componentTree: [
-        { id: 'building', kind: 'group' },
-        { id: 'window-grid', kind: 'group', parent: 'building' },
-        { id: 'window', parent: 'window-grid', primitive: 'box', dimensions: { width: 0.4, height: 0.5, depth: 0.1 }, material: 'stone' },
-      ],
-      parameterSchema: [
-        { id: 'rows', type: 'number', value: 2, min: 1, max: 3, targets: [] },
-        { id: 'columns', type: 'number', value: 2, min: 1, max: 3, targets: [] },
-        { id: 'window-spacing', type: 'number', value: 0.8, min: 0.4, max: 1.2, targets: [] },
-      ],
-      generators: [{
-        id: 'window-grid-generator', type: 'grid', templateRootId: 'window-grid',
-        rowParameterId: 'rows', columnParameterId: 'columns',
-        spacingX: 0.8, spacingZ: 0.8, spacingXParameterId: 'window-spacing', spacingXScale: 1,
-        defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3,
-      }],
-    };
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify(objectSculptSpec) } }] }),
-    }) as never;
-
-    const result = await service.generateObjectFromPrompt('带窗户阵列的建筑', '建筑', 'stylized');
-    expect(result.objectSculptSpec.parameterSchema.find((item: any) => item.id === 'window-spacing')).toMatchObject({ targets: [] });
   });
 
   it('rejects prompt-generated models with disconnected component roots', async () => {

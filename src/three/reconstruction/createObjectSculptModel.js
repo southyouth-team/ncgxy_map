@@ -1,3 +1,4 @@
+import { compileObjectModelSpec, isObjectModelSpecV3 } from './objectModelSpecV3.js';
 /**
  * Bounded ObjectSculptSpec -> Three.js runtime adapter.
  *
@@ -1019,11 +1020,14 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   if (!THREE?.Group || !THREE?.Mesh || !THREE?.MeshStandardMaterial) {
     throw new TypeError('Three.js runtime is required');
   }
-  validateObjectSculptSpec(spec);
-  const renderSpec = expandObjectSculptSpec(spec);
+  // 3.0 is the canonical declarative protocol. Compile it into the bounded
+  // component-tree execution form only at the runtime adapter boundary.
+  const effectiveSpec = isObjectModelSpecV3(spec) ? compileObjectModelSpec(spec) : spec;
+  validateObjectSculptSpec(effectiveSpec);
+  const renderSpec = expandObjectSculptSpec(effectiveSpec);
   const validation = validateObjectSculptSpec(renderSpec);
   const root = new THREE.Group();
-  root.name = String(spec.targetName || spec.name || 'reconstructed-object').slice(0, 120);
+  root.name = String(effectiveSpec.targetName || effectiveSpec.name || 'reconstructed-object').slice(0, 120);
   const groups = new Map();
   const materialSpecs = renderSpec.materials && typeof renderSpec.materials === 'object' ? renderSpec.materials : {};
   const resolveMaterial = key => {
@@ -1074,10 +1078,10 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     groups.set(node.id, group);
   }
   root.userData.componentGroups = groups;
-  root.userData.objectSculptSpec = JSON.parse(JSON.stringify(spec));
-  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(spec));
+  root.userData.objectSculptSpec = JSON.parse(JSON.stringify(effectiveSpec));
+  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(effectiveSpec));
   root.userData.objectSculpt = {
-    schemaVersion: spec.schemaVersion,
+    schemaVersion: effectiveSpec.schemaVersion,
     targetName: root.name,
     componentCount: validation.componentCount,
     source: options.source || 'object-sculpt-spec',

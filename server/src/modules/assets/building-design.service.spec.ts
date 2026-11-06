@@ -178,7 +178,7 @@ describe('BuildingDesignService', () => {
     expect(result.addedParameters).toHaveLength(3);
     expect(result.objectSculptSpec.parameterSchema.map((item: any) => item.id)).toEqual(['gate-length', 'gate-width', 'gate-height']);
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
-    expect(systemPrompt).toContain('不能伪造目标');
+    expect(systemPrompt).toContain('不得虚构字段');
     expect(systemPrompt).toContain('禁止返回 JavaScript/TypeScript');
   });
 

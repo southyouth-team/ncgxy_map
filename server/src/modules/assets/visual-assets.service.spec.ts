@@ -105,7 +105,7 @@ describe('AssetsService visual asset persistence', () => {
     };
 
     await expect(service.saveObjectSculptAsset('owner-1', { name: 'invalid loft', objectSculptSpec }))
-      .rejects.toThrow('资产 loft 截面必须保持一致的轮廓绕序');
+      .rejects.toThrow('组件几何描述符无效：loft-body.geometryDescriptor.sections 所有截面必须保持一致的轮廓绕序');
   });
 
   it('persists and owner-scopes a complete ObjectModelSpec 3.0', async () => {

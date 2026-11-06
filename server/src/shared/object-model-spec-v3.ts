@@ -226,7 +226,7 @@ const geometryCapabilityDefinitions = [
 ] as const;
 
 const geometryCapabilityRegistry = createObjectModelGeometryCapabilityRegistry(geometryCapabilityDefinitions);
-export const OBJECT_MODEL_GEOMETRY_CAPABILITIES = Object.freeze(Object.fromEntries(geometryCapabilityDefinitions.map(({ primitive, descriptor }) => [primitive, Object.freeze({ descriptor })])));
+export const OBJECT_MODEL_GEOMETRY_CAPABILITIES = Object.freeze(Object.fromEntries(geometryCapabilityDefinitions.map(({ primitive, descriptor }) => [primitive, Object.freeze({ id: primitive, descriptor })])));
 export function getObjectModelGeometryCapability(primitive: unknown) {
   return geometryCapabilityRegistry.get(primitive);
 }

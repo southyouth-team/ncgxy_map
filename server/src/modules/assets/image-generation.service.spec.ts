@@ -236,6 +236,64 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.componentTree[0].geometry.indices).toEqual([0, 2, 1]);
   });
 
+  it('converts component additions and removals into a validated structural ChangeSet', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const original = {
+      schemaVersion: '3.0', targetName: 'house',
+      materials: { stone: { color: '#888888', roughness: 0.8, metalness: 0 } },
+      parameterSchema: [], operations: [],
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'body', parent: 'root', kind: 'group' },
+        { id: 'old-window', parent: 'body', primitive: 'box', dimensions: { width: 1, height: 1, depth: 0.1 } },
+        { id: 'tree', parent: 'root', primitive: 'sphere', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+    };
+    const generated = {
+      ...original,
+      componentTree: [
+        original.componentTree[0], original.componentTree[1], original.componentTree[3],
+        { id: 'new-door', parent: 'body', primitive: 'box', dimensions: { width: 0.8, height: 1.8, depth: 0.1 } },
+      ],
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(generated) } }] }),
+    }) as never;
+    const result = await service.modifyObjectFromInstruction(original, ['body'], '把窗户替换成一扇门');
+    expect(result.changeSetResult.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'add-component', component: expect.objectContaining({ id: 'new-door' }) }),
+      expect.objectContaining({ type: 'remove-component', nodeId: 'old-window', cascade: true }),
+    ]));
+    expect(result.changeSetResult.affectedNodeIds).toEqual(expect.arrayContaining(['new-door', 'old-window']));
+    expect(result.objectSculptSpec.componentTree.map((node: any) => node.id)).toEqual(['root', 'body', 'tree', 'new-door']);
+    expect(original.componentTree.some((node: any) => node.id === 'old-window')).toBe(true);
+  });
+
+  it('converts whole-object hierarchy changes into a ChangeSet', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const original = {
+      schemaVersion: '3.0', targetName: 'tower', materials: {}, parameterSchema: [], operations: [],
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'body', parent: 'root', kind: 'group' },
+        { id: 'roof', parent: 'body', primitive: 'box', dimensions: { width: 2, height: 1, depth: 2 } },
+        { id: 'antenna-mount', parent: 'root', kind: 'group' },
+      ],
+    };
+    const generated = JSON.parse(JSON.stringify(original));
+    generated.componentTree.find((node: any) => node.id === 'roof').parent = 'antenna-mount';
+    generated.componentTree.push({ id: 'antenna', parent: 'antenna-mount', primitive: 'cylinder', dimensions: { width: 0.2, height: 2, depth: 0.2 } });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(generated) } }] }),
+    }) as never;
+    const result = await service.modifyObjectFromInstruction(original, [], '把天线移动到顶部支架');
+    expect(result.changeSetResult.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'add-component', component: expect.objectContaining({ id: 'antenna' }) }),
+      expect.objectContaining({ type: 'replace-component', nodeId: 'roof', component: expect.objectContaining({ parent: 'antenna-mount' }) }),
+    ]));
+    expect(result.objectSculptSpec.componentTree.find((node: any) => node.id === 'roof').parent).toBe('antenna-mount');
+    expect(result.changeSetResult.affectedNodeIds).toEqual(expect.arrayContaining(['antenna', 'roof']));
+  });
   it('analyzes reference-image proportions and spatial relations before generating geometry', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
     const analysis = {

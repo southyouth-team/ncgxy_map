@@ -150,7 +150,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!Number.isFinite(fitScale) || fitScale <= 0) throw new Error('AI 建筑无法计算有效的等比装配比例');
     holder.scale.setScalar(fitScale);
     const fittedSize = sourceSize.clone().multiplyScalar(fitScale);
-    holder.position.y = Number(target.userData.generatedBuildingBaseY) || 0.73;
+    const baseY = Number(target.userData.generatedBuildingBaseY);
+    holder.position.y = Number.isFinite(baseY) ? baseY : 0.73;
 
     const foundation = target.userData.foundationMesh;
     target.children.slice().forEach(child => {
@@ -361,21 +362,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const bounds = new THREE.Box3().setFromObject(object)
       if (bounds.isEmpty()) return
       if (isRpgSample && object.userData?.buildingId === 'sample-teaching-building') {
-        // 样板教学楼按墙体分段碰撞，正门中间留出通行口；不再用整栋 AABB 封死入口。
-        const centerX = (bounds.min.x + bounds.max.x) / 2
-        // 按建筑墙体实际位置生成碰撞边界，屋檐和台阶不参与墙体定位。
-        const frontZ = object.position.z + 4.28
-        const backZ = object.position.z - 4.28
-        const sideWidth = 0.55
-        const doorHalfWidth = 1.08
-        const wallDepth = 0.5
+        // 碰撞轮廓跟随实际挂载的生成模型，不再假设固定 14.8 × 8.5 的建筑尺寸。
+        const buildingBounds = object.userData.generatedBuildingShell
+          ? new THREE.Box3().setFromObject(object.userData.generatedBuildingShell)
+          : bounds
+        const centerX = (buildingBounds.min.x + buildingBounds.max.x) / 2
+        const width = buildingBounds.max.x - buildingBounds.min.x
+        const depth = buildingBounds.max.z - buildingBounds.min.z
+        const frontZ = buildingBounds.max.z
+        const backZ = buildingBounds.min.z
+        const sideWidth = Math.min(0.55, width * 0.08)
+        const doorHalfWidth = Math.min(1.08, width * 0.14)
+        const wallDepth = Math.min(0.5, depth * 0.06)
         object.userData.collisionObstacleStart = buildingObstacles.length
         buildingObstacles.push(
-          { minX: bounds.min.x, maxX: centerX - doorHalfWidth, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
-          { minX: centerX + doorHalfWidth, maxX: bounds.max.x, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
-          { minX: bounds.min.x, maxX: bounds.max.x, minZ: backZ - 0.12, maxZ: backZ + wallDepth },
-          { minX: bounds.min.x, maxX: bounds.min.x + sideWidth, minZ: backZ, maxZ: frontZ },
-          { minX: bounds.max.x - sideWidth, maxX: bounds.max.x, minZ: backZ, maxZ: frontZ },
+          { minX: buildingBounds.min.x, maxX: centerX - doorHalfWidth, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
+          { minX: centerX + doorHalfWidth, maxX: buildingBounds.max.x, minZ: frontZ - wallDepth, maxZ: frontZ + 0.12 },
+          { minX: buildingBounds.min.x, maxX: buildingBounds.max.x, minZ: backZ - 0.12, maxZ: backZ + wallDepth },
+          { minX: buildingBounds.min.x, maxX: buildingBounds.min.x + sideWidth, minZ: backZ, maxZ: frontZ },
+          { minX: buildingBounds.max.x - sideWidth, maxX: buildingBounds.max.x, minZ: backZ, maxZ: frontZ },
         )
         object.userData.collisionObstacleCount = 5
       } else if (Array.isArray(object.userData?.collisionSegments) && object.userData.collisionSegments.length) {

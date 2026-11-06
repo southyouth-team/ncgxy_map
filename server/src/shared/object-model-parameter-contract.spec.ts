@@ -20,6 +20,8 @@ describe('geometry capability validator registry', () => {
       { primitive: 'polygon', descriptor: 'points', validateDescriptor(node: any) { calls.push(node.id); } },
     ]);
     expect(registry.has('POLYGON')).toBe(true);
+    expect(registry.get('polygon')).toMatchObject({ id: 'polygon', primitive: 'polygon', descriptor: 'points' });
+    expect(registry.list()).toEqual([{ id: 'polygon', primitive: 'polygon', descriptor: 'points' }]);
     registry.validate('POLYGON', { id: 'footprint' }, {});
     expect(calls).toEqual(['footprint']);
     expect(() => registry.validate('lathe', {}, {})).toThrow('not registered: lathe');

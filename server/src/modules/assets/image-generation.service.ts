@@ -291,7 +291,6 @@ function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   });
   for (const operation of operations) {
     const subtree = subtreeFor(operation.sourceRootId);
-    const parameter = null;
     // Parameter ranges are checked after parameterSchema normalization.
     estimatedExpandedCount += subtree.length;
   }

@@ -1,5 +1,5 @@
 import { getObjectModelGeometryCapability, validateObjectModelSpecV3 } from '../../../server/src/shared/object-model-spec-v3.ts';
-import { normalizeObjectModelMaterialParameterAliases } from '../../../server/src/shared/object-model-parameter-schema.ts';
+import { normalizeObjectModelMaterialParameterAliases, normalizeObjectModelMaterialParameterProperty } from '../../../server/src/shared/object-model-parameter-schema.ts';
 import { resolveObjectModelParameterTarget } from '../../../server/src/shared/object-model-property-resolver.ts';
 import { compileObjectModelSpec } from './objectModelSpecV3.js';
 /**
@@ -519,7 +519,7 @@ function createGeometry(THREE, node) {
  * a bounded subset and preserves the original spec outside the runtime object.
  */
 export function resolveEditableParameterTarget(node, materials, property) {
-  const resolved = resolveObjectModelParameterTarget(node, materials, property);
+  const resolved = resolveObjectModelParameterTarget(node, materials, normalizeObjectModelMaterialParameterProperty(property));
   return resolved ? { value: resolved.value, kind: resolved.kind } : null;
 }
 

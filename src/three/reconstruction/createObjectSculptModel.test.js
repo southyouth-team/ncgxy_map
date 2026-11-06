@@ -767,6 +767,11 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       {},
       'geometryDescriptor.label',
     )).toMatchObject({ value: 'custom', kind: 'select' });
+    expect(resolveEditableParameterTarget(
+      { id: 'panel', primitive: 'box', material: 'wall' },
+      { wall: { color: '#cccccc' } },
+      'lattice_color',
+    )).toMatchObject({ value: '#cccccc', kind: 'color' });
 
     const model = createObjectSculptModel(THREE, spec);
     expect(model.userData.objectSculptSpec.parameterSchema[0].targets[0].property).toBe('material.color');

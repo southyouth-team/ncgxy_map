@@ -1409,7 +1409,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     const mesh = model.userData.componentGroups.get('rib').getObjectByName('rib:mesh');
     expect(mesh.geometry.parameters.radius).toBeCloseTo(0.08);
     applyObjectSculptParameter(THREE, model, 'rib-radius', 0.1);
-    expect(model.userData.objectSculptSpec.componentTree.find((node: any) => node.id === 'rib').geometryDescriptor.radius).toBeCloseTo(0.1);
+    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'rib').geometryDescriptor.radius).toBeCloseTo(0.1);
     expect(model.userData.componentGroups.get('rib').getObjectByName('rib:mesh').geometry.parameters.radius).toBeCloseTo(0.1);
   });
 

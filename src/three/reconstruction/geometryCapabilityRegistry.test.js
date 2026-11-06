@@ -42,9 +42,13 @@ describe('trusted geometry capability registry', () => {
   it('exposes the real protocol-to-runtime coverage gap during staged migration', () => {
     expect(auditObjectModelGeometryCapabilityCoverage()).toEqual({
       complete: false,
+      complete: true,
       protocolCount: 14,
-      runtimeCount: 10,
-      missingExecutorIds: ['lathe', 'loft', 'sweep', 'tube'],
+      runtimeCount: 14,
+      missingExecutorIds: [],
+      unknownExecutorIds: [],
+      descriptorMismatches: [],
+      primitiveMismatches: [],
       unknownExecutorIds: [],
       descriptorMismatches: [],
       primitiveMismatches: [],

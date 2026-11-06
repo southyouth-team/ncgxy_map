@@ -96,7 +96,7 @@ describe('ImageGenerationService', () => {
       VISION_MODEL: 'vision-test',
     });
     const objectSculptSpec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       targetName: 'castle',
       materials: { stone: { color: '#c9b58d' } },
       componentTree: [
@@ -129,7 +129,7 @@ describe('ImageGenerationService', () => {
   it('repairs an out-of-range tube radius during first-generation validation', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const invalidSpec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { steel: { color: '#777777' } },
       componentTree: [{
         id: 'lattice_rib_cw_2', primitive: 'tube',
@@ -171,7 +171,7 @@ describe('ImageGenerationService', () => {
       uncertainties: [],
     };
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { steel: { color: '#777777' } },
       componentTree: [{ id: 'tower-root', kind: 'group', name: '广州塔主体' }],
     };
@@ -197,7 +197,7 @@ describe('ImageGenerationService', () => {
   it('rejects duplicate component identity IDs before they can overwrite Map entries', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const duplicated = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { stone: { color: '#c9b58d' } },
       componentTree: [
         { id: 'body', primitive: 'box', dimensions: { width: 2, height: 2, depth: 2 } },
@@ -220,7 +220,7 @@ describe('ImageGenerationService', () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ choices: [{ message: { content: JSON.stringify({
-        schemaVersion: '2.0',
+        schemaVersion: '3.0',
         materials: { stone: { color: '#c9b58d' } },
         componentTree: [
           { id: 'body', primitive: 'box' },
@@ -252,7 +252,7 @@ describe('ImageGenerationService', () => {
       prompt: '一辆低多边形汽车，四个车轮按前后两轴分布',
       objectType: '汽车',
       spec: {
-        schemaVersion: '2.0', targetName: 'vehicle',
+        schemaVersion: '3.0', targetName: 'vehicle',
         materials: { body: { color: '#d43b32', roughness: 0.65 }, rubber: { color: '#202124', roughness: 0.95 } },
         componentTree: [
           { id: 'car-root', kind: 'group', name: '汽车主体' },
@@ -275,7 +275,7 @@ describe('ImageGenerationService', () => {
       prompt: '一张四条腿的木桌，桌面和桌腿结构清晰',
       objectType: '桌子',
       spec: {
-        schemaVersion: '2.0', targetName: 'table',
+        schemaVersion: '3.0', targetName: 'table',
         materials: { wood: { color: '#a66b3f', roughness: 0.82 } },
         componentTree: [
           { id: 'table-root', kind: 'group', name: '桌子主体' },

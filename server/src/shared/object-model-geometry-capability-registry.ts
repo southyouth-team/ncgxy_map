@@ -6,7 +6,7 @@ export interface ObjectModelGeometryCapability<TNode = any, TDescriptor = any> {
 
 /** Runtime-neutral trusted validator registry; it never executes model-provided code. */
 export function createObjectModelGeometryCapabilityRegistry<TNode = any, TDescriptor = any>(
-  definitions: ObjectModelGeometryCapability<TNode, TDescriptor>[],
+  definitions: readonly ObjectModelGeometryCapability<TNode, TDescriptor>[],
 ) {
   const capabilities = new Map<string, Readonly<ObjectModelGeometryCapability<TNode, TDescriptor>>>();
   for (const definition of definitions) {

@@ -205,6 +205,39 @@ function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   return { operations, parameterIds, expressionParameterIds };
 }
 
+const WORLD_MVP_TEACHING_BUILDING_PROFILE = 'world-mvp-teaching-building';
+const WORLD_MVP_REPEAT_WINDOW_GROUP_ID = 'repeat_ground_left_windows';
+
+function validateWorldMvpGenerationProfile(spec: any, profile: string) {
+  if (profile !== WORLD_MVP_TEACHING_BUILDING_PROFILE) return;
+  const matchingGroups = spec.componentTree.filter((node: any) => node.id === WORLD_MVP_REPEAT_WINDOW_GROUP_ID);
+  if (matchingGroups.length !== 1 || matchingGroups[0].kind !== 'group' || !matchingGroups[0].parent) {
+    throw new ServiceUnavailableException('MVP 教学楼必须包含唯一 Group：' + WORLD_MVP_REPEAT_WINDOW_GROUP_ID);
+  }
+  const rootId = matchingGroups[0].id;
+  const byId = new Map(spec.componentTree.map((node: any) => [node.id, node]));
+  const descendants = spec.componentTree.filter((node: any) => {
+    let current = node;
+    while (current?.parent) {
+      if (current.parent === rootId) return true;
+      current = byId.get(current.parent);
+    }
+    return false;
+  });
+  if (!descendants.some((node: any) => node.kind !== 'group')) {
+    throw new ServiceUnavailableException('MVP 教学楼重复窗组必须包含至少一个 Mesh 子组件：' + rootId);
+  }
+  const matchingOperations = (spec.operations || []).filter((operation: any) => operation.sourceRootId === rootId);
+  if (matchingOperations.length !== 1) {
+    throw new ServiceUnavailableException('MVP 教学楼必须有且仅有一个 instance.sourceRootId 引用：' + rootId);
+  }
+  const countParameter = spec.parameterSchema.find((item: any) => item.id === matchingOperations[0].count?.parameterId);
+  if (!countParameter || countParameter.type !== 'number' || !Number.isInteger(countParameter.value)
+    || countParameter.value < 2 || !Number.isInteger(countParameter.max) || countParameter.max < 2) {
+    throw new ServiceUnavailableException('MVP 教学楼重复窗组必须绑定至少 2 个实例的整数数量参数：' + rootId);
+  }
+}
+
 function validateOperationParameterBindings(operations: any[], parameterSchema: any[], componentTree: any[], expressionParameterIds = new Set<string>()) {
   const byId = new Map(parameterSchema.map(item => [item.id, item]));
   const byNode = new Map(componentTree.map(node => [node.id, node]));
@@ -488,7 +521,7 @@ export class ImageGenerationService {
    * Prompt-to-3D POC: ask the configured vision/chat model for a bounded ObjectSculptSpec.
    * The model returns JSON data only; no generated JavaScript is evaluated in the server.
    */
-  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, allowGeometryRepair = true, imageDataUrlInput?: unknown): Promise<any> {
+  async generateObjectFromPrompt(promptInput: unknown, objectTypeInput: unknown, visualStyleInput: unknown, allowGeometryRepair = true, imageDataUrlInput?: unknown, generationProfileInput?: unknown): Promise<any> {
     const promptText = typeof promptInput === 'string' ? promptInput.trim() : '';
     const imageDataUrl = typeof imageDataUrlInput === 'string' ? imageDataUrlInput : '';
     if (!promptText && !imageDataUrl) throw new BadRequestException('Three.js 模型生成需要提示词或参考图片');
@@ -500,6 +533,14 @@ export class ImageGenerationService {
       ? objectTypeInput.trim().slice(0, 80) : '独立 3D 物体';
     const visualStyle = typeof visualStyleInput === 'string' && visualStyleInput.trim()
       ? visualStyleInput.trim().slice(0, 80) : 'stylized';
+    const generationProfile = generationProfileInput == null || generationProfileInput === ''
+      ? '' : String(generationProfileInput);
+    if (generationProfile && generationProfile !== WORLD_MVP_TEACHING_BUILDING_PROFILE) {
+      throw new BadRequestException('不支持的 3D 资产生成配置：' + generationProfile);
+    }
+    const generationProfileInstruction = generationProfile === WORLD_MVP_TEACHING_BUILDING_PROFILE
+      ? '【MVP 教学楼强制结构契约】componentTree 必须包含且仅包含一个 id 为 repeat_ground_left_windows、kind 为 group 的节点，该 Group 必须是建筑主体根节点下的子节点，并至少包含一个 Mesh 子组件。operations 必须包含且仅包含一个 sourceRootId 为 repeat_ground_left_windows 的 instance 操作；该操作必须绑定 parameterSchema 中 value 至少为 2 的整数数量参数。不得将该 ID 用于 Mesh，不得省略该 Group，不得用其他 Group 或其他 ID 替代。'
+      : '';
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
     const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
@@ -592,6 +633,7 @@ export class ImageGenerationService {
                 '旧式 geometryDescriptor 仍可用于兼容构造：polygon 使用 points，tube 使用 path/radius，lathe 使用 profile，sweep 使用 path/profile，loft 使用 sections。通用 indexed-mesh 不使用这些描述符；不要把通用网格退化成受限轮廓点、路径点或截面数量。',
 '重复结构必须用通用 operations 描述，不得使用 repeat/grid 专用生成器。operations 项格式：{id,type:"instance",sourceRootId,count:{parameterId},transform:{position:[表达式,表达式,表达式],rotation:[表达式,表达式,表达式],scale:[表达式,表达式,表达式]}}。sourceRootId 指向 componentTree 中完整的 Group 子树；count.parameterId 指向 parameterSchema 中的整数参数。表达式只允许数字常量或 AST：{op:"constant",value}、{op:"index"}、{op:"count"}、{op:"parameter",id}、{op:"add"|"subtract"|"multiply"|"divide",left,right}、{op:"sin"|"cos"|"negate",value}。index 是当前实例索引，count 是实例总数；角度使用弧度。通过三角函数、向量分量和旋转表达式描述任意轴向/圆周/螺旋/非均匀分布，不得把这些分布固化成专用类型。数量参数 targets=[]，由 operation 控制。禁止输出 JavaScript、函数体、eval 或未声明的表达式操作。',
                 '所有重复、旋转、路径和空间分布均通过 operations 与受限表达式声明；不得输出 generators 或 constraints。',
+                ...(generationProfileInstruction ? [generationProfileInstruction] : []),
                 '单个资产的装配完整性优先于组件数量：componentTree 必须恰好只有一个根节点，代表该对象的核心主体（例如建筑主体、树干/主枝、车身、人体躯干、家具主框架或机械机架）；其余组件必须通过 parent 连接到该根节点，形成一棵连通树。不要把单个资产拆成互不关联的多个根对象。',
                 '所有子组件 position 必须是相对直接 parent 的局部坐标。先确定对象整体中心、尺度和局部坐标系，再按类别安排部件：建筑的屋顶/塔楼/门窗连接主体；树木的枝干连接树干、树冠叶簇连接枝条；车辆的车轮连接车轴/底盘、车门连接车身；人物的头部和四肢连接躯干/关节；家具的面板、桌腿、靠背连接主框架；机械的轴、齿轮、外壳连接机架或传动组件。',
                 '空间关系与连接规则必须以参考图片为准，而不是一律要求部件贴合：允许图片中真实存在的悬空、架空、镂空、环绕、分离式观景舱、细长支撑和装饰间隙；这些结构必须保留其在图片中的高度、间距、相对位置及真实支撑/连接方式。只有与参考图不符的漂浮、断开、错位或无依据散落才属于结构错误。没有参考图片时，再根据物体功能判断合理连接关系。承重、安装、插接部件应接触、嵌入或通过连接件连接；装饰、叶片、毛发和辐条允许自然间距。',
@@ -609,7 +651,7 @@ export class ImageGenerationService {
                     { type: 'text', text: '请依据上面的视觉分析和参考图片生成 ObjectSculptSpec。分析中记录的轮廓、宽高比、分段宽度变化、组件相对位置、悬空/间隔/支撑关系必须落实到几何和局部坐标。允许并保留图片中真实存在的悬空、架空、镂空、环绕和观景舱结构；不得为了消除悬空而擅自移动、贴合或删除部件。只修正与图片不符的漂浮、断开和错位。用户补充要求：' + (prompt || '无') + '。只返回 JSON。' },
                     { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
                   ]
-                : '请直接构建可转换为真实 Three.js Mesh 的独立物体结构，优先保证外轮廓、部件层级、比例和材质。只返回 JSON。',
+                : '请直接构建可转换为真实 Three.js Mesh 的独立物体结构，优先保证外轮廓、部件层级、比例和材质。' + (generationProfileInstruction ? '\\n' + generationProfileInstruction : '') + '只返回 JSON。',
             },
           ],
         }),
@@ -681,12 +723,15 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException(error instanceof Error ? error.message : 'AI 参数 Schema 无效');
     }
     validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
+    validateWorldMvpGenerationProfile(spec, generationProfile);
     try { validateObjectModelSpecV3(spec); } catch (error) {
       if (!allowGeometryRepair || !(error instanceof Error)) {
         throw new ServiceUnavailableException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
       }
       this.logger.warn('ObjectModelSpec 3.0 校验失败，执行一次定向修复：' + error.message);
-      return this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
+      const repaired = await this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
+      if (generationProfile) validateWorldMvpGenerationProfile(repaired.objectSculptSpec, generationProfile);
+      return repaired;
     }
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };

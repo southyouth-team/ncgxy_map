@@ -42,6 +42,7 @@ async function generateBuilding() {
     const result = await requestJson('/assets/ai-image/generate-object', {
       objectType: '两层大学教学楼',
       visualStyle: 'realistic',
+      generationProfile: 'world-mvp-teaching-building',
       prompt: prompt.value.trim(),
     })
     const spec = result?.objectSculptSpec

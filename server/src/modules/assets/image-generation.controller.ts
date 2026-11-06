@@ -54,7 +54,8 @@ export class ImageGenerationController {
     @Body('prompt') prompt: string,
     @Body('objectType') objectType: string,
     @Body('visualStyle') visualStyle: string,
+    @Body('generationProfile') generationProfile: string,
   ) {
-    return this.service.generateObjectFromPrompt(prompt, objectType, visualStyle);
+    return this.service.generateObjectFromPrompt(prompt, objectType, visualStyle, true, undefined, generationProfile);
   }
 }

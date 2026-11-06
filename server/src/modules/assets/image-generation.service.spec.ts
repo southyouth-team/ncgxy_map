@@ -17,6 +17,36 @@ describe('ImageGenerationService', () => {
     } as never);
   }
 
+  function createTeachingBuildingSpec(sourceRootId = 'repeat_ground_left_windows') {
+    return {
+      schemaVersion: '3.0',
+      targetName: 'MVP 教学楼',
+      category: 'building',
+      objectType: '两层大学教学楼',
+      visualStyle: 'realistic',
+      materials: { glass: { color: '#8eb8c9', roughness: 0.2, metalness: 0.05 } },
+      componentTree: [
+        { id: 'building-root', kind: 'group' },
+        { id: 'left-facade', kind: 'group', parent: 'building-root' },
+        { id: 'repeat_ground_left_windows', kind: 'group', parent: 'left-facade' },
+        { id: 'ground-left-window', parent: 'repeat_ground_left_windows', primitive: 'box',
+          dimensions: { width: 1.1, height: 1.4, depth: 0.12 }, material: 'glass' },
+      ],
+      parameterSchema: [{
+        id: 'ground-left-window-count', label: '一层左侧窗户数量', type: 'number',
+        value: 6, min: 2, max: 12, step: 1, targets: [],
+      }],
+      operations: [{
+        id: 'instance-ground-left-windows', type: 'instance', sourceRootId,
+        count: { parameterId: 'ground-left-window-count' },
+        transform: {
+          position: [{ op: 'multiply', left: { op: 'index' }, right: 1.3 }, 0, 0],
+          rotation: [0, 0, 0], scale: [1, 1, 1],
+        },
+      }],
+    };
+  }
+
   it('validates prompt before calling provider', async () => {
     const service = createService({ IMAGE_API_KEY: 'test-key' });
     await expect(service.generate('  ')).rejects.toBeInstanceOf(BadRequestException);
@@ -141,6 +171,38 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
     expect(systemPrompt).toContain('不受预置几何类型限制');
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
+  });
+
+  it('enforces the world MVP teaching-building repeat window Group contract', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const spec = createTeachingBuildingSpec();
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(spec) } }] }),
+    });
+    global.fetch = fetchMock as never;
+
+    const result = await service.generateObjectFromPrompt(
+      '生成一栋两层教学楼', '两层大学教学楼', 'realistic', true, undefined, 'world-mvp-teaching-building',
+    );
+
+    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(systemPrompt).toContain('repeat_ground_left_windows');
+    expect(result.objectSculptSpec.operations).toHaveLength(1);
+    expect(result.objectSculptSpec.operations[0].sourceRootId).toBe('repeat_ground_left_windows');
+  });
+
+  it('rejects a world MVP instance operation that points at a different Group', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const spec = createTeachingBuildingSpec('left-facade');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(spec) } }] }),
+    }) as never;
+
+    await expect(service.generateObjectFromPrompt(
+      '生成一栋两层教学楼', '两层大学教学楼', 'realistic', true, undefined, 'world-mvp-teaching-building',
+    )).rejects.toThrow('必须有且仅有一个 instance.sourceRootId 引用：repeat_ground_left_windows');
   });
 
   it('repairs an out-of-range tube radius during first-generation validation', async () => {

@@ -122,6 +122,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!isRpgSample || !campus) throw new Error('AI 建筑挂载仅在 MVP 世界场景中可用');
     if (indoorGroup) throw new Error('请先退出室内空间，再替换 AI 建筑');
     if (!model?.isObject3D || model.parent) throw new TypeError('AI 建筑必须是尚未挂载的 THREE.Object3D');
+    const sourceSpec = model.userData?.parameterBaseSpec;
+    const repeatWindowGroups = sourceSpec?.componentTree?.filter(node => node.id === 'repeat_ground_left_windows') || [];
+    const repeatWindowOperations = sourceSpec?.operations?.filter(operation => operation.sourceRootId === 'repeat_ground_left_windows') || [];
+    const repeatWindowRuntimeGroup = model.userData?.componentGroups?.get?.('repeat_ground_left_windows');
+    if (repeatWindowGroups.length !== 1 || repeatWindowGroups[0].kind !== 'group'
+      || repeatWindowOperations.length !== 1 || !repeatWindowRuntimeGroup?.isGroup) {
+      throw new Error('AI 教学楼资产不符合重复窗组契约：sourceRootId 必须唯一引用 Group repeat_ground_left_windows');
+    }
     const target = campus.getObjectByName('sample-teaching-building');
     if (!target) throw new Error('MVP 场景缺少教学楼挂载节点');
 

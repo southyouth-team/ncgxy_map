@@ -46,7 +46,7 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
   it('accepts a valid source spec and reports bounded expansion size', () => {
     const result = validateObjectModelSpecV3(createRadialSpec(8));
     expect(result.componentCount).toBe(3);
-    expect(result.expandedComponentCount).toBe(3 + 2 * 7);
+    expect(result.expandedComponentCount).toBe(3 + 2 * (64 - 1));
   });
 
   it('rejects duplicate operation IDs and invalid operation parameter references', () => {

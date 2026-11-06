@@ -119,9 +119,22 @@ describe('AssetsService visual asset persistence', () => {
       componentTree: [
         { id: 'body-group', kind: 'group', transform: { position: [0,5,0] } },
         { id: 'body', parent: 'body-group', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 10, depth: 6 } },
+        { id: 'rib-template', kind: 'group', parent: 'body-group' },
+        { id: 'rib', parent: 'rib-template', primitive: 'box', material: 'wall', dimensions: { width: 0.1, height: 2, depth: 0.1 } },
       ],
-      parameterSchema: [{ id: 'height', label: '整体高度', type: 'number', value: 10, min: 5, max: 20, targets: [{ nodeId: 'body', property: 'dimensions.height', mode: 'set' }] }],
-      operations: [],
+      parameterSchema: [
+        { id: 'height', label: '整体高度', type: 'number', value: 10, min: 5, max: 20, targets: [{ nodeId: 'body', property: 'dimensions.height', mode: 'set' }] },
+        { id: 'rib-count', label: '肋条数量', type: 'number', value: 8, min: 1, max: 16, targets: [] },
+      ],
+      operations: [{
+        id: 'rib-array', type: 'instance', sourceRootId: 'rib-template',
+        count: { parameterId: 'rib-count' },
+        transform: {
+          position: [{ op: 'multiply', left: { op: 'constant', value: 0.2 }, right: { op: 'index' } }, 0, 0],
+          rotation: [0, { op: 'multiply', left: { op: 'index' }, right: { op: 'divide', left: { op: 'constant', value: 0.7853981633974483 }, right: { op: 'count' } } }, 0],
+          scale: [1, 1, 1],
+        },
+      }],
     };
     const saved = await service.saveObjectSculptAsset('owner-1', { name: '教学楼', objectSculptSpec });
     expect(saved.assetId).toMatch(/^[a-f0-9-]{36}$/i);

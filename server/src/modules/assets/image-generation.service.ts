@@ -450,7 +450,7 @@ export class ImageGenerationService {
     if (serialized.length > 30000) throw new BadRequestException('待修复模型数据超过 30 KB');
     const repairPrompt = [
       '这是针对现有 ObjectSculptSpec 的定向结构修复，不是重新设计或重新生成整个物体。',
-      '必须保留 targetName、category、objectType、visualStyle、materials、所有节点 ID、parent 层级、非错误节点几何、transform、parameterSchema、generators 和 constraints。',
+      original.schemaVersion === '3.0' ? '必须保留 targetName、category、objectType、visualStyle、materials、所有节点 ID、parent 层级、非错误节点几何、transform、parameterSchema 和 operations；operations 必须逐字段保持不变。' : '必须保留 targetName、category、objectType、visualStyle、materials、所有节点 ID、parent 层级、非错误节点几何、transform、parameterSchema、generators 和 constraints。',
       '只允许修改错误明确涉及的节点及其必要几何字段。不要删除组件，不要把复杂几何降级为 box，不要改变参考物体轮廓。',
       'Runtime 错误：' + validationError,
       '原始 ObjectSculptSpec JSON：' + serialized,
@@ -488,7 +488,7 @@ export class ImageGenerationService {
     const editPrompt = [
       '这是对现有 Three.js ObjectSculptSpec 的微调任务，不是从零创建新物体。',
       targetDescription,
-      '必须返回完整 ObjectSculptSpec JSON。尽可能保留原有节点 ID、层级、未涉及几何、材质、参数、generators 和 constraints。',
+      original.schemaVersion === '3.0' ? '必须返回完整 ObjectModelSpec 3.0 JSON。尽可能保留原有节点 ID、层级、未涉及几何、材质、参数和 operations；operations 必须逐字段保持不变。' : '必须返回完整 ObjectSculptSpec JSON。尽可能保留原有节点 ID、层级、未涉及几何、材质、参数、generators 和 constraints。',
       '不得把复杂几何降级成简单方盒，不得无故删除部件或改变整体风格。',
       '用户微调要求：' + instruction,
       '当前 ObjectSculptSpec：' + serialized,
@@ -544,8 +544,7 @@ export class ImageGenerationService {
         componentTree: [...preservedNodes, ...editedNodes],
         // 局部编辑不允许重写全局参数/生成器/约束；避免选中部件之外的联动被意外改变。
         parameterSchema: original.parameterSchema || [],
-        generators: original.generators || [],
-        constraints: original.constraints || [],
+        ...(original.schemaVersion === '3.0' ? { operations: original.operations || [] } : { generators: original.generators || [], constraints: original.constraints || [] }),
       };
       return {
         ...result,

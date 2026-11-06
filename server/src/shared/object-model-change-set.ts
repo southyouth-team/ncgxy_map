@@ -139,8 +139,8 @@ function applyChange(spec: Record<string, any>, rawChange: any, affectedNodeIds:
         fail('invalid_change', 'add-component 必须提供完整 component 对象');
       }
       const nodeId = requireId(rawChange.component.id, 'component.id');
-      if (spec.componentTree.some(node => node.id === nodeId)) fail('identity_conflict', '组件 ID 已存在：' + nodeId);
-      if (!rawChange.component.parent || !spec.componentTree.some(node => node.id === rawChange.component.parent)) {
+      if (spec.componentTree.some((node: any) => node.id === nodeId)) fail('identity_conflict', '组件 ID 已存在：' + nodeId);
+      if (!rawChange.component.parent || !spec.componentTree.some((node: any) => node.id === rawChange.component.parent)) {
         fail('target_not_found', '新增组件必须引用当前存在的 parent：' + nodeId);
       }
       spec.componentTree.push(cloneJson(rawChange.component, 'component'));
@@ -172,7 +172,7 @@ function applyChange(spec: Record<string, any>, rawChange: any, affectedNodeIds:
       if (descendants.size > 1 && rawChange.cascade !== true) {
         fail('dependency_conflict', '组件仍包含子节点，必须显式声明 cascade=true：' + nodeId);
       }
-      spec.componentTree = spec.componentTree.filter(node => !descendants.has(node.id));
+      spec.componentTree = spec.componentTree.filter((node: any) => !descendants.has(node.id));
       descendants.forEach(id => affectedNodeIds.add(id));
       return;
     }
@@ -191,7 +191,7 @@ function applyChange(spec: Record<string, any>, rawChange: any, affectedNodeIds:
       if (!Object.prototype.hasOwnProperty.call(spec.materials || {}, materialId)) {
         fail('target_not_found', '材质不存在：' + materialId);
       }
-      if (spec.componentTree.some(node => node.material === materialId)) {
+      if (spec.componentTree.some((node: any) => node.material === materialId)) {
         fail('dependency_conflict', '材质仍被组件引用，不能删除：' + materialId);
       }
       delete spec.materials[materialId];

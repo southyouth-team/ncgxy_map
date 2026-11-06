@@ -120,7 +120,7 @@ onMounted(() => {
   controls.enableDamping = true
   controls.dampingFactor = 0.08
   raycaster = new THREE.Raycaster()
-  renderer.domElement.addEventListener('dblclick', selectPart)
+  renderer.domElement.addEventListener('click', selectPart)
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(canvasHost.value)
   syncPreview()
@@ -130,7 +130,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame)
   resizeObserver?.disconnect()
-  renderer?.domElement?.removeEventListener('dblclick', selectPart)
+  renderer?.domElement?.removeEventListener('click', selectPart)
   controls?.dispose()
   if (previewRoot) scene?.remove(previewRoot)
   renderer?.dispose()
@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
     <div class="model-editor__body">
       <section class="model-editor__preview">
         <div ref="canvasHost" class="model-editor__canvas"></div>
-        <div class="model-editor__preview-hint">双击模型部件进行选择 · 拖动旋转 · 滚轮缩放</div>
+        <div class="model-editor__preview-hint">单击模型部件进行选择 · 拖动旋转 · 滚轮缩放</div>
         <div class="model-editor__part-chip">当前范围：{{ selectedPartName }}</div>
       </section>
       <section class="model-editor__controls">

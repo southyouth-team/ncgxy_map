@@ -783,10 +783,19 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
  * remain stable, while normals and spatial bounds are refreshed for that mesh.
  */
 /** Apply declarative changes and retain all unchanged component Group references. */
-export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput) {
+export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput, changeSetResult = null) {
   if (!root?.userData?.componentGroups || !root.userData?.parameterBaseSpec || !root.userData?.renderObjectSculptSpec) throw new TypeError('目标不是支持组件级增量编辑的 ObjectModelSpec 3.0 资产');
   if (!THREE?.Group || !THREE?.Mesh || !THREE?.MeshStandardMaterial) throw new TypeError('Three.js runtime is required');
-  const candidate = JSON.parse(JSON.stringify(nextSpecInput));
+  if (changeSetResult && (!changeSetResult.objectModelSpec
+    || stableObjectJson(changeSetResult.objectModelSpec) !== stableObjectJson(nextSpecInput)
+    || !Array.isArray(changeSetResult.changes)
+    || !Array.isArray(changeSetResult.affectedNodeIds)
+    || !Array.isArray(changeSetResult.affectedMaterialIds))) {
+    throw new TypeError('服务端结构 ChangeSet 与模型结果不一致');
+  }
+  const affectedNodeIds = new Set(changeSetResult?.affectedNodeIds || []);
+  const affectedMaterialIds = new Set(changeSetResult?.affectedMaterialIds || []);
+  const candidate = JSON.parse(JSON.stringify(changeSetResult?.objectModelSpec || nextSpecInput));
   const compatibleSpec = { ...candidate, parameterSchema: normalizeObjectModelMaterialParameterAliases(candidate.parameterSchema) };
   validateObjectModelSpecV3(compatibleSpec);
   const parameterizedSpec = applyObjectModelParameterValues(compatibleSpec);
@@ -805,7 +814,9 @@ export function applyObjectSculptComponentChanges(THREE, root, nextSpecInput) {
       const newKey = typeof node.material === 'string' ? node.material : 'default';
       const { parent: oldParent, ...oldContent } = oldNode;
       const { parent: newParent, ...newContent } = node;
-      const unchanged = stableObjectJson(oldContent) === stableObjectJson(newContent)
+      const unchanged = !affectedNodeIds.has(node.id)
+        && !affectedMaterialIds.has(oldKey) && !affectedMaterialIds.has(newKey)
+        && stableObjectJson(oldContent) === stableObjectJson(newContent)
         && stableObjectJson(oldMaterials[oldKey] || DEFAULT_MATERIAL) === stableObjectJson(nextMaterials[newKey] || DEFAULT_MATERIAL);
       if (unchanged) nextGroups.set(node.id,oldGroup);
       else { const group = createObjectSculptComponentGroup(THREE,node,nextMaterials); nextGroups.set(node.id,group); createdGroups.push(group); }

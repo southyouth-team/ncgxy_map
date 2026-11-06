@@ -361,7 +361,7 @@ async function modifySelectedAsset() {
       return
     }
     clearComponentHighlight()
-    applyObjectSculptComponentChanges(THREE, root, nextSpec)
+    applyObjectSculptComponentChanges(THREE, root, nextSpec, result.changeSetResult)
     selectedComponentId.value = targetNodeId && nextSpec.componentTree.some(node => node.id === targetNodeId) ? targetNodeId : ''
     editorRevision.value += 1
     modifyInstruction.value = ''

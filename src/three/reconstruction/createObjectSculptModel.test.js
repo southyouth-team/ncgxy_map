@@ -93,6 +93,15 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('body').getObjectByName('body:mesh').geometry.parameters.width).toBe(3);
   });
 
+  it('uses server ChangeSet affected IDs and material IDs to target component rebuilds', () => {
+    const spec={schemaVersion:'3.0',materials:{stone:{color:'#888888',roughness:0.8,metalness:0}},componentTree:[{id:'root',kind:'group'},{id:'body',parent:'root',primitive:'box',material:'stone',dimensions:{width:2,height:2,depth:2}},{id:'window',parent:'root',primitive:'box',material:'stone',dimensions:{width:0.5,height:0.6,depth:0.1}}]};
+    const model=createObjectSculptModel(THREE,spec),body=model.userData.componentGroups.get('body'),window=model.userData.componentGroups.get('window');
+    const next=structuredClone(model.userData.objectSculptSpec);
+    const changeSetResult={objectModelSpec:next,changes:[{type:'replace-component',nodeId:'body',component:next.componentTree[1]}],affectedNodeIds:['body'],affectedMaterialIds:[]};
+    applyObjectSculptComponentChanges(THREE,model,next,changeSetResult);
+    expect(model.userData.componentGroups.get('body')).not.toBe(body);
+    expect(model.userData.componentGroups.get('window')).toBe(window);
+  });
   it('adds and removes components without replacing surviving component Groups', () => {
     const spec={schemaVersion:'3.0',componentTree:[{id:'root',kind:'group'},{id:'left',parent:'root',primitive:'box',dimensions:{width:1,height:1,depth:1}},{id:'right',parent:'root',primitive:'box',dimensions:{width:1,height:1,depth:1}}]};
     const model=createObjectSculptModel(THREE,spec),left=model.userData.componentGroups.get('left'),right=model.userData.componentGroups.get('right');

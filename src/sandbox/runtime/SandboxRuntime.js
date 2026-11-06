@@ -221,8 +221,6 @@ export class SandboxRuntime {
     if (!object) throw new Error('请先选择一个模型')
     const exportRoot = this.cloneObject(object)
     exportRoot.position.set(0, 0, 0)
-    exportRoot.rotation.set(0, 0, 0)
-    exportRoot.scale.set(1, 1, 1)
     exportRoot.updateMatrixWorld(true)
     try {
       const result = await this.exporter.parseAsync(exportRoot, {

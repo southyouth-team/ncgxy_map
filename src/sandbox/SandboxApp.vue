@@ -75,6 +75,33 @@ function downloadText(filename, content, type = 'application/json') {
   anchor.click()
   URL.revokeObjectURL(url)
 }
+function downloadBinary(filename, buffer, type = 'model/gltf-binary') {
+  const url = URL.createObjectURL(new Blob([buffer], { type }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+async function exportSelectedModel() {
+  try {
+    const name = (selectedObject.value?.name || 'model').replace(/[^a-z0-9_-]+/gi, '-')
+    const buffer = await runtime.value.exportObject(selectedObject.value)
+    downloadBinary(name + '.glb', buffer)
+    taskResult.value = '模型已导出为 GLB：' + name + '.glb'
+  } catch (error) {
+    taskResult.value = '模型导出失败：' + (error?.message || '未知错误')
+  }
+}
+async function exportAllModels() {
+  try {
+    const buffer = await runtime.value.exportAllObjects()
+    downloadBinary('sandbox-assets.glb', buffer)
+    taskResult.value = '场景模型已打包导出为 sandbox-assets.glb'
+  } catch (error) {
+    taskResult.value = '模型打包失败：' + (error?.message || '未知错误')
+  }
+}
 function saveDocument() {
   if (!runtime.value) return
   downloadText('sandbox-scene.json', runtime.value.serialize())
@@ -132,6 +159,7 @@ onBeforeUnmount(() => {
       <div class="sandbox__top-actions">
         <span class="sandbox__status"><i></i>{{ ready ? '运行中' : '初始化中' }}</span>
         <button @click="saveDocument">导出场景</button>
+        <button @click="exportAllModels">导出模型包</button>
         <button @click="documentInput?.click()">导入场景</button>
         <a href="/">返回校园地图</a>
         <input ref="documentInput" class="sandbox__hidden" type="file" accept=".json,application/json" @change="loadDocument">
@@ -159,6 +187,7 @@ onBeforeUnmount(() => {
           <small>当前选中</small><strong>{{ selectedName }}</strong>
           <div class="sandbox__object-actions">
             <button :disabled="!selectedObject" @click="duplicateSelected">复制</button>
+            <button :disabled="!selectedObject" @click="exportSelectedModel">导出 GLB</button>
             <button :disabled="!selectedObject" @click="focusSelected">聚焦</button>
             <button class="danger" :disabled="!selectedObject" @click="deleteSelected">删除</button>
           </div>

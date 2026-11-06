@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
+import ProceduralModelEditor from './ProceduralModelEditor.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -14,6 +15,9 @@ const aiPrompt = ref('')
 const referenceImageDataUrl = ref('')
 const referenceImageName = ref('')
 const aiBusy = ref(false)
+const editingModel = ref(null)
+const editBusy = ref(false)
+const editError = ref('')
 const message = ref('正在初始化 RPG 校园场景…')
 const time = ref(14)
 const weather = ref('clear')
@@ -137,8 +141,11 @@ async function generateAiModel() {
     }
 
     message.value = '源码已返回，正在隔离执行并构建 THREE.Group…'
-    const group = await executeProceduralModel(result.generatedCode, { timeoutMs: 25000 })
+    const group = await executeProceduralModel(result.generatedCode, { timeoutMs: 60000 })
     const modelName = group.userData.assetName || result.objectType || 'AI 程序化模型'
+    const modelParameters = Array.isArray(group.userData.proceduralModelParameters) ? group.userData.proceduralModelParameters : []
+    group.userData.proceduralModelParameterValues = modelParameterDefaults(modelParameters)
+    group.userData.proceduralModelParts = Array.isArray(group.userData.proceduralModelParts) ? group.userData.proceduralModelParts : []
     group.userData.proceduralModelConfig = {
       protocol: 'threejs-procedural-v1',
       generator: result.generationMethod || 'img2threejs-procedural',
@@ -161,6 +168,98 @@ async function generateAiModel() {
     aiBusy.value = false
   }
 }
+
+function openModelEditor(payload) {
+  const model = payload?.id ? engine?.getSandboxModel(payload.id) : selected
+  if (!model?.userData?.proceduralModelSource) {
+    message.value = '该模型没有可编辑的 AI 程序化源码'
+    return
+  }
+  editingModel.value = model
+  editError.value = ''
+}
+function modelParameterDefaults(definitions, existing = {}) {
+  const values = { ...(existing || {}) }
+  for (const item of definitions || []) {
+    if (item?.id && values[item.id] === undefined && item.default !== undefined) values[item.id] = item.default
+  }
+  return values
+}
+async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新') {
+  const current = editingModel.value
+  if (!current) throw new Error('当前没有正在编辑的模型')
+  const id = current.userData.sandboxModelId
+  const replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: values })
+  replacement.userData = {
+    ...(replacement.userData || {}),
+    proceduralModelSource: source,
+    proceduralModelParameters: Array.isArray(definitions) ? definitions : replacement.userData.proceduralModelParameters || [],
+    proceduralModelParts: Array.isArray(parts) ? parts : replacement.userData.proceduralModelParts || [],
+    proceduralModelParameterValues: { ...(values || {}) },
+    proceduralModelConfig: { ...(current.userData.proceduralModelConfig || {}), updatedAt: new Date().toISOString() },
+    interactionRadius: Number(current.userData.interactionRadius) || 4.5,
+  }
+  replacement.name = current.name
+  if (!engine.replaceSandboxModel(id, replacement, { name: current.name })) throw new Error('模型替换失败，原模型已保留')
+  objectsById.set(id, replacement)
+  selected = replacement
+  editingModel.value = replacement
+  syncObjects()
+  message.value = summary
+}
+async function handleModelEdit(payload) {
+  const current = editingModel.value
+  if (!current || editBusy.value) return
+  const source = current.userData.proceduralModelSource
+  const values = { ...(current.userData.proceduralModelParameterValues || {}), ...(payload?.parameterValues || {}) }
+  editBusy.value = true
+  editError.value = ''
+  try {
+    const response = await fetch(API_BASE + '/assets/ai-image/modify-procedural-object', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({
+        source,
+        parameters: current.userData.proceduralModelParameters || [],
+        parts: current.userData.proceduralModelParts || [],
+        selectedPartId: payload?.selectedPartId || '',
+        instruction: payload?.instruction || '',
+        objectType: current.userData.proceduralModelConfig?.objectType || '独立 3D 模型',
+      }),
+    })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(body.message || 'AI 模型编辑失败：HTTP ' + response.status)
+    const result = body.data || body.result || body
+    const definitions = Array.isArray(result.parameters) ? result.parameters : []
+    const nextValues = modelParameterDefaults(definitions, values)
+    await replaceEditedModel(result.generatedCode, nextValues, definitions, result.parts, result.changeSummary || 'AI 已完成模型调整')
+  } catch (error) {
+    editError.value = error?.message || '模型调整失败'
+  } finally {
+    editBusy.value = false
+  }
+}
+async function handleParameterChange(payload) {
+  const current = editingModel.value
+  if (!current || editBusy.value || !payload?.id) return
+  const values = { ...(current.userData.proceduralModelParameterValues || {}), [payload.id]: payload.value }
+  editBusy.value = true
+  editError.value = ''
+  try {
+    await replaceEditedModel(
+      current.userData.proceduralModelSource,
+      values,
+      current.userData.proceduralModelParameters || [],
+      current.userData.proceduralModelParts || [],
+      '参数已更新',
+    )
+  } catch (error) {
+    editError.value = error?.message || '参数更新失败'
+  } finally {
+    editBusy.value = false
+  }
+}
+
 function updateEnvironment() {
   if (!engine) return
   engine.setEnvironment({
@@ -207,6 +306,7 @@ onMounted(async () => {
       onError: error => { message.value = '校园场景初始化失败：' + (error?.message || '未知错误') },
       onSandboxModelsChange: list => { objects.value = list },
       onSandboxModelSelected: handleModelSelected,
+      onSandboxModelDoubleClick: openModelEditor,
       onSandboxInteractionPromptChange: payload => {
         if (payload?.visible) message.value = payload.text
         else if (message.value.startsWith('靠近 ')) message.value = '使用 WASD 或方向键移动人物，靠近模型按 E 交互。'
@@ -311,7 +411,16 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </aside>
-    <footer class="world-mvp__help">WASD / 方向键移动人物 · 点击建模组选择 · 拖动坐标轴编辑模型</footer>
+    <ProceduralModelEditor
+      v-if="editingModel"
+      :model="editingModel"
+      :busy="editBusy"
+      :error="editError"
+      @close="editingModel = null"
+      @edit="handleModelEdit"
+      @parameter-change="handleParameterChange"
+    />
+    <footer class="world-mvp__help">WASD / 方向键移动人物 · 点击建模组选择 · 双击 AI 模型打开微调编辑器 · 拖动坐标轴编辑模型</footer>
   </main>
 </template>
 

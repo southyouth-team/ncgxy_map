@@ -150,6 +150,7 @@ async function generateAiModel() {
     }
     // 源码保留在实例元数据中，后续可用于重生成；场景实际使用的是 ObjectLoader 还原的 THREE.Group。
     group.userData.proceduralModelSource = result.generatedCode
+    group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
     registerModel(group, modelName + ' ' + (objects.value.length + 1))
     aiPrompt.value = ''
     referenceImageDataUrl.value = ''
@@ -206,8 +207,11 @@ onMounted(async () => {
       onError: error => { message.value = '校园场景初始化失败：' + (error?.message || '未知错误') },
       onSandboxModelsChange: list => { objects.value = list },
       onSandboxModelSelected: handleModelSelected,
-      onSandboxInteractionPromptChange: payload => { if (payload?.visible) message.value = payload.text },
-      onSandboxModelInteract: payload => { message.value = '已与 ' + (payload?.name || '模型') + ' 交互' },
+      onSandboxInteractionPromptChange: payload => {
+        if (payload?.visible) message.value = payload.text
+        else if (message.value.startsWith('靠近 ')) message.value = '使用 WASD 或方向键移动人物，靠近模型按 E 交互。'
+      },
+      onSandboxModelInteract: payload => { message.value = payload?.message || ('已与 ' + (payload?.name || '模型') + ' 交互') },
     }, {
       // 直接复用仓库已有的小型 RPG 样板场景，不加载完整校园 GIS 主地图。
       sceneType: 'rpg-sample',

@@ -11,6 +11,12 @@ const MATERIAL_PARAMETER_ALIASES: Readonly<Record<string, string>> = Object.free
   lattice_opacity: 'material.opacity',
 });
 
+export function normalizeObjectModelMaterialParameterProperty(property: unknown): unknown {
+  return typeof property === 'string' && Object.prototype.hasOwnProperty.call(MATERIAL_PARAMETER_ALIASES, property)
+    ? MATERIAL_PARAMETER_ALIASES[property]
+    : property;
+}
+
 function fail(message: string): never {
   throw new TypeError(message);
 }
@@ -22,9 +28,7 @@ export function normalizeObjectModelMaterialParameterAliases(input: unknown): un
     targets: Array.isArray(parameter?.targets)
       ? parameter.targets.map((target: any) => ({
         ...target,
-        property: Object.prototype.hasOwnProperty.call(MATERIAL_PARAMETER_ALIASES, target?.property)
-          ? MATERIAL_PARAMETER_ALIASES[target.property]
-          : target?.property,
+        property: normalizeObjectModelMaterialParameterProperty(target?.property),
       }))
       : parameter?.targets,
   }));

@@ -667,7 +667,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   // The public spec reflects parameter values applied to component data; the
   // baseline retains original component data so subsequent edits never drift.
   root.userData.objectSculptSpec = JSON.parse(JSON.stringify(parameterizedSpec));
-  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(spec));
+  root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(compatibleSpec));
   root.userData.objectSculpt = {
     schemaVersion: spec.schemaVersion,
     targetName: root.name,

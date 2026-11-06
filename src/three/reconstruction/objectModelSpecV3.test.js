@@ -140,8 +140,6 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     legacy.generators = [];
     expect(() => validateObjectModelSpecV3(legacy)).toThrow('不接受 generators/constraints');
   });
-});
-
   it('accepts legacy material target aliases at the shared protocol boundary', () => {
     const legacy = createRadialSpec();
     legacy.materials.steel.color = '#777777';
@@ -157,6 +155,8 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     invalid.parameterSchema[0].step = '1';
     expect(() => validateObjectModelSpecV3(invalid)).toThrow('数值参数步长无效');
   });
+
+});
 
 describe('ObjectModelSpec 3.0 compiler', () => {
   it('expands arbitrary axis-angle instance distributions from expressions', () => {

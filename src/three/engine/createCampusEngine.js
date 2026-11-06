@@ -71,6 +71,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let outdoorState = null
   let nearOutdoorEntrance = false
   let nearOutdoorBuildingId = null
+  let nearSandboxModelId = null
   // 建筑入口在场景初始化时索引；玩家未移动时不重复遍历整个校园场景树。
   let outdoorEntranceObjects = []
   let lastEntranceCheckPosition = null
@@ -1486,6 +1487,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (event.key.toLowerCase() !== 'e') return
     // 室外靠近教学楼正门按 E 进入；室内交互继续由同一按键处理。
     if (!indoorGroup) {
+      if (nearSandboxModelId) {
+        const target = sandboxModels.get(nearSandboxModelId)
+        if (target) {
+          callbacks.onSandboxModelInteract?.({
+            id: nearSandboxModelId,
+            name: target.name,
+            message: target.userData.interactionMessage || ('你与 ' + target.name + ' 完成了一次交互'),
+          })
+          return
+        }
+        nearSandboxModelId = null
+      }
       if (nearOutdoorBuildingId) enterIndoorBuilding(nearOutdoorBuildingId)
       else if (nearOutdoorEntrance) {
         if (isRpgSample) enterIndoorBuilding('sample-teaching-building')
@@ -1641,6 +1654,24 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
             ? { visible: true, text: '按 E 进入' + nearest.name }
             : { visible: false })
         }
+      }
+    }
+
+    if (!indoorGroup && cameraRig?.player && isRpgSample) {
+      let nearestSandboxModel = null
+      for (const [id, model] of sandboxModels) {
+        const radius = Number(model.userData.interactionRadius) || 3.5
+        const distance = Math.hypot(cameraRig.player.x - model.position.x, cameraRig.player.z - model.position.z)
+        if (distance <= radius && (!nearestSandboxModel || distance < nearestSandboxModel.distance)) {
+          nearestSandboxModel = { id, name: model.name, distance }
+        }
+      }
+      const nextId = nearestSandboxModel?.id || null
+      if (nextId !== nearSandboxModelId) {
+        nearSandboxModelId = nextId
+        callbacks.onSandboxInteractionPromptChange?.(nearestSandboxModel
+          ? { visible: true, id: nearestSandboxModel.id, name: nearestSandboxModel.name, text: '靠近 ' + nearestSandboxModel.name + '，按 E 交互' }
+          : { visible: false })
       }
     }
 

@@ -71,6 +71,8 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     lathe.componentTree[2].primitive = 'lathe';
     lathe.componentTree[2].geometryDescriptor = { profile: [[0,-0.5],[0.2,0],[0,0.5]] };
     expect(() => validateObjectModelSpecV3(lathe)).not.toThrow();
+    lathe.componentTree[2].geometryDescriptor.profile = [[0,-0.5],[0.4,0.5],[0,0.5],[0.4,-0.5]];
+    expect(() => validateObjectModelSpecV3(lathe)).toThrow('旋转截面不能自相交');
 
     const sweep = createRadialSpec();
     sweep.componentTree[2].primitive = 'sweep';
@@ -92,6 +94,16 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     const unsupported = createRadialSpec();
     unsupported.componentTree[2].primitive = 'lathe-like-custom';
     expect(() => validateObjectModelSpecV3(unsupported)).toThrow('组件几何类型不受支持：lathe-like-custom');
+  });
+
+  it('separates raw protocol input from compiler-owned operation controls', () => {
+    const forged = createRadialSpec();
+    forged.operations = [];
+    forged.parameterSchema[0].operationControl = true;
+    expect(() => validateObjectModelSpecV3(forged)).toThrow('原始 ObjectModelSpec 不允许包含内部字段 operationControl');
+
+    const compiled = compileObjectModelSpec(createRadialSpec());
+    expect(() => validateObjectModelSpecV3(compiled, { mode: 'compiled' })).not.toThrow();
   });
 
   it('rejects duplicate operation IDs and invalid operation parameter references', () => {

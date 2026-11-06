@@ -122,14 +122,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!isRpgSample || !campus) throw new Error('AI 建筑挂载仅在 MVP 世界场景中可用');
     if (indoorGroup) throw new Error('请先退出室内空间，再替换 AI 建筑');
     if (!model?.isObject3D || model.parent) throw new TypeError('AI 建筑必须是尚未挂载的 THREE.Object3D');
-    const sourceSpec = model.userData?.parameterBaseSpec;
-    const repeatWindowGroups = sourceSpec?.componentTree?.filter(node => node.id === 'repeat_ground_left_windows') || [];
-    const repeatWindowOperations = sourceSpec?.operations?.filter(operation => operation.sourceRootId === 'repeat_ground_left_windows') || [];
-    const repeatWindowRuntimeGroup = model.userData?.componentGroups?.get?.('repeat_ground_left_windows');
-    if (repeatWindowGroups.length !== 1 || repeatWindowGroups[0].kind !== 'group'
-      || repeatWindowOperations.length !== 1 || !repeatWindowRuntimeGroup?.isGroup) {
-      throw new Error('AI 教学楼资产不符合重复窗组契约：sourceRootId 必须唯一引用 Group repeat_ground_left_windows');
-    }
     const target = campus.getObjectByName('sample-teaching-building');
     if (!target) throw new Error('MVP 场景缺少教学楼挂载节点');
 
@@ -152,7 +144,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     model.position.y -= sourceBounds.min.y;
     model.position.z -= (sourceBounds.min.z + sourceBounds.max.z) / 2;
     holder.add(model);
-    holder.scale.set(width / sourceSize.x, height / sourceSize.y, depth / sourceSize.z);
+    // Preserve the generated model's proportions. Independent XYZ scaling can
+    // distort windows, wall thickness and roof geometry, and cannot repair bad joins.
+    const fitScale = Math.min(width / sourceSize.x, height / sourceSize.y, depth / sourceSize.z);
+    if (!Number.isFinite(fitScale) || fitScale <= 0) throw new Error('AI 建筑无法计算有效的等比装配比例');
+    holder.scale.setScalar(fitScale);
+    const fittedSize = sourceSize.clone().multiplyScalar(fitScale);
     holder.position.y = Number(target.userData.generatedBuildingBaseY) || 0.73;
 
     const foundation = target.userData.foundationMesh;
@@ -169,12 +166,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     target.userData.buildingHeight = height;
     target.userData.buildingId = 'sample-teaching-building';
     target.userData.objectType = 'building';
-    target.userData.indoorEntrance = { x: 0, z: depth / 2 + 1.1, radius: Number(options.entranceRadius) || 2.4 };
+    target.userData.indoorEntrance = { x: 0, z: fittedSize.z / 2 + 1.1, radius: Number(options.entranceRadius) || 2.4 };
     target.userData.rebuildOptions = null;
     target.updateMatrixWorld(true);
     invalidateShadowMap();
     requestFrame();
-    return { buildingId: target.userData.buildingId, floors, floorHeight, dimensions: { width, depth, height }, entrance: { ...target.userData.indoorEntrance } };
+    return { buildingId: target.userData.buildingId, floors, floorHeight, dimensions: { width: fittedSize.x, depth: fittedSize.z, height: fittedSize.y }, entrance: { ...target.userData.indoorEntrance } };
   }
 
 

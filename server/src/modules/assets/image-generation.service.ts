@@ -206,37 +206,6 @@ function validateGeneratedOperations(input: unknown, componentTree: any[]) {
 }
 
 const WORLD_MVP_TEACHING_BUILDING_PROFILE = 'world-mvp-teaching-building';
-const WORLD_MVP_REPEAT_WINDOW_GROUP_ID = 'repeat_ground_left_windows';
-
-function validateWorldMvpGenerationProfile(spec: any, profile: string) {
-  if (profile !== WORLD_MVP_TEACHING_BUILDING_PROFILE) return;
-  const matchingGroups = spec.componentTree.filter((node: any) => node.id === WORLD_MVP_REPEAT_WINDOW_GROUP_ID);
-  if (matchingGroups.length !== 1 || matchingGroups[0].kind !== 'group' || !matchingGroups[0].parent) {
-    throw new ServiceUnavailableException('MVP 教学楼必须包含唯一 Group：' + WORLD_MVP_REPEAT_WINDOW_GROUP_ID);
-  }
-  const rootId = matchingGroups[0].id;
-  const byId = new Map(spec.componentTree.map((node: any) => [node.id, node]));
-  const descendants = spec.componentTree.filter((node: any) => {
-    let current = node;
-    while (current?.parent) {
-      if (current.parent === rootId) return true;
-      current = byId.get(current.parent);
-    }
-    return false;
-  });
-  if (!descendants.some((node: any) => node.kind !== 'group')) {
-    throw new ServiceUnavailableException('MVP 教学楼重复窗组必须包含至少一个 Mesh 子组件：' + rootId);
-  }
-  const matchingOperations = (spec.operations || []).filter((operation: any) => operation.sourceRootId === rootId);
-  if (matchingOperations.length !== 1) {
-    throw new ServiceUnavailableException('MVP 教学楼必须有且仅有一个 instance.sourceRootId 引用：' + rootId);
-  }
-  const countParameter = spec.parameterSchema.find((item: any) => item.id === matchingOperations[0].count?.parameterId);
-  if (!countParameter || countParameter.type !== 'number' || !Number.isInteger(countParameter.value)
-    || countParameter.value < 2 || !Number.isInteger(countParameter.max) || countParameter.max < 2) {
-    throw new ServiceUnavailableException('MVP 教学楼重复窗组必须绑定至少 2 个实例的整数数量参数：' + rootId);
-  }
-}
 
 function validateOperationParameterBindings(operations: any[], parameterSchema: any[], componentTree: any[], expressionParameterIds = new Set<string>()) {
   const byId = new Map(parameterSchema.map(item => [item.id, item]));
@@ -539,7 +508,7 @@ export class ImageGenerationService {
       throw new BadRequestException('不支持的 3D 资产生成配置：' + generationProfile);
     }
     const generationProfileInstruction = generationProfile === WORLD_MVP_TEACHING_BUILDING_PROFILE
-      ? '【MVP 教学楼强制结构契约】componentTree 必须包含且仅包含一个 id 为 repeat_ground_left_windows、kind 为 group 的节点，该 Group 必须是建筑主体根节点下的子节点，并至少包含一个 Mesh 子组件。operations 必须包含且仅包含一个 sourceRootId 为 repeat_ground_left_windows 的 instance 操作；该操作必须绑定 parameterSchema 中 value 至少为 2 的整数数量参数。不得将该 ID 用于 Mesh，不得省略该 Group，不得用其他 Group 或其他 ID 替代。'
+      ? '【World Sandbox MVP 建筑目标】生成一栋可从外部观察并可进入的完整两层教学楼。请根据建筑设计自行决定 componentTree 的层级、几何类型、构件数量和重复结构；不要求固定节点 ID、固定 Group、固定 primitive 或固定 operations。重点保证几何实际拼装：窗框/玻璃位于墙面开口内并与墙面贴合，不能漂浮在墙前或离开立面；门窗尺寸与墙体开口匹配；首层墙体、楼板、二层墙体和屋顶连续承接；主体底部与同一地面基准接触，不得整体悬空。允许使用任意合法 indexed-mesh、primitive、geometryDescriptor、层级组合和 instance operations 实现，不得为了满足某种协议形式牺牲建筑外观。输出前逐项检查构件的局部坐标和父子变换，确认上述空间关系在累积变换后的对象坐标系中成立。'
       : '';
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');
@@ -730,14 +699,14 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException(error instanceof Error ? error.message : 'AI 参数 Schema 无效');
     }
     validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
-    validateWorldMvpGenerationProfile(spec, generationProfile);
+
     try { validateObjectModelSpecV3(spec); } catch (error) {
       if (!allowGeometryRepair || !(error instanceof Error)) {
         throw new ServiceUnavailableException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
       }
       this.logger.warn('ObjectModelSpec 3.0 校验失败，执行一次定向修复：' + error.message);
       const repaired = await this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
-      if (generationProfile) validateWorldMvpGenerationProfile(repaired.objectSculptSpec, generationProfile);
+
       return repaired;
     }
 

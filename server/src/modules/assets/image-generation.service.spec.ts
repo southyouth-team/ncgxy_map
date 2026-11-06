@@ -173,9 +173,23 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.componentTree[1].parent).toBe('body');
   });
 
-  it('enforces the world MVP teaching-building repeat window Group contract', async () => {
+  it('keeps the world MVP profile implementation-agnostic', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
-    const spec = createTeachingBuildingSpec();
+    const spec = {
+      schemaVersion: '3.0',
+      targetName: 'MVP 教学楼',
+      category: 'building',
+      objectType: '两层大学教学楼',
+      visualStyle: 'realistic',
+      materials: { wall: { color: '#d8d2c4', roughness: 0.82, metalness: 0 } },
+      componentTree: [
+        { id: 'building-root', kind: 'group' },
+        { id: 'building-body', parent: 'building-root', primitive: 'box',
+          dimensions: { width: 12, height: 7, depth: 8 }, material: 'wall' },
+      ],
+      parameterSchema: [],
+      operations: [],
+    };
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ choices: [{ message: { content: JSON.stringify(spec) } }] }),
@@ -187,22 +201,10 @@ describe('ImageGenerationService', () => {
     );
 
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
-    expect(systemPrompt).toContain('repeat_ground_left_windows');
-    expect(result.objectSculptSpec.operations).toHaveLength(1);
-    expect(result.objectSculptSpec.operations[0].sourceRootId).toBe('repeat_ground_left_windows');
-  });
-
-  it('rejects a world MVP instance operation that points at a different Group', async () => {
-    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
-    const spec = createTeachingBuildingSpec('left-facade');
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify(spec) } }] }),
-    }) as never;
-
-    await expect(service.generateObjectFromPrompt(
-      '生成一栋两层教学楼', '两层大学教学楼', 'realistic', true, undefined, 'world-mvp-teaching-building',
-    )).rejects.toThrow('必须有且仅有一个 instance.sourceRootId 引用：repeat_ground_left_windows');
+    expect(systemPrompt).toContain('窗框/玻璃位于墙面开口内并与墙面贴合');
+    expect(systemPrompt).not.toContain('repeat_ground_left_windows');
+    expect(result.objectSculptSpec.componentTree).toHaveLength(2);
+    expect(result.objectSculptSpec.operations).toHaveLength(0);
   });
 
   it('repairs an out-of-range tube radius during first-generation validation', async () => {

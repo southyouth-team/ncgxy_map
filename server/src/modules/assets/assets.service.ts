@@ -272,13 +272,13 @@ export class AssetsService {
   async saveObjectSculptAsset(userId: string, input: Record<string, unknown>) {
     if (!userId) throw new BadRequestException('缺少资产保存用户身份');
     const spec = input?.objectSculptSpec as Record<string, any> | undefined;
+    if (spec && (!spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials))) spec.materials = {};
     try { validateObjectModelSpecV3(spec); } catch (error) {
       throw new BadRequestException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
     }
     if (!spec || typeof spec !== 'object' || Array.isArray(spec) || spec.schemaVersion !== '3.0'
       || Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')
-      || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 300
-      || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
+      || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 300) {
       throw new BadRequestException('ObjectModelSpec 3.0 结构无效，无法保存');
     }
     const serialized = JSON.stringify(spec);
@@ -297,7 +297,6 @@ export class AssetsService {
       if (kind === 'mesh') {
         if (!primitives.has(String(node.primitive || '').toLowerCase())) throw new BadRequestException('资产组件几何类型无效：' + node.id);
         if (!node.dimensions || ['width','height','depth'].some(key => !Number.isFinite(Number(node.dimensions[key])) || Number(node.dimensions[key]) < 0.02 || Number(node.dimensions[key]) > 100)) throw new BadRequestException('资产组件尺寸无效：' + node.id);
-        if (typeof node.material !== 'string' || !Object.prototype.hasOwnProperty.call(spec.materials, node.material)) throw new BadRequestException('资产组件材质引用无效：' + node.id);
         if (String(node.primitive).toLowerCase() === 'tube') {
           const path = node.geometryDescriptor?.path;
           if (!Array.isArray(path) || path.length < 2 || path.length > 32

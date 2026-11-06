@@ -355,7 +355,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function addSandboxModel(model, options = {}) {
     if (!scene || !model?.isObject3D || model.parent) throw new TypeError('AI 建模结果必须是未挂载的 THREE.Object3D')
-    const id = 'sandbox_' + (++sandboxModelSequence)
+    const id = options.id ? String(options.id) : 'sandbox_' + (++sandboxModelSequence)
+    const restoredSequence = Number(id.match(/^sandbox_(\\d+)$/)?.[1] || 0)
+    sandboxModelSequence = Math.max(sandboxModelSequence, restoredSequence)
     model.userData = { ...(model.userData || {}), sandboxModelId: id, isSandboxModel: true }
     model.name = options.name || model.name || 'AI 建模组 ' + sandboxModelSequence
     if (options.position) model.position.set(Number(options.position.x) || 0, Number(options.position.y) || 0, Number(options.position.z) || 0)

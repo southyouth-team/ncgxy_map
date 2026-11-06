@@ -519,6 +519,46 @@ describe('BuildingDesignService', () => {
   });
 
 
+  it('adds a dynamic geometry descriptor parameter to ObjectModelSpec 3.0 without changing operations', async () => {
+    const service = new BuildingDesignService({
+      get: (key: string) => ({
+        VISION_API_KEY: 'v3-parameter-secret',
+        VISION_MODEL: 'vision-test',
+        VISION_API_BASE_URL: 'http://vision.local/v1',
+      } as Record<string, string>)[key],
+    } as never);
+    const current = {
+      schemaVersion: '3.0',
+      targetName: 'steel-frame',
+      category: 'other',
+      objectType: '钢结构',
+      visualStyle: 'realistic',
+      materials: { steel: { color: '#777777', roughness: 0.6, metalness: 0.7 } },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'rib', parent: 'root', primitive: 'tube', material: 'steel',
+          dimensions: { width: 1, height: 1, depth: 1 },
+          geometryDescriptor: { path: [[0, -0.5, 0], [0, 0.5, 0]], radius: 0.08 } },
+      ],
+      parameterSchema: [],
+      operations: [],
+    };
+    const parameterSchema = [{
+      id: 'rib-radius', label: '钢丝管径', type: 'number', value: 0.08,
+      min: 0.04, max: 0.12, step: 0.005,
+      targets: [{ nodeId: 'rib', property: 'geometryDescriptor.radius', mode: 'set' }],
+    }];
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ parameterSchema, unsupported: [] }) } }] }),
+    }) as never;
+
+    const result = await service.addObjectParameters(current, '增加钢丝管径调整参数');
+    expect(result.objectSculptSpec.schemaVersion).toBe('3.0');
+    expect(result.objectSculptSpec.parameterSchema).toEqual(parameterSchema);
+    expect(result.objectSculptSpec.operations).toEqual([]);
+  });
+
   it('creates a repeat generator and a direct floor-count parameter for a reusable template', async () => {
     const service = new BuildingDesignService({
       get: (key: string) => ({

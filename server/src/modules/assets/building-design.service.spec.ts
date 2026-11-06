@@ -554,9 +554,10 @@ describe('BuildingDesignService', () => {
     }) as never;
 
     const result = await service.addObjectParameters(current, '增加钢丝管径调整参数');
-    expect(result.objectSculptSpec.schemaVersion).toBe('3.0');
-    expect(result.objectSculptSpec.parameterSchema).toEqual(parameterSchema);
-    expect(result.objectSculptSpec.operations).toEqual([]);
+    const resultSpec = result.objectSculptSpec as any;
+    expect(resultSpec.schemaVersion).toBe('3.0');
+    expect(resultSpec.parameterSchema).toEqual(parameterSchema);
+    expect(resultSpec.operations).toEqual([]);
   });
 
   it('creates a repeat generator and a direct floor-count parameter for a reusable template', async () => {

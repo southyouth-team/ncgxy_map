@@ -40,7 +40,38 @@ function validateGeneratedGeometryDescriptors(componentTree: any[]) {
     }
   }
 }
-const PARAMETER_BINDINGS = new Set(['dimensions.width','dimensions.height','dimensions.depth','transform.position.x','transform.position.y','transform.position.z','transform.scale.x','transform.scale.y','transform.scale.z','material.color','material.roughness','material.metalness','material.opacity','geometry.primitive','geometryDescriptor.inset','geometryDescriptor.tube','geometryDescriptor.radius','visibility.visible']);
+function isGeneratedParameterTargetValid(node: any, materials: Record<string, any>, property: unknown, parameterType: string) {
+  if (!node || typeof property !== 'string' || property.length > 160) return false;
+  const parts = property.split('.');
+  if (parts.some(part => !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(part) || ['__proto__','prototype','constructor'].includes(part))) return false;
+  let kind = '';
+  if (property === 'visibility.visible') kind = 'boolean';
+  else if (property === 'geometry.primitive') kind = 'select';
+  else if (parts[0] === 'material' && parts.length === 2 && typeof node.material === 'string') {
+    const material = materials[node.material];
+    if (!material || !Object.prototype.hasOwnProperty.call(material, parts[1])) return false;
+    const value = material[parts[1]];
+    if (value === null || typeof value === 'object') return false;
+    kind = typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? 'color' : typeof value;
+  } else if (parts[0] === 'transform' && ['position','rotation','scale'].includes(parts[1]) && parts.length === 3 && ['x','y','z'].includes(parts[2])) {
+    kind = 'number';
+  } else if (['dimensions','geometryDescriptor'].includes(parts[0]) && parts.length >= 2 && parts.length <= 4) {
+    let value = node[parts[0]];
+    for (const part of parts.slice(1)) {
+      if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, part)) return false;
+      value = value[part];
+    }
+    if (value === null || typeof value === 'object') return false;
+    kind = typeof value === 'number' && Number.isFinite(value) ? 'number'
+      : typeof value === 'boolean' ? 'boolean'
+        : typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? 'color'
+          : typeof value === 'string' ? 'select' : '';
+  }
+  if (!kind) return false;
+  return parameterType === kind || (property === 'visibility.visible' && parameterType === 'number');
+}
+
+
 /**
  * AI 有时会把材质参数写成语义化别名（如 lattice_color），但 Runtime 协议
  * 只接受标准材质绑定。将明确的材质字段别名收敛为统一协议，避免整次生成失败。
@@ -62,7 +93,7 @@ function normalizeGeneratedParameterBindings(input: unknown) {
   }));
 }
 
-function validateGeneratedParameterSchema(input: unknown, componentTree: any[], generatorParameterIds = new Set<string>()) {
+function validateGeneratedParameterSchema(input: unknown, componentTree: any[], generatorParameterIds = new Set<string>(), materials: Record<string, any> = {}) {
   if (input == null) return [];
   if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('视觉模型返回的 parameterSchema 无效或超出 100 项');
   const ids = new Set<string>(), nodes = new Set(componentTree.map(node => node.id));
@@ -76,7 +107,8 @@ function validateGeneratedParameterSchema(input: unknown, componentTree: any[], 
     if (item.type === 'select' && (!Array.isArray(item.options) || !item.options.some((option: any) => option?.value === item.value))) throw new ServiceUnavailableException('AI 枚举参数无效：' + item.id);
     if (!Array.isArray(item.targets) || item.targets.length > 100 || (!item.targets.length && !generatorParameterIds.has(item.id))) throw new ServiceUnavailableException('AI 参数目标无效：' + item.id);
     for (const target of item.targets) {
-      if (!nodes.has(target?.nodeId) || !PARAMETER_BINDINGS.has(target?.property)) throw new ServiceUnavailableException('AI 参数目标引用无效：' + item.id);
+      const targetNode = componentTree.find(node => node.id === target?.nodeId);
+      if (!nodes.has(target?.nodeId) || !isGeneratedParameterTargetValid(targetNode, materials, target?.property, item.type)) throw new ServiceUnavailableException('AI 参数目标引用无效或数据类型不匹配：' + item.id);
       const mode = target.mode || 'set';
       if (!['set','multiply','add','visible-from','visible-through'].includes(mode)) throw new ServiceUnavailableException('AI 参数目标运算无效：' + item.id);
       if (['visible-from','visible-through'].includes(mode) && (target.property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) throw new ServiceUnavailableException('AI 参数可见性阈值无效：' + item.id);
@@ -760,7 +792,7 @@ export class ImageGenerationService {
     const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
     spec.operations = operationValidation.operations;
     const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
-    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds);
+    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
     validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };

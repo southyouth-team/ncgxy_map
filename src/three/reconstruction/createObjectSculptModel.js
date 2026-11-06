@@ -758,7 +758,10 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
     groups.set(node.id, group);
   }
   root.userData.componentGroups = groups;
-  root.userData.objectSculptSpec = JSON.parse(JSON.stringify(spec));
+  // Keep the editable declarative state separate from the immutable baseline.
+  // The public spec reflects parameter values applied to component data; the
+  // baseline retains original component data so subsequent edits never drift.
+  root.userData.objectSculptSpec = JSON.parse(JSON.stringify(parameterizedSpec));
   root.userData.parameterBaseSpec = JSON.parse(JSON.stringify(spec));
   root.userData.objectSculpt = {
     schemaVersion: spec.schemaVersion,
@@ -810,8 +813,8 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
   root.userData = {
     ...root.userData,
     ...rebuilt.userData,
-    objectSculptSpec: spec,
+    objectSculptSpec: rebuilt.userData.objectSculptSpec,
     parameterBaseSpec: baseline,
   };
-  return spec;
+  return root.userData.objectSculptSpec;
 }

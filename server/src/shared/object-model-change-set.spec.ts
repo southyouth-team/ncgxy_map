@@ -5,7 +5,7 @@ import {
 } from './object-model-change-set';
 
 describe('ObjectModelChangeSet 1.0', () => {
-  const baseSpec = () => ({
+  const baseSpec = (): any => ({
     schemaVersion: '3.0',
     targetName: 'test-object',
     materials: { stone: { color: '#888888', roughness: 0.8, metalness: 0 } },

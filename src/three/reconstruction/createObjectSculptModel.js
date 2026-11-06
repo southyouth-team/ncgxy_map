@@ -737,7 +737,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
       const mesh = new THREE.Mesh(geometry, resolveMaterial(node.material));
       mesh.name = node.id + ':mesh';
       mesh.userData.componentId = node.id;
-      mesh.userData.componentSourceId = node.generatorInstance?.sourceNodeId || node.id;
+      mesh.userData.componentSourceId = node.operationInstance?.sourceNodeId || node.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);

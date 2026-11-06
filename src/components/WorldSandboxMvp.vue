@@ -194,7 +194,7 @@ onMounted(async () => {
       // 直接复用仓库已有的小型 RPG 样板场景，不加载完整校园 GIS 主地图。
       sceneType: 'rpg-sample',
       isometricRpg: true,
-      viewMode: '2.5d',
+      viewMode: '3d',
     })
     await engine.init()
     if (disposed) return

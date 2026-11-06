@@ -1177,17 +1177,9 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
       const node = findNode(target.nodeId);
       if (!node) continue;
       const mode = target.mode || 'set';
-      let current;
-      if (target.property.startsWith('material.')) {
-        const field = target.property.split('.')[1];
-        current = spec.materials[node.material]?.[field];
-      } else if (target.property.startsWith('transform.position.') || target.property.startsWith('transform.scale.')) {
-        const [, vector, axis] = target.property.split('.');
-        current = node.transform?.[vector]?.['xyz'.indexOf(axis)] ?? (vector === 'scale' ? 1 : 0);
-      } else {
-        const [section, field] = target.property.split('.');
-        current = node[section]?.[field];
-      }
+      const binding = resolveEditableParameterTarget(node, spec.materials || {}, target.property);
+      if (!binding) throw new TypeError('参数目标属性不存在或不可编辑：' + target.property);
+      const current = binding.value;
       const resolved = mode === 'multiply' ? Number(current) * Number(parameterValue)
         : mode === 'add' ? Number(current) + Number(parameterValue) : parameterValue;
       if (target.property === 'visibility.visible') {
@@ -1199,26 +1191,14 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
       } else if (target.property === 'geometry.primitive') {
         if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
         node.primitive = resolved;
-      } else if (target.property === 'geometryDescriptor.inset' || target.property === 'geometryDescriptor.tube' || target.property === 'geometryDescriptor.radius') {
-        node.geometryDescriptor = node.geometryDescriptor || {};
-        node.geometryDescriptor[target.property.split('.')[1]] = Number(resolved);
       } else if (target.property.startsWith('material.')) {
         const previousMaterial = spec.materials[node.material] || DEFAULT_MATERIAL;
         const uniqueKey = 'parameter-' + node.id;
         if (node.material !== uniqueKey) spec.materials[uniqueKey] = { ...previousMaterial };
         node.material = uniqueKey;
-        const field = target.property.split('.')[1];
-        if (field === 'color') spec.materials[uniqueKey].color = resolved;
-        else spec.materials[uniqueKey][field] = Math.max(field === 'opacity' ? 0.05 : 0, Math.min(1, Number(resolved)));
-      } else if (target.property.startsWith('transform.position.') || target.property.startsWith('transform.scale.')) {
-        const [, vector, axis] = target.property.split('.');
-        const index = 'xyz'.indexOf(axis);
-        node.transform = node.transform || {};
-        node.transform[vector] = node.transform[vector] || (vector === 'scale' ? [1,1,1] : [0,0,0]);
-        node.transform[vector][index] = Number(resolved);
+        setEditableParameterTarget(node, spec.materials, target.property, resolved);
       } else {
-        const [section, field] = target.property.split('.');
-        node[section][field] = Math.max(0.02, Math.min(100, Number(resolved)));
+        setEditableParameterTarget(node, spec.materials || {}, target.property, resolved);
       }
     }
   }

@@ -5,7 +5,7 @@ const CampusPlanEditor = defineAsyncComponent(() => import('./editor/CampusPlanE
 const IndoorFloorPlanEditor = defineAsyncComponent(() => import('./components/IndoorFloorPlanEditor.vue'))
 const BuildingTemplateWorkshop = defineAsyncComponent(() => import('./components/BuildingTemplateWorkshop.vue'))
 const AssetTemplateLab = defineAsyncComponent(() => import('./components/AssetTemplateLab.vue'))
-const SandboxApp = defineAsyncComponent(() => import('./sandbox/SandboxApp.vue'))
+const WorldSandboxMvp = defineAsyncComponent(() => import('./components/WorldSandboxMvp.vue'))
 const currentRoute = window.location.pathname.replace(/\/+$/, '')
 const isAssetTemplateLabRoute = currentRoute === '/asset-template-lab'
 const isAssetWorkshopRoute = currentRoute === '/asset-workshop'
@@ -572,7 +572,7 @@ onBeforeUnmount(() => {
 
 <template>
   <BuildingTemplateWorkshop v-if="isAssetWorkshopRoute" />
-  <SandboxApp v-else-if="isSandboxRoute" />
+  <WorldSandboxMvp v-else-if="isSandboxRoute" />
   <AssetTemplateLab v-else-if="isAssetTemplateLabRoute" />
   <main v-else ref="appShell" :class="['app-shell', { 'is-overview': activeMode === 'overview', 'is-mobile': isMobile, 'is-rpg-sample': isCampusExplorer } ]">
     <div ref="viewport" class="scene-viewport" :style="{ display: showEditor && editorViewMode === '2d' ? 'none' : 'block' }"></div>

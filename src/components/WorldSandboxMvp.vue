@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
-import { createObjectSculptModel } from '../three/reconstruction/createObjectSculptModel.js'
+import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
@@ -11,7 +11,8 @@ const selectedName = ref('')
 const objects = ref([])
 const command = ref('')
 const aiPrompt = ref('')
-const aiModificationPrompt = ref('')
+const referenceImageDataUrl = ref('')
+const referenceImageName = ref('')
 const aiBusy = ref(false)
 const message = ref('正在初始化 RPG 校园场景…')
 const time = ref(14)
@@ -88,58 +89,73 @@ function duplicateSelected() {
     message.value = '已复制模型组'
   }
 }
+function onReferenceImageChange(event) {
+  const file = event.target.files?.[0]
+  referenceImageDataUrl.value = ''
+  referenceImageName.value = ''
+  if (!file) return
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    message.value = '参考图仅支持 PNG、JPG 或 WebP'
+    event.target.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    message.value = '参考图不能超过 10 MB'
+    event.target.value = ''
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    referenceImageDataUrl.value = String(reader.result || '')
+    referenceImageName.value = file.name
+    message.value = '参考图已就绪，可以开始生成'
+  }
+  reader.onerror = () => { message.value = '参考图读取失败' }
+  reader.readAsDataURL(file)
+}
 async function generateAiModel() {
   const prompt = aiPrompt.value.trim()
-  if (!prompt || aiBusy.value) return
+  if ((!prompt && !referenceImageDataUrl.value) || aiBusy.value) return
   aiBusy.value = true
-  message.value = '正在调用视觉模型生成独立建模组…'
+  message.value = '正在生成 Three.js 程序化模型源码…'
   try {
-    const response = await fetch(API_BASE + '/assets/ai-image/generate-object', {
+    const response = await fetch(API_BASE + '/assets/ai-image/generate-procedural-object', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
-      body: JSON.stringify({ prompt, objectType: '独立 3D 模型', visualStyle: 'stylized' }),
+      body: JSON.stringify({
+        prompt,
+        objectType: '独立 3D 模型',
+        visualStyle: 'stylized',
+        imageDataUrl: referenceImageDataUrl.value || undefined,
+      }),
     })
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(payload.message || '模型生成失败：HTTP ' + response.status)
-    const spec = payload.objectSculptSpec || payload.data?.objectSculptSpec || payload.result?.objectSculptSpec || payload.data || payload.result || payload
-    const group = createObjectSculptModel(THREE, spec, { source: 'world-sandbox-ai' })
-    registerModel(group, spec.targetName || 'AI 建模组 ' + (objects.value.length + 1))
-    aiPrompt.value = ''
-  } catch (error) {
-    message.value = 'AI 建模失败：' + (error?.message || '未知错误')
-  } finally {
-    aiBusy.value = false
-  }
-}
-async function modifyAiModel() {
-  if (!selected || !aiModificationPrompt.value.trim() || aiBusy.value) return
-  const spec = selected.userData.objectSculptSpec
-  if (!spec) { message.value = '当前选中对象不是 AI 建模组，暂不支持 AI 修改'; return }
-  aiBusy.value = true
-  message.value = '正在根据指令修改建模组…'
-  try {
-    const response = await fetch(API_BASE + '/assets/ai-image/modify-object', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
-      body: JSON.stringify({ objectSculptSpec: spec, selectedNodeIds: [], instruction: aiModificationPrompt.value.trim() }),
-    })
-    const payload = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(payload.message || '模型修改失败：HTTP ' + response.status)
+    if (!response.ok) throw new Error(payload.message || '程序化模型生成失败：HTTP ' + response.status)
     const result = payload.data || payload.result || payload
-    const nextSpec = result.objectSculptSpec || result.spec || result.data?.objectSculptSpec || result
-    const replacement = createObjectSculptModel(THREE, nextSpec, { source: 'world-sandbox-ai-edit' })
-    replacement.position.copy(selected.position)
-    replacement.rotation.copy(selected.rotation)
-    replacement.scale.copy(selected.scale)
-    const old = selected
-    const oldId = old.userData.sandboxModelId
-    engine.removeSandboxModel(oldId)
-    objectsById.delete(oldId)
-    selected = null
-    registerModel(replacement, nextSpec.targetName || old.name, replacement.position)
-    aiModificationPrompt.value = ''
+    if (typeof result.generatedCode !== 'string' || !result.generatedCode.trim()) {
+      throw new Error('生成接口没有返回 Three.js 程序化源码')
+    }
+
+    message.value = '源码已返回，正在隔离执行并构建 THREE.Group…'
+    const group = await executeProceduralModel(result.generatedCode, { timeoutMs: 25000 })
+    const modelName = group.userData.assetName || result.objectType || 'AI 程序化模型'
+    group.userData.proceduralModelConfig = {
+      protocol: 'threejs-procedural-v1',
+      generator: result.generationMethod || 'img2threejs-procedural',
+      objectType: result.objectType || '独立 3D 模型',
+      visualStyle: result.visualStyle || 'stylized',
+      prompt,
+      hasReferenceImage: Boolean(referenceImageDataUrl.value),
+      generatedAt: result.generatedAt || new Date().toISOString(),
+    }
+    // 源码保留在实例元数据中，后续可用于重生成；场景实际使用的是 ObjectLoader 还原的 THREE.Group。
+    group.userData.proceduralModelSource = result.generatedCode
+    registerModel(group, modelName + ' ' + (objects.value.length + 1))
+    aiPrompt.value = ''
+    referenceImageDataUrl.value = ''
+    referenceImageName.value = ''
   } catch (error) {
-    message.value = 'AI 修改失败：' + (error?.message || '未知错误')
+    message.value = 'AI 程序化建模失败：' + (error?.message || '未知错误')
   } finally {
     aiBusy.value = false
   }
@@ -190,6 +206,8 @@ onMounted(async () => {
       onError: error => { message.value = '校园场景初始化失败：' + (error?.message || '未知错误') },
       onSandboxModelsChange: list => { objects.value = list },
       onSandboxModelSelected: handleModelSelected,
+      onSandboxInteractionPromptChange: payload => { if (payload?.visible) message.value = payload.text },
+      onSandboxModelInteract: payload => { message.value = '已与 ' + (payload?.name || '模型') + ' 交互' },
     }, {
       // 直接复用仓库已有的小型 RPG 样板场景，不加载完整校园 GIS 主地图。
       sceneType: 'rpg-sample',
@@ -227,14 +245,14 @@ onBeforeUnmount(() => {
       <section>
         <h2>AI 建模</h2>
         <div class="world-mvp__command">
-          <input v-model="aiPrompt" placeholder="描述要生成的模型，例如：一座现代图书馆" @keydown.enter="generateAiModel">
-          <button :disabled="aiBusy || !aiPrompt.trim()" @click="generateAiModel">{{ aiBusy ? '生成中' : '生成' }}</button>
+          <input v-model="aiPrompt" placeholder="描述模型，例如：一栋带玻璃幕墙的现代图书馆" @keydown.enter="generateAiModel">
+          <button :disabled="aiBusy || (!aiPrompt.trim() && !referenceImageDataUrl)" @click="generateAiModel">{{ aiBusy ? '生成中' : '生成' }}</button>
         </div>
         <div class="world-mvp__command" style="margin-top:7px">
-          <input v-model="aiModificationPrompt" placeholder="修改当前 AI 建模组，例如：增加玻璃幕墙" @keydown.enter="modifyAiModel">
-          <button :disabled="aiBusy || !aiModificationPrompt.trim() || !selected?.userData.objectSculptSpec" @click="modifyAiModel">修改</button>
+          <input type="file" accept="image/png,image/jpeg,image/webp" @change="onReferenceImageChange">
         </div>
-        <p class="world-mvp__message">生成结果作为独立建模组加入场景，可整体移动、旋转、缩放和复制。</p>
+        <p v-if="referenceImageName" class="world-mvp__message">参考图：{{ referenceImageName }}</p>
+        <p class="world-mvp__message">AI 返回 Three.js 源码，在隔离环境构建后直接加入 RPG 场景；不经过 GLB。</p>
       </section>
       <section>
         <h2>基础模型</h2>

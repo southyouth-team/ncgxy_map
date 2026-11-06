@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { validateObjectModelSpecV3 } from '../../../../../shared/object-model-spec-v3';
+import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 function validateGeneratedGeometryDescriptors(componentTree: any[]) {

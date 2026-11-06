@@ -1,4 +1,43 @@
 /**
+ * Compare protocol-declared geometry capabilities with trusted runtime executors.
+ * This is an audit only: incomplete migration is reported, never silently treated
+ * as executable support and never blocks application startup.
+ */
+export function auditGeometryCapabilityCoverage(protocolCapabilities = [], runtimeCapabilities = []) {
+  const toMap = (items, label) => {
+    if (!Array.isArray(items)) throw new TypeError(label + ' must be an array');
+    const map = new Map();
+    for (const item of items) {
+      if (!item || typeof item.id !== 'string' || typeof item.primitive !== 'string'
+        || typeof item.descriptor !== 'string') throw new TypeError(label + ' contains an invalid capability');
+      if (map.has(item.id)) throw new TypeError(label + ' contains a duplicate capability ID: ' + item.id);
+      map.set(item.id, item);
+    }
+    return map;
+  };
+  const protocol = toMap(protocolCapabilities, 'Protocol capabilities');
+  const runtime = toMap(runtimeCapabilities, 'Runtime capabilities');
+  const missingExecutorIds = [], unknownExecutorIds = [], descriptorMismatches = [], primitiveMismatches = [];
+  for (const [id, capability] of protocol) {
+    const executor = runtime.get(id);
+    if (!executor) { missingExecutorIds.push(id); continue; }
+    if (executor.descriptor !== capability.descriptor) descriptorMismatches.push(id);
+    if (executor.primitive !== capability.primitive) primitiveMismatches.push(id);
+  }
+  for (const id of runtime.keys()) if (!protocol.has(id)) unknownExecutorIds.push(id);
+  return Object.freeze({
+    complete: !missingExecutorIds.length && !unknownExecutorIds.length
+      && !descriptorMismatches.length && !primitiveMismatches.length,
+    protocolCount: protocol.size,
+    runtimeCount: runtime.size,
+    missingExecutorIds: Object.freeze(missingExecutorIds.sort()),
+    unknownExecutorIds: Object.freeze(unknownExecutorIds.sort()),
+    descriptorMismatches: Object.freeze(descriptorMismatches.sort()),
+    primitiveMismatches: Object.freeze(primitiveMismatches.sort()),
+  });
+}
+
+/**
  * Trusted, runtime-local geometry capability registry.
  * Only application code can register validators and Three.js executors; model data
  * supplies a primitive identifier and descriptor, never executable code.

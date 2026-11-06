@@ -7,7 +7,7 @@ function baseSpec(parameterSchema: any[]) {
     schemaVersion: '3.0',
     materials: { steel: { color: '#777777', roughness: 0.5, metalness: 0.8 } },
     componentTree: [
-      { id: 'root', kind: 'group' },
+      { id: 'root', kind: 'group', dimensions: { width: 1 } },
       { id: 'panel', parent: 'root', primitive: 'box', material: 'steel',
         dimensions: { width: 2, height: 1, depth: 0.1 } },
     ],
@@ -48,6 +48,38 @@ export function createObjectModelParameterContractCases(): any[] {
       spec: baseSpec([{ id: 'panel-width', type: 'number', value: 2, min: 1, max: 4,
         targets: [{ nodeId: 'panel', property: 'dimensions.unknown' }] }]),
       normalizer: 'reject', validator: 'reject',
+    },
+    {
+      id: 'group-dimension-target',
+      spec: baseSpec([{ id: 'root-width', type: 'number', value: 1, min: 0.5, max: 2,
+        targets: [{ nodeId: 'root', property: 'dimensions.width' }] }]),
+      normalizer: 'reject', validator: 'reject',
+    },
+    {
+      id: 'visibility-threshold',
+      spec: baseSpec([{ id: 'panel-visibility', type: 'number', value: 3, min: 1, max: 10,
+        targets: [{ nodeId: 'panel', property: 'visibility.visible', mode: 'visible-from', threshold: 3 }] }]),
+      normalizer: 'accept', validator: 'accept',
+      normalizedTarget: { nodeId: 'panel', property: 'visibility.visible', mode: 'visible-from', threshold: 3 },
+    },
+    {
+      id: 'invalid-visibility-threshold',
+      spec: baseSpec([{ id: 'panel-visibility', type: 'number', value: 3, min: 1, max: 10,
+        targets: [{ nodeId: 'panel', property: 'visibility.visible', mode: 'visible-from', threshold: 101 }] }]),
+      normalizer: 'reject', validator: 'reject',
+    },
+    {
+      id: 'invalid-target-mode',
+      spec: baseSpec([{ id: 'panel-width', type: 'number', value: 2, min: 1, max: 4,
+        targets: [{ nodeId: 'panel', property: 'dimensions.width', mode: 'execute' }] }]),
+      normalizer: 'reject', validator: 'reject',
+    },
+    {
+      id: 'registered-geometry-option',
+      spec: baseSpec([{ id: 'panel-primitive', type: 'select', value: 'box',
+        options: [{ label: 'Box', value: 'box' }, { label: 'Sphere', value: 'sphere' }],
+        targets: [{ nodeId: 'panel', property: 'geometry.primitive' }] }]),
+      normalizer: 'accept', validator: 'accept',
     },
     {
       id: 'unregistered-geometry-option',

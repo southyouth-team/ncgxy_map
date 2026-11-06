@@ -685,6 +685,64 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
+  it('estimates indexed-mesh buffers from actual positions and maximum index', () => {
+    const positions = [
+      0, 0, 0, 1, 0, 0, 0, 1, 0, 9, 9, 9,
+    ];
+    const indices = [0, 1, 2];
+    const estimate = estimateObjectSculptPrimitiveGeometry('indexed-mesh', { positions, indices });
+    const component = createObjectSculptComponentGroup(THREE, {
+      id: 'estimated-indexed-mesh',
+      geometry: { type: 'indexed-mesh', positions, indices },
+    });
+    const geometry = component.getObjectByName('estimated-indexed-mesh:mesh').geometry;
+    const actualAttributeBytes = Object.values(geometry.attributes)
+      .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+    const actualIndex = geometry.getIndex();
+    expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+    expect(estimate.indexCount).toBe(actualIndex.count);
+    expect(estimate.attributeComponents).toBe(6);
+    expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+    expect(estimate.indexBytes).toBe(actualIndex.array.byteLength);
+    expect(estimate.indexBytesPerElement).toBe(actualIndex.array.BYTES_PER_ELEMENT);
+    expect(estimate.bufferBytes).toBe(actualAttributeBytes + actualIndex.array.byteLength);
+    component.traverse(object => object.geometry?.dispose?.() || object.material?.dispose?.());
+  });
+
+  it('estimates loft buffers against actual generated geometry for multiple section/profile sizes', () => {
+    for (const sectionCount of [2, 3, 5]) {
+      for (const ringSize of [3, 4, 7]) {
+        const sections = Array.from({ length: sectionCount }, (_, sectionIndex) => ({
+          height: -0.5 + sectionIndex / (sectionCount - 1),
+          points: Array.from({ length: ringSize }, (_, pointIndex) => {
+            const angle = (Math.PI * 2 * pointIndex) / ringSize;
+            return [Math.cos(angle) * 0.4, Math.sin(angle) * 0.4];
+          }),
+        }));
+        const descriptor = { sections };
+        const estimate = estimateObjectSculptPrimitiveGeometry('loft', descriptor);
+        const component = createObjectSculptComponentGroup(THREE, {
+          id: 'estimated-loft-' + sectionCount + '-' + ringSize,
+          primitive: 'loft',
+          dimensions: { width: 2, height: 3, depth: 2 },
+          geometryDescriptor: descriptor,
+        });
+        const geometry = component.getObjectByName('estimated-loft-' + sectionCount + '-' + ringSize + ':mesh').geometry;
+        const actualAttributeBytes = Object.values(geometry.attributes)
+          .reduce((total, attribute) => total + attribute.array.byteLength, 0);
+        const actualIndex = geometry.getIndex();
+        expect(estimate.vertexCount).toBe(geometry.getAttribute('position').count);
+        expect(estimate.indexCount).toBe(actualIndex.count);
+        expect(estimate.attributeComponents).toBe(6);
+        expect(estimate.attributeBytes).toBe(actualAttributeBytes);
+        expect(estimate.indexBytes).toBe(actualIndex.array.byteLength);
+        expect(estimate.indexBytesPerElement).toBe(actualIndex.array.BYTES_PER_ELEMENT);
+        expect(estimate.bufferBytes).toBe(actualAttributeBytes + actualIndex.array.byteLength);
+        component.traverse(object => object.geometry?.dispose?.() || object.material?.dispose?.());
+      }
+    }
+  });
+
   it('does not claim an estimate for extruded box geometry or uncalibrated primitives', () => {
     expect(() => estimateObjectSculptPrimitiveGeometry('box', { openings: [{}] }))
       .toThrow('当前估算器不支持');

@@ -581,22 +581,39 @@ export function auditObjectModelGeometryCapabilityCoverage() {
  * geometries whose topology is fully determined by the runtime constructor.
  * Temporary JS arrays, Three.js objects, bounds and allocator overhead are excluded.
  */
-function estimateGeometryBuffers(vertexCount, indexCount) {
+function estimateGeometryBuffers(vertexCount, indexCount, attributeComponents, maxIndex) {
   if (!Number.isSafeInteger(vertexCount) || vertexCount < 1
-    || !Number.isSafeInteger(indexCount) || indexCount < 0) {
+    || !Number.isSafeInteger(indexCount) || indexCount < 0
+    || !Number.isSafeInteger(attributeComponents) || attributeComponents < 1
+    || !Number.isSafeInteger(maxIndex) || maxIndex < 0 || maxIndex >= vertexCount) {
     throw new RangeError('几何资源估算数量无效');
   }
-  const indexBytesPerElement = vertexCount > 65536 ? 4 : 2;
-  const attributeBytes = vertexCount * (3 + 3 + 2) * Float32Array.BYTES_PER_ELEMENT;
+  const indexBytesPerElement = maxIndex > 65535 ? 4 : 2;
+  const attributeBytes = vertexCount * attributeComponents * Float32Array.BYTES_PER_ELEMENT;
   const indexBytes = indexCount * indexBytesPerElement;
   return {
     vertexCount,
     indexCount,
+    attributeComponents,
     attributeBytes,
     indexBytes,
     indexBytesPerElement,
     bufferBytes: attributeBytes + indexBytes,
   };
+}
+
+function getMaximumGeometryIndex(indices) {
+  if (!Array.isArray(indices) || indices.length < 3 || indices.length % 3 !== 0) {
+    throw new TypeError('几何资源估算需要非空三角形索引数组');
+  }
+  let maxIndex = 0;
+  for (const index of indices) {
+    if (!Number.isSafeInteger(index) || index < 0) {
+      throw new TypeError('几何资源估算索引必须是非负整数');
+    }
+    if (index > maxIndex) maxIndex = index;
+  }
+  return maxIndex;
 }
 
 /**
@@ -610,6 +627,8 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
   const segments = Math.round(boundedNumber(options.segments, 16, 3, MAX_SEGMENTS, type + '.segments'));
   let vertexCount;
   let indexCount;
+  let attributeComponents = 8;
+  let maxIndex;
 
   switch (type) {
     case 'box':
@@ -620,16 +639,19 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
       // BoxGeometry emits four independent vertices and six indices per face.
       vertexCount = 6 * 4;
       indexCount = 6 * 6;
+      maxIndex = vertexCount - 1;
       break;
     case 'cylinder':
       // One side grid plus independently-owned top and bottom cap centers/rims.
       vertexCount = 2 * (segments + 1) + 2 * (2 * segments + 1);
       indexCount = 12 * segments;
+      maxIndex = vertexCount - 1;
       break;
     case 'cone':
       // CylinderGeometry(radiusTop=0) omits the top cap and one side triangle per segment.
       vertexCount = 2 * (segments + 1) + (2 * segments + 1);
       indexCount = 6 * segments;
+      maxIndex = vertexCount - 1;
       break;
     case 'sphere':
     case 'ellipsoid': {
@@ -637,19 +659,53 @@ export function estimateObjectSculptPrimitiveGeometry(primitive, descriptor = {}
       vertexCount = (segments + 1) * (heightSegments + 1);
       // The two pole bands emit one triangle per cell; inner bands emit two.
       indexCount = 6 * segments * (heightSegments - 1);
+      maxIndex = vertexCount - 1;
       break;
     }
     case 'torus': {
       const radialSegments = Math.min(16, segments);
       vertexCount = (radialSegments + 1) * (segments + 1);
       indexCount = 6 * radialSegments * segments;
+      maxIndex = vertexCount - 1;
+      break;
+    }
+    case 'indexed-mesh': {
+      const positions = options.positions;
+      const indices = options.indices;
+      if (!Array.isArray(positions) || positions.length < 9 || positions.length % 3 !== 0
+        || positions.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
+        throw new TypeError('indexed-mesh positions 格式无效');
+      }
+      vertexCount = positions.length / 3;
+      maxIndex = getMaximumGeometryIndex(indices);
+      if (maxIndex >= vertexCount || indices.some(index => index >= vertexCount)) {
+        throw new RangeError('indexed-mesh 索引超出顶点范围');
+      }
+      indexCount = indices.length;
+      attributeComponents = 6;
+      break;
+    }
+    case 'loft': {
+      const sections = options.sections;
+      if (!Array.isArray(sections) || sections.length < 2
+        || !Array.isArray(sections[0]?.points) || sections[0].points.length < 3) {
+        throw new TypeError('loft sections 格式无效');
+      }
+      const ringSize = sections[0].points.length;
+      if (sections.some(section => !Array.isArray(section?.points) || section.points.length !== ringSize)) {
+        throw new TypeError('loft sections 必须具有相同数量的轮廓点');
+      }
+      vertexCount = 2 * ringSize * (sections.length + 1);
+      indexCount = 6 * ringSize * (sections.length - 1) + 6 * (ringSize - 2);
+      maxIndex = vertexCount - 1;
+      attributeComponents = 6;
       break;
     }
     default:
       throw new RangeError('当前几何类型没有经过校准的资源估算：' + type);
   }
 
-  return estimateGeometryBuffers(vertexCount, indexCount);
+  return estimateGeometryBuffers(vertexCount, indexCount, attributeComponents, maxIndex);
 }
 
 function createGeometry(THREE, node) {

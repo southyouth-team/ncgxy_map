@@ -171,12 +171,15 @@ export class BuildingDesignService {
       }
     }
     let parameterSchema: any[];
+    let previous: any[];
     try {
       parameterSchema = normalizeObjectModelParameterSchema(parsed.parameterSchema, componentTree, current.materials || {}, operationParameterIds);
+      // Normalize the persisted baseline as well: 3.0 assets may omit the
+      // implicit target mode "set" or still contain a supported legacy alias.
+      previous = normalizeObjectModelParameterSchema(current.parameterSchema || [], componentTree, current.materials || {}, operationParameterIds);
     } catch (error) {
       throw new ServiceUnavailableException(error instanceof Error ? error.message : '参数 Schema 无效');
     }
-    const previous = current.parameterSchema || [];
     const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));
     for (const item of previous) {
       if (stableSerialize(nextById.get(item.id)) !== stableSerialize(item)) {

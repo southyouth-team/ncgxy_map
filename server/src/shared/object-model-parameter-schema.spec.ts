@@ -74,4 +74,17 @@ describe('ObjectModelSpec parameter schema normalization', () => {
       ],
     }]);
   });
+
+  it('normalizes legacy targets without an explicit mode before comparing persisted schemas', () => {
+    const legacy = [{
+      id: 'legacy-width', type: 'number', value: 2, min: 1, max: 4,
+      targets: [{ nodeId: 'panel', property: 'dimensions.width' }],
+    }];
+    const current = normalizeObjectModelParameterSchema(legacy, tree, materials);
+    const proposed = normalizeObjectModelParameterSchema([{
+      ...legacy[0],
+      targets: [{ nodeId: 'panel', property: 'dimensions.width', mode: 'set' }],
+    }], tree, materials);
+    expect(current).toEqual(proposed);
+  });
 });

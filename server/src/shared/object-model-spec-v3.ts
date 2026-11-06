@@ -122,8 +122,6 @@ export function validateObjectModelSpecV3(spec: any) {
     }
     nodes.set(node.id, node);
   }
-  const roots = spec.componentTree.filter((node: any) => node.parent === undefined || node.parent === null || node.parent === '');
-  if (roots.length !== 1) fail('ObjectModelSpec 必须只有一个主体根节点');
   for (const node of spec.componentTree) {
     if (node.parent !== undefined && node.parent !== null && node.parent !== '' && !nodes.has(node.parent)) fail('组件父节点不存在：' + node.id);
     const visited = new Set([node.id]);
@@ -136,6 +134,9 @@ export function validateObjectModelSpecV3(spec: any) {
       parent = nodes.get(parent)?.parent;
     }
   }
+
+  const roots = spec.componentTree.filter((node: any) => node.parent === undefined || node.parent === null || node.parent === '');
+  if (roots.length !== 1) fail('ObjectModelSpec 必须只有一个主体根节点');
 
   const parameters = spec.parameterSchema ?? [];
   if (!Array.isArray(parameters) || parameters.length > MAX_PARAMETERS) fail('parameterSchema 最多允许 100 个参数');

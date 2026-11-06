@@ -1,10 +1,16 @@
 import { createObjectModelGeometryCapabilityRegistry } from './object-model-geometry-capability-registry';
 import { describe, expect, it } from '@jest/globals';
 import { normalizeObjectModelParameterSchema } from './object-model-parameter-schema';
-import { validateObjectModelSpecV3 } from './object-model-spec-v3';
+import { OBJECT_MODEL_GEOMETRY_CAPABILITIES, validateObjectModelSpecV3 } from './object-model-spec-v3';
 import { createObjectModelParameterContractCases } from './object-model-parameter-contract.fixtures';
 
 describe('geometry capability validator registry', () => {
+  it('publishes a canonical ID that is identical to the primitive key', () => {
+    for (const [primitive, capability] of Object.entries(OBJECT_MODEL_GEOMETRY_CAPABILITIES)) {
+      expect(capability.id).toBe(primitive);
+    }
+  });
+
   it('requires a validator for every capability and rejects duplicate identifiers', () => {
     expect(() => createObjectModelGeometryCapabilityRegistry([{ primitive: 'box', descriptor: 'optional' } as any]))
       .toThrow('valid primitive, descriptor contract and validator');

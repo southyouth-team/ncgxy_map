@@ -193,16 +193,14 @@ export function compileObjectModelSpec(spec) {
     }
   }
   const parameterSchema = (spec.parameterSchema || []).map(parameter => operationParameterIds.has(parameter.id)
-    ? { ...parameter, generatorControl: true }
+    ? { ...parameter, operationControl: true }
     : parameter);
   return {
     ...spec,
-    schemaVersion: '2.0',
+    schemaVersion: '3.0',
     componentTree,
     parameterSchema,
-    generators: [],
-    constraints: [],
-    operations: undefined,
+    operations: [],
   };
 }
 

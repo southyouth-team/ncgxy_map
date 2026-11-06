@@ -884,10 +884,12 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     }
   });
 
-  it('does not claim an estimate for extruded box geometry or uncalibrated primitives', () => {
+  it('rejects invalid polygon descriptors and uncalibrated primitives', () => {
     expect(() => estimateObjectSculptPrimitiveGeometry('box', { openings: [{}] }))
       .toThrow('当前估算器不支持');
     expect(() => estimateObjectSculptPrimitiveGeometry('polygon', {}))
+      .toThrow('polygon points');
+    expect(() => estimateObjectSculptPrimitiveGeometry('arch', {}))
       .toThrow('没有经过校准');
   });
 

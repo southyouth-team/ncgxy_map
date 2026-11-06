@@ -451,6 +451,99 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(right.material.color.getHexString()).toBe('cccccc');
   });
 
+  it('rebuilds only users of an updated material and disposes replaced resources once', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      materials: {
+        shared: { color: '#888888', roughness: 0.8, metalness: 0 },
+        independent: { color: '#00aa00', roughness: 0.5, metalness: 0 },
+      },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'left', parent: 'root', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'right', parent: 'root', primitive: 'sphere', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'independent', parent: 'root', primitive: 'box', material: 'independent', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const leftGroup = model.userData.componentGroups.get('left');
+    const rightGroup = model.userData.componentGroups.get('right');
+    const independentGroup = model.userData.componentGroups.get('independent');
+    const leftMesh = leftGroup.getObjectByName('left:mesh');
+    const rightMesh = rightGroup.getObjectByName('right:mesh');
+    const independentMesh = independentGroup.getObjectByName('independent:mesh');
+    const disposeCount = { leftGeometry: 0, leftMaterial: 0, rightGeometry: 0, rightMaterial: 0 };
+    leftMesh.geometry.addEventListener('dispose', () => disposeCount.leftGeometry++);
+    leftMesh.material.addEventListener('dispose', () => disposeCount.leftMaterial++);
+    rightMesh.geometry.addEventListener('dispose', () => disposeCount.rightGeometry++);
+    rightMesh.material.addEventListener('dispose', () => disposeCount.rightMaterial++);
+    const next = structuredClone(model.userData.objectSculptSpec);
+    next.materials.shared.color = '#ff0000';
+    const changeSetResult = {
+      objectModelSpec: next,
+      changes: [{ type: 'update-material', materialId: 'shared' }],
+      affectedNodeIds: [],
+      affectedMaterialIds: ['shared'],
+    };
+
+    applyObjectSculptComponentChanges(THREE, model, next, changeSetResult);
+
+    const nextLeft = model.userData.componentGroups.get('left');
+    const nextRight = model.userData.componentGroups.get('right');
+    expect(nextLeft).not.toBe(leftGroup);
+    expect(nextRight).not.toBe(rightGroup);
+    expect(model.userData.componentGroups.get('independent')).toBe(independentGroup);
+    expect(nextLeft.getObjectByName('left:mesh').material.color.getHexString()).toBe('ff0000');
+    expect(nextRight.getObjectByName('right:mesh').material.color.getHexString()).toBe('ff0000');
+    expect(independentGroup.getObjectByName('independent:mesh')).toBe(independentMesh);
+    expect(disposeCount).toEqual({ leftGeometry: 1, leftMaterial: 1, rightGeometry: 1, rightMaterial: 1 });
+  });
+
+  it('releases a removed material only after all of its component users are reassigned', () => {
+    const spec = {
+      schemaVersion: '3.0',
+      materials: {
+        shared: { color: '#888888', roughness: 0.8, metalness: 0 },
+        replacement: { color: '#2222ff', roughness: 0.6, metalness: 0 },
+      },
+      componentTree: [
+        { id: 'root', kind: 'group' },
+        { id: 'left', parent: 'root', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
+        { id: 'right', parent: 'root', primitive: 'sphere', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
+      ],
+    };
+    const model = createObjectSculptModel(THREE, spec);
+    const oldMeshes = ['left', 'right'].map(id => model.userData.componentGroups.get(id).getObjectByName(id + ':mesh'));
+    const disposeCount = { geometry: [0, 0], material: [0, 0] };
+    oldMeshes.forEach((mesh, index) => {
+      mesh.geometry.addEventListener('dispose', () => disposeCount.geometry[index]++);
+      mesh.material.addEventListener('dispose', () => disposeCount.material[index]++);
+    });
+    const next = structuredClone(model.userData.objectSculptSpec);
+    next.componentTree.forEach(node => {
+      if (node.id === 'left' || node.id === 'right') node.material = 'replacement';
+    });
+    delete next.materials.shared;
+    const changeSetResult = {
+      objectModelSpec: next,
+      changes: [
+        { type: 'replace-component', nodeId: 'left', component: next.componentTree.find(node => node.id === 'left') },
+        { type: 'replace-component', nodeId: 'right', component: next.componentTree.find(node => node.id === 'right') },
+        { type: 'remove-material', materialId: 'shared' },
+      ],
+      affectedNodeIds: ['left', 'right'],
+      affectedMaterialIds: ['shared', 'replacement'],
+    };
+
+    applyObjectSculptComponentChanges(THREE, model, next, changeSetResult);
+
+    expect(model.userData.objectSculptSpec.materials).not.toHaveProperty('shared');
+    for (const id of ['left', 'right']) {
+      expect(model.userData.componentGroups.get(id).getObjectByName(id + ':mesh').material.color.getHexString()).toBe('2222ff');
+    }
+    expect(disposeCount).toEqual({ geometry: [1, 1], material: [1, 1] });
+  });
+
   it('routes box and cuboid geometry through their registered capability executors', () => {
     const spec = {
       schemaVersion: '3.0',

@@ -126,144 +126,6 @@ function validateGeneratedParameterSchema(input: unknown, componentTree: any[], 
   return input;
 }
 
-/**
- * 生成器模板必须以 Group 为根。模型有时会把单个 Mesh 直接声明为模板根，
- * 这里自动补一层无几何 Group，保留原节点及其局部变换，避免把可修复的结构偏差升级为 503。
- */
-function normalizeGeneratorTemplateRoots(componentTree: any[], generators: any[]) {
-  const byId = new Map(componentTree.map(node => [node.id, node]));
-  const usedIds = new Set(byId.keys());
-  for (const generator of generators) {
-    const root = byId.get(generator?.templateRootId);
-    if (!root) continue; // 后续 validator 会给出明确的引用错误
-    if (String(root.kind || 'mesh').toLowerCase() === 'group') {
-      root.kind = 'group';
-      continue;
-    }
-    const originalParent = root.parent;
-    const baseId = String(generator.id || 'generator') + '-template-group';
-    let groupId = baseId, suffix = 2;
-    while (usedIds.has(groupId)) groupId = baseId + '-' + suffix++;
-    usedIds.add(groupId);
-    const wrapper = {
-      id: groupId,
-      kind: 'group',
-      name: (root.name || generator.id || '生成器模板') + '（结构组）',
-      ...(originalParent ? { parent: originalParent } : {}),
-      transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-    };
-    root.parent = groupId;
-    componentTree.push(wrapper);
-    byId.set(groupId, wrapper);
-    generator.templateRootId = groupId;
-  }
-}
-
-function validateGeneratedGenerators(input: unknown, componentTree: any[]) {
-  if (input == null) return { generators: [], parameterIds: new Set<string>() };
-  if (!Array.isArray(input) || input.length > 30) throw new ServiceUnavailableException('AI generators 必须是最多 30 项的数组');
-  const byId = new Map(componentTree.map(node => [node.id, node]));
-  const ids = new Set<string>(), parameterIds = new Set<string>(), claimedNodes = new Set<string>();
-  let expandedCount = componentTree.length;
-  const getSubtree = (rootId: string) => componentTree.filter(node => {
-    let parent = node.id;
-    while (parent) {
-      if (parent === rootId) return true;
-      parent = byId.get(parent)?.parent;
-    }
-    return false;
-  });
-  const generators = input.map((raw: any) => {
-    const id = typeof raw?.id === 'string' ? raw.id : '';
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)
-      || !['repeat','grid'].includes(raw?.type)) throw new ServiceUnavailableException('AI 结构生成器 ID 或类型无效：' + id);
-    ids.add(id);
-    const root = byId.get(raw.templateRootId);
-    if (!root || (root.kind || 'mesh') !== 'group') throw new ServiceUnavailableException('AI 结构生成器模板根节点必须是 Group：' + id);
-    const subtree = getSubtree(root.id);
-    if (!subtree.length) throw new ServiceUnavailableException('AI 结构生成器模板子树为空：' + id);
-    for (const node of subtree) {
-      if (claimedNodes.has(node.id)) throw new ServiceUnavailableException('AI 结构生成器模板不能嵌套或重叠：' + id);
-      claimedNodes.add(node.id);
-    }
-    const parameterId = (value: unknown): string => {
-      if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value)) {
-        throw new ServiceUnavailableException('AI 结构生成器数量参数引用 ID 无效：' + id);
-      }
-      // Generator parameter IDs are references to shared business parameters.
-      // Uniqueness belongs to parameterSchema and to row/column pairs within one grid, not across generators.
-      parameterIds.add(value);
-      return value;
-    };
-    if (raw.type === 'repeat') {
-      const countParameterId = parameterId(raw.countParameterId);
-      const spacing = Number(raw.spacing), defaultCount = Number(raw.defaultCount), maxCount = Number(raw.maxCount);
-      if (!['x','y','z'].includes(raw.axis) || !Number.isFinite(spacing) || Math.abs(spacing) > 100
-        || !Number.isInteger(defaultCount) || !Number.isInteger(maxCount) || defaultCount < 1 || defaultCount > maxCount || maxCount > 100
-        || (raw.followers !== undefined && (!Array.isArray(raw.followers) || raw.followers.length > 30))) {
-        throw new ServiceUnavailableException('AI repeat 生成器间距、轴向或数量范围无效：' + id);
-      }
-      const followers = (raw.followers || []).map((follower: any) => {
-        if (!byId.has(follower?.nodeId) || !['x','y','z'].includes(follower.axis)
-          || subtree.some(node => node.id === follower.nodeId) || !Number.isFinite(Number(follower.offset ?? 0))
-          || Math.abs(Number(follower.offset ?? 0)) > 100) throw new ServiceUnavailableException('AI repeat followers 无效：' + id);
-        return follower;
-      });
-      expandedCount += subtree.length * (maxCount - 1);
-      if (expandedCount > 300) throw new ServiceUnavailableException('AI 生成器最大展开组件数超过 300：' + id);
-      return { ...raw, id, countParameterId, spacing, defaultCount, maxCount, followers };
-    }
-    const rowParameterId = parameterId(raw.rowParameterId), columnParameterId = parameterId(raw.columnParameterId);
-    const spacingX = Number(raw.spacingX), spacingZ = Number(raw.spacingZ);
-    const spacingXParameterId = raw.spacingXParameterId == null ? undefined : raw.spacingXParameterId;
-    const spacingZParameterId = raw.spacingZParameterId == null ? undefined : raw.spacingZParameterId;
-    // Dynamic spacing parameters are generator controls too; they may intentionally
-    // have no component targets, just like repeat counts and grid dimensions.
-    if (spacingXParameterId) parameterIds.add(spacingXParameterId);
-    if (spacingZParameterId) parameterIds.add(spacingZParameterId);
-    const spacingXScale = Number(raw.spacingXScale), spacingZScale = Number(raw.spacingZScale);
-    const defaultRows = Number(raw.defaultRows), defaultColumns = Number(raw.defaultColumns);
-    const maxRows = Number(raw.maxRows), maxColumns = Number(raw.maxColumns);
-    if (raw.centered !== undefined && typeof raw.centered !== 'boolean') throw new ServiceUnavailableException('AI grid centered 必须是布尔值：' + id);
-    if ((spacingXParameterId && (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(spacingXParameterId) || !Number.isFinite(spacingXScale) || Math.abs(spacingXScale) > 10)) || (spacingZParameterId && (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(spacingZParameterId) || !Number.isFinite(spacingZScale) || Math.abs(spacingZScale) > 10))) throw new ServiceUnavailableException('AI grid 动态间距比例无效：' + id);
-    if (rowParameterId === columnParameterId || ![spacingX,spacingZ].every(value => Number.isFinite(value) && Math.abs(value) <= 100)
-      || ![defaultRows,defaultColumns,maxRows,maxColumns].every(Number.isInteger)
-      || defaultRows < 1 || defaultColumns < 1 || defaultRows > maxRows || defaultColumns > maxColumns
-      || maxRows > 100 || maxColumns > 100 || maxRows * maxColumns * subtree.length > 300) {
-      throw new ServiceUnavailableException('AI grid 生成器行列、间距或最大展开数量无效：' + id);
-    }
-    expandedCount += subtree.length * (maxRows * maxColumns - 1);
-    if (expandedCount > 300) throw new ServiceUnavailableException('AI 生成器最大展开组件数超过 300：' + id);
-    return { ...raw, id, rowParameterId, columnParameterId, spacingX, spacingZ, spacingXParameterId, spacingXScale, spacingZParameterId, spacingZScale, centered: raw.centered === true, defaultRows, defaultColumns, maxRows, maxColumns };
-  });
-  return { generators, parameterIds };
-}
-
-function validateGeneratorParameterBindings(generators: any[], parameterSchema: any[]) {
-  for (const generator of generators) {
-    const ids = generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId];
-    const defaults = generator.type === 'grid' ? [generator.defaultRows, generator.defaultColumns] : [generator.defaultCount];
-    const maximums = generator.type === 'grid' ? [generator.maxRows, generator.maxColumns] : [generator.maxCount];
-    for (let index = 0; index < ids.length; index += 1) {
-      const parameter = parameterSchema.find(item => item.id === ids[index]);
-      if (!parameter || parameter.type !== 'number' || !Number.isInteger(parameter.min)
-        || !Number.isInteger(parameter.max) || !Number.isInteger(parameter.value)
-        || parameter.min < 1 || parameter.max > maximums[index]
-        || parameter.value !== defaults[index] || parameter.value < parameter.min || parameter.value > parameter.max) {
-        throw new ServiceUnavailableException('AI 生成器必须绑定默认值一致的有效整数数量参数：' + generator.id);
-      }
-    }
-    if (generator.type === 'grid') {
-      for (const [parameterId, scale] of [[generator.spacingXParameterId, generator.spacingXScale], [generator.spacingZParameterId, generator.spacingZScale]]) {
-        if (!parameterId) continue;
-        const parameter = parameterSchema.find(item => item.id === parameterId);
-        if (!parameter || parameter.type !== 'number' || !Number.isFinite(parameter.value) || !Number.isFinite(scale) || Math.abs(scale) > 10) throw new ServiceUnavailableException('AI 网格动态间距必须绑定有效数值参数：' + generator.id);
-      }
-    }
-  }
-}
-
-
 function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   if (input == null) return { operations: [], parameterIds: new Set<string>(), expressionParameterIds: new Set<string>() };
   if (!Array.isArray(input) || input.length > 40) throw new ServiceUnavailableException('AI operations 必须是最多 40 项的数组');
@@ -489,7 +351,7 @@ export class ImageGenerationService {
     if (serialized.length > 30000) throw new BadRequestException('待修复模型数据超过 30 KB');
     const repairPrompt = [
       '这是针对现有 ObjectSculptSpec 的定向结构修复，不是重新设计或重新生成整个物体。',
-      original.schemaVersion === '3.0' ? '必须保留 targetName、category、objectType、visualStyle、materials、所有节点 ID、parent 层级、非错误节点几何、transform、parameterSchema 和 operations；operations 必须逐字段保持不变。' : '必须保留 targetName、category、objectType、visualStyle、materials、所有节点 ID、parent 层级、非错误节点几何、transform、parameterSchema、generators 和 constraints。',
+      '必须保留 ObjectModelSpec 3.0 的 targetName、category、objectType、visualStyle、materials、所有节点 ID、parent 层级、非错误节点几何、transform、parameterSchema 和 operations；operations 必须逐字段保持不变。',
       '只允许修改错误明确涉及的节点及其必要几何字段。不要删除组件，不要把复杂几何降级为 box，不要改变参考物体轮廓。',
       'Runtime 错误：' + validationError,
       '原始 ObjectSculptSpec JSON：' + serialized,
@@ -527,7 +389,7 @@ export class ImageGenerationService {
     const editPrompt = [
       '这是对现有 Three.js ObjectSculptSpec 的微调任务，不是从零创建新物体。',
       targetDescription,
-      original.schemaVersion === '3.0' ? '必须返回完整 ObjectModelSpec 3.0 JSON。尽可能保留原有节点 ID、层级、未涉及几何、材质、参数和 operations；operations 必须逐字段保持不变。' : '必须返回完整 ObjectSculptSpec JSON。尽可能保留原有节点 ID、层级、未涉及几何、材质、参数、generators 和 constraints。',
+      '必须返回完整 ObjectModelSpec 3.0 JSON。尽可能保留原有节点 ID、层级、未涉及几何、材质、参数和 operations；operations 必须逐字段保持不变。',
       '不得把复杂几何降级成简单方盒，不得无故删除部件或改变整体风格。',
       '用户微调要求：' + instruction,
       '当前 ObjectSculptSpec：' + serialized,
@@ -581,9 +443,9 @@ export class ImageGenerationService {
         ...original,
         materials: mergedMaterials,
         componentTree: [...preservedNodes, ...editedNodes],
-        // 局部编辑不允许重写全局参数/生成器/约束；避免选中部件之外的联动被意外改变。
+        // 局部编辑不允许重写全局参数和结构运算；避免选中部件之外的联动被意外改变。
         parameterSchema: original.parameterSchema || [],
-        ...(original.schemaVersion === '3.0' ? { operations: original.operations || [] } : { generators: original.generators || [], constraints: original.constraints || [] }),
+        operations: original.operations || [],
       };
       return {
         ...result,
@@ -751,7 +613,7 @@ export class ImageGenerationService {
       throw new ServiceUnavailableException('视觉模型未返回有效 ObjectSculptSpec JSON');
     }
     if (!spec || typeof spec !== 'object' || Array.isArray(spec)
-      || !['2.0','3.0'].includes(spec.schemaVersion) || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
+      || spec.schemaVersion !== '3.0' || !Array.isArray(spec.componentTree) || spec.componentTree.length < 1 || spec.componentTree.length > 100
       || !spec.materials || typeof spec.materials !== 'object' || Array.isArray(spec.materials)) {
       throw new ServiceUnavailableException('视觉模型返回的 ObjectSculptSpec 结构无效');
     }
@@ -796,26 +658,14 @@ export class ImageGenerationService {
       this.logger.warn('ObjectSculptSpec 几何校验失败，执行一次定向修复：' + error.message);
       return this.repairObjectFromValidation(spec, error.message, objectType, visualStyle);
     }
-    if (spec.schemaVersion === '3.0') {
-      const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
-      spec.operations = operationValidation.operations;
-      const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
-      spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
-      validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
-    } else {
-      // Transitional read path for existing 2.0 templates. New generation prompts and
-      // all new procedural authoring use 3.0 operations; legacy templates remain editable.
-      normalizeGeneratorTemplateRoots(spec.componentTree, Array.isArray(spec.generators) ? spec.generators : []);
-      const generatorValidation = validateGeneratedGenerators(spec.generators, spec.componentTree);
-      spec.generators = generatorValidation.generators;
-      spec.parameterSchema = validateGeneratedParameterSchema(
-        normalizeGeneratedParameterBindings(spec.parameterSchema),
-        spec.componentTree,
-        generatorValidation.parameterIds,
-        spec.materials,
-      );
-      validateGeneratorParameterBindings(spec.generators, spec.parameterSchema);
+    if (Object.prototype.hasOwnProperty.call(spec, 'generators') || Object.prototype.hasOwnProperty.call(spec, 'constraints')) {
+      throw new ServiceUnavailableException('ObjectModelSpec 3.0 不接受 generators/constraints；请使用 operations 声明结构运算');
     }
+    const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
+    spec.operations = operationValidation.operations;
+    const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
+    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
+    validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };
   }

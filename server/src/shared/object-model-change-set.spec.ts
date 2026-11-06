@@ -101,12 +101,19 @@ describe('ObjectModelChangeSet 1.0', () => {
 
   it('rejects a candidate that fails the canonical ObjectModelSpec validator', () => {
     const base = baseSpec();
-    expect(() => applyObjectModelChangeSet(base, changeSet(base, [
-      { type: 'replace-component', nodeId: 'body', component: {
-        id: 'body', parent: 'root', primitive: 'box',
-        dimensions: { width: 0, height: 2, depth: 2 },
-      } },
-    ]))).toThrow('ChangeSet 执行结果未通过 ObjectModelSpec 校验');
+    let caught: any;
+    try {
+      applyObjectModelChangeSet(base, changeSet(base, [
+        { type: 'replace-component', nodeId: 'body', component: {
+          id: 'body', parent: 'root', primitive: 'box',
+          dimensions: { width: 0, height: 2, depth: 2 },
+        } },
+      ]));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ code: 'invalid_result' });
+    expect(caught.message).toContain('组件尺寸超出允许范围：body.width');
   });
 
   it('rejects prototype-polluting keys and does not mutate the baseline', () => {

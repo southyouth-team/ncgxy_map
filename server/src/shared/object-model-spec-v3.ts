@@ -405,6 +405,7 @@ export function validateObjectModelSpecV3(spec: any, options: { mode?: 'raw' | '
       if (['visible-from', 'visible-through'].includes(mode) && (target.property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) fail('可见性阈值参数无效：' + parameter.id);
       if (target.property === 'visibility.visible' && !['set', 'visible-from', 'visible-through'].includes(mode)) fail('可见性参数运算无效：' + parameter.id);
       if (target.property === 'geometry.primitive' && mode !== 'set') fail('几何类型参数仅支持 set：' + parameter.id);
+      if (target.property === 'geometry.primitive' && parameter.options.some((option: any) => !getObjectModelGeometryCapability(option?.value))) fail('几何类型参数包含未注册的 primitive：' + parameter.id);
     }
   }
   return { nodes, parameterById, componentCount: nodes.size, expandedComponentCount: expandedCount };

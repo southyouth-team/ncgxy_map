@@ -32,10 +32,7 @@ describe('ImageGenerationService', () => {
         { id: 'ground-left-window', parent: 'repeat_ground_left_windows', primitive: 'box',
           dimensions: { width: 1.1, height: 1.4, depth: 0.12 }, material: 'glass' },
       ],
-      parameterSchema: [{
-        id: 'ground-left-window-count', label: '一层左侧窗户数量', type: 'number',
-        value: 6, min: 2, max: 12, step: 1, targets: [],
-      }],
+      parameterSchema: [],
       operations: [{
         id: 'instance-ground-left-windows', type: 'instance', sourceRootId,
         count: { parameterId: 'ground-left-window-count' },
@@ -167,6 +164,8 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('positions:[x,y,z,...],indices:[a,b,c,...]');
     expect(systemPrompt).toContain('旧式 geometryDescriptor 仍可用于兼容构造');
     expect(systemPrompt).toContain('MVP 生成阶段不使用 instance operations、sourceRootId 或表达式参数绑定');
+    expect(systemPrompt).toContain('geometry 必须严格是 {type:"indexed-mesh",positions:[x,y,z,...],indices:[a,b,c,...]}');
+    expect(systemPrompt).toContain('若无法完整满足上述格式，必须省略 geometry');
     expect(systemPrompt).toContain('重复窗户、栏杆、立柱、车轮、叶片等结构必须直接展开');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
     expect(systemPrompt).toContain('不受预置几何类型限制');

@@ -193,8 +193,8 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   replacement.userData = {
     ...(replacement.userData || {}),
     proceduralModelSource: source,
-    proceduralModelParameters: Array.isArray(definitions) ? definitions : replacement.userData.proceduralModelParameters || [],
-    proceduralModelParts: Array.isArray(parts) ? parts : replacement.userData.proceduralModelParts || [],
+    proceduralModelParameters: Array.isArray(definitions) && definitions.length ? definitions : replacement.userData.proceduralModelParameters || [],
+    proceduralModelParts: Array.isArray(parts) && parts.length ? parts : replacement.userData.proceduralModelParts || [],
     proceduralModelParameterValues: { ...(values || {}) },
     proceduralModelConfig: { ...(current.userData.proceduralModelConfig || {}), updatedAt: new Date().toISOString() },
     interactionRadius: Number(current.userData.interactionRadius) || 4.5,
@@ -221,6 +221,7 @@ async function handleModelEdit(payload) {
       body: JSON.stringify({
         source,
         parameters: current.userData.proceduralModelParameters || [],
+        parameterValues: values,
         parts: current.userData.proceduralModelParts || [],
         selectedPartId: payload?.selectedPartId || '',
         instruction: payload?.instruction || '',

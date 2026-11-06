@@ -108,6 +108,63 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let lastRenderCostMs = 0
   let directionalLight = null
 
+  /**
+   * MVP bridge: mount an AI-generated building into the shared RPG world.
+   * The exterior remains the generated Object3D; indoor rooms/floors are supplied
+   * as spatial metadata and rendered by the existing indoor runtime.
+   */
+  function mountMvpBuilding(model, options = {}) {
+    if (!isRpgSample || !campus) throw new Error('AI 建筑挂载仅在 MVP 世界场景中可用');
+    if (indoorGroup) throw new Error('请先退出室内空间，再替换 AI 建筑');
+    if (!model?.isObject3D || model.parent) throw new TypeError('AI 建筑必须是尚未挂载的 THREE.Object3D');
+    const target = campus.getObjectByName('sample-teaching-building');
+    if (!target) throw new Error('MVP 场景缺少教学楼挂载节点');
+
+    model.updateMatrixWorld(true);
+    const sourceBounds = new THREE.Box3().setFromObject(model);
+    if (sourceBounds.isEmpty()) throw new Error('AI 建筑没有可渲染的几何体');
+    const sourceSize = sourceBounds.getSize(new THREE.Vector3());
+    if (![sourceSize.x, sourceSize.y, sourceSize.z].every(value => Number.isFinite(value) && value > 0.001)) {
+      throw new Error('AI 建筑几何尺寸无效，无法装配到场景');
+    }
+
+    const width = Number(options.width) || 14.8;
+    const depth = Number(options.depth) || 8.5;
+    const floorHeight = Number(options.floorHeight) || 4.2;
+    const floors = Number.isInteger(options.floors) ? Math.max(1, options.floors) : 2;
+    const height = floors * floorHeight;
+    const holder = new THREE.Group();
+    holder.name = 'ai-generated-building-model';
+    model.position.x -= (sourceBounds.min.x + sourceBounds.max.x) / 2;
+    model.position.y -= sourceBounds.min.y;
+    model.position.z -= (sourceBounds.min.z + sourceBounds.max.z) / 2;
+    holder.add(model);
+    holder.scale.set(width / sourceSize.x, height / sourceSize.y, depth / sourceSize.z);
+    holder.position.y = Number(target.userData.generatedBuildingBaseY) || 0.73;
+
+    const foundation = target.userData.foundationMesh;
+    target.children.slice().forEach(child => {
+      if (child === foundation) return;
+      target.remove(child);
+      // 原样板建筑复用了场景级材质；替换资产时只释放旧几何，避免误销毁道路等对象共用的材质。
+      child.traverse?.(object => object.geometry?.dispose?.());
+    });
+    target.add(holder);
+    target.userData.generatedBuildingShell = holder;
+    target.userData.floorCount = floors;
+    target.userData.floorHeight = floorHeight;
+    target.userData.buildingHeight = height;
+    target.userData.buildingId = 'sample-teaching-building';
+    target.userData.objectType = 'building';
+    target.userData.indoorEntrance = { x: 0, z: depth / 2 + 1.1, radius: Number(options.entranceRadius) || 2.4 };
+    target.userData.rebuildOptions = null;
+    target.updateMatrixWorld(true);
+    invalidateShadowMap();
+    requestFrame();
+    return { buildingId: target.userData.buildingId, floors, floorHeight, dimensions: { width, depth, height }, entrance: { ...target.userData.indoorEntrance } };
+  }
+
+
   // 静态校园保留阴影贴图；只有场景几何变化时才重算，不随相机交互重复执行 shadow pass。
   function invalidateShadowMap() {
     if (!renderer || !renderer.shadowMap.enabled) return
@@ -1066,7 +1123,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 室外靠近教学楼正门按 E 进入；室内交互继续由同一按键处理。
     if (!indoorGroup) {
       if (nearOutdoorBuildingId) enterIndoorBuilding(nearOutdoorBuildingId)
-      else if (nearOutdoorEntrance) enterIndoorPrototype()
+      else if (nearOutdoorEntrance) {
+        if (isRpgSample) enterIndoorBuilding('sample-teaching-building')
+        else enterIndoorPrototype()
+      }
       return
     }
     if (stairTransition) return
@@ -1906,5 +1966,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, resetView, enterIndoorPrototype, enterIndoorBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, resetView, enterIndoorPrototype, enterIndoorBuilding, mountMvpBuilding, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

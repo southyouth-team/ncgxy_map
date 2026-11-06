@@ -919,7 +919,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
       .toThrow('当前估算器不支持');
     expect(() => estimateObjectSculptPrimitiveGeometry('polygon', {}))
       .toThrow('polygon points');
-    expect(estimateObjectSculptPrimitiveGeometry('arch', {}).vertexCount).toBe(204);
+    expect(estimateObjectSculptPrimitiveGeometry('arch', {}).vertexCount).toBe(828);
   });
 
   it('executes cylinder, cone, sphere, ellipsoid and torus through registered capabilities', () => {

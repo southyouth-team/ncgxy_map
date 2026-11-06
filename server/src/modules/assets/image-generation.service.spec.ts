@@ -210,7 +210,7 @@ describe('ImageGenerationService', () => {
     expect(result.objectSculptSpec.materials).toEqual(original.materials);
   });
 
-  it('keeps component replacement fallback when AI changes indexed-mesh topology', async () => {
+  it('converts indexed-mesh topology changes into a component replacement ChangeSet', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
     const original = {
       schemaVersion: '3.0',
@@ -219,24 +219,20 @@ describe('ImageGenerationService', () => {
       operations: [],
       componentTree: [{
         id: 'body', material: 'stone',
-        geometry: {
-          type: 'indexed-mesh',
-          positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
-          indices: [0, 1, 2],
-        },
+        geometry: { type: 'indexed-mesh', positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], indices: [0, 1, 2] },
       }],
     };
     const generated = JSON.parse(JSON.stringify(original));
     generated.componentTree[0].geometry.indices = [0, 2, 1];
     global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify(generated) } }] }),
+      ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(generated) } }] }),
     }) as never;
-
     const result = await service.modifyObjectFromInstruction(original, ['body'], '翻转三角面方向');
-
     expect(result.editScope).toBe('component');
-    expect(result.changeSetResult).toBeUndefined();
+    expect(result.changeSetResult.changes).toEqual([expect.objectContaining({
+      type: 'replace-component', nodeId: 'body',
+      component: expect.objectContaining({ geometry: expect.objectContaining({ indices: [0, 2, 1] }) }),
+    })]);
     expect(result.objectSculptSpec.componentTree[0].geometry.indices).toEqual([0, 2, 1]);
   });
 

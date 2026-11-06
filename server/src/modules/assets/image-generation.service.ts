@@ -68,6 +68,68 @@ function createVertexOnlyChangeSetResult(original: any, candidate: any) {
   });
 }
 
+/**
+ * Convert a validated full AI candidate into the smallest supported structural ChangeSet.
+ * The AI may still return a full Spec; the server owns the diff, revision and canonical validation.
+ */
+function createObjectModelChangeSetResult(original: any, candidate: any) {
+  const vertexOnly = createVertexOnlyChangeSetResult(original, candidate);
+  if (vertexOnly) return vertexOnly;
+  const { componentTree: originalTree, materials: originalMaterials, parameterSchema: originalParameters, operations: originalOperations, ...originalMetadata } = original;
+  const { componentTree: candidateTree, materials: candidateMaterials, parameterSchema: candidateParameters, operations: candidateOperations, ...candidateMetadata } = candidate;
+  if (stableJson(originalMetadata) !== stableJson(candidateMetadata)
+    || !Array.isArray(originalTree) || !Array.isArray(candidateTree)) return null;
+  const originalById = new Map<string, any>(originalTree.map((node: any) => [node.id, node]));
+  const candidateById = new Map<string, any>(candidateTree.map((node: any) => [node.id, node]));
+  if (originalById.size !== originalTree.length || candidateById.size !== candidateTree.length) return null;
+  const originalRoots = originalTree.filter((node: any) => !node.parent);
+  const candidateRoots = candidateTree.filter((node: any) => !node.parent);
+  if (originalRoots.length !== 1 || candidateRoots.length !== 1 || originalRoots[0].id !== candidateRoots[0].id) return null;
+  const changes: any[] = [];
+  const beforeMaterials = originalMaterials || {}, afterMaterials = candidateMaterials || {};
+  for (const [materialId, material] of Object.entries(afterMaterials)) {
+    if (!Object.prototype.hasOwnProperty.call(beforeMaterials, materialId) || stableJson(beforeMaterials[materialId]) !== stableJson(material)) {
+      changes.push({ type: 'upsert-material', materialId, material });
+    }
+  }
+  const addedNodes = candidateTree.filter((node: any) => !originalById.has(node.id));
+  const availableIds = new Set(originalById.keys());
+  const pendingAdds = [...addedNodes];
+  while (pendingAdds.length) {
+    const index = pendingAdds.findIndex((node: any) => node.parent && availableIds.has(node.parent));
+    if (index < 0) return null;
+    const [node] = pendingAdds.splice(index, 1);
+    changes.push({ type: 'add-component', component: node });
+    availableIds.add(node.id);
+  }
+  for (const node of candidateTree) {
+    const previous = originalById.get(node.id);
+    if (previous && stableJson(previous) !== stableJson(node)) {
+      changes.push({ type: 'replace-component', nodeId: node.id, component: node });
+    }
+  }
+  const removedIds = new Set(originalTree.filter((node: any) => !candidateById.has(node.id)).map((node: any) => node.id));
+  const removalRoots = originalTree.filter((node: any) => removedIds.has(node.id) && (!node.parent || !removedIds.has(node.parent)));
+  for (const node of removalRoots) changes.push({ type: 'remove-component', nodeId: node.id, cascade: true });
+  for (const [materialId] of Object.entries(beforeMaterials)) {
+    if (Object.prototype.hasOwnProperty.call(afterMaterials, materialId)) continue;
+    if (candidateTree.some((node: any) => node.material === materialId)) return null;
+    changes.push({ type: 'remove-material', materialId });
+  }
+  if (stableJson(originalParameters ?? []) !== stableJson(candidateParameters ?? [])) {
+    changes.push({ type: 'replace-parameter-schema', parameterSchema: candidateParameters ?? [] });
+  }
+  if (stableJson(originalOperations ?? []) !== stableJson(candidateOperations ?? [])) {
+    changes.push({ type: 'replace-operations', operations: candidateOperations ?? [] });
+  }
+  if (!changes.length || changes.length > 200) return null;
+  return applyObjectModelChangeSet(original, {
+    changeSetVersion: '1.0',
+    baseRevision: getObjectModelRevision(original),
+    changes,
+  });
+}
+
 function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   if (input == null) return { operations: [], parameterIds: new Set<string>(), expressionParameterIds: new Set<string>() };
   if (!Array.isArray(input) || input.length > 40) throw new ServiceUnavailableException('AI operations 必须是最多 40 项的数组');
@@ -396,18 +458,21 @@ export class ImageGenerationService {
         parameterSchema: original.parameterSchema || [],
         operations: original.operations || [],
       };
-      const changeSetResult = createVertexOnlyChangeSetResult(original, mergedSpec);
+      const changeSetResult = createObjectModelChangeSetResult(original, mergedSpec);
       return {
         ...result,
         objectSculptSpec: changeSetResult?.objectModelSpec || mergedSpec,
         ...(changeSetResult ? { changeSetResult } : {}),
-        affectedNodeIds: [...allowedIds],
+        affectedNodeIds: changeSetResult?.affectedNodeIds || [...allowedIds],
         editScope: 'component',
       };
     }
+    const changeSetResult = createObjectModelChangeSetResult(original, result.objectSculptSpec);
     return {
       ...result,
-      affectedNodeIds: original.componentTree.map((node: any) => node.id),
+      objectSculptSpec: changeSetResult?.objectModelSpec || result.objectSculptSpec,
+      ...(changeSetResult ? { changeSetResult } : {}),
+      affectedNodeIds: changeSetResult?.affectedNodeIds || result.objectSculptSpec.componentTree.map((node: any) => node.id),
       editScope: 'whole-object',
     };
   }

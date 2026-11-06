@@ -896,14 +896,15 @@ export class ImageGenerationService {
 
 
   async modifyProceduralObjectFromInstruction(
-    sourceInput: unknown, parametersInput: unknown, partsInput: unknown,
+    sourceInput: unknown, parametersInput: unknown, parameterValuesInput: unknown, partsInput: unknown,
     selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown,
   ): Promise<any> {
     const source = typeof sourceInput === 'string' ? sourceInput.trim() : '';
     const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 12000) : '';
     if (!source || !instruction) throw new BadRequestException('模型源码和调整指令不能为空');
     if (source.length > 120000) throw new BadRequestException('模型源码超过 120 KB');
-    const parameters = parametersInput && typeof parametersInput === 'object' && !Array.isArray(parametersInput) ? parametersInput : {};
+    const parameterDefinitions = Array.isArray(parametersInput) ? parametersInput.slice(0, 100) : [];
+    const parameterValues = parameterValuesInput && typeof parameterValuesInput === 'object' && !Array.isArray(parameterValuesInput) ? parameterValuesInput : {};
     const parts = Array.isArray(partsInput) ? partsInput.slice(0, 300) : [];
     const selectedPartId = typeof selectedPartIdInput === 'string' ? selectedPartIdInput.slice(0, 160) : '';
     const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';

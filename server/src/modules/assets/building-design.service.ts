@@ -953,7 +953,7 @@ export class BuildingDesignService {
     const current = objectSculptSpecInput as Record<string, any> | undefined;
     const selectedIds = Array.isArray(selectedNodeIdsInput) ? selectedNodeIdsInput.filter((id: unknown) => typeof id === 'string') : [];
     const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 3000) : '';
-    if (!current || current.schemaVersion !== '2.0' || !Array.isArray(current.componentTree) || !current.materials || typeof current.materials !== 'object') {
+    if (!current || !['2.0','3.0'].includes(current.schemaVersion) || !Array.isArray(current.componentTree) || !current.materials || typeof current.materials !== 'object') {
       throw new BadRequestException('当前 ObjectSculptSpec 无效');
     }
     if (!selectedIds.length || selectedIds.length > 30 || !instruction) throw new BadRequestException('请选择一个或多个部件并填写修改要求');
@@ -1080,6 +1080,7 @@ export class BuildingDesignService {
               '不能为没有合适原型的结构创建生成器；不允许执行脚本、表达式或自定义函数。最大展开组件数量 300。',
               '所有参数 ID 唯一；新增参数不得与现有 ID 冲突。最多 100 个参数，每项最多 100 个目标。',
               '禁止返回 JavaScript/TypeScript。AI 只声明参数数据，服务端会再次校验所有字段与目标。',
+              ...(current.schemaVersion === '3.0' ? ['当前协议是 ObjectModelSpec 3.0：必须原样保留 operations，不得返回 generators，不得修改、删除或重排任何 operation；参数设计只新增/调整 parameterSchema 与必要的逻辑 Group。已有 operation 数量参数必须保留 targets=[]，不得把 operation 改写成 repeat/grid。'] : []),
             ].join('\\n') },
             { role: 'user', content: JSON.stringify({ instruction, objectSculptSpec: current }) },
           ],
@@ -1116,6 +1117,27 @@ export class BuildingDesignService {
       if (!currentNodes.has(id) && (node.kind || 'mesh') !== 'group') {
         throw new ServiceUnavailableException('参数化只允许新增逻辑 Group，不允许新增 Mesh：' + id);
       }
+    }
+    if (current.schemaVersion === '3.0') {
+      const operations = Array.isArray(current.operations) ? current.operations : [];
+      if (parsed.operations !== undefined && stableSerialize(parsed.operations) !== stableSerialize(operations)) {
+        throw new ServiceUnavailableException('AI 参数设计不得修改或删除已有 operations');
+      }
+      const operationParameterIds = new Set(operations.map((operation: any) => operation?.count?.parameterId).filter((id: unknown) => typeof id === 'string'));
+      const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, operationParameterIds);
+      const previous = current.parameterSchema || [];
+      const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));
+      for (const item of previous) {
+        if (stableSerialize(nextById.get(item.id)) !== stableSerialize(item)) {
+          throw new ServiceUnavailableException('AI 参数设计不得修改或删除已有参数：' + item.id);
+        }
+      }
+      return {
+        objectSculptSpec: { ...current, componentTree, parameterSchema, operations },
+        addedParameters: parameterSchema.filter((item: any) => !previous.some((old: any) => old.id === item.id)),
+        addedGenerators: [],
+        unsupported: Array.isArray(parsed.unsupported) ? parsed.unsupported.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
+      };
     }
     const generators = normalizeObjectGenerators(parsed.generators ?? current.generators ?? [], componentTree);
     const generatorParameterIds = new Set(generators.flatMap((generator: any) => generator.type === 'grid' ? [generator.rowParameterId, generator.columnParameterId] : [generator.countParameterId]));

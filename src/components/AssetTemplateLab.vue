@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { createCampusAssetTemplateRuntime } from '../three/world/campus/createCampusAssetTemplateRuntime.js'
-import { createObjectSculptModel, applyObjectSculptParameter } from '../three/reconstruction/createObjectSculptModel.js'
+import { createObjectSculptModel, applyObjectSculptParameter, applyObjectSculptMeshVertexUpdates } from '../three/reconstruction/createObjectSculptModel.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const wizardStep = ref(1), templateName = ref(''), templateCategory = ref('building')
@@ -350,6 +350,16 @@ async function modifySelectedAsset() {
     })
     const nextSpec = result.objectSculptSpec
     if (!nextSpec?.componentTree?.length) throw new Error('AI 修改结果缺少有效模型结构')
+    if (result.changeSetResult?.geometryVertexUpdates?.length) {
+      clearComponentHighlight()
+      applyObjectSculptMeshVertexUpdates(THREE, root, result.changeSetResult)
+      selectedComponentId.value = targetNodeId && nextSpec.componentTree.some(node => node.id === targetNodeId) ? targetNodeId : ''
+      editorRevision.value += 1
+      modifyInstruction.value = ''
+      if (selectedComponentId.value) selectComponent(selectedComponentId.value)
+      status.value = targetNodeId ? '部件局部几何修改完成：' + targetLabel : '模型局部几何修改完成'
+      return
+    }
     const position = root.position.clone(), rotation = root.rotation.clone(), objectScale = root.scale.clone()
     clearComponentHighlight()
     scene.remove(root)

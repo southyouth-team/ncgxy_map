@@ -2,8 +2,71 @@ import { BadRequestException, Injectable, Logger, ServiceUnavailableException } 
 import { ConfigService } from '@nestjs/config';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 import { normalizeObjectModelParameterSchema } from '../../shared/object-model-parameter-schema';
+import { applyObjectModelChangeSet, getObjectModelRevision } from '../../shared/object-model-change-set';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+function stableJson(value: any): string {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Convert a complete AI result into a vertex-only ChangeSet when component
+ * identity, topology, materials and all non-position fields remain unchanged.
+ * Any structural or topological difference deliberately falls back to the
+ * existing component replacement path.
+ */
+function createVertexOnlyChangeSetResult(original: any, candidate: any) {
+  const { componentTree: originalTree, ...originalMetadata } = original;
+  const { componentTree: candidateTree, ...candidateMetadata } = candidate;
+  if (stableJson(originalMetadata) !== stableJson(candidateMetadata)
+    || !Array.isArray(originalTree) || !Array.isArray(candidateTree)
+    || originalTree.length !== candidateTree.length) return null;
+
+  const originalById = new Map(originalTree.map((node: any) => [node.id, node]));
+  const candidateById = new Map(candidateTree.map((node: any) => [node.id, node]));
+  if (originalById.size !== candidateById.size) return null;
+
+  const changes: Array<{ type: 'update-mesh-vertices'; nodeId: string; updates: Array<{ index: number; position: [number, number, number] }> }> = [];
+  for (const [nodeId, originalNode] of originalById) {
+    const candidateNode = candidateById.get(nodeId);
+    if (!candidateNode) return null;
+    if (stableJson(originalNode) === stableJson(candidateNode)) continue;
+    if (originalNode.geometry?.type !== 'indexed-mesh'
+      || candidateNode.geometry?.type !== 'indexed-mesh'
+      || !Array.isArray(originalNode.geometry.positions)
+      || !Array.isArray(candidateNode.geometry.positions)
+      || originalNode.geometry.positions.length !== candidateNode.geometry.positions.length
+      || stableJson(originalNode.geometry.indices) !== stableJson(candidateNode.geometry.indices)) return null;
+
+    const withoutPositions = (node: any) => {
+      const { positions, ...geometry } = node.geometry;
+      return { ...node, geometry };
+    };
+    if (stableJson(withoutPositions(originalNode)) !== stableJson(withoutPositions(candidateNode))) return null;
+
+    const updates: Array<{ index: number; position: [number, number, number] }> = [];
+    for (let offset = 0; offset < originalNode.geometry.positions.length; offset += 3) {
+      const previous = originalNode.geometry.positions.slice(offset, offset + 3);
+      const next = candidateNode.geometry.positions.slice(offset, offset + 3);
+      if (stableJson(previous) === stableJson(next)) continue;
+      updates.push({ index: offset / 3, position: next as [number, number, number] });
+    }
+    if (!updates.length) return null;
+    changes.push({ type: 'update-mesh-vertices', nodeId, updates });
+  }
+  if (!changes.length) return null;
+
+  return applyObjectModelChangeSet(original, {
+    changeSetVersion: '1.0',
+    baseRevision: getObjectModelRevision(original),
+    changes,
+  });
+}
 
 function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   if (input == null) return { operations: [], parameterIds: new Set<string>(), expressionParameterIds: new Set<string>() };
@@ -320,6 +383,7 @@ export class ImageGenerationService {
         const materialKey = typeof node.material === 'string' ? node.material : '';
         const generatedMaterial = materialKey ? result.objectSculptSpec.materials?.[materialKey] : null;
         if (!generatedMaterial) return;
+        if (mergedMaterials[materialKey] && stableJson(mergedMaterials[materialKey]) === stableJson(generatedMaterial)) return;
         const isolatedKey = 'local-edit-' + node.id + '-' + materialKey;
         mergedMaterials[isolatedKey] = generatedMaterial;
         node.material = isolatedKey;
@@ -332,9 +396,11 @@ export class ImageGenerationService {
         parameterSchema: original.parameterSchema || [],
         operations: original.operations || [],
       };
+      const changeSetResult = createVertexOnlyChangeSetResult(original, mergedSpec);
       return {
         ...result,
-        objectSculptSpec: mergedSpec,
+        objectSculptSpec: changeSetResult?.objectModelSpec || mergedSpec,
+        ...(changeSetResult ? { changeSetResult } : {}),
         affectedNodeIds: [...allowedIds],
         editScope: 'component',
       };

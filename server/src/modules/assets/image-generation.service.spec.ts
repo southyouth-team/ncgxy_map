@@ -174,6 +174,68 @@ describe('ImageGenerationService', () => {
     expect(result.repair.strategy).toBe('targeted-structure-repair');
   });
 
+  it('converts AI component edits with unchanged indexed-mesh topology into vertex ChangeSets', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const original = {
+      schemaVersion: '3.0',
+      targetName: 'mesh-object',
+      materials: { stone: { color: '#888888', roughness: 0.8, metalness: 0 } },
+      componentTree: [{
+        id: 'body', kind: 'mesh', material: 'stone',
+        geometry: {
+          type: 'indexed-mesh',
+          positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+          indices: [0, 1, 2],
+        },
+      }],
+    };
+    const generated = JSON.parse(JSON.stringify(original));
+    generated.componentTree[0].geometry.positions[7] = 1.5;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(generated) } }] }),
+    }) as never;
+
+    const result = await service.modifyObjectFromInstruction(original, ['body'], '抬高第三个顶点');
+
+    expect(result.editScope).toBe('component');
+    expect(result.changeSetResult.appliedChangeCount).toBe(1);
+    expect(result.changeSetResult.geometryVertexUpdates).toEqual([{
+      nodeId: 'body',
+      updates: [{ index: 2, position: [0, 1.5, 0] }],
+    }]);
+    expect(result.objectSculptSpec.componentTree[0].geometry.positions[7]).toBe(1.5);
+    expect(result.objectSculptSpec.materials).toEqual(original.materials);
+  });
+
+  it('keeps component replacement fallback when AI changes indexed-mesh topology', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    const original = {
+      schemaVersion: '3.0',
+      materials: { stone: { color: '#888888', roughness: 0.8, metalness: 0 } },
+      componentTree: [{
+        id: 'body', material: 'stone',
+        geometry: {
+          type: 'indexed-mesh',
+          positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+          indices: [0, 1, 2],
+        },
+      }],
+    };
+    const generated = JSON.parse(JSON.stringify(original));
+    generated.componentTree[0].geometry.indices = [0, 2, 1];
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(generated) } }] }),
+    }) as never;
+
+    const result = await service.modifyObjectFromInstruction(original, ['body'], '翻转三角面方向');
+
+    expect(result.editScope).toBe('component');
+    expect(result.changeSetResult).toBeUndefined();
+    expect(result.objectSculptSpec.componentTree[0].geometry.indices).toEqual([0, 2, 1]);
+  });
+
   it('analyzes reference-image proportions and spatial relations before generating geometry', async () => {
     const service = createService({ VISION_API_KEY: 'vision-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
     const analysis = {

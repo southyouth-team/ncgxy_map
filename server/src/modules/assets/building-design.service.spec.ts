@@ -586,7 +586,7 @@ describe('BuildingDesignService', () => {
     });
     global.fetch = fetchMock as never;
     const result = await service.addObjectParameters(current, '给教学楼增加房间行数和列数调整变量');
-    expect(result.objectSculptSpec.generators).toMatchObject([{ id: 'room-grid', type: 'grid', rowParameterId: 'room-rows', columnParameterId: 'room-columns' }]);
+    expect((result.objectSculptSpec as any).generators).toMatchObject([{ id: 'room-grid', type: 'grid', rowParameterId: 'room-rows', columnParameterId: 'room-columns' }]);
     expect(result.addedParameters.map((item: any) => item.id)).toEqual(['room-rows', 'room-columns']);
     const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
     expect(systemPrompt).toContain('type:"grid"');

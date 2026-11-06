@@ -118,8 +118,8 @@ describe('ImageGenerationService', () => {
     expect(systemPrompt).toContain('车轮连接车轴/底盘');
     expect(systemPrompt).toContain('简单对象可以只有一个组件');
     expect(systemPrompt).toContain('tube、lathe、sweep、loft');
-    expect(systemPrompt).toContain('generators');
-    expect(systemPrompt).toContain('generator.templateRootId 必须指向 componentTree 中 kind="group" 的节点');
+    expect(systemPrompt).toContain('operations');
+    expect(systemPrompt).toContain('operation.sourceRootId 必须指向 componentTree 中 kind="group" 的节点');
     expect(systemPrompt).toContain('parameterSchema 必须根据本次对象真实结构动态声明');
     expect(systemPrompt).toContain('loft 使用 sections');
     expect(systemPrompt).toContain('geometryDescriptor.radius 必须是 0.01-10');

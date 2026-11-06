@@ -656,7 +656,7 @@ onBeforeUnmount(() => {
       <div v-if="error" class="error">{{ error }}</div>
       <div class="step-actions"><button class="secondary" @click="wizardStep=2">返回继续微调</button><button class="secondary" @click="wizardStep=1">返回模板信息</button></div>
     </section>
-    <footer>独立素材模板实验环境 · AI 输出 ObjectSculptSpec，由 Three.js Runtime 转换为真实 Mesh。</footer>
+    <footer>独立素材模板实验环境 · AI 输出 ObjectModelSpec 3.0，由 Three.js Runtime 转换为真实 Mesh。</footer>
   </main>
 </template>
 

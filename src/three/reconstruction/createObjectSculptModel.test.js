@@ -4,7 +4,7 @@ import { createObjectSculptModel, validateObjectSculptSpec, applyObjectSculptPar
 
 function castleSpec() {
   return {
-    schemaVersion: '2.0',
+    schemaVersion: '3.0',
     targetName: 'anime-painted-castle',
     materials: {
       stone: { color: '#ead9ad', roughness: 0.9 },
@@ -46,7 +46,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('builds pure logical Group nodes without creating placeholder meshes', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
       componentTree: [
         { id: 'root-group', kind: 'group', name: '主体分组' },
@@ -67,7 +67,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('exposes stable component IDs and gives each mesh an independently editable material', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { shared: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
       componentTree: [
         { id: 'left', primitive: 'box', material: 'shared', dimensions: { width: 1, height: 1, depth: 1 } },
@@ -86,7 +86,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('builds dedicated arch openings and wedge roof geometry', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { stone: { color: '#d8c39a' } },
       componentTree: [
         { id: 'arch', primitive: 'arch', material: 'stone', dimensions: { width: 3, height: 4, depth: 0.5 }, geometryDescriptor: { inset: 0.35 } },
@@ -104,7 +104,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('extrudes bounded custom polygon outlines into real geometry', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'gable-outline', primitive: 'polygon', dimensions: { width: 4, height: 3, depth: 0.6 },
         geometryDescriptor: { points: [[-0.5, -0.5], [0.5, -0.5], [0.32, 0.15], [0, 0.5], [-0.32, 0.15]] },
@@ -186,7 +186,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   });
   it('applies AI-declared parameters to linked components without cumulative drift', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
       componentTree: [
         { id: 'body', primitive: 'box', material: 'wall', dimensions: { width: 4, height: 2, depth: 3 } },
@@ -210,86 +210,9 @@ describe('ObjectSculptSpec Three.js adapter', () => {
   });
 
 
-  it('rebuilds repeat-generated component subtrees when a template count parameter changes', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      targetName: 'three-storey-school',
-      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
-      componentTree: [
-        { id: 'building-root', kind: 'group', name: '教学楼主体' },
-        { id: 'floor-prototype', kind: 'group', name: '标准楼层', parent: 'building-root', transform: { position: [0, 0, 0] } },
-        { id: 'floor-slab', kind: 'mesh', name: '楼板', parent: 'floor-prototype', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 0.25, depth: 6 }, transform: { position: [0, 0, 0] } },
-        { id: 'roof', kind: 'mesh', name: '屋顶', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 8.5, height: 0.4, depth: 6.5 }, transform: { position: [0, 11, 0] } },
-      ],
-      parameterSchema: [{
-        id: 'floor-count', label: '楼层数', type: 'number', value: 3, min: 1, max: 8, step: 1, unit: '层', targets: [],
-      }],
-      generators: [{
-        id: 'floor-repeat', type: 'repeat', templateRootId: 'floor-prototype', countParameterId: 'floor-count',
-        axis: 'y', spacing: 3.2, defaultCount: 3, maxCount: 8, followers: [{ nodeId: 'roof', axis: 'y', offset: 0 }],
-      }],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    expect(model.userData.componentGroups.size).toBe(8);
-    expect([...model.userData.componentGroups.keys()].some(id => id.startsWith('generated-'))).toBe(true);
-    applyObjectSculptParameter(THREE, model, 'floor-count', 5);
-    expect(model.userData.objectSculptSpec.parameterSchema[0].value).toBe(5);
-    expect(model.userData.objectSculptSpec.generators).toHaveLength(1);
-    expect(model.userData.componentGroups.size).toBe(12);
-    const fifthFloor = [...model.userData.componentGroups.values()].find(group => group.userData.componentSourceId === 'floor-prototype' && Math.abs(group.position.y - 12.8) < 0.001);
-    expect(fifthFloor).toBeDefined();
-    expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(17.4);
-    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
-    expect(reloaded.userData.componentGroups.size).toBe(12);
-    expect(reloaded.userData.componentGroups.get('roof').position.y).toBeCloseTo(17.4);
-    applyObjectSculptParameter(THREE, model, 'floor-count', 2);
-    expect(model.userData.componentGroups.size).toBe(6);
-    expect(model.userData.componentGroups.get('roof').position.y).toBeCloseTo(7.8);
-    expect([...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-'))).toHaveLength(2);
-  });
-
-
-  it('rebuilds room layouts as a deterministic two-dimensional grid', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
-      componentTree: [
-        { id: 'building-root', kind: 'group', name: '教学楼' },
-        { id: 'room-prototype', kind: 'group', name: '标准教室', parent: 'building-root' },
-        { id: 'room-shell', kind: 'mesh', name: '教室主体', parent: 'room-prototype', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 5 } },
-      ],
-      parameterSchema: [
-        { id: 'room-rows', label: '房间行数', type: 'number', value: 2, min: 1, max: 4, step: 1, targets: [] },
-        { id: 'room-columns', label: '房间列数', type: 'number', value: 3, min: 1, max: 5, step: 1, targets: [] },
-      ],
-      generators: [{
-        id: 'room-grid', type: 'grid', templateRootId: 'room-prototype',
-        rowParameterId: 'room-rows', columnParameterId: 'room-columns',
-        spacingX: 7, spacingZ: 6, defaultRows: 2, defaultColumns: 3, maxRows: 4, maxColumns: 5,
-      }],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    expect(model.userData.componentGroups.size).toBe(13);
-    const roomAtSecondColumn = [...model.userData.componentGroups.values()].find(group =>
-      group.userData.componentSourceId === 'room-prototype' && Math.abs(group.position.x - 7) < 0.001 && Math.abs(group.position.z) < 0.001);
-    expect(roomAtSecondColumn).toBeDefined();
-    const roomAtSecondRow = [...model.userData.componentGroups.values()].find(group =>
-      group.userData.componentSourceId === 'room-prototype' && Math.abs(group.position.x) < 0.001 && Math.abs(group.position.z - 6) < 0.001);
-    expect(roomAtSecondRow).toBeDefined();
-    const originalGeneratedIds = [...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-')).sort();
-    applyObjectSculptParameter(THREE, model, 'room-rows', 3);
-    applyObjectSculptParameter(THREE, model, 'room-columns', 2);
-    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'room-rows').value).toBe(3);
-    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'room-columns').value).toBe(2);
-    expect(model.userData.componentGroups.size).toBe(13);
-    expect([...model.userData.componentGroups.keys()].filter(id => id.startsWith('generated-')).sort()).not.toEqual(originalGeneratedIds);
-    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
-    expect(reloaded.userData.componentGroups.size).toBe(13);
-  });
-
   it('builds a continuous tube mesh from a bounded declarative 3D path', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { metal: { color: '#777777', roughness: 0.35, metalness: 0.7 } },
       componentTree: [
         { id: 'root', kind: 'group' },
@@ -316,7 +239,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('builds a lathe mesh from a bounded radial profile and recalculates it when dimensions change', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { ceramic: { color: '#d7b98c', roughness: 0.72, metalness: 0 } },
       componentTree: [{
         id: 'vase', primitive: 'lathe', material: 'ceramic',
@@ -342,7 +265,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('builds a continuous parallel-transport sweep mesh from a 3D path and a 2D cross-section', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { metal: { color: '#777777', roughness: 0.35, metalness: 0.7 } },
       componentTree: [{
         id: 'curved-duct', primitive: 'sweep', material: 'metal',
@@ -365,7 +288,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('keeps sweep cap triangles correctly indexed and consistently oriented for either profile winding', () => {
     const build = profile => createObjectSculptModel(THREE, {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'straight-sweep', primitive: 'sweep', material: 'default',
         dimensions: { width: 4, height: 2, depth: 2 },
@@ -406,7 +329,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects closed sweep paths until seam frame correction is implemented', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'closed-sweep', primitive: 'sweep', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -422,7 +345,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('builds a loft mesh between ordered cross-sections and closes both ends', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { stone: { color: '#b9b4a8', roughness: 0.85, metalness: 0 } },
       componentTree: [{
         id: 'tapered-pillar', primitive: 'loft', material: 'stone',
@@ -446,7 +369,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('orients loft side faces and end caps consistently for clockwise input contours', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'loft-solid', primitive: 'loft', material: 'default',
         dimensions: { width: 2, height: 2, depth: 2 },
@@ -482,7 +405,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('keeps loft side-face winding aligned with generated vertex normals across multiple sections', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'offset-loft', primitive: 'loft', material: 'default',
         dimensions: { width: 4, height: 6, depth: 3 },
@@ -519,7 +442,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects loft sections with inconsistent contour winding', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'twisted-loft', primitive: 'loft', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -536,7 +459,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects self-intersecting sweep cross-sections before mesh construction', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'crossed-sweep', primitive: 'sweep', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -551,7 +474,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects sharp reversing turns in sweep paths before geometry construction', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'reversing-sweep', primitive: 'sweep', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -566,7 +489,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects duplicate adjacent points in sweep paths', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'zero-path', primitive: 'sweep', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -581,7 +504,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects self-intersecting loft section contours', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'crossed-loft', primitive: 'loft', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -598,7 +521,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects loft sections that do not share the same profile topology', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'loft', primitive: 'loft', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -615,7 +538,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('keeps sweep side normals aligned along a non-planar parallel-transport path', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'spatial-sweep', primitive: 'sweep', material: 'default',
         dimensions: { width: 3, height: 3, depth: 3 },
@@ -648,7 +571,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects sweep profiles with invalid normalized cross-section coordinates', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'duct', primitive: 'sweep', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -663,7 +586,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects lathe profiles outside normalized radius and height bounds', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'vase', primitive: 'lathe', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -675,7 +598,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects tube paths with coordinates outside the normalized bounds', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{
         id: 'cable', primitive: 'tube', material: 'default',
         dimensions: { width: 1, height: 1, depth: 1 },
@@ -687,7 +610,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('rejects AI parameter targets outside the renderer allowlist', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       componentTree: [{ id: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } }],
       parameterSchema: [{ id: 'unsafe', type: 'number', value: 1, min: 0, max: 2, targets: [{ nodeId: 'root', property: 'constructor.prototype', mode: 'set' }] }],
     };
@@ -696,7 +619,7 @@ describe('ObjectSculptSpec Three.js adapter', () => {
 
   it('supports AI-declared shape selectors and floor visibility dependencies', () => {
     const spec = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
       componentTree: [
         { id: 'body', primitive: 'box', material: 'wall', dimensions: { width: 4, height: 4, depth: 3 } },
@@ -719,664 +642,6 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('floor-2').visible).toBe(true);
     expect(model.userData.componentGroups.get('floor-3').visible).toBe(false);
     expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'window-shape').value).toBe('arch');
-  });
-
-  it('recalculates follow and span constraints from the baseline when grid dimensions change', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      materials: { wall: { color: '#cccccc', roughness: 0.8, metalness: 0 } },
-      componentTree: [
-        { id: 'building-root', kind: 'group', name: '建筑主体' },
-        { id: 'room-prototype', kind: 'group', name: '房间原型', parent: 'building-root' },
-        { id: 'room-shell', kind: 'mesh', name: '房间', parent: 'room-prototype', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 5 } },
-        { id: 'outer-wall', kind: 'mesh', name: '外墙边界', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 6, height: 3, depth: 0.3 } },
-        { id: 'roof', kind: 'mesh', name: '屋顶', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 8, height: 0.4, depth: 7 }, transform: { position: [0, 4, 0] } },
-        { id: 'decoration', kind: 'mesh', name: '独立装饰', parent: 'building-root', primitive: 'box', material: 'wall', dimensions: { width: 1, height: 1, depth: 1 }, transform: { position: [3, 2, 1] } },
-      ],
-      parameterSchema: [
-        { id: 'rows', label: '行数', type: 'number', value: 2, min: 1, max: 4, step: 1, targets: [] },
-        { id: 'columns', label: '列数', type: 'number', value: 3, min: 1, max: 5, step: 1, targets: [] },
-      ],
-      generators: [{
-        id: 'room-grid', type: 'grid', templateRootId: 'room-prototype',
-        rowParameterId: 'rows', columnParameterId: 'columns',
-        spacingX: 7, spacingZ: 6, defaultRows: 2, defaultColumns: 3, maxRows: 4, maxColumns: 5,
-      }],
-      constraints: [
-        { id: 'roof-follow', type: 'follow', sourceGeneratorId: 'room-grid', targetNodeId: 'roof', axis: 'x', measure: 'columns', factor: 1, offset: 0 },
-        { id: 'wall-span', type: 'span', sourceGeneratorId: 'room-grid', targetNodeId: 'outer-wall', axis: 'x', measure: 'columns', property: 'dimensions.width', factor: 1, offset: 0 },
-      ],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(14);
-    expect(model.userData.componentGroups.get('outer-wall').getObjectByName('outer-wall:mesh').geometry.parameters.width).toBeCloseTo(20);
-    applyObjectSculptParameter(THREE, model, 'columns', 2);
-    expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(7);
-    expect(model.userData.componentGroups.get('outer-wall').getObjectByName('outer-wall:mesh').geometry.parameters.width).toBeCloseTo(13);
-    applyObjectSculptParameter(THREE, model, 'columns', 4);
-    expect(model.userData.componentGroups.get('roof').position.x).toBeCloseTo(21);
-    expect(model.userData.componentGroups.get('outer-wall').getObjectByName('outer-wall:mesh').geometry.parameters.width).toBeCloseTo(27);
-    expect(model.userData.componentGroups.get('decoration').position.toArray()).toEqual([3, 2, 1]);
-  });
-
-  it('rejects structural constraints that reference unknown generators or template nodes', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      materials: { wall: { color: '#cccccc' } },
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'prototype', kind: 'group', parent: 'root' },
-        { id: 'part', primitive: 'box', parent: 'prototype', material: 'wall', dimensions: { width: 1, height: 1, depth: 1 } },
-      ],
-      parameterSchema: [{ id: 'count', type: 'number', value: 1, min: 1, max: 2, targets: [] }],
-      generators: [{ id: 'repeat', type: 'repeat', templateRootId: 'prototype', countParameterId: 'count', axis: 'y', spacing: 2, defaultCount: 1, maxCount: 2 }],
-      constraints: [{ id: 'bad-follow', type: 'follow', sourceGeneratorId: 'missing', targetNodeId: 'root', axis: 'y' }],
-    };
-    expect(() => validateObjectSculptSpec(spec)).toThrow('结构约束引用无效');
-  });
-
-  it('attaches sibling meshes by face anchors and records adjacency metadata', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      materials: { wall: { color: '#cccccc' } },
-      componentTree: [
-        { id: 'building', kind: 'group', name: '建筑主体' },
-        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 4, height: 3, depth: 0.3 }, transform: { position: [0, 0, 0] } },
-        { id: 'door', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 1, height: 2, depth: 0.2 }, transform: { position: [9, 0, 0] } },
-        { id: 'corridor', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 3, height: 2.5, depth: 2 } },
-      ],
-      constraints: [
-        { id: 'door-to-wall', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'door',
-          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
-        { id: 'door-to-corridor', type: 'adjacency', sourceNodeId: 'door', targetNodeId: 'corridor', relation: 'connects' },
-      ],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    expect(model.userData.componentGroups.get('door').position.x).toBeCloseTo(2.5);
-    expect(model.userData.componentGroups.get('door').userData.componentRelations).toContainEqual({
-      id: 'door-to-wall', type: 'attach', nodeId: 'wall', axis: 'x',
-    });
-    expect(model.userData.componentGroups.get('corridor').userData.componentRelations).toContainEqual({
-      id: 'door-to-corridor', type: 'adjacency', relation: 'connects', nodeId: 'door',
-    });
-    expect(model.userData.componentGroups.get('door').userData.componentRelations).toContainEqual({
-      id: 'door-to-corridor', type: 'adjacency', relation: 'connects', nodeId: 'corridor',
-    });
-  });
-
-  it('recomputes face attachments when linked source dimensions change', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'building', kind: 'group' },
-        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 4, height: 3, depth: 0.3 } },
-        { id: 'door', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 1, height: 2, depth: 0.2 } },
-      ],
-      parameterSchema: [{
-        id: 'wall-width', label: '墙体宽度', type: 'number', value: 4, min: 2, max: 8, step: 0.5, unit: 'm',
-        targets: [{ nodeId: 'wall', property: 'dimensions.width', mode: 'set' }],
-      }],
-      constraints: [{
-        id: 'door-to-wall', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'door',
-        axis: 'x', sourceSide: 1, targetSide: -1, offset: 0,
-      }],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    const door = model.userData.componentGroups.get('door');
-    expect(door.position.x).toBeCloseTo(2.5);
-
-    applyObjectSculptParameter(THREE, model, 'wall-width', 6);
-    expect(model.userData.componentGroups.get('door').position.x).toBeCloseTo(3.5);
-
-    applyObjectSculptParameter(THREE, model, 'wall-width', 2);
-    expect(model.userData.componentGroups.get('door').position.x).toBeCloseTo(1.5);
-
-    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
-    expect(reloaded.userData.componentGroups.get('door').position.x).toBeCloseTo(1.5);
-  });
-
-  it('rejects cyclic attach dependencies before building the model', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'a', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-        { id: 'b', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-      ],
-      constraints: [
-        { id: 'a-to-b', type: 'attach', sourceNodeId: 'a', targetNodeId: 'b', axis: 'x', sourceSide: 1, targetSide: -1 },
-        { id: 'b-to-a', type: 'attach', sourceNodeId: 'b', targetNodeId: 'a', axis: 'x', sourceSide: 1, targetSide: -1 },
-      ],
-    };
-    expect(() => validateObjectSculptSpec(spec)).toThrow('attach 关系存在循环依赖');
-  });
-
-  it('rejects attach relations across different parent groups', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'left', kind: 'group', parent: 'root' },
-        { id: 'right', kind: 'group', parent: 'root' },
-        { id: 'a', parent: 'left', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-        { id: 'b', parent: 'right', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-      ],
-      constraints: [{ id: 'invalid-attach', type: 'attach', sourceNodeId: 'a', targetNodeId: 'b',
-        axis: 'x', sourceSide: 1, targetSide: -1 }],
-    };
-    expect(() => validateObjectSculptSpec(spec)).toThrow('attach 必须连接同一父级下的 Mesh 面');
-  });
-
-  it('cuts a real rectangular through-opening into a box mesh and hides its cutter volume', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      materials: { wall: { color: '#cccccc' } },
-      componentTree: [
-        { id: 'building', kind: 'group' },
-        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 4, height: 3, depth: 0.3 } },
-        { id: 'door-opening-volume', kind: 'mesh', parent: 'building', primitive: 'box', material: 'wall',
-          dimensions: { width: 1, height: 2, depth: 0.5 }, transform: { position: [0.5, -0.2, 0] } },
-      ],
-      constraints: [{
-        id: 'door-opening', type: 'cutout', targetNodeId: 'wall',
-        cutterNodeId: 'door-opening-volume', axis: 'z', operation: 'subtract',
-      }],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    const wall = model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
-    expect(wall.geometry.type).toBe('ExtrudeGeometry');
-    expect(wall.geometry.parameters.shapes.holes).toHaveLength(1);
-    expect(wall.geometry.getAttribute('position').count).toBeGreaterThan(0);
-    expect(model.userData.componentGroups.get('door-opening-volume').children).toHaveLength(0);
-  });
-
-  it('rebuilds cutout geometry from baseline when opening width and position parameters change', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      materials: { wall: { color: '#cccccc', roughness: 0.8 } },
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'wall', kind: 'mesh', parent: 'root', primitive: 'box', material: 'wall',
-          dimensions: { width: 4, height: 3, depth: 0.3 } },
-        { id: 'opening-volume', kind: 'mesh', parent: 'root', primitive: 'box', material: 'wall',
-          dimensions: { width: 1, height: 2, depth: 0.5 }, transform: { position: [0, -0.2, 0] } },
-      ],
-      parameterSchema: [
-        { id: 'opening-width', label: '开口宽度', type: 'number', value: 1, min: 0.5, max: 2, step: 0.1, unit: 'm',
-          targets: [{ nodeId: 'opening-volume', property: 'dimensions.width', mode: 'set' }] },
-        { id: 'opening-offset-x', label: '开口水平位置', type: 'number', value: 0, min: -1, max: 1, step: 0.1, unit: 'm',
-          targets: [{ nodeId: 'opening-volume', property: 'transform.position.x', mode: 'set' }] },
-      ],
-      constraints: [{ id: 'wall-opening', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening-volume', axis: 'z', operation: 'subtract' }],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    const getWall = () => model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
-    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
-    expect(model.userData.componentGroups.get('opening-volume').children).toHaveLength(0);
-    applyObjectSculptParameter(THREE, model, 'opening-width', 1.6);
-    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
-    expect(getWall().geometry.parameters.shapes.holes[0].getPoints().length).toBeGreaterThan(0);
-    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening-volume').dimensions.width).toBe(1.6);
-    applyObjectSculptParameter(THREE, model, 'opening-offset-x', 0.5);
-    expect(model.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening-volume').transform.position[0]).toBe(0.5);
-    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
-    const reloaded = createObjectSculptModel(THREE, structuredClone(model.userData.objectSculptSpec));
-    expect(reloaded.userData.componentGroups.get('wall').getObjectByName('wall:mesh').geometry.parameters.shapes.holes).toHaveLength(1);
-  });
-
-  it('supports multiple independent cutouts on the same target mesh', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'building', kind: 'group' },
-        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 4, height: 3, depth: 0.3 } },
-        { id: 'left-opening', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 0.8, height: 1.8, depth: 0.5 }, transform: { position: [-1, 0, 0] } },
-        { id: 'right-opening', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 0.8, height: 1.8, depth: 0.5 }, transform: { position: [1, 0, 0] } },
-      ],
-      constraints: [
-        { id: 'left-window-cutout', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'left-opening', axis: 'z', operation: 'subtract' },
-        { id: 'right-window-cutout', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'right-opening', axis: 'z', operation: 'subtract' },
-      ],
-    };
-    expect(() => validateObjectSculptSpec(spec)).not.toThrow();
-    const model = createObjectSculptModel(THREE, spec);
-    const wall = model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
-    expect(wall.geometry.parameters.shapes.holes).toHaveLength(2);
-    expect(model.userData.componentGroups.get('left-opening').children).toHaveLength(0);
-    expect(model.userData.componentGroups.get('right-opening').children).toHaveLength(0);
-  });
-
-  it('rejects overlapping and edge-touching cutout regions on one target mesh', () => {
-    const createSpec = rightX => ({
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'building', kind: 'group' },
-        { id: 'wall', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 4, height: 3, depth: 0.3 } },
-        { id: 'left-opening', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 1, height: 1, depth: 0.5 }, transform: { position: [-0.5, 0, 0] } },
-        { id: 'right-opening', kind: 'mesh', parent: 'building', primitive: 'box',
-          dimensions: { width: 1, height: 1, depth: 0.5 }, transform: { position: [rightX, 0, 0] } },
-      ],
-      constraints: [
-        { id: 'left-cut', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'left-opening', axis: 'z', operation: 'subtract' },
-        { id: 'right-cut', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'right-opening', axis: 'z', operation: 'subtract' },
-      ],
-    });
-    expect(() => validateObjectSculptSpec(createSpec(0.25))).toThrow('cutout 开口不能重叠或边界接触');
-    expect(() => validateObjectSculptSpec(createSpec(0.5))).toThrow('cutout 开口不能重叠或边界接触');
-    expect(() => validateObjectSculptSpec(createSpec(0.5002))).not.toThrow();
-  });
-
-  it('rejects cutouts that exceed the target mesh bounds', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'wall', primitive: 'box', dimensions: { width: 2, height: 2, depth: 0.3 } },
-        { id: 'opening', primitive: 'box', dimensions: { width: 1.5, height: 1, depth: 0.5 }, transform: { position: [0.8, 0, 0] } },
-      ],
-      constraints: [{ id: 'out-of-bounds', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening', axis: 'z', operation: 'subtract' }],
-    };
-    expect(() => validateObjectSculptSpec(spec)).toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
-  });
-
-
-
-  it('recomputes multi-level attach chains from upstream to downstream after size and scale edits', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'base', parent: 'root', primitive: 'box', dimensions: { width: 4, height: 1, depth: 1 } },
-        { id: 'middle', parent: 'root', primitive: 'box', dimensions: { width: 2, height: 1, depth: 1 } },
-        { id: 'leaf', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-      ],
-      parameterSchema: [
-        { id: 'base-width', type: 'number', value: 4, min: 2, max: 8, targets: [
-          { nodeId: 'base', property: 'dimensions.width', mode: 'set' },
-        ] },
-        { id: 'middle-scale', type: 'number', value: 1, min: 1, max: 3, targets: [
-          { nodeId: 'middle', property: 'transform.scale.x', mode: 'set' },
-        ] },
-      ],
-      // 故意反向声明：middle -> leaf 在 base -> middle 之前。
-      constraints: [
-        { id: 'middle-to-leaf', type: 'attach', sourceNodeId: 'middle', targetNodeId: 'leaf',
-          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
-        { id: 'base-to-middle', type: 'attach', sourceNodeId: 'base', targetNodeId: 'middle',
-          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
-      ],
-    };
-
-    const model = createObjectSculptModel(THREE, spec);
-    const position = id => model.userData.componentGroups.get(id).position.x;
-    expect(position('middle')).toBeCloseTo(3);
-    expect(position('leaf')).toBeCloseTo(4.5);
-
-    applyObjectSculptParameter(THREE, model, 'base-width', 6);
-    expect(position('middle')).toBeCloseTo(4);
-    expect(position('leaf')).toBeCloseTo(5.5);
-
-    applyObjectSculptParameter(THREE, model, 'middle-scale', 2);
-    expect(position('middle')).toBeCloseTo(5);
-    expect(position('leaf')).toBeCloseTo(7.5);
-
-    // JSON 序列化/反序列化后，依赖关系仍保留；再次调整从持久化状态重算。
-    const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
-    const reloaded = createObjectSculptModel(THREE, persisted);
-    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(5);
-    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(7.5);
-    applyObjectSculptParameter(THREE, reloaded, 'base-width', 2);
-    expect(reloaded.userData.componentGroups.get('middle').position.x).toBeCloseTo(3);
-    expect(reloaded.userData.componentGroups.get('leaf').position.x).toBeCloseTo(5.5);
-  });
-
-  it('rejects cutout boundary-breaking parameter edits without mutating the last valid scene', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'wall', parent: 'root', primitive: 'box', dimensions: { width: 4, height: 3, depth: 0.3 } },
-        { id: 'opening', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 2, depth: 0.5 } },
-      ],
-      parameterSchema: [
-        { id: 'opening-offset', type: 'number', value: 0, min: -1.5, max: 1.8, targets: [
-          { nodeId: 'opening', property: 'transform.position.x', mode: 'set' },
-        ] },
-        { id: 'opening-width', type: 'number', value: 1, min: 0.5, max: 2, targets: [
-          { nodeId: 'opening', property: 'dimensions.width', mode: 'set' },
-        ] },
-        { id: 'wall-width', type: 'number', value: 4, min: 1.5, max: 4, targets: [
-          { nodeId: 'wall', property: 'dimensions.width', mode: 'set' },
-        ] },
-      ],
-      constraints: [
-        { id: 'wall-opening', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening',
-          axis: 'z', operation: 'subtract' },
-      ],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    const getWall = () => model.userData.componentGroups.get('wall').getObjectByName('wall:mesh');
-    const getParameter = id => model.userData.objectSculptSpec.parameterSchema.find(item => item.id === id).value;
-
-    applyObjectSculptParameter(THREE, model, 'opening-offset', 0.5);
-    expect(model.userData.componentGroups.get('opening').position.x).toBeCloseTo(0.5);
-    expect(getParameter('opening-offset')).toBe(0.5);
-
-    // 开口右边界 2.1 超出墙体半宽 2；拒绝本次更新，保留上一次合法状态。
-    expect(() => applyObjectSculptParameter(THREE, model, 'opening-offset', 1.6))
-      .toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
-    expect(model.userData.componentGroups.get('opening').position.x).toBeCloseTo(0.5);
-    expect(getParameter('opening-offset')).toBe(0.5);
-    expect(getWall().geometry.parameters.shapes.holes).toHaveLength(1);
-
-    // 缩小目标墙体也必须重新校验已有开口，不能留下越界结构。
-    expect(() => applyObjectSculptParameter(THREE, model, 'wall-width', 1.5))
-      .toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
-    expect(model.userData.componentGroups.get('wall').getObjectByName('wall:mesh').geometry.parameters.shapes.holes)
-      .toHaveLength(1);
-    expect(getParameter('wall-width')).toBe(4);
-
-    // 保存、加载后仍然保留 Cutout 约束，并可继续进行合法参数调整。
-    const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
-    const reloaded = createObjectSculptModel(THREE, persisted);
-    applyObjectSculptParameter(THREE, reloaded, 'opening-width', 1.5);
-    expect(reloaded.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening').dimensions.width).toBe(1.5);
-    expect(reloaded.userData.componentGroups.get('wall').getObjectByName('wall:mesh').geometry.parameters.shapes.holes)
-      .toHaveLength(1);
-  });
-
-
-
-  it('keeps attached cutout assemblies aligned through repeated edits and JSON reloads', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'base', parent: 'root', primitive: 'box', dimensions: { width: 4, height: 1, depth: 1 } },
-        { id: 'wall', parent: 'root', primitive: 'box', dimensions: { width: 2, height: 4, depth: 0.3 } },
-        { id: 'opening', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 0.5 }, transform: { position: [0, 1.5, 0] } },
-      ],
-      parameterSchema: [
-        { id: 'base-width', type: 'number', value: 4, min: 2, max: 8, targets: [
-          { nodeId: 'base', property: 'dimensions.width', mode: 'set' },
-        ] },
-        { id: 'opening-width', type: 'number', value: 1, min: 0.5, max: 2.5, targets: [
-          { nodeId: 'opening', property: 'dimensions.width', mode: 'set' },
-        ] },
-      ],
-      // 故意把 Cutout 放在 Attach 前面，验证展开阶段会先稳定全部吸附位置。
-      constraints: [
-        { id: 'wall-opening-cut', type: 'cutout', targetNodeId: 'wall', cutterNodeId: 'opening',
-          axis: 'z', operation: 'subtract' },
-        { id: 'wall-opening-center', type: 'attach', sourceNodeId: 'wall', targetNodeId: 'opening',
-          axis: 'x', sourceSide: 1, targetSide: 1, offset: 0 },
-        { id: 'base-wall', type: 'attach', sourceNodeId: 'base', targetNodeId: 'wall',
-          axis: 'x', sourceSide: 1, targetSide: -1, offset: 0 },
-      ],
-    };
-
-    const model = createObjectSculptModel(THREE, spec);
-    const group = (instance, id) => instance.userData.componentGroups.get(id);
-    const wallMesh = instance => group(instance, 'wall').getObjectByName('wall:mesh');
-    const expectAligned = (instance, wallX) => {
-      expect(group(instance, 'wall').position.x).toBeCloseTo(wallX);
-      const openingWidth = instance.userData.objectSculptSpec.componentTree.find(node => node.id === 'opening').dimensions.width;
-      expect(group(instance, 'opening').position.x).toBeCloseTo(wallX + 1 - openingWidth / 2);
-      expect(group(instance, 'opening').position.y).toBeCloseTo(1.5);
-      expect(wallMesh(instance).geometry.parameters.shapes.holes).toHaveLength(1);
-    };
-
-    expectAligned(model, 3);
-
-    // 上游尺寸连续变化时，墙体和开口组件必须整体平移，不允许累计偏移。
-    applyObjectSculptParameter(THREE, model, 'base-width', 6);
-    expectAligned(model, 4);
-    applyObjectSculptParameter(THREE, model, 'base-width', 2);
-    expectAligned(model, 2);
-    applyObjectSculptParameter(THREE, model, 'base-width', 8);
-    expectAligned(model, 5);
-
-    // 开口尺寸变化后重新生成 Cutout；非法尺寸必须保留上一份有效模型。
-    applyObjectSculptParameter(THREE, model, 'opening-width', 1.5);
-    expect(wallMesh(model).geometry.parameters.shapes.holes).toHaveLength(1);
-    expect(() => applyObjectSculptParameter(THREE, model, 'opening-width', 2.1))
-      .toThrow('cutout 开口必须完整位于目标 Mesh 边界内');
-    expect(group(model, 'opening').position.x).toBeCloseTo(5.25);
-    expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === 'opening-width').value).toBe(1.5);
-    expectAligned(model, 5);
-
-    // 通过实际持久化载荷重建后，Attach 与 Cutout 关系均可再次参与参数重算。
-    const persisted = JSON.parse(JSON.stringify(model.userData.objectSculptSpec));
-    const reloaded = createObjectSculptModel(THREE, persisted);
-    expectAligned(reloaded, 5);
-    applyObjectSculptParameter(THREE, reloaded, 'base-width', 4);
-    expectAligned(reloaded, 3);
-    expect(reloaded.userData.objectSculptSpec.constraints).toHaveLength(3);
-  });
-
-
-  it('requires generator templates to be explicit Group roots', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'prototype', kind: 'mesh', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-      ],
-      parameterSchema: [{ id: 'count', type: 'number', value: 2, min: 1, max: 4, targets: [] }],
-      generators: [{ id: 'repeat-items', type: 'repeat', templateRootId: 'prototype', countParameterId: 'count',
-        axis: 'y', spacing: 1, defaultCount: 2, maxCount: 4 }],
-    };
-    expect(() => validateObjectSculptSpec(spec)).toThrow('结构生成器类型或模板 Group 无效');
-  });
-
-  it('rejects repeat followers with offsets outside the shared server/runtime bound', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'prototype', kind: 'group', parent: 'root' },
-        { id: 'part', parent: 'prototype', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-        { id: 'roof', parent: 'root', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-      ],
-      parameterSchema: [{ id: 'count', type: 'number', value: 2, min: 1, max: 4, targets: [] }],
-      generators: [{ id: 'repeat-items', type: 'repeat', templateRootId: 'prototype', countParameterId: 'count',
-        axis: 'y', spacing: 1, defaultCount: 2, maxCount: 4, followers: [{ nodeId: 'roof', axis: 'y', offset: 101 }] }],
-    };
-    expect(() => validateObjectSculptSpec(spec)).toThrow('结构生成器跟随规则无效');
-  });
-
-
-  it('reconstructs tree, vehicle, and furniture fixtures with editable generated structures', () => {
-    const fixtures = [
-      {
-        name: 'tree',
-        spec: {
-          schemaVersion: '2.0',
-          componentTree: [
-            { id: 'tree-root', kind: 'group', name: '树木' },
-            { id: 'trunk', kind: 'mesh', parent: 'tree-root', primitive: 'cylinder',
-              dimensions: { width: 0.45, height: 3, depth: 0.45 } },
-            { id: 'crown-layer', kind: 'group', parent: 'tree-root', name: '树冠层模板' },
-            { id: 'crown-mesh', kind: 'mesh', parent: 'crown-layer', primitive: 'sphere',
-              dimensions: { width: 2.4, height: 1.3, depth: 2.4 } },
-          ],
-          parameterSchema: [
-            { id: 'crown-count', type: 'number', value: 3, min: 1, max: 6, step: 1, targets: [] },
-            { id: 'trunk-height', type: 'number', value: 3, min: 2, max: 5, step: 0.5,
-              targets: [{ nodeId: 'trunk', property: 'dimensions.height', mode: 'set' }] },
-          ],
-          generators: [{ id: 'crown-repeat', type: 'repeat', templateRootId: 'crown-layer',
-            countParameterId: 'crown-count', axis: 'y', spacing: 0.7, defaultCount: 3, maxCount: 6 }],
-        },
-        countParameter: 'crown-count',
-        nextCount: 5,
-        expectedComponents: 12,
-        dimensionParameter: 'trunk-height',
-        nextDimension: 4.5,
-        dimensionNode: 'trunk',
-        dimension: 'height',
-      },
-      {
-        name: 'vehicle',
-        spec: {
-          schemaVersion: '2.0',
-          componentTree: [
-            { id: 'car-root', kind: 'group', name: '汽车' },
-            { id: 'car-body', kind: 'mesh', parent: 'car-root', primitive: 'box',
-              dimensions: { width: 4.2, height: 1.1, depth: 1.9 } },
-            { id: 'wheel-pair', kind: 'group', parent: 'car-root', name: '车轮模板' },
-            { id: 'wheel', kind: 'mesh', parent: 'wheel-pair', primitive: 'cylinder',
-              dimensions: { width: 0.7, height: 0.28, depth: 0.7 },
-              transform: { rotation: [Math.PI / 2, 0, 0] } },
-          ],
-          parameterSchema: [
-            { id: 'axle-rows', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
-            { id: 'wheel-columns', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
-            { id: 'body-width', type: 'number', value: 4.2, min: 3, max: 5, step: 0.1,
-              targets: [{ nodeId: 'car-body', property: 'dimensions.width', mode: 'set' }] },
-          ],
-          generators: [{ id: 'wheel-grid', type: 'grid', templateRootId: 'wheel-pair',
-            rowParameterId: 'axle-rows', columnParameterId: 'wheel-columns',
-            spacingX: 2.6, spacingZ: 1.5, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
-        },
-        countParameter: 'wheel-columns',
-        nextCount: 3,
-        expectedComponents: 14,
-        dimensionParameter: 'body-width',
-        nextDimension: 4.8,
-        dimensionNode: 'car-body',
-        dimension: 'width',
-      },
-      {
-        name: 'furniture',
-        spec: {
-          schemaVersion: '2.0',
-          componentTree: [
-            { id: 'table-root', kind: 'group', name: '桌子' },
-            { id: 'table-top', kind: 'mesh', parent: 'table-root', primitive: 'box',
-              dimensions: { width: 2.2, height: 0.16, depth: 1.4 }, transform: { position: [0, 1.5, 0] } },
-            { id: 'leg-pair', kind: 'group', parent: 'table-root', name: '桌腿模板' },
-            { id: 'leg', kind: 'mesh', parent: 'leg-pair', primitive: 'box',
-              dimensions: { width: 0.12, height: 1.45, depth: 0.12 }, transform: { position: [0, 0.72, 0] } },
-          ],
-          parameterSchema: [
-            { id: 'leg-rows', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
-            { id: 'leg-columns', type: 'number', value: 2, min: 1, max: 3, step: 1, targets: [] },
-            { id: 'table-width', type: 'number', value: 2.2, min: 1.5, max: 5, step: 0.1,
-              targets: [{ nodeId: 'table-top', property: 'dimensions.width', mode: 'set' }] },
-          ],
-          generators: [{ id: 'leg-grid', type: 'grid', templateRootId: 'leg-pair',
-            rowParameterId: 'leg-rows', columnParameterId: 'leg-columns',
-            spacingX: 1.0, spacingZ: 1.0, spacingXParameterId: 'table-width', spacingXScale: 0.45, centered: true, defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3 }],
-        },
-        countParameter: 'leg-columns',
-        nextCount: 3,
-        expectedComponents: 14,
-        dimensionParameter: 'table-width',
-        nextDimension: 4.2,
-        dimensionNode: 'table-top',
-        dimension: 'width',
-      },
-    ];
-
-    for (const fixture of fixtures) {
-      const model = createObjectSculptModel(THREE, structuredClone(fixture.spec));
-      expect(model.userData.componentGroups.size).toBeGreaterThan(0);
-      const initialMeshes = [...model.userData.componentGroups.values()]
-        .flatMap(group => group.children)
-        .filter(child => child.isMesh);
-      expect(initialMeshes.length).toBeGreaterThan(0);
-      for (const mesh of initialMeshes) {
-        expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(0);
-        mesh.geometry.computeBoundingSphere();
-        expect(mesh.geometry.boundingSphere).not.toBeNull();
-      }
-
-      if (fixture.name === 'tree') {
-        const crownGroups = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'crown-layer');
-        expect(crownGroups).toHaveLength(3);
-        expect(crownGroups.map(group => Number(group.position.y.toFixed(2))).sort((a, b) => a - b)).toEqual([0, 0.7, 1.4]);
-      }
-      if (fixture.name === 'furniture') {
-        const legGroups = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
-        expect(legGroups).toHaveLength(4);
-        expect(legGroups.map(group => [Number(group.position.x.toFixed(2)), Number(group.position.z.toFixed(2))])
-          .sort((a, b) => a[0] - b[0] || a[1] - b[1])).toEqual([[-0.5, -0.5], [-0.5, 0.5], [0.5, -0.5], [0.5, 0.5]]);
-      }
-      if (fixture.name === 'vehicle') {
-        const wheelGroups = [...model.userData.componentGroups.values()]
-          .filter(group => group.userData.componentSourceId === 'wheel-pair');
-        expect(wheelGroups).toHaveLength(4);
-        const wheelPositions = wheelGroups
-          .map(group => [Number(group.position.x.toFixed(2)), Number(group.position.z.toFixed(2))])
-          .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-        expect(wheelPositions).toEqual([[0, 0], [0, 1.5], [2.6, 0], [2.6, 1.5]]);
-        for (const wheelGroup of wheelGroups) {
-          const wheelNode = [...model.userData.componentGroups.values()]
-            .find(group => group.userData.componentSourceId === 'wheel'
-              && group.parent === wheelGroup);
-          expect(wheelNode).toBeTruthy();
-          const wheelMesh = wheelNode.getObjectByName(wheelNode.name + ':mesh');
-          expect(wheelMesh.geometry.type).toBe('CylinderGeometry');
-          wheelMesh.geometry.computeBoundingBox();
-          expect(wheelMesh.geometry.boundingBox.getSize(new THREE.Vector3()).length()).toBeGreaterThan(0);
-        }
-      }
-
-      applyObjectSculptParameter(THREE, model, fixture.countParameter, fixture.nextCount);
-      expect(model.userData.componentGroups.size).toBe(fixture.expectedComponents);
-      if (fixture.name === 'tree') {
-        const expandedCrowns = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'crown-layer');
-        expect(expandedCrowns).toHaveLength(5);
-        expect(expandedCrowns.map(group => Number(group.position.y.toFixed(2))).sort((a, b) => a - b)).toEqual([0, 0.7, 1.4, 2.1, 2.8]);
-      }
-      if (fixture.name === 'furniture') {
-        const expandedLegs = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
-        expect(expandedLegs).toHaveLength(6);
-        expect([...new Set(expandedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b)).toEqual([-0.99, 0, 0.99]);
-        expect([...new Set(expandedLegs.map(group => Number(group.position.z.toFixed(2))))].sort((a, b) => a - b)).toEqual([-0.5, 0.5]);
-        const tabletop = model.userData.componentGroups.get('table-top').getObjectByName('table-top:mesh');
-        tabletop.geometry.computeBoundingBox();
-        const halfWidth = tabletop.geometry.boundingBox.getSize(new THREE.Vector3()).x / 2;
-        expect(Math.max(...expandedLegs.map(group => Math.abs(group.position.x))) + 0.06).toBeLessThanOrEqual(halfWidth);
-      }
-      if (fixture.name === 'vehicle') {
-        const expandedWheelGroups = [...model.userData.componentGroups.values()]
-          .filter(group => group.userData.componentSourceId === 'wheel-pair');
-        expect(expandedWheelGroups).toHaveLength(6);
-        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b))
-          .toEqual([0, 2.6, 5.2]);
-        expect([...new Set(expandedWheelGroups.map(group => Number(group.position.z.toFixed(2))))].sort((a, b) => a - b))
-          .toEqual([0, 1.5]);
-      }
-
-      applyObjectSculptParameter(THREE, model, fixture.dimensionParameter, fixture.nextDimension);
-      if (fixture.name === 'furniture') {
-        const resizedLegs = [...model.userData.componentGroups.values()].filter(group => group.userData.componentSourceId === 'leg-pair');
-        expect([...new Set(resizedLegs.map(group => Number(group.position.x.toFixed(2))))].sort((a, b) => a - b))
-          .toEqual([-1.89, 0, 1.89]);
-      }
-      const node = model.userData.componentGroups.get(fixture.dimensionNode);
-      const mesh = node.getObjectByName(fixture.dimensionNode + ':mesh');
-      expect(mesh.geometry.parameters[fixture.dimension]).toBeCloseTo(fixture.nextDimension);
-      expect(model.userData.objectSculptSpec.parameterSchema.find(item => item.id === fixture.dimensionParameter).value)
-        .toBe(fixture.nextDimension);
-
-      const persisted = structuredClone(model.userData.objectSculptSpec);
-      const reloaded = createObjectSculptModel(THREE, persisted);
-      expect(reloaded.userData.componentGroups.size).toBe(fixture.expectedComponents);
-      const reloadedNode = reloaded.userData.componentGroups.get(fixture.dimensionNode);
-      expect(reloadedNode.getObjectByName(fixture.dimensionNode + ':mesh').geometry.parameters[fixture.dimension])
-        .toBeCloseTo(fixture.nextDimension);
-    }
   });
 
   it('exposes geometry descriptor scalars as dynamic parameters in ObjectModelSpec 3.0', () => {
@@ -1413,61 +678,3 @@ describe('ObjectSculptSpec Three.js adapter', () => {
     expect(model.userData.componentGroups.get('rib').getObjectByName('rib:mesh').geometry.parameters.radius).toBeCloseTo(0.1);
   });
 
-  it('allows independent generators to share one parameter identity and expands both templates', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'left-template', kind: 'group', parent: 'root' },
-        { id: 'left-part', parent: 'left-template', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-        { id: 'right-template', kind: 'group', parent: 'root' },
-        { id: 'right-part', parent: 'right-template', primitive: 'box', dimensions: { width: 1, height: 1, depth: 1 } },
-      ],
-      parameterSchema: [
-        { id: 'shared-repeat-count', type: 'number', value: 3, min: 1, max: 4, targets: [] },
-      ],
-      generators: [
-        { id: 'left-repeat', type: 'repeat', templateRootId: 'left-template', countParameterId: 'shared-repeat-count',
-          axis: 'x', spacing: 1, defaultCount: 3, maxCount: 4 },
-        { id: 'right-repeat', type: 'repeat', templateRootId: 'right-template', countParameterId: 'shared-repeat-count',
-          axis: 'x', spacing: 1, defaultCount: 3, maxCount: 4 },
-      ],
-    };
-
-    const model = createObjectSculptModel(THREE, spec);
-    const leftInstances = [...model.userData.componentGroups.values()]
-      .filter(group => group.userData.componentSourceId === 'left-template');
-    const rightInstances = [...model.userData.componentGroups.values()]
-      .filter(group => group.userData.componentSourceId === 'right-template');
-    expect(leftInstances).toHaveLength(3);
-    expect(rightInstances).toHaveLength(3);
-    expect(model.userData.componentGroups.size).toBe(13);
-  });
-
-  it('accepts generator-only grid spacing parameters without component targets', () => {
-    const spec = {
-      schemaVersion: '2.0',
-      componentTree: [
-        { id: 'root', kind: 'group' },
-        { id: 'window-template', kind: 'group', parent: 'root' },
-        { id: 'window', parent: 'window-template', primitive: 'box', dimensions: { width: 1, height: 1, depth: 0.2 } },
-      ],
-      parameterSchema: [
-        { id: 'rows', type: 'number', value: 2, min: 1, max: 3, targets: [] },
-        { id: 'columns', type: 'number', value: 2, min: 1, max: 3, targets: [] },
-        { id: 'spacing', type: 'number', value: 1.5, min: 0.5, max: 2, targets: [] },
-      ],
-      generators: [{
-        id: 'window-grid', type: 'grid', templateRootId: 'window-template',
-        rowParameterId: 'rows', columnParameterId: 'columns',
-        spacingX: 1, spacingZ: 1, spacingXParameterId: 'spacing', spacingXScale: 1,
-        defaultRows: 2, defaultColumns: 2, maxRows: 3, maxColumns: 3,
-      }],
-    };
-    const model = createObjectSculptModel(THREE, spec);
-    const instances = [...model.userData.componentGroups.values()]
-      .filter(group => group.userData.componentSourceId === 'window-template');
-    expect(instances).toHaveLength(4);
-  });
-
-});

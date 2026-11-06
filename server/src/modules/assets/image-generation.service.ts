@@ -1,60 +1,9 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
-import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from '../../shared/object-model-property-resolver';
+import { normalizeObjectModelParameterSchema } from '../../shared/object-model-parameter-schema';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-
-/**
- * AI 有时会把材质参数写成语义化别名（如 lattice_color），但 Runtime 协议
- * 只接受标准材质绑定。将明确的材质字段别名收敛为统一协议，避免整次生成失败。
- */
-function normalizeGeneratedParameterBindings(input: unknown) {
-  if (!Array.isArray(input)) return input;
-  const materialAliases: Record<string, string> = {
-    lattice_color: 'material.color',
-    lattice_roughness: 'material.roughness',
-    lattice_metalness: 'material.metalness',
-    lattice_opacity: 'material.opacity',
-  };
-  return input.map((parameter: any) => ({
-    ...parameter,
-    targets: Array.isArray(parameter?.targets) ? parameter.targets.map((target: any) => ({
-      ...target,
-      property: materialAliases[target?.property] || target?.property,
-    })) : parameter?.targets,
-  }));
-}
-
-function validateGeneratedParameterSchema(input: unknown, componentTree: any[], generatorParameterIds = new Set<string>(), materials: Record<string, any> = {}) {
-  if (input == null) return [];
-  if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('视觉模型返回的 parameterSchema 无效或超出 100 项');
-  const ids = new Set<string>(), nodes = new Set(componentTree.map(node => node.id));
-  for (const item of input) {
-    if (!item || typeof item !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(item.id || '') || ids.has(item.id)) throw new ServiceUnavailableException('AI 参数 ID 无效或重复');
-    ids.add(item.id);
-    if (!['number','color','boolean','select'].includes(item.type)) throw new ServiceUnavailableException('AI 参数类型无效：' + item.id);
-    if (item.type === 'number' && (!Number.isFinite(item.value) || !Number.isFinite(item.min) || !Number.isFinite(item.max) || item.min > item.max || item.value < item.min || item.value > item.max)) throw new ServiceUnavailableException('AI 数值参数范围无效：' + item.id);
-    if (item.type === 'color' && (typeof item.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(item.value))) throw new ServiceUnavailableException('AI 颜色参数无效：' + item.id);
-    if (item.type === 'boolean' && typeof item.value !== 'boolean') throw new ServiceUnavailableException('AI 布尔参数无效：' + item.id);
-    if (item.type === 'select' && (!Array.isArray(item.options) || !item.options.some((option: any) => option?.value === item.value))) throw new ServiceUnavailableException('AI 枚举参数无效：' + item.id);
-    if (!Array.isArray(item.targets) || item.targets.length > 100 || (!item.targets.length && !generatorParameterIds.has(item.id))) throw new ServiceUnavailableException('AI 参数目标无效：' + item.id);
-    for (const target of item.targets) {
-      const targetNode = componentTree.find(node => node.id === target?.nodeId);
-      const resolvedTarget = resolveObjectModelParameterTarget(targetNode, materials, target?.property);
-      const mode = target.mode || 'set';
-      if (!nodes.has(target?.nodeId) || !resolvedTarget
-        || !isObjectModelParameterTargetTypeCompatible(item.type, resolvedTarget, mode, target?.property)) {
-        throw new ServiceUnavailableException('AI 参数目标引用无效或数据类型不匹配：' + item.id);
-      }
-      if (!['set','multiply','add','visible-from','visible-through'].includes(mode)) throw new ServiceUnavailableException('AI 参数目标运算无效：' + item.id);
-      if (['visible-from','visible-through'].includes(mode) && (target.property !== 'visibility.visible' || !Number.isFinite(target.threshold) || target.threshold < 1 || target.threshold > 100)) throw new ServiceUnavailableException('AI 参数可见性阈值无效：' + item.id);
-      if (target.property === 'geometry.primitive' && item.type !== 'select') throw new ServiceUnavailableException('几何类型参数必须是枚举：' + item.id);
-      if (target.property.startsWith('material.') && mode !== 'set') throw new ServiceUnavailableException('材质参数只允许 set：' + item.id);
-    }
-  }
-  return input;
-}
 
 function validateGeneratedOperations(input: unknown, componentTree: any[]) {
   if (input == null) return { operations: [], parameterIds: new Set<string>(), expressionParameterIds: new Set<string>() };
@@ -593,7 +542,11 @@ export class ImageGenerationService {
     const operationValidation = validateGeneratedOperations(spec.operations, spec.componentTree);
     spec.operations = operationValidation.operations;
     const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
-    spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
+    try {
+      spec.parameterSchema = normalizeObjectModelParameterSchema(spec.parameterSchema, spec.componentTree, spec.materials, operationParameterIds);
+    } catch (error) {
+      throw new ServiceUnavailableException(error instanceof Error ? error.message : 'AI 参数 Schema 无效');
+    }
     validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
     try { validateObjectModelSpecV3(spec); } catch (error) {
       if (!allowGeometryRepair || !(error instanceof Error)) {

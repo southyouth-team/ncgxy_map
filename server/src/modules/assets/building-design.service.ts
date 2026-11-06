@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, ServiceUnavailableException } 
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
-import { isObjectModelParameterTargetTypeCompatible, resolveObjectModelParameterTarget } from '../../shared/object-model-property-resolver';
+import { normalizeObjectModelParameterSchema } from '../../shared/object-model-parameter-schema';
 
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
 const TEMPLATES = ['街区楼 A', '街区楼 B', '庭院楼', '坡顶楼', '教学楼', '宿舍楼', '办公楼', '实验楼', '图书馆', '体育馆'];
@@ -13,68 +13,6 @@ function stableSerialize(value: any): string {
   if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableSerialize(value[key])).join(',') + '}';
   return JSON.stringify(value);
 }
-function normalizeObjectParameterSchema(input: unknown, componentTree: any[], materials: Record<string, any>, operationParameterIds = new Set<string>()) {
-  if (input == null) return [];
-  if (!Array.isArray(input) || input.length > 100) throw new ServiceUnavailableException('parameterSchema 必须是最多 100 项的数组');
-  const ids = new Set<string>();
-  const nodeIds = new Set(componentTree.map(node => node.id));
-  return input.map((raw: any) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ServiceUnavailableException('参数定义格式无效');
-    const id = typeof raw.id === 'string' ? raw.id : '';
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id) || ids.has(id)) throw new ServiceUnavailableException('参数 ID 无效或重复：' + id);
-    ids.add(id);
-    const type = raw.type;
-    if (!['number','color','boolean','select'].includes(type)) throw new ServiceUnavailableException('参数类型不受支持：' + id);
-    const parameter: Record<string, any> = { id, label: String(raw.label || id).slice(0, 100), type, value: raw.value };
-    if (type === 'number') {
-      const min = Number(raw.min), max = Number(raw.max), value = Number(raw.value);
-      if (![min,max,value].every(Number.isFinite) || min > max || value < min || value > max || min < -1000 || max > 1000) throw new ServiceUnavailableException('数值参数范围无效：' + id);
-      parameter.min = min; parameter.max = max; parameter.value = value;
-      if (raw.step !== undefined) {
-        const step = Number(raw.step);
-        if (!Number.isFinite(step) || step <= 0 || step > max - min + 0.000001) throw new ServiceUnavailableException('数值参数步长无效：' + id);
-        parameter.step = step;
-      }
-      if (typeof raw.unit === 'string') parameter.unit = raw.unit.slice(0, 20);
-    } else if (type === 'color') {
-      if (typeof raw.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(raw.value)) throw new ServiceUnavailableException('颜色参数无效：' + id);
-    } else if (type === 'boolean') {
-      if (typeof raw.value !== 'boolean') throw new ServiceUnavailableException('布尔参数无效：' + id);
-    } else {
-      if (!Array.isArray(raw.options) || raw.options.length < 1 || raw.options.length > 30 || !raw.options.some((item: any) => item?.value === raw.value)) throw new ServiceUnavailableException('枚举参数选项无效：' + id);
-      parameter.options = raw.options.map((item: any) => {
-        if (!item || typeof item.value !== 'string' || item.value.length > 80) throw new ServiceUnavailableException('枚举参数选项无效：' + id);
-        return { label: String(item.label || item.value).slice(0, 100), value: item.value };
-      });
-    }
-    if (!Array.isArray(raw.targets) || raw.targets.length > 100 || (raw.targets.length < 1 && !operationParameterIds.has(id))) throw new ServiceUnavailableException('参数目标不能为空或超出数量限制：' + id);
-    parameter.targets = raw.targets.map((target: any) => {
-      const node = componentTree.find(item => item.id === target?.nodeId);
-      const binding = resolveObjectModelParameterTarget(node, materials, target?.property);
-      if (!nodeIds.has(target?.nodeId) || !binding) throw new ServiceUnavailableException('参数目标无效：' + id);
-      if (node.kind === 'group' && !String(target.property).startsWith('transform.') && target.property !== 'visibility.visible') throw new ServiceUnavailableException('Group 节点仅支持变换和显隐参数：' + id);
-      const mode = target.mode || 'set';
-      if (!isObjectModelParameterTargetTypeCompatible(type, binding, mode, target?.property)) {
-        throw new ServiceUnavailableException('参数类型与目标属性的数据类型不匹配：' + id);
-      }
-      if (!['set','multiply','add','visible-from','visible-through'].includes(mode) || (target.property.startsWith('material.') && mode !== 'set')) throw new ServiceUnavailableException('参数目标运算无效：' + id);
-      if (['visible-from','visible-through'].includes(mode) && target.property !== 'visibility.visible') throw new ServiceUnavailableException('可见性阈值运算只能用于 visibility.visible：' + id);
-      if (target.property === 'visibility.visible' && mode === 'set' && type !== 'boolean' && type !== 'number') throw new ServiceUnavailableException('可见性参数类型无效：' + id);
-      if (target.property === 'geometry.primitive' && type !== 'select') throw new ServiceUnavailableException('几何类型参数必须是 select：' + id);
-      if (target.property.startsWith('material.') && !materials[node.material]) throw new ServiceUnavailableException('参数引用的材质不存在：' + id);
-      const normalizedTarget: Record<string, any> = { nodeId: target.nodeId, property: target.property, mode };
-      if (target.property === 'visibility.visible' && ['visible-from','visible-through'].includes(mode)) {
-        const threshold = Number(target.threshold);
-        if (!Number.isFinite(threshold) || threshold < 1 || threshold > 100) throw new ServiceUnavailableException('可见性阈值无效：' + id);
-        normalizedTarget.threshold = threshold;
-      }
-      return normalizedTarget;
-    });
-    return parameter;
-  });
-}
-
-
 @Injectable()
 export class BuildingDesignService {
   private readonly logger = new Logger(BuildingDesignService.name);
@@ -232,7 +170,12 @@ export class BuildingDesignService {
         if (Array.isArray(vector)) vector.forEach(collectExpressionParameterIds);
       }
     }
-    const parameterSchema = normalizeObjectParameterSchema(parsed.parameterSchema, componentTree, current.materials || {}, operationParameterIds);
+    let parameterSchema: any[];
+    try {
+      parameterSchema = normalizeObjectModelParameterSchema(parsed.parameterSchema, componentTree, current.materials || {}, operationParameterIds);
+    } catch (error) {
+      throw new ServiceUnavailableException(error instanceof Error ? error.message : '参数 Schema 无效');
+    }
     const previous = current.parameterSchema || [];
     const nextById = new Map(parameterSchema.map((item: any) => [item.id, item]));
     for (const item of previous) {

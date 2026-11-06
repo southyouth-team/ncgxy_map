@@ -85,7 +85,7 @@ describe('ImageGenerationService', () => {
 
     const result = await service.generateObjectFromPrompt('一个格栅物体', '格栅', 'stylized');
     expect(result.objectSculptSpec.parameterSchema[0].targets).toEqual([
-      { nodeId: 'lattice-panel', property: 'material.color' },
+      { nodeId: 'lattice-panel', property: 'material.color', mode: 'set' },
     ]);
   });
 

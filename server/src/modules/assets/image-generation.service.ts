@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { validateObjectModelSpecV3 } from '../../../../../shared/object-model-spec-v3';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 function validateGeneratedGeometryDescriptors(componentTree: any[]) {
@@ -672,6 +673,9 @@ export class ImageGenerationService {
     const operationParameterIds = new Set([...operationValidation.parameterIds, ...operationValidation.expressionParameterIds]);
     spec.parameterSchema = validateGeneratedParameterSchema(normalizeGeneratedParameterBindings(spec.parameterSchema), spec.componentTree, operationParameterIds, spec.materials);
     validateOperationParameterBindings(spec.operations, spec.parameterSchema, spec.componentTree, operationValidation.expressionParameterIds);
+    try { validateObjectModelSpecV3(spec); } catch (error) {
+      throw new ServiceUnavailableException(error instanceof Error ? error.message : 'ObjectModelSpec 3.0 校验失败');
+    }
 
     return { provider: baseUrl, model, objectType, visualStyle, referenceAnalysis, objectSculptSpec: spec };
   }

@@ -99,147 +99,6 @@ export class AssetsService {
       throw new BadRequestException('仅支持真实格式匹配的 PNG、JPG、WebP 图片');
     }
 
-    } else {
-      const operations = spec.operations === undefined ? [] : spec.operations;
-      if (!Array.isArray(operations) || operations.length > 40) throw new BadRequestException('资产 operations 数量无效');
-      const operationIds = new Set<string>(), operationRoots = new Set<string>();
-      const parameterById = new Map((spec.parameterSchema || []).map((item: any) => [item.id, item]));
-      let expandedCount = spec.componentTree.length;
-      const expressionParameters = new Set<string>();
-      const validateExpression = (expression: any, depth = 0): void => {
-        if (depth > 16) throw new BadRequestException('资产空间表达式嵌套层级超限');
-        if (typeof expression === 'number') {
-          if (!Number.isFinite(expression) || Math.abs(expression) > 10000) throw new BadRequestException('资产空间表达式常量无效');
-          return;
-        }
-        if (!expression || typeof expression !== 'object' || Array.isArray(expression)) throw new BadRequestException('资产空间表达式格式无效');
-        if (expression.op === 'constant') {
-          if (!Number.isFinite(Number(expression.value)) || Math.abs(Number(expression.value)) > 10000) throw new BadRequestException('资产空间表达式常量无效');
-        } else if (expression.op === 'index' || expression.op === 'count') {
-          return;
-        } else if (expression.op === 'parameter') {
-          if (typeof expression.id !== 'string' || !parameterById.has(expression.id) || parameterById.get(expression.id)?.type !== 'number') {
-            throw new BadRequestException('资产空间表达式只能引用已声明的数值参数');
-          }
-          expressionParameters.add(expression.id);
-        } else if (['add','subtract','multiply','divide'].includes(expression.op)) {
-          validateExpression(expression.left, depth + 1);
-          validateExpression(expression.right, depth + 1);
-        } else if (['sin','cos','negate'].includes(expression.op)) {
-          validateExpression(expression.value, depth + 1);
-        } else {
-          throw new BadRequestException('资产空间表达式运算不受支持：' + String(expression.op));
-        }
-      };
-      const subtreeFor = (rootId: string) => spec.componentTree.filter((node: any) => {
-        let current = node;
-        while (current) {
-          if (current.id === rootId) return true;
-          current = current.parent ? byId.get(current.parent) : null;
-        }
-        return false;
-      });
-      for (const operation of operations) {
-        if (!operation || typeof operation !== 'object'
-          || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(operation.id || '')
-          || operationIds.has(operation.id) || operation.type !== 'instance') {
-          throw new BadRequestException('资产 instance operation 定义无效');
-        }
-        operationIds.add(operation.id);
-        const root = byId.get(operation.sourceRootId);
-        if (!root || (root.kind || 'mesh') !== 'group' || operationRoots.has(root.id)) {
-          throw new BadRequestException('资产 instance 源节点必须是唯一 Group：' + operation.id);
-        }
-        operationRoots.add(root.id);
-        const subtree = subtreeFor(root.id);
-        const countParameter = parameterById.get(operation.count?.parameterId);
-        if (!countParameter || countParameter.type !== 'number' || !Number.isInteger(countParameter.value)
-          || !Number.isInteger(countParameter.min) || !Number.isInteger(countParameter.max)
-          || countParameter.min < 1 || countParameter.max > 100 || countParameter.value < countParameter.min || countParameter.value > countParameter.max) {
-          throw new BadRequestException('资产 instance 必须绑定 1-100 范围内的整数数量参数：' + operation.id);
-        }
-        expandedCount += subtree.length * (countParameter.max - 1);
-        if (expandedCount > 300) throw new BadRequestException('资产 operations 最大展开组件数量超过 300：' + operation.id);
-        const transform = operation.transform || {};
-        for (const key of ['position','rotation','scale']) {
-          const vector = transform[key] ?? (key === 'scale' ? [1,1,1] : [0,0,0]);
-          if (!Array.isArray(vector) || vector.length !== 3) throw new BadRequestException('资产 instance transform.' + key + ' 必须是三维表达式数组：' + operation.id);
-          vector.forEach((value: any) => validateExpression(value));
-        }
-      }
-      for (const parameterId of expressionParameters) {
-        if (parameterById.get(parameterId)?.type !== 'number') throw new BadRequestException('资产空间表达式参数类型无效：' + parameterId);
-      }
-    }
-
-    } else {
-      const operations = spec.operations === undefined ? [] : spec.operations;
-      if (!Array.isArray(operations) || operations.length > 40) throw new BadRequestException('资产 operations 数量无效');
-      const operationIds = new Set<string>(), operationRoots = new Set<string>();
-      const parameterById = new Map((spec.parameterSchema || []).map((item: any) => [item.id, item]));
-      let expandedCount = spec.componentTree.length;
-      const validateExpression = (expression: any, depth = 0): void => {
-        if (depth > 16) throw new BadRequestException('资产空间表达式嵌套层级超限');
-        if (typeof expression === 'number') {
-          if (!Number.isFinite(expression) || Math.abs(expression) > 10000) throw new BadRequestException('资产空间表达式常量无效');
-          return;
-        }
-        if (!expression || typeof expression !== 'object' || Array.isArray(expression)) throw new BadRequestException('资产空间表达式格式无效');
-        if (expression.op === 'constant') {
-          if (!Number.isFinite(Number(expression.value)) || Math.abs(Number(expression.value)) > 10000) throw new BadRequestException('资产空间表达式常量无效');
-        } else if (expression.op === 'index' || expression.op === 'count') {
-          return;
-        } else if (expression.op === 'parameter') {
-          if (typeof expression.id !== 'string' || parameterById.get(expression.id)?.type !== 'number') {
-            throw new BadRequestException('资产空间表达式只能引用已声明的数值参数');
-          }
-        } else if (['add','subtract','multiply','divide'].includes(expression.op)) {
-          validateExpression(expression.left, depth + 1);
-          validateExpression(expression.right, depth + 1);
-        } else if (['sin','cos','negate'].includes(expression.op)) {
-          validateExpression(expression.value, depth + 1);
-        } else {
-          throw new BadRequestException('资产空间表达式运算不受支持：' + String(expression.op));
-        }
-      };
-      const subtreeFor = (rootId: string) => spec.componentTree.filter((node: any) => {
-        let current = node;
-        while (current) {
-          if (current.id === rootId) return true;
-          current = current.parent ? byId.get(current.parent) : null;
-        }
-        return false;
-      });
-      for (const operation of operations) {
-        if (!operation || typeof operation !== 'object'
-          || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(operation.id || '')
-          || operationIds.has(operation.id) || operation.type !== 'instance') {
-          throw new BadRequestException('资产 instance operation 定义无效');
-        }
-        operationIds.add(operation.id);
-        const root = byId.get(operation.sourceRootId);
-        if (!root || (root.kind || 'mesh') !== 'group' || operationRoots.has(root.id)) {
-          throw new BadRequestException('资产 instance 源节点必须是唯一 Group：' + operation.id);
-        }
-        operationRoots.add(root.id);
-        const subtree = subtreeFor(root.id);
-        const countParameter = parameterById.get(operation.count?.parameterId);
-        if (!countParameter || countParameter.type !== 'number' || !Number.isInteger(countParameter.value)
-          || !Number.isInteger(countParameter.min) || !Number.isInteger(countParameter.max)
-          || countParameter.min < 1 || countParameter.max > 100 || countParameter.value < countParameter.min || countParameter.value > countParameter.max) {
-          throw new BadRequestException('资产 instance 必须绑定 1-100 范围内的整数数量参数：' + operation.id);
-        }
-        expandedCount += subtree.length * (countParameter.max - 1);
-        if (expandedCount > 300) throw new BadRequestException('资产 operations 最大展开组件数量超过 300：' + operation.id);
-        const transform = operation.transform || {};
-        for (const key of ['position','rotation','scale']) {
-          const vector = transform[key] ?? (key === 'scale' ? [1,1,1] : [0,0,0]);
-          if (!Array.isArray(vector) || vector.length !== 3) throw new BadRequestException('资产 instance transform.' + key + ' 必须是三维表达式数组：' + operation.id);
-          vector.forEach((value: any) => validateExpression(value));
-        }
-      }
-    }
-
     const assetId = randomUUID();
     const objectKey = `${campusId}/${mapId}/${assetId}${detected.extension}`;
     const absolutePath = resolve(this.storageDir, objectKey);
@@ -537,7 +396,6 @@ export class AssetsService {
     if (spec.componentTree.filter((node: any) => !node.parent).length !== 1) throw new BadRequestException('结构化资产必须只有一个主体根节点');
     if (spec.parameterSchema !== undefined && (!Array.isArray(spec.parameterSchema) || spec.parameterSchema.length > 100)) throw new BadRequestException('资产参数 Schema 无效');
     if (spec.schemaVersion === '2.0') {
-    if (spec.schemaVersion === '2.0') {
     const generators = spec.generators === undefined ? [] : spec.generators;
     if (!Array.isArray(generators) || generators.length > 30) throw new BadRequestException('资产结构生成器数量无效');
     const generatorIds = new Set<string>();
@@ -720,6 +578,74 @@ export class AssetsService {
       visitedAttachments.add(nodeId);
     };
     for (const nodeId of attachmentGraph.keys()) visitAttachment(nodeId);
+
+    } else {
+      const operations = spec.operations === undefined ? [] : spec.operations;
+      if (!Array.isArray(operations) || operations.length > 40) throw new BadRequestException('资产 operations 数量无效');
+      const operationIds = new Set<string>(), operationRoots = new Set<string>();
+      const parameterById = new Map<string, any>((spec.parameterSchema || []).map((item: any) => [item.id, item]));
+      let expandedCount = spec.componentTree.length;
+      const validateExpression = (expression: any, depth = 0): void => {
+        if (depth > 16) throw new BadRequestException('资产空间表达式嵌套层级超限');
+        if (typeof expression === 'number') {
+          if (!Number.isFinite(expression) || Math.abs(expression) > 10000) throw new BadRequestException('资产空间表达式常量无效');
+          return;
+        }
+        if (!expression || typeof expression !== 'object' || Array.isArray(expression)) throw new BadRequestException('资产空间表达式格式无效');
+        if (expression.op === 'constant') {
+          if (!Number.isFinite(Number(expression.value)) || Math.abs(Number(expression.value)) > 10000) throw new BadRequestException('资产空间表达式常量无效');
+        } else if (expression.op === 'index' || expression.op === 'count') {
+          return;
+        } else if (expression.op === 'parameter') {
+          if (typeof expression.id !== 'string' || parameterById.get(expression.id)?.type !== 'number') {
+            throw new BadRequestException('资产空间表达式只能引用已声明的数值参数');
+          }
+        } else if (['add','subtract','multiply','divide'].includes(expression.op)) {
+          validateExpression(expression.left, depth + 1);
+          validateExpression(expression.right, depth + 1);
+        } else if (['sin','cos','negate'].includes(expression.op)) {
+          validateExpression(expression.value, depth + 1);
+        } else {
+          throw new BadRequestException('资产空间表达式运算不受支持：' + String(expression.op));
+        }
+      };
+      const subtreeFor = (rootId: string) => spec.componentTree.filter((node: any) => {
+        let current = node;
+        while (current) {
+          if (current.id === rootId) return true;
+          current = current.parent ? byId.get(current.parent) : null;
+        }
+        return false;
+      });
+      for (const operation of operations) {
+        if (!operation || typeof operation !== 'object'
+          || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(operation.id || '')
+          || operationIds.has(operation.id) || operation.type !== 'instance') {
+          throw new BadRequestException('资产 instance operation 定义无效');
+        }
+        operationIds.add(operation.id);
+        const root = byId.get(operation.sourceRootId);
+        if (!root || (root.kind || 'mesh') !== 'group' || operationRoots.has(root.id)) {
+          throw new BadRequestException('资产 instance 源节点必须是唯一 Group：' + operation.id);
+        }
+        operationRoots.add(root.id);
+        const subtree = subtreeFor(root.id);
+        const countParameter = parameterById.get(operation.count?.parameterId);
+        if (!countParameter || countParameter.type !== 'number' || !Number.isInteger(countParameter.value)
+          || !Number.isInteger(countParameter.min) || !Number.isInteger(countParameter.max)
+          || countParameter.min < 1 || countParameter.max > 100 || countParameter.value < countParameter.min || countParameter.value > countParameter.max) {
+          throw new BadRequestException('资产 instance 必须绑定 1-100 范围内的整数数量参数：' + operation.id);
+        }
+        expandedCount += subtree.length * (countParameter.max - 1);
+        if (expandedCount > 300) throw new BadRequestException('资产 operations 最大展开组件数量超过 300：' + operation.id);
+        const transform = operation.transform || {};
+        for (const key of ['position','rotation','scale']) {
+          const vector = transform[key] ?? (key === 'scale' ? [1,1,1] : [0,0,0]);
+          if (!Array.isArray(vector) || vector.length !== 3) throw new BadRequestException('资产 instance transform.' + key + ' 必须是三维表达式数组：' + operation.id);
+          vector.forEach((value: any) => validateExpression(value));
+        }
+      }
+    }
 
     const assetId = randomUUID();
     const directory = resolve(this.storageDir, 'campus-visual-assets', 'objects');

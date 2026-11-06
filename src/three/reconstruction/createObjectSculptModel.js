@@ -573,6 +573,41 @@ function setEditableParameterTarget(node, materials, property, value) {
   target[parts[parts.length - 1]] = value;
 }
 
+function applyObjectModelParameterValues(input) {
+  const spec = JSON.parse(JSON.stringify(input));
+  for (const parameter of spec.parameterSchema || []) {
+    for (const target of parameter.targets || []) {
+      const node = spec.componentTree.find(item => item.id === target.nodeId);
+      if (!node) throw new TypeError('参数目标组件不存在：' + target.nodeId);
+      const binding = resolveEditableParameterTarget(node, spec.materials || {}, target.property);
+      if (!binding) throw new TypeError('参数目标属性不存在或不可编辑：' + target.property);
+      const mode = target.mode || 'set';
+      const resolved = mode === 'multiply' ? Number(binding.value) * Number(parameter.value)
+        : mode === 'add' ? Number(binding.value) + Number(parameter.value) : parameter.value;
+      if (target.property === 'visibility.visible') {
+        const threshold = Number(target.threshold ?? 1);
+        node.hidden = mode === 'visible-from' ? Number(parameter.value) < threshold
+          : mode === 'visible-through' ? Number(parameter.value) > threshold
+            : !Boolean(parameter.value);
+      } else if (target.property === 'geometry.primitive') {
+        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft'].includes(String(resolved))) {
+          throw new TypeError('参数指定了不支持的几何类型');
+        }
+        node.primitive = resolved;
+      } else if (target.property.startsWith('material.')) {
+        const previousMaterial = spec.materials[node.material] || DEFAULT_MATERIAL;
+        const uniqueKey = 'parameter-' + node.id;
+        if (node.material !== uniqueKey) spec.materials[uniqueKey] = { ...previousMaterial };
+        node.material = uniqueKey;
+        setEditableParameterTarget(node, spec.materials, target.property, resolved);
+      } else {
+        setEditableParameterTarget(node, spec.materials || {}, target.property, resolved);
+      }
+    }
+  }
+  return spec;
+}
+
 export function validateObjectSculptSpec(spec) {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new TypeError('ObjectSculptSpec 必须是 JSON 对象');
   if (spec.schemaVersion !== '3.0') throw new TypeError('仅支持 ObjectModelSpec 3.0');
@@ -666,7 +701,8 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
   }
   // 3.0 is the canonical declarative protocol. Compile it into the bounded
   // component-tree execution form only at the runtime adapter boundary.
-  const effectiveSpec = compileObjectModelSpec(spec);
+  const parameterizedSpec = applyObjectModelParameterValues(spec);
+  const effectiveSpec = compileObjectModelSpec(parameterizedSpec);
   validateObjectSculptSpec(effectiveSpec);
   const renderSpec = effectiveSpec;
   const validation = validateObjectSculptSpec(renderSpec);
@@ -739,7 +775,7 @@ export function createObjectSculptModel(THREE, spec, options = {}) {
  * Every edit starts from the immutable baseline spec to avoid cumulative drift.
  */
 export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) {
-  if (!root?.userData?.parameterBaseSpec || !root.userData?.componentGroups) throw new TypeError('目标不是可编辑的 ObjectSculpt 资产');
+  if (!root?.userData?.parameterBaseSpec || !root.userData?.componentGroups) throw new TypeError('目标不是可编辑的 ObjectModelSpec 3.0 资产');
   const baseline = root.userData.parameterBaseSpec;
   const parameter = (baseline.parameterSchema || []).find(item => item.id === parameterId);
   if (!parameter) throw new TypeError('未声明可编辑参数：' + parameterId);
@@ -758,42 +794,10 @@ export function applyObjectSculptParameter(THREE, root, parameterId, nextValue) 
   const activeValues = new Map(activeSchema.map(item => [item.id, item.value]));
   activeValues.set(parameterId, value);
   const spec = JSON.parse(JSON.stringify(baseline));
-  const findNode = id => spec.componentTree.find(node => node.id === id);
-  for (const currentParameter of spec.parameterSchema || []) {
-    const parameterValue = activeValues.has(currentParameter.id) ? activeValues.get(currentParameter.id) : currentParameter.value;
-    currentParameter.value = parameterValue;
-    for (const target of currentParameter.targets) {
-      const node = findNode(target.nodeId);
-      if (!node) continue;
-      const mode = target.mode || 'set';
-      const binding = resolveEditableParameterTarget(node, spec.materials || {}, target.property);
-      if (!binding) throw new TypeError('参数目标属性不存在或不可编辑：' + target.property);
-      const current = binding.value;
-      const resolved = mode === 'multiply' ? Number(current) * Number(parameterValue)
-        : mode === 'add' ? Number(current) + Number(parameterValue) : parameterValue;
-      if (target.property === 'visibility.visible') {
-        const threshold = Number(target.threshold ?? 1);
-        if (!Number.isFinite(threshold) || threshold < 1 || threshold > 100) throw new RangeError('可见性阈值无效：' + currentParameter.id);
-        node.hidden = mode === 'visible-from' ? Number(parameterValue) < threshold
-          : mode === 'visible-through' ? Number(parameterValue) > threshold
-            : !Boolean(parameterValue);
-      } else if (target.property === 'geometry.primitive') {
-        if (!['box','cuboid','polygon','wedge','arch','cylinder','cone','sphere','ellipsoid','torus','tube','lathe','sweep','loft'].includes(String(resolved))) throw new TypeError('参数指定了不支持的几何类型');
-        node.primitive = resolved;
-      } else if (target.property.startsWith('material.')) {
-        const previousMaterial = spec.materials[node.material] || DEFAULT_MATERIAL;
-        const uniqueKey = 'parameter-' + node.id;
-        if (node.material !== uniqueKey) spec.materials[uniqueKey] = { ...previousMaterial };
-        node.material = uniqueKey;
-        setEditableParameterTarget(node, spec.materials, target.property, resolved);
-      } else {
-        setEditableParameterTarget(node, spec.materials || {}, target.property, resolved);
-      }
-    }
+  for (const item of spec.parameterSchema || []) {
+    if (activeValues.has(item.id)) item.value = activeValues.get(item.id);
   }
-  // createObjectSculptModel owns expansion and validation. Passing an already-expanded
-  // spec here would discard the declarative constraints before their boundary checks run.
-  const rebuilt = createObjectSculptModel(THREE, spec, { source: 'object-sculpt-parameter' });
+  const rebuilt = createObjectSculptModel(THREE, spec, { source: 'object-model-parameter' });
   for (const child of [...root.children]) {
     root.remove(child);
     child.traverse?.(item => {

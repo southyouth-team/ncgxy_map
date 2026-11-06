@@ -49,6 +49,45 @@ describe('canonical ObjectModelSpec 3.0 validator', () => {
     expect(result.expandedComponentCount).toBe(3 + 2 * (64 - 1));
   });
 
+
+  it('validates primitive geometry descriptors consistently at the canonical boundary', () => {
+    const polygon = createRadialSpec();
+    polygon.componentTree[2].primitive = 'polygon';
+    polygon.componentTree[2].geometryDescriptor = { points: [[-0.4,-0.4],[0.4,-0.4],[0.4,0.4],[-0.4,0.4]] };
+    expect(() => validateObjectModelSpecV3(polygon)).not.toThrow();
+
+    const selfIntersecting = createRadialSpec();
+    selfIntersecting.componentTree[2].primitive = 'polygon';
+    selfIntersecting.componentTree[2].geometryDescriptor = { points: [[-0.4,-0.4],[0.4,0.4],[-0.4,0.4],[0.4,-0.4]] };
+    expect(() => validateObjectModelSpecV3(selfIntersecting)).toThrow('轮廓不能自相交');
+
+    const tube = createRadialSpec();
+    tube.componentTree[2].geometryDescriptor = { path: [[0,-0.5,0],[0,0.5,0]], radius: 0.025, tubularSegments: 32, radialSegments: 8 };
+    expect(() => validateObjectModelSpecV3(tube)).not.toThrow();
+    tube.componentTree[2].geometryDescriptor.radius = 0.001;
+    expect(() => validateObjectModelSpecV3(tube)).toThrow('radius');
+
+    const lathe = createRadialSpec();
+    lathe.componentTree[2].primitive = 'lathe';
+    lathe.componentTree[2].geometryDescriptor = { profile: [[0,-0.5],[0.2,0],[0,0.5]] };
+    expect(() => validateObjectModelSpecV3(lathe)).not.toThrow();
+
+    const sweep = createRadialSpec();
+    sweep.componentTree[2].primitive = 'sweep';
+    sweep.componentTree[2].geometryDescriptor = { path: [[0,-0.5,0],[0,0.5,0]], profile: [[-0.1,-0.1],[0.1,-0.1],[0.1,0.1],[-0.1,0.1]], steps: 32 };
+    expect(() => validateObjectModelSpecV3(sweep)).not.toThrow();
+
+    const loft = createRadialSpec();
+    loft.componentTree[2].primitive = 'loft';
+    loft.componentTree[2].geometryDescriptor = { sections: [
+      { height: -0.5, points: [[-0.2,-0.2],[0.2,-0.2],[0.2,0.2],[-0.2,0.2]] },
+      { height: 0.5, points: [[-0.1,-0.1],[0.1,-0.1],[0.1,0.1],[-0.1,0.1]] },
+    ] };
+    expect(() => validateObjectModelSpecV3(loft)).not.toThrow();
+    loft.componentTree[2].geometryDescriptor.sections[1].height = -0.5;
+    expect(() => validateObjectModelSpecV3(loft)).toThrow('height 必须严格递增');
+  });
+
   it('rejects duplicate operation IDs and invalid operation parameter references', () => {
     const duplicate = createRadialSpec();
     duplicate.operations.push({ ...duplicate.operations[0] });

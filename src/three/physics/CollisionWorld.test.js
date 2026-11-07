@@ -141,3 +141,25 @@ describe('CollisionWorld', () => {
     expect(collision.obstacles).toHaveLength(0)
   })
 })
+
+
+describe('CollisionWorld support surface registry', () => {
+  it('registers standing surfaces independently from movement obstacles', () => {
+    const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 })
+    const mesh = { isMesh: true }
+    expect(collision.addSupportSurface({
+      ownerId: 'model-a', surfaceId: 'floor-a', targetPartId: 'floor',
+      supportsStanding: true, walkable: true, meshes: [mesh],
+    })).toBe(true)
+    expect(collision.supportSurfaces).toHaveLength(1)
+    expect(collision.obstacles).toHaveLength(0)
+  })
+
+  it('removes support surfaces by model instance owner', () => {
+    const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 })
+    collision.addSupportSurface({ ownerId: 'model-a', surfaceId: 'a', meshes: [{}], supportsStanding: true })
+    collision.addSupportSurface({ ownerId: 'model-b', surfaceId: 'b', meshes: [{}], walkable: true })
+    expect(collision.removeSupportSurfacesByOwner('model-a')).toBe(1)
+    expect(collision.supportSurfaces.map(surface => surface.ownerId)).toEqual(['model-b'])
+  })
+})

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 import { normalizeObjectModelParameterSchema } from '../../shared/object-model-parameter-schema';
 import { applyObjectModelChangeSet, getObjectModelRevision } from '../../shared/object-model-change-set';
+import { resolveModelBuildOrder, type ModelBuildPlan } from './procedural-model-build.protocol';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -899,6 +900,183 @@ export class ImageGenerationService {
     };
   }
 
+
+
+  /**
+   * Stream a model build as newline-delimited JSON events. The first model
+   * response chooses a one-shot fast path or returns a shared component plan.
+   * Generated component source is data only and is never evaluated by the API.
+   */
+  async streamProceduralObjectBuild(
+    promptInput: unknown,
+    objectTypeInput: unknown,
+    visualStyleInput: unknown,
+    imageDataUrlInput: unknown,
+    emit: (event: Record<string, unknown>) => void,
+  ): Promise<void> {
+    const prompt = typeof promptInput === 'string' ? promptInput.trim().slice(0, 40000) : '';
+    const imageDataUrl = typeof imageDataUrlInput === 'string' ? imageDataUrlInput : '';
+    if (!prompt && !imageDataUrl) throw new BadRequestException('程序化模型生成需要提示词或参考图片');
+    if (imageDataUrl && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl)
+      || Buffer.byteLength(imageDataUrl, 'utf8') > 14 * 1024 * 1024)) {
+      throw new BadRequestException('参考图片格式无效或超过 10 MB');
+    }
+
+    const objectType = typeof objectTypeInput === 'string' && objectTypeInput.trim()
+      ? objectTypeInput.trim().slice(0, 80) : '独立 3D 物体';
+    const visualStyle = typeof visualStyleInput === 'string' && visualStyleInput.trim()
+      ? visualStyleInput.trim().slice(0, 80) : 'stylized';
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    if (!apiKey || !model) throw new ServiceUnavailableException('程序化模型生成未配置视觉模型');
+
+    const configuredTimeout = Number(this.config.get<string>('VISION_REQUEST_TIMEOUT_MS') || 600000);
+    const timeoutMs = Number.isFinite(configuredTimeout)
+      ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
+    const requestText = async (messages: any[]): Promise<string> => {
+      let response: Response;
+      try {
+        response = await fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(timeoutMs),
+          body: JSON.stringify({ model, temperature: 0.25, messages }),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error('增量模型构建请求失败：' + message);
+        throw new ServiceUnavailableException('程序化模型生成服务连接失败');
+      }
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 800);
+        this.logger.warn('增量模型构建 API HTTP ' + response.status + '：' + detail);
+        throw new ServiceUnavailableException('程序化模型生成失败（HTTP ' + response.status + '）');
+      }
+      const payload = await response.json() as any;
+      const content = payload?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || !content.trim()) {
+        throw new ServiceUnavailableException('视觉模型未返回构建内容');
+      }
+      return content.trim();
+    };
+    const parseJson = (raw: string): any => {
+      const cleaned = raw.replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/, '').trim();
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start < 0 || end <= start) throw new ServiceUnavailableException('视觉模型未返回有效的构建规划 JSON');
+      try { return JSON.parse(cleaned.slice(start, end + 1)); }
+      catch { throw new ServiceUnavailableException('视觉模型构建规划 JSON 格式无效'); }
+    };
+
+    emit({ type: 'stage', stage: 'planning', label: '分析模型结构并选择构建策略' });
+    const planningMessages: any[] = [
+      {
+        role: 'system',
+        content: [
+          'You are a procedural Three.js model architect. Return one JSON object only; no Markdown.',
+          'Choose strategy "single" for simple assets that can be built coherently in one factory. For structurally complex assets choose "components". This decision is based on actual structural complexity, never on a fixed object-category list.',
+          'For strategy single, return {"strategy":"single","generatedCode":"..."} where generatedCode is a complete self-contained ES module exporting createModel(THREE, params = {}) and returning one THREE.Group.',
+          'For strategy components, return {"strategy":"components","plan":{...}}. The plan must use version 1, modelId, name, coordinateSystem:{upAxis:"Y",units:"scene"}, and components[]. Every component needs a stable unique id and a concrete purpose/description. Use parentId and dependsOn only for real construction dependencies. Include local transform/placement and bounds when useful. Include modelCapabilityManifest when relevant.',
+          'Do not split simple geometry into artificial pieces. A component is a meaningful independently constructible Object3D subtree. All components share one root coordinate system and one scale. Preserve intended openings, gaps, cavities, overhangs and intersections. Do not impose category-specific rules.',
+          'Component source will be requested separately. Describe enough geometry, dimensions, materials, local placement and connection intent in each component plan entry for independent generation.',
+          'The component plan must describe the complete final model, not a list of unrelated assets. Keep the plan concise but geometrically specific.',
+          'Use real Three.js geometry and materials. No external assets, URLs, imports, DOM, network, Node APIs, eval, Function or dynamic imports.',
+          'Object type: ' + objectType,
+          'Visual style: ' + visualStyle,
+          'User request: ' + (prompt || 'Reconstruct the visible object from the reference image.'),
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: imageDataUrl
+          ? [
+              { type: 'text', text: 'Analyze this reference and choose the correct strategy. The image is primary evidence; do not invent hidden details. Return the JSON object only.' },
+              { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
+            ]
+          : 'Choose the strategy and return the complete JSON planning result.',
+      },
+    ];
+    const planning = parseJson(await requestText(planningMessages));
+
+    if (planning?.strategy === 'single') {
+      const generatedCode = typeof planning.generatedCode === 'string' ? planning.generatedCode.trim() : '';
+      if (!generatedCode || generatedCode.length > 120000
+        || !/export\s+function\s+createModel\s*\(\s*THREE(?:\s*,[^)]*)?\)/.test(generatedCode)) {
+        throw new ServiceUnavailableException('一次性模型源码缺少有效 createModel(THREE) 工厂');
+      }
+      emit({
+        type: 'single',
+        result: {
+          provider: baseUrl, model, objectType, visualStyle,
+          generationMethod: 'img2threejs-procedural',
+          generatedCode, generatedAt: new Date().toISOString(),
+        },
+      });
+      emit({ type: 'complete', modelId: 'single-model' });
+      return;
+    }
+
+    const plan = planning?.plan as ModelBuildPlan;
+    if (planning?.strategy !== 'components' || !plan || plan.version !== 1
+      || !plan.coordinateSystem || plan.coordinateSystem.upAxis !== 'Y'
+      || !Array.isArray(plan.components) || !plan.components.length || plan.components.length > 40) {
+      throw new ServiceUnavailableException('视觉模型返回的 ModelBuildPlan 无效或组件数量超出范围');
+    }
+    const ordered = resolveModelBuildOrder(plan);
+    emit({ type: 'plan', plan });
+    const completed: Array<{ componentId: string; purpose: string; bounds?: unknown }> = [];
+    for (let index = 0; index < ordered.length; index += 1) {
+      const component = ordered[index];
+      emit({ type: 'component-start', componentId: component.id, index, total: ordered.length });
+      const chunkMessages = [
+        {
+          role: 'system',
+          content: [
+            'You are generating one independently constructible part of a larger Three.js model.',
+            'Return JavaScript ES module source only, exporting function createComponent(THREE, context = {}) that returns one THREE.Group.',
+            'The context contains the complete plan, current component entry, and summaries of already generated dependencies. Use the shared Y-up scene coordinate system and the component placement from the plan. Do not recenter this component independently.',
+            'Build only the requested component subtree. Do not recreate other components. Keep stable userData.componentId on the returned root and meaningful nested part groups.',
+            'Use real Three.js geometry/materials. No imports, external assets, URLs, network, DOM, Node APIs, eval, Function, dynamic imports, animation loops or renderer creation.',
+            'Preserve intentional gaps, openings, overhangs, cavities and intersections. Do not apply model-category-specific recipes.',
+            'Object type: ' + objectType + '; visual style: ' + visualStyle + '; original user request: ' + prompt,
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            plan,
+            component,
+            completedDependencies: completed,
+            instruction: 'Generate this component source now. Return only the ES module source.',
+          }),
+        },
+      ];
+      const rawChunk = (await requestText(chunkMessages))
+        .replace(/^\`\`\`(?:javascript|js)?\s*/i, '')
+        .replace(/\s*\`\`\`$/, '').trim();
+      if (!rawChunk || rawChunk.length > 120000
+        || !/export\s+function\s+createComponent\s*\(\s*THREE\s*,/.test(rawChunk)) {
+        emit({ type: 'error', stage: 'component', componentId: component.id, message: '组件源码缺少 createComponent(THREE, context) 工厂' });
+        throw new ServiceUnavailableException('组件 ' + component.id + ' 未返回有效的 createComponent 工厂');
+      }
+      emit({
+        type: 'component-complete',
+        componentId: component.id,
+        index,
+        total: ordered.length,
+        chunk: { componentId: component.id, source: rawChunk },
+      });
+      completed.push({
+        componentId: component.id,
+        purpose: String(component.purpose || component.description || component.id).slice(0, 500),
+        bounds: component.bounds,
+      });
+    }
+    emit({ type: 'assembly', status: 'started' });
+    emit({ type: 'assembly', status: 'complete' });
+    emit({ type: 'complete', modelId: String(plan.modelId || 'generated-model') });
+  }
 
   async modifyProceduralObjectFromInstruction(
     sourceInput: unknown, parametersInput: unknown, parameterValuesInput: unknown, partsInput: unknown,

@@ -701,3 +701,55 @@ Persistence & Infrastructure
 4. 收到完整源码后只调用一次隔离 Worker 构建；Worker 成功前不显示半成品。
 5. 记录并可从日志/结果元数据读取请求耗时与尝试次数。
 6. 自动化测试覆盖单次请求、超时重试和非暂时性错误不重试；本地 Nest build、Jest 和浏览器真实模型生成仍需单独验收。
+
+
+---
+
+## 3.20 通用空间表面协议与人物地面运动（P0/P1）
+
+### 目标
+
+统一区分实体阻挡、可支撑表面和可行走表面。碰撞不是“障碍物”的同义词：实体可以阻挡穿越，同时其顶部仍可支撑人物；坡面/楼梯表面可以同时支撑并允许人物沿面移动。
+
+### 模型定义协议（P0）
+
+在 `modelCapabilityManifest.capabilities.spatial` 下增加可选 `surfaces[]`，保持声明式、开放扩展：
+
+```js
+surfaces: [{
+  id: "stable-surface-id",
+  targetPartId: "stable-component-id",
+  shape: "mesh",
+  supportsStanding: true,
+  walkable: true,
+  enabled: true
+}]
+```
+
+- `targetPartId` 必须引用模型内真实的稳定 `userData.componentId`。
+- `shape: "mesh"` 表示以目标部件内真实 THREE.Mesh 几何为依据；不以 Mesh 名称或人为生成的粗略 AABB 代替表面。
+- `supportsStanding` 与 `walkable` 独立：可以站立的平台不一定允许沿其表面通行。
+- 表面法线、世界变换和实际高度由 Runtime 从几何计算，不由 AI 编造。
+- `colliders[]` 继续表达实体阻挡；同一几何可以同时具有实体阻挡与顶部支撑属性。
+- 未知字段保留；缺少声明不自动推断为可站立/可行走。
+
+### P0 实施边界
+
+- AI 新建和微调 Prompt 都要求按实际几何声明 surfaces。
+- Runtime 通过稳定 componentId 解析目标 Group，并收集其真实后代 Mesh。
+- 沙盒 CollisionWorld 以模型实例 ownerId 注册/移除 support surface 句柄；模型替换、删除和空间刷新时同步维护。
+- 注册仅表示数据接入，不代表人物控制器已经消费表面，也不代表楼梯/坡面已可走。
+
+### P1 人物地面运动
+
+- 人物控制器需从注册表查询脚下/前方实际三角面，计算世界空间高度和法线。
+- 人物碰撞体与地面支撑分离；地面接触不能被当作穿模或普通障碍。
+- 基础验收：地面站立、平台上落地、从平台边缘跌落、坡面移动受最大坡度限制、模型 Transform 改变后表面跟随。
+- 楼梯连续踏步、跨台阶、跳跃、复杂凹凸网格和室内楼层导航需单独验收；P0/P1 不提前承诺完整支持。
+- 任何未接入 Player Runtime 的表面声明均为数据声明，不得显示为“已可行走”。
+
+### 约束
+
+- 不按建筑、楼梯、桌子、车辆等模型类别编写专用物理规则。
+- 不用整模型 AABB 替代真实表面；不把所有 Mesh 自动视为可行走。
+- 不改变现有 XZ 阻挡协议和门状态优先级；用户 capability override 仍高于模型状态条件。

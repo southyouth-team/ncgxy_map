@@ -71,10 +71,14 @@ let pointer = new THREE.Vector2()
 let frame = 0
 
 function syncPreview() {
-  if (!scene || !props.model) return
+  if (!scene) return
   if (previewRoot) {
     scene.remove(previewRoot)
     previewRoot = null
+  }
+  if (!props.model) {
+    render()
+    return
   }
   previewRoot = props.model.clone(true)
   previewRoot.position.set(0, 0, 0)
@@ -187,14 +191,14 @@ onBeforeUnmount(() => {
   <div class="model-editor" role="dialog" aria-modal="true" aria-label="AI 模型编辑器">
     <header class="model-editor__header">
       <div><strong>{{ mode === 'create' ? (model ? '模型生成与编辑工作台' : '正在创建模型') : '模型编辑工作台' }}</strong><span>{{ model?.name || (mode === 'create' ? '生成完成后可继续调整参数与结构' : '程序化模型') }}</span></div>
-      <div class="model-editor__header-actions"><button :disabled="busy || !canUndo" @click="emit('undo')">撤销上一步</button><button @click="emit('close')">关闭</button></div>
+      <div class="model-editor__header-actions"><button :disabled="busy || !canUndo" @click="emit('undo')">撤销上一步</button><button :disabled="busy" @click="emit('close')">关闭</button></div>
     </header>
     <div class="model-editor__body">
       <section class="model-editor__preview">
         <div ref="canvasHost" class="model-editor__canvas"></div>
         <div v-if="!model" class="model-editor__preview-empty"><strong>模型预览</strong><span>模型生成完成后将在这里显示</span></div>
         <div v-else class="model-editor__preview-hint">单击模型部件进行选择 · 拖动旋转 · 滚轮缩放</div>
-        <div class="model-editor__part-chip">当前范围：{{ selectedPartName }}</div>
+        <div v-if="model" class="model-editor__part-chip">当前范围：{{ selectedPartName }}</div>
       </section>
       <section v-if="model" class="model-editor__controls">
         <div class="model-editor__scope">

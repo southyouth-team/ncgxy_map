@@ -2297,6 +2297,8 @@ export const environmentBindings = [
 
 ### 已实现能力与限制
 
+- 兼容性回归：保留旧墙壁开关通过 `targetId` 控制另一模型实例的状态路径；`set` 只接受可序列化原始值，拒绝对象和非有限数字。
+
 - 源码链路为“近邻检测 → 动作声明 → Action Runtime → 实例状态/部件 Transform → 视觉与空间刷新”。
 - `set` 当前只写入模型实例 `worldState`；只有已有 stateBinding 对应受支持属性时才会产生视觉效果。
 - `rotate/translate` 是局部 Transform 增量，不包含动画插值、连续扫掠碰撞或跨模型事务。

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
+import { createCapabilityControlDocument } from './capabilityControl.js'
 
 /**
  * Dedicated module worker for generated model code.
@@ -76,6 +77,10 @@ self.addEventListener('message', async (event) => {
       modelModule.modelParameters,
       modelModule.environmentBindings,
     )
+    const capabilityControlDocument = createCapabilityControlDocument({
+      manifest: modelCapabilityManifest,
+      previousDocument: event.data?.capabilityControlDocument,
+    })
     const manifestParameters = modelCapabilityManifest.parameters
     const manifestEnvironmentBindings = Array.isArray(modelCapabilityManifest.capabilities.environmentBindings)
       ? modelCapabilityManifest.capabilities.environmentBindings : []
@@ -86,6 +91,7 @@ self.addEventListener('message', async (event) => {
       proceduralModelParts: Array.isArray(modelModule.modelParts) ? modelModule.modelParts : [],
       proceduralModelEnvironmentBindings: manifestEnvironmentBindings,
       proceduralModelCapabilityManifest: modelCapabilityManifest,
+      proceduralModelCapabilityControlDocument: capabilityControlDocument,
       proceduralModelParameterValues: parameters,
     }
     root.updateMatrixWorld(true)

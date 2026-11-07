@@ -75,9 +75,7 @@ function addModel(type) {
   registerModel(group, mesh.name + ' ' + (objects.value.length + 1))
 }
 function addLightSwitchDemo() {
-  const origin = engine?.getSandboxModel?.('__never__')
-  void origin
-  const player = { x: 0, z: 14 }
+  const player = engine?.getPlayerPosition?.() || { x: 0, z: 14 }
   const lamp = new THREE.Group()
   lamp.name = '演示灯具'
   const base = new THREE.Mesh(

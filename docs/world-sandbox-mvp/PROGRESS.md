@@ -429,3 +429,85 @@ export const environmentBindings = [
 2. 优先修正 AI 新模型生成、Worker 解析、模型替换、存档恢复链路，使 Manifest 在全生命周期内不丢失。
 3. 增量编辑接收并返回 Manifest；先确保元数据可保存和可编辑，再逐项实现 Spatial/Interior/Interaction Runtime。
 4. 完成代码后执行可用的单测、构建和 CI；当前没有这些验证结果。
+
+
+---
+
+## 2026-11-07 — Model Capability Manifest v1 第一阶段接入
+
+### 本轮目标
+
+把模型固有能力从零散元数据升级为统一 Manifest，打通 AI 新建、隔离 Worker 解析、模型保存、AI 增量编辑和模型替换/撤销链路。此轮只接数据协议，不提前宣称碰撞、室内空间或通用交互 Runtime 已完成。
+
+### 仓库与分支
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 工作分支：`feat/world-sandbox-conversational-model-editor`
+- 所有源码与文档读取/写入均显式指定该功能分支。
+- 本轮没有向 `main` 写入，没有创建 PR。
+
+### 实际代码变更
+
+1. **AI 新模型生成 Prompt**（`server/src/modules/assets/image-generation.service.ts`）
+   - 要求导出 `modelCapabilityManifest`，结构包含 `version`、`parameters` 和可选 `capabilities`。
+   - 能力段按模型实际情况选择性声明：spatial、interior、environmentBindings、interactions；不要求每个模型都具备全部能力。
+   - 保留 `modelParameters`、`modelParts`、`environmentBindings` 兼容导出。
+   - 文本生成和参考图生成均要求输出 Manifest。
+
+2. **隔离 Worker 解析与持久化**（`src/three/sandbox/proceduralModel.worker.js`）
+   - 读取模块导出的 Manifest。
+   - 没有 Manifest 的旧模型根据旧参数/环境绑定导出合成 v1 兼容 Manifest。
+   - 保留未知能力字段，不按固定模型类别拒绝。
+   - 将 Manifest 写入根节点 `userData.proceduralModelCapabilityManifest`。
+   - 同时保留现有 `proceduralModelParameters`、`proceduralModelEnvironmentBindings` 兼容字段。
+
+3. **AI 增量编辑 API 与 Prompt**
+   - Controller 接收 `modelCapabilityManifest` 并传入 Service。
+   - Service 将当前 Manifest 提供给 AI；要求 AI 返回完整更新 Manifest，并保留未被要求修改的能力声明。
+   - 响应兼容旧模型：若 AI 未返回 Manifest，则沿用原 Manifest/旧环境绑定；将 Manifest 中环境绑定与旧 `environmentBindings` 响应字段同步。
+
+4. **页面模型生命周期**
+   - 新模型生成后保留 Worker 解析出的 Manifest。
+   - AI 微调请求携带当前 Manifest。
+   - 模型替换时优先以 Manifest 中的参数定义和环境绑定为主，旧字段作为兼容回退。
+   - 撤销历史记录 Manifest；撤销时一并恢复。
+   - 当前沙盒通过 `Object3D.toJSON()` 保存模型根节点 userData，因此 Manifest 随现有模型 JSON 存档；恢复仍由 ObjectLoader 读取。
+
+5. **计划文档**
+   - 新增 `PROJECT_PLAN.md` 第 3.13 节，定义 Manifest v1、旧字段兼容规则、安全边界和 Runtime 未实现声明。
+   - 本轮不迁移 World Document，不改变实例 Transform、worldState 和 environmentOverrides 的既有归属。
+
+### 当前实现边界
+
+- 本轮建立的是 Manifest 数据往返链路；Spatial、Interior、通用 Interaction 能力尚未接 Runtime。
+- 当前人工灯光 Runtime 仍通过旧的 `proceduralModelEnvironmentBindings` 字段工作；页面确保其与 Manifest 环境绑定别名同步。
+- 模型参数值仍保存在现有 `proceduralModelParameterValues`；本轮没有把实例值迁移到独立 Model Definition。
+- AI 返回的 Manifest 是数据声明；未实现的 capability 不会自动产生物理或交互效果。
+- 现有旧模型可在 Worker 中合成 Manifest，但若没有可编辑源码，AI 仍无法保证无损增加隐藏结构。
+
+### 提交记录
+
+- `5fc28866f78b9a432e338588fc6b57fdc0652509` — Worker 解析并保存 Manifest。
+- `7f3141daf088043207d56114c072887ea1957946` — AI 生成/微调 Prompt 与 Manifest 数据传递。
+- `58409205fea54416856f81a51739ac359d3e6f41` — 微调 Controller 接收 Manifest。
+- `5fd7d836f44eed378bbd717f559020c80c2dc862` — 页面保存、替换、撤销 Manifest。
+- `e5101edcece5520fc4ac1bea3dcb2169d0250e27` — 同步 Manifest 与环境绑定兼容字段。
+- `acd6affad99dabef754f9c51382c26161da34fd4` — 修正 Manifest/旧参数与环境绑定的优先级。
+
+### 验证状态
+
+- 源码：本轮修改后需再次回读关键文件确认；已完成静态字符串锚点检查，尚未运行代码。
+- 自动化测试：未执行。
+- 前端构建：未执行。
+- 后端测试/类型检查：未执行。
+- CI：未取得可确认的成功结果。
+- 浏览器验收：未执行。
+- 分支精确 HEAD：当前连接器无法可靠读取 ref HEAD；以文件显式 ref 回读和各文件写入返回 commit 作为落点依据。
+- main：本轮未发起写入。
+
+### 下一步
+
+1. 回读 AI 生成 Prompt、Worker Manifest 解析、微调 API、页面替换/撤销代码，检查字段一致性。
+2. 在可执行环境运行前端 build、相关单测、后端类型检查/测试。
+3. 浏览器验收：新建模型 → 保存刷新 → 查看 Manifest 元数据保留；对旧模型用自然语言增加能力声明 → 替换模型 → 撤销 → 再次保存恢复。
+4. 数据链路稳定后，再开始 Spatial Runtime 的最小端到端用例；优先部件级碰撞体与通行区域。

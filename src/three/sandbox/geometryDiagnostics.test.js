@@ -23,17 +23,21 @@ describe('collectProceduralModelGeometryDiagnostics', () => {
     const root = new THREE.Group()
     const empty = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial())
     empty.userData.componentId = 'empty'
+    const zeroVertexGeometry = new THREE.BufferGeometry()
+    zeroVertexGeometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3))
+    const zeroVertex = new THREE.Mesh(zeroVertexGeometry, new THREE.MeshBasicMaterial())
+    zeroVertex.userData.componentId = 'zero-vertex'
     const pointGeometry = new THREE.BufferGeometry()
     pointGeometry.setAttribute('position', new THREE.Float32BufferAttribute([1, 1, 1], 3))
     const point = new THREE.Mesh(pointGeometry, new THREE.MeshBasicMaterial())
     point.userData.componentId = 'point'
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial())
     plane.userData.componentId = 'plane'
-    root.add(empty, point, plane)
+    root.add(empty, zeroVertex, point, plane)
 
     const result = collectProceduralModelGeometryDiagnostics(THREE, root)
-    expect(result.diagnostics.map(item => item.code)).toEqual(['missing-position-attribute', 'degenerate-geometry-bounds'])
-    expect(result.meshes[2].worldBounds).not.toBeNull()
+    expect(result.diagnostics.map(item => item.code)).toEqual(['missing-position-attribute', 'empty-geometry', 'degenerate-geometry-bounds'])
+    expect(result.meshes[3].worldBounds).not.toBeNull()
   })
 
   it('reports non-finite vertices and world transforms without throwing', () => {

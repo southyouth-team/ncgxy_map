@@ -41,7 +41,7 @@ describe('resolveCapabilityRecords', () => {
     const result = resolveCapabilityRecords({
       proposals: [{ capabilityId, scope, status: 'proposed', confidence: 0.99, value: { passThrough: true } }],
     })
-    expect(result[0]).toMatchObject({ source: 'ai-inference', status: 'pending', enabled: true })
+    expect(result[0]).toMatchObject({ source: 'ai-inference', status: 'pending', enabled: false })
   })
   it('allows a user rejection/disable to suppress a capability', () => {
     const result = resolveCapabilityRecords({

@@ -148,10 +148,10 @@ export class InputController {
       .flatMap(surface => surface.meshes || [])
     if (!meshes.length) return 1.7
 
-    this.groundRayOrigin.set(player.x, player.y + 50, player.z)
+    this.groundRayOrigin.set(player.x, player.y + 0.35, player.z)
     this.groundRayDirection.set(0, -1, 0)
     this.groundRaycaster.set(this.groundRayOrigin, this.groundRayDirection)
-    this.groundRaycaster.far = 100
+    this.groundRaycaster.far = 3
     const hits = this.groundRaycaster.intersectObjects(meshes, false)
     const maxSlopeCos = Math.cos(this.maxWalkableSlopeDegrees * Math.PI / 180)
     for (const hit of hits) {

@@ -33,10 +33,12 @@ export async function executeProceduralModel(source, options = {}) {
   // Vue refs/proxies are not structured-cloneable. Model parameters are a JSON data contract,
   // so normalize them into plain data before crossing the Worker boundary.
   let workerParameters
+  let workerCapabilityControlDocument
   try {
     workerParameters = JSON.parse(JSON.stringify(options.parameters ?? {}))
+    workerCapabilityControlDocument = JSON.parse(JSON.stringify(options.capabilityControlDocument ?? null))
   } catch {
-    throw new TypeError('模型参数无法序列化为 Worker 可传输数据')
+    throw new TypeError('模型参数或能力控制文档无法序列化为 Worker 可传输数据')
   }
 
   return new Promise((resolve, reject) => {
@@ -124,7 +126,12 @@ export async function executeProceduralModel(source, options = {}) {
     try {
       // IMPORTANT: transfer port2. The worker responds through this port,
       // not through the Worker global message channel.
-      worker.postMessage({ type: 'run', source, parameters: workerParameters }, [channel.port2])
+      worker.postMessage({
+        type: 'run',
+        source,
+        parameters: workerParameters,
+        capabilityControlDocument: workerCapabilityControlDocument,
+      }, [channel.port2])
     } catch (error) {
       fail(error)
     }

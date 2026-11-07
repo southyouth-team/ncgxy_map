@@ -903,3 +903,80 @@ export const environmentBindings = [
 1. 增加从当前轮用户自然语言指令到结构化 user override 的 AI 输出契约，并保证微调结果不会覆盖历史 override。
 2. 在 Resolver 中解析模型 inference + Manifest definitions + overrides，并将 resolved 结果提供给第一个 Runtime adapter。
 3. 先验证空间 box collider 的 override 是否改变玩家阻挡行为，再扩展其他能力执行器。
+
+
+---
+
+## 2026-11-07 — 模型能力面板与空间阻挡控制闭环（第一阶段）
+
+### 本轮目标
+
+在现有 AI 模型编辑器中直观展示模型能力声明，并完成一个真实可操作的 Runtime 控制：按模型部件启用/关闭玩家移动阻挡。用户不需要逐项确认 AI 推断；用户通过页面调整时，写入独立覆盖记录并立即影响玩家碰撞。
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`，分支搜索确认存在；仓库默认分支为 `main`。
+- 已重新读取 `PROJECT_PLAN.md`、`PROGRESS.md`、`ProceduralModelEditor.vue`、`WorldSandboxMvp.vue`、`capabilityControl.js`、`modelCapabilityManifest.js`、`modelSpatialRuntime.js`、`CollisionWorld.js` 和引擎模型注册/刷新代码。
+- 确认原模型编辑器已有部件选择和参数编辑，但没有能力面板；原 Spatial Runtime 直接读取 Manifest 中的 box collider，不读取用户 overrides。
+- 本轮没有把文件 blob SHA 当作分支 HEAD；GitHub 连接器没有稳定提供本轮目标分支的独立 HEAD SHA 查询结果。
+
+### 实际改动
+
+- `src/components/ProceduralModelEditor.vue`
+  - 增加“模型能力”面板，按 Manifest capability namespace 展示能力。
+  - 明确标注 Runtime 接入范围：spatial 仅部分支持 box collider 阻挡；其他能力显示未接入，不提供伪开关。
+  - 选择模型部件后，空间控制列表按 `targetPartId` 过滤；未选择部件时展示模型内全部空间 collider。
+  - 对 Runtime 当前可执行、部件存在且未禁用的 box collider 提供“阻挡玩家移动”开关。
+  - 展示能力控制来源为模型定义或用户覆盖。
+- `src/components/WorldSandboxMvp.vue`
+  - 接收编辑器的 capability-change 事件。
+  - 将用户修改写入 `proceduralModelCapabilityControlDocument.overrides`，按 collider capability ID + part scope 更新，不改写原始 Manifest。
+  - 即时调用引擎空间障碍刷新，并提示用户保存沙盒。
+- `src/three/engine/modelSpatialRuntime.js`
+  - 通过 `resolveCapabilityRecords` 合并 collider 模型定义、AI inference proposals 和用户 overrides。
+  - 仅对目标部件匹配的 collider 应用 `blocksMovement` 覆盖；保留其他部件的原始行为。
+  - 继续只执行 box collider，不扩大 Runtime 能力范围。
+- `src/three/engine/createCampusEngine.js`
+  - 对外暴露 `refreshSandboxModelSpatial(model)`，使页面修改覆盖后可立即重建该模型的 CollisionWorld 障碍。
+- `src/three/engine/modelSpatialRuntime.test.js`
+  - 增加用户覆盖关闭阻挡的用例。
+  - 增加用户覆盖开启阻挡且不影响其他部件的 scope 隔离用例。
+- `PROJECT_PLAN.md`
+  - 更新能力面板、用户覆盖与 Spatial Runtime 的当前实现边界。
+
+### 相关提交
+
+- `9489e931a8519ffb8fcbe649bc59d982af269184` — Spatial Runtime 应用部件级能力覆盖
+- `7f7bceb27f61029be1cb8a75074f446b504f8509` — 暴露模型空间障碍刷新接口
+- `d50cd7f714030bb8aff3d8f6c2a9bf80721da8cd` — 增加 Spatial Runtime 覆盖测试
+- `52e11bbf06c6773133c73264ce9dffe4a407fdc6` — 增加模型能力面板与空间控制
+- `73996c45b9f0fae0f172cdc10b71ece4aecf166d` — 页面写入用户覆盖并即时刷新碰撞
+- `1b7355964d4e4e9104b669c1fb581f33676afdde` — 增加覆盖启用与 scope 隔离测试
+- `508cc2e4f6892371309fc8819d6187997807c5c0` — 更新能力面板和 Runtime 架构文档
+- `9b8ea927a1f46943cbdd9d36e11e39113af356de` — 修正 UI Runtime 可执行状态判断
+
+### 验证状态
+
+- GitHub 目标分支回读静态断言：**11/11 通过**，覆盖 Resolver 调用、scope override、引擎刷新接口、测试用例、能力面板、实际开关事件、页面持久化覆盖、碰撞刷新调用、事件绑定和计划文档更新。
+- 已回读核心实现片段，确认用户覆盖没有写回 Manifest，Runtime 仍只执行 box collider。
+- Vitest：未执行（当前会话没有本地仓库执行环境）。
+- 前端 build / typecheck：未执行。
+- CI：未核验到本轮提交的成功结果，不能判定通过。
+- 浏览器验收：未执行；因此不能声称玩家已在实际页面中完成穿越验证。
+- 未修改 `main`，未创建 PR。
+
+### 当前能力边界与风险
+
+- 该闭环控制的是 Manifest 中明确声明的 box collider，不会自动从任意 Mesh 几何推导碰撞体。
+- 如果 collider 没有稳定 ID，当前控制 ID 会回退使用 targetPartId；同一部件存在多个未命名 collider 时，可能共享同一个覆盖键。AI 后续输出应为每个 collider 提供稳定唯一 ID。
+- 当前碰撞仍是玩家地面移动的 XZ 障碍，不是完整 3D 刚体物理。
+- AI inference proposal 目前仍由 Manifest capability namespace 派生，不代表具备独立的几何证据或置信度。
+- 页面展示其他 capability namespace，但其 Runtime 尚未接入；不提供虚假可操作开关。
+
+### 下一步
+
+1. 在本地运行 `modelSpatialRuntime.test.js`、前端 build 和 typecheck。
+2. 浏览器生成含墙体的 AI 模型，分别切换墙体阻挡开/关，验证玩家移动是否真实穿过，并保存刷新验证覆盖仍生效。
+3. 为 AI Prompt 明确要求 collider 输出稳定唯一 ID，并补充重复 ID / 缺失部件诊断。
+4. 再按同一闭环方式接入内部空间/门洞/可进入能力；不提前暴露未实现控制项。

@@ -155,6 +155,8 @@ function handleSandboxModelInteract(payload) {
       'interior-entry-point-not-declared': '模型没有声明这个内部入口',
       'already-inside-model': '当前已经处于一个模型的内部空间',
       'not-inside-target-model': '当前不在这个模型内部，无法从此处退出',
+      'interior-source-mismatch': '进入和退出动作必须由当前模型自身触发',
+      'player-teleport-failed': '人物位置切换失败',
     }
     message.value = errors[result?.reason] || '当前模型未声明可执行的交互动作'
     return
@@ -172,7 +174,9 @@ function handleSandboxModelInteract(payload) {
   } else {
     message.value = config.successMessage || ('已执行 ' + result.action + ' 动作')
   }
-  saveStatus.value = '状态已变更，记得保存'
+  if (result.action !== 'enter' && result.action !== 'exit') {
+    saveStatus.value = '状态已变更，记得保存'
+  }
 }
 
 function selectModel(object) {

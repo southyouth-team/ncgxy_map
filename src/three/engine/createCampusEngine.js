@@ -530,24 +530,29 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function applySandboxModelInteraction(payload = {}) {
-    const modelId = String(payload.id || '')
-    const model = sandboxModels.get(modelId)
-    if (!model) return { ok: false, reason: 'model-not-found' }
+    const sourceModelId = String(payload.id || '')
+    const sourceModel = sandboxModels.get(sourceModelId)
+    if (!sourceModel) return { ok: false, reason: 'model-not-found' }
+    const config = payload.config || {}
+    // Legacy switches may explicitly target another model instance; keep that route intact.
+    const targetModelId = config.targetId ? String(config.targetId) : sourceModelId
+    const targetModel = sandboxModels.get(targetModelId)
+    if (!targetModel) return { ok: false, reason: 'target-model-not-found' }
     const result = executeSandboxInteractionAction({
-      model,
-      sourcePartId: payload.targetPartId || null,
-      config: payload.config || {},
+      model: targetModel,
+      sourcePartId: targetModel === sourceModel ? (payload.targetPartId || null) : null,
+      config,
     })
     if (!result.ok) return result
     if (result.statePatch) {
-      const state = setSandboxModelState(modelId, result.statePatch)
-      return state ? { ...result, state } : { ok: false, reason: 'state-update-failed' }
+      const state = setSandboxModelState(targetModelId, result.statePatch)
+      return state ? { ...result, targetModelId, state } : { ok: false, reason: 'state-update-failed' }
     }
-    model.updateWorldMatrix(true, true)
-    refreshSandboxModelSpatial(model)
+    targetModel.updateWorldMatrix(true, true)
+    refreshSandboxModelSpatial(targetModel)
     invalidateShadowMap()
     requestFrame()
-    return result
+    return { ...result, targetModelId }
   }
 
   function setSandboxModelState(id, patch = {}) {

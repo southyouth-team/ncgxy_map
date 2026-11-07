@@ -144,7 +144,7 @@ describe('InputController model support surface grounding', () => {
       point: { x: 2, y: 2.4, z: 3 },
     }])
     expect(controller.resolvePlayerGroundHeight(rig.player)).toBeCloseTo(4.1)
-    expect(controller.groundRaycaster.far).toBe(3)
+    expect(controller.groundRaycaster.far).toBe(60)
   })
 
   it('ignores surfaces steeper than the configured walkable slope', () => {
@@ -158,5 +158,70 @@ describe('InputController model support surface grounding', () => {
   it('keeps the default ground height when no declared mesh is under the player', () => {
     const { controller, rig } = groundedController([])
     expect(controller.resolvePlayerGroundHeight(rig.player)).toBe(1.7)
+  })
+})
+
+
+describe('InputController gravity and traversal semantics', () => {
+  class Vector3 {
+    constructor(x = 0, y = 0, z = 0) { this.set(x, y, z) }
+    set(x, y, z) { this.x = x; this.y = y; this.z = z; return this }
+  }
+  class Raycaster {
+    set(origin, direction) { this.origin = origin; this.direction = direction }
+    intersectObjects() { return this.hits || [] }
+  }
+  class Matrix3 { getNormalMatrix() { return this } }
+  const makeHit = (y) => ({
+    face: { normal: { clone: () => ({ applyMatrix3() { return this }, normalize() { this.y = 1; return this }, y: 1 }) } },
+    object: { matrixWorld: {} },
+    point: { x: 0, y, z: 0 },
+  })
+  function setup(playerY = 1.7, hit = null) {
+    const THREE = { Vector3, Raycaster, Matrix3 }
+    const player = { x: 0, y: playerY, z: 0 }
+    const rig = { player }
+    const surface = { supportsStanding: true, walkable: true, meshes: [{}] }
+    const collision = { supportSurfaces: [surface] }
+    const controller = new InputController(THREE, {}, rig, null, collision)
+    controller.groundRaycaster.hits = hit ? [hit] : []
+    return { controller, player, surface }
+  }
+
+  it('does not teleport the player onto a platform higher than the step limit', () => {
+    const { controller, player } = setup(1.7, makeHit(2.4))
+    controller.updateVerticalMotion(player, 0.05, { walking: true })
+    expect(player.y).toBeLessThan(1.7)
+    expect(player.y).not.toBeCloseTo(4.1)
+    expect(controller.grounded).toBe(false)
+  })
+
+  it('applies gravity while airborne and lands on the default world ground', () => {
+    const { controller, player } = setup(3, null)
+    controller.grounded = false
+    controller.verticalVelocity = -4
+    for (let index = 0; index < 100; index += 1) controller.updateVerticalMotion(player, 0.05)
+    expect(player.y).toBeCloseTo(1.7)
+    expect(controller.verticalVelocity).toBe(0)
+    expect(controller.grounded).toBe(true)
+  })
+
+  it('lands on a declared support surface after falling onto it', () => {
+    const { controller, player } = setup(4.5, makeHit(2.4))
+    controller.grounded = false
+    controller.verticalVelocity = -8
+    for (let index = 0; index < 20 && !controller.grounded; index += 1) {
+      controller.updateVerticalMotion(player, 0.05)
+    }
+    expect(player.y).toBeCloseTo(4.1)
+    expect(controller.grounded).toBe(true)
+  })
+
+  it('allows walking only on walkable surfaces while retaining standing support', () => {
+    const { controller, surface } = setup(4.1, makeHit(2.4))
+    surface.walkable = false
+    surface.supportsStanding = true
+    expect(controller.getPlayerSupportHit(controller.cameraRig.player, { walking: true })).toBeNull()
+    expect(controller.getPlayerSupportHit(controller.cameraRig.player, { walking: false })).not.toBeNull()
   })
 })

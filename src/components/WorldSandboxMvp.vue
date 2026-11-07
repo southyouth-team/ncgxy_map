@@ -262,7 +262,7 @@ function buildCompositeComponentSource(plan, chunks) {
       purpose: String(parts.find(part => part.id === item.componentId)?.purpose || item.componentId),
     }))
     const source = String(entry.source || '').replace(/^\s*export\s+function\s+createComponent/, 'function createComponent')
-    if (!/^\s*function\s+createComponent\s*\\(\s*THREE\s*,/.test(source)) {
+    if (!/^\s*function\s+createComponent\s*\(\s*THREE\s*,/.test(source)) {
       throw new Error('组件 ' + entry.componentId + ' 的源码工厂格式无效')
     }
     if (/^\s*(?:import|export)\s/m.test(source)) throw new Error('组件 ' + entry.componentId + ' 包含不允许的模块声明')

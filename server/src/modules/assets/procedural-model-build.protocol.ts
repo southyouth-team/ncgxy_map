@@ -41,6 +41,8 @@ export type ModelComponentChunk = {
 
 export type ModelBuildEvent =
   | { type: 'plan'; plan: ModelBuildPlan }
+  | { type: 'stage'; stage: string; label: string }
+  | { type: 'single'; result: Record<string, unknown> }
   | { type: 'component-start'; componentId: string; index: number; total: number }
   | { type: 'component-complete'; componentId: string; index: number; total: number; chunk: ModelComponentChunk }
   | { type: 'assembly'; status: 'started' | 'complete' }

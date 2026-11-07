@@ -40,6 +40,15 @@ export function executeSandboxInteractionAction({ model, sourcePartId = null, co
     }
     return { ok: true, action, stateKey, statePatch: { [stateKey]: value } }
   }
+  if (action === 'enter') {
+    const entryPointId = typeof config.entryPointId === 'string' ? config.entryPointId.trim() : ''
+    const entries = model.userData?.proceduralModelCapabilityManifest?.capabilities?.interior?.entryPoints
+    if (!entryPointId || !Array.isArray(entries) || !entries.some(item => item && String(item.id) === entryPointId)) {
+      return { ok: false, reason: 'interior-entry-point-not-declared' }
+    }
+    return { ok: true, action, entryPointId }
+  }
+  if (action === 'exit') return { ok: true, action }
   if (action === 'rotate' || action === 'translate') {
     const targetPartId = config.targetPartId ?? sourcePartId
     const target = targetPartId == null ? model : findPartById(model, targetPartId)

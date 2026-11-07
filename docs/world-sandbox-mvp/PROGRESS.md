@@ -2302,7 +2302,7 @@ export const environmentBindings = [
 - 源码链路为“近邻检测 → 动作声明 → Action Runtime → 实例状态/部件 Transform → 视觉与空间刷新”。
 - `set` 当前只写入模型实例 `worldState`；只有已有 stateBinding 对应受支持属性时才会产生视觉效果。
 - `rotate/translate` 是局部 Transform 增量，不包含动画插值、连续扫掠碰撞或跨模型事务。
-- `enter/pickup/drop` 尚未实现；能力声明不能代替 Runtime。
+- P2.4 后续 P2.5 已接入 `enter/exit` 同模型内部空间过渡；`pickup/drop` 尚未实现。
 - 交互配置位于部件 `userData.interactionConfig`，Object3D JSON 可保存；端到端存档恢复仍需实测。
 
 ### 验证状态

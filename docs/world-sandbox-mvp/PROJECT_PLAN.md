@@ -318,6 +318,27 @@ export const modelCapabilityManifest = {
 
 以上字段即使被 Manifest 保存，也不代表当前 Runtime 已执行。
 
+### 3.15 Spatial Runtime v2 — 门洞与状态驱动门扇（当前增量）
+
+本阶段在 v1 地面 Box Collider 基础上增加门扇状态联动，不将声明式 interior/portal 数据误认为已经支持室内导航。
+
+#### 已实现的数据与执行约定
+
+- 墙体必须按门洞结构拆分为独立实体段/碰撞段；门洞净空不得存在墙体 blocker。门洞本身不是一个需要“关闭阻挡”的 collider。
+- 每个 collider 使用模型内稳定唯一的 `id`，`targetPartId` 指向真实的 `userData.componentId`。旧模型缺少 collider id 时继续兼容旧回退规则，但新生成/微调结果必须输出唯一 ID。
+- 普通静态 collider 继续使用 `blocksMovement`。
+- 可开合门扇可使用 `stateCondition: { key, equals, defaultValue }`。Runtime 从模型实例 `worldState[key]` 读取状态；缺少状态时使用声明的 defaultValue。条件不满足时不注册该门扇碰撞体。
+- 门扇部件可使用 `userData.stateBinding = { key, property: "rotationY", enabledValue, disabledValue }`，由 World State Runtime 驱动铰链旋转。门扇部件局部原点应位于铰链，几何与 collider 均使用该部件局部坐标。
+- `setSandboxModelState` 更新实例状态后同步刷新该模型的空间碰撞。用户明确的部件级 capability override 优先于 stateCondition。
+- 门状态属于 Model Instance State，不能写回 Manifest；碰撞定义仍属于 Model Definition。
+
+#### 当前执行边界
+
+- 已支持：Box 地面移动碰撞、门扇 boolean 状态条件、`rotationY` 状态绑定、状态变化后的碰撞刷新。
+- 仍未支持：自动几何切割/自动检测门洞、非 Box 碰撞、Portal/Traversal Zone、室内可行走区域、楼层/楼梯/电梯导航。
+- AI Prompt 负责生成分段几何和声明；Runtime 不会从一个完整墙体 Mesh 中自动挖洞。模型若未拆分墙体或碰撞体跨越门洞，仍会挡住玩家。
+- 当前 state API 已可驱动门状态，但完整玩家近距离交互入口（按键开门）仍需 Interaction Runtime 后续接入。
+
 
 ### 3.14 通用对象能力：AI 推理、用户控制与 Runtime 执行
 
@@ -471,7 +492,7 @@ Persistence & Infrastructure
 1. **三层数据边界与 Model Capability Manifest**：正式区分模型固有定义、世界环境变量、实例运行状态；确定可选能力段、版本和稳定 ID 规则。
 2. **模型能力声明链路**：AI 新建模型时输出模型固有能力声明；Worker 读取并随模型定义保存；沙盒实例化、存档恢复时保留定义；没有某项能力的模型允许省略该段。
 3. **AI 增量编辑链路**：微调接口接收当前模型定义/能力声明；AI 可按自然语言增删模型参数、碰撞/通行描述、内部空间、环境绑定和交互声明；替换模型时保留实例 ID、Transform、运行状态和无关结构。
-4. **Runtime 分能力接通**：先让空间/碰撞声明影响玩家通行，再接内部空间与连接关系，再接交互设备和对象状态，最后扩展更多环境绑定。每项都必须有端到端验收用例。
+4. **Runtime 分能力接通**：先完成 Spatial Runtime v1 地面阻挡，再完成 v2 门洞分段与状态驱动门扇；随后接内部空间/可行走区域与楼层连接，再接通用交互设备和对象状态，最后扩展更多环境绑定。每项都必须有端到端验收用例。
 5. **World Document 与存档升级**：将模型定义、实例 Transform、实例状态和世界环境从 Object3D JSON 中逐步分离，提供旧版存档迁移。
 6. **全局/局部环境扩展与生命周期**：补充 Environment Registry、区域继承/覆盖、对象删除/替换时的绑定和空间关系清理。
 

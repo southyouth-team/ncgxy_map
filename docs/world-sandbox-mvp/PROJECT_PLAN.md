@@ -841,6 +841,7 @@ P1 分为两个可独立验收的子阶段，避免将射线检测等同于完�
 
 
 ## P2.4 通用交互 Action Runtime（本轮增量）
+- 兼容性：交互配置显式提供 `targetId` 时，状态动作可更新同一沙盒内的另一个模型实例；未提供时默认更新交互所属实例。
 
 - Interaction Detection 负责定位最近交互入口；Action Runtime 负责解释入口上的声明式动作。
 - 首批受控动作：`toggle`（兼容旧 `toggle-state`）、`set`、`rotate`、`translate`。

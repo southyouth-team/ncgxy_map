@@ -8,6 +8,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
+import { applyWorldStateBindings } from './worldStateRuntime.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -366,6 +367,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     model.traverse(object => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true } })
     scene.add(model)
     sandboxModels.set(id, model)
+    // ObjectLoader 恢复后以持久化世界状态重建灯光/材质等运行时属性。
+    applyWorldStateBindings(model, model.userData.worldState || {})
     selectSandboxModel(id)
     invalidateShadowMap()
     requestFrame()
@@ -467,20 +470,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const previous = { ...(model.userData.worldState || {}) }
     const next = { ...previous, ...patch }
     model.userData.worldState = next
-    model.traverse(object => {
-      const binding = object.userData?.stateBinding
-      if (!binding?.key || !Object.prototype.hasOwnProperty.call(next, binding.key)) return
-      const value = next[binding.key]
-      if (binding.property === 'visible') object.visible = Boolean(value)
-      else if (binding.property === 'intensity' && 'intensity' in object) {
-        object.intensity = value ? Number(binding.enabledValue ?? 1) : 0
-      } else if (binding.property === 'emissiveIntensity' && object.material) {
-        const materials = Array.isArray(object.material) ? object.material : [object.material]
-        materials.forEach(material => {
-          if ('emissiveIntensity' in material) material.emissiveIntensity = value ? Number(binding.enabledValue ?? 1) : 0
-        })
-      }
-    })
+    applyWorldStateBindings(model, next)
     callbacks.onSandboxModelStateChange?.({ id: String(id), previous, state: next, patch: { ...patch } })
     invalidateShadowMap()
     requestFrame()

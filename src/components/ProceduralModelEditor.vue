@@ -148,6 +148,43 @@ function submitEdit() {
   emit('edit', { instruction: text, selectedPartId: selectedPartId.value, parameterValues: parameterValues.value })
   instruction.value = ''
 }
+async function captureVisualViews() {
+  if (!renderer || !previewRoot || !camera || !controls) throw new Error('模型预览尚未完成渲染，无法采集视觉质检截图')
+  const originalPosition = camera.position.clone()
+  const originalUp = camera.up.clone()
+  const originalTarget = controls.target.clone()
+  const distance = Math.max(2, camera.position.distanceTo(controls.target))
+  const directions = [
+    { label: 'front', direction: new THREE.Vector3(0, 0.15, 1), up: new THREE.Vector3(0, 1, 0) },
+    { label: 'side', direction: new THREE.Vector3(1, 0.15, 0), up: new THREE.Vector3(0, 1, 0) },
+    { label: 'top', direction: new THREE.Vector3(0, 1, 0.001), up: new THREE.Vector3(0, 0, -1) },
+    { label: 'isometric', direction: new THREE.Vector3(1, 0.75, 1), up: new THREE.Vector3(0, 1, 0) },
+  ]
+  const screenshots = []
+  try {
+    for (const view of directions) {
+      controls.target.copy(originalTarget)
+      camera.up.copy(view.up)
+      camera.position.copy(originalTarget).add(view.direction.normalize().multiplyScalar(distance))
+      camera.lookAt(originalTarget)
+      camera.updateProjectionMatrix()
+      render()
+      screenshots.push({
+        label: view.label,
+        imageDataUrl: renderer.domElement.toDataURL('image/jpeg', 0.76),
+      })
+    }
+  } finally {
+    camera.up.copy(originalUp)
+    camera.position.copy(originalPosition)
+    controls.target.copy(originalTarget)
+    camera.lookAt(originalTarget)
+    controls.update()
+    render()
+  }
+  return screenshots
+}
+defineExpose({ captureVisualViews })
 watch(() => props.model, (model) => {
   syncModelMetadata(model)
   syncPreview()

@@ -143,18 +143,21 @@ function addLightSwitchDemo() {
 
 function handleSandboxModelInteract(payload) {
   const source = payload?.id ? objectsById.get(payload.id) : null
-  const config = source?.userData?.interactionConfig
-  if (config?.action === 'toggle-state' && config.targetId && config.stateKey) {
-    const current = engine?.getSandboxModelState?.(config.targetId)
+  const config = payload?.config || source?.userData?.interactionConfig
+  if (config?.action === 'toggle-state' && config.stateKey) {
+    const targetId = String(config.targetId || payload.id || '')
+    const current = targetId ? engine?.getSandboxModelState?.(targetId) : null
     if (!current) {
       message.value = '交互目标不存在，无法切换状态'
       return
     }
     const nextValue = !Boolean(current[config.stateKey])
-    const next = engine.setSandboxModelState(config.targetId, { [config.stateKey]: nextValue })
+    const next = engine.setSandboxModelState(targetId, { [config.stateKey]: nextValue })
+    const defaultOn = config.stateKey === 'doorOpen' ? '门已打开' : '状态已开启'
+    const defaultOff = config.stateKey === 'doorOpen' ? '门已关闭' : '状态已关闭'
     message.value = next
-      ? (nextValue ? '灯具已开启' : '灯具已关闭')
-      : '灯具状态更新失败'
+      ? (nextValue ? (config.openMessage || defaultOn) : (config.closeMessage || defaultOff))
+      : '交互状态更新失败'
     saveStatus.value = '状态已变更，记得保存'
     return
   }

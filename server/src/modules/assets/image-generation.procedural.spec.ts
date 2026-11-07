@@ -138,45 +138,64 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('Bounds overlap is only a spatial clue');
   });
 
-  it('streams a one-shot fast path selected by the model planner', async () => {
+  it('streams one complete model response without planning or component requests', async () => {
     const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
-    const generatedCode = 'export function createModel(THREE, params = {}) { return new THREE.Group(); }';
+    const generatedCode = 'export function createModel(THREE, params = {}) { const group = new THREE.Group(); return group; }';
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ strategy: 'single', generatedCode }) } }] }),
+      json: async () => ({ choices: [{ message: { content: generatedCode } }] }),
     });
     global.fetch = fetchMock as never;
     const events: any[] = [];
 
-    await service.streamProceduralObjectBuild('一个简单的木箱', '物体', 'stylized', undefined, event => events.push(event));
+    await service.streamProceduralObjectBuild('一栋复杂的建筑', '建筑', 'stylized', undefined, event => events.push(event));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const planningRequest = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(planningRequest.response_format).toEqual({ type: 'json_object' });
-    expect(events.map(event => event.type)).toEqual(['stage', 'single', 'complete']);
-    expect(events[1].result.generatedCode).toBe(generatedCode);
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request.response_format).toBeUndefined();
+    expect(request.messages[0].content).toContain('complete editable procedural Three.js model');
+    expect(events.map(event => event.type)).toEqual(['stage', 'stage', 'single', 'complete']);
+    expect(events.some(event => event.type.startsWith('component-') || event.type === 'plan')).toBe(false);
+    expect(events.find(event => event.type === 'single').result.generatedCode).toBe(generatedCode);
   });
 
-  it('plans complex models and streams dependency-ordered component chunks', async () => {
+  it('retries a timed-out complete-model request and reports retry progress', async () => {
     const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
-    const plan = {
-      version: 1, modelId: 'complex-1', name: 'Complex model',
-      coordinateSystem: { upAxis: 'Y', units: 'scene' },
-      components: [{ id: 'child', parentId: 'root', purpose: 'child part' }, { id: 'root', purpose: 'root part' }],
-    };
-    const source = 'export function createComponent(THREE, context = {}) { return new THREE.Group(); }';
+    const generatedCode = 'export function createModel(THREE) { const group = new THREE.Group(); return group; }';
+    const timeout = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'AbortError' });
     const fetchMock = jest.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ strategy: 'components', plan }) } }] }) })
-      .mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: source } }] }) });
+      .mockRejectedValueOnce(timeout)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: generatedCode } }] }),
+      });
     global.fetch = fetchMock as never;
-    const events: any[] = [];
+    const progress: any[] = [];
 
-    await service.streamProceduralObjectBuild('复杂模型', '物体', 'stylized', undefined, event => events.push(event));
+    const result = await service.generateProceduralObjectFromPrompt(
+      '一栋建筑', '建筑', 'stylized', undefined, event => progress.push(event),
+    );
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(events.filter(event => event.type === 'component-complete').map(event => event.componentId))
-      .toEqual(['root', 'child']);
-    expect(events[events.length - 1]).toMatchObject({ type: 'complete', modelId: 'complex-1' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.generatedCode).toBe(generatedCode);
+    expect(result.generationMetrics.attempts).toBe(2);
+    expect(progress).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: 'retry', label: '生成请求超时，正在重试' }),
+    ]));
+  });
+
+  it('does not retry non-transient payment errors', async () => {
+    const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 402,
+      text: async () => 'Insufficient Balance',
+    });
+    global.fetch = fetchMock as never;
+
+    await expect(service.generateProceduralObjectFromPrompt('一栋建筑', '建筑', 'stylized'))
+      .rejects.toThrow('HTTP 402');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
 });

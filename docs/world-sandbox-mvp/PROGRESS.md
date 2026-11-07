@@ -2327,7 +2327,7 @@ export const environmentBindings = [
   - 按 `entryPointId` 查找 `capabilities.interior.entryPoints`。
   - 使用稳定 `targetPartId` 定位真实 Object3D。
   - 将部件局部地面坐标经完整世界矩阵变换为世界坐标。
-  - 缺少声明、目标部件或非有限坐标时失败关闭。
+  - 缺少声明、目标部件或非有限坐标时失败关闭；入口点若与当前 XZ 碰撞障碍重叠则拒绝传送。
 - `sandboxActionRuntime.js` 增加 `enter` 与 `exit` 动作协议；enter 必须引用模型已声明的入口 ID。
 - `createCampusEngine.js` 增加同模型内部空间过渡：
   - 进入前保存玩家世界坐标与相机模式。

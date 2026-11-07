@@ -390,7 +390,13 @@ function saveEditorModel() {
     referenceImageDataUrl.value = ''
     referenceImageName.value = ''
   }
-  saveSandbox()
+  const persisted = saveSandbox()
+  if (!persisted) {
+    message.value = wasDraft
+      ? '模型已加入当前沙盒，但存档失败；请检查存储空间后重试保存'
+      : '模型修改已应用到当前沙盒，但存档失败；请检查存储空间后重试保存'
+    return
+  }
   editorOpen.value = false
   editingModel.value = null
   message.value = wasDraft ? '模型已加入沙盒并保存存档' : '模型修改已保存到沙盒存档'
@@ -565,7 +571,7 @@ async function handleParameterChange(payload) {
 }
 
 function saveSandbox() {
-  if (!engine) return
+  if (!engine) return false
   try {
     const models = Array.from(objectsById.entries()).map(([id, model]) => ({
       id,
@@ -592,10 +598,12 @@ function saveSandbox() {
     localStorage.setItem(STORAGE_KEY, serialized)
     saveStatus.value = '已保存 · ' + new Date(snapshot.savedAt).toLocaleTimeString()
     message.value = '沙盒已保存，刷新页面后会自动恢复'
+    return true
   } catch (error) {
     const reason = error?.name === 'QuotaExceededError' ? '浏览器本地存储空间不足' : (error?.message || '未知错误')
     saveStatus.value = '保存失败'
     message.value = '沙盒保存失败：' + reason
+    return false
   }
 }
 

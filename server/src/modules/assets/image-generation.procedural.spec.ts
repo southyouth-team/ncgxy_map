@@ -151,6 +151,8 @@ describe('ImageGenerationService procedural generation', () => {
     await service.streamProceduralObjectBuild('一个简单的木箱', '物体', 'stylized', undefined, event => events.push(event));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const planningRequest = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(planningRequest.response_format).toEqual({ type: 'json_object' });
     expect(events.map(event => event.type)).toEqual(['stage', 'single', 'complete']);
     expect(events[1].result.generatedCode).toBe(generatedCode);
   });

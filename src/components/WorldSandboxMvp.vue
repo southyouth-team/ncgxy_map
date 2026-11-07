@@ -23,8 +23,12 @@ const message = ref('正在初始化 RPG 校园场景…')
 const saveStatus = ref('尚未保存')
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
+const timeEnabled = ref(true)
 const weather = ref('clear')
+const weatherEnabled = ref(true)
+const rainEnabled = ref(true)
 const wind = ref(20)
+const windEnabled = ref(true)
 const transformMode = ref('translate')
 const objectTypes = [
   { id: 'box', label: '立方体' }, { id: 'sphere', label: '球体' },
@@ -307,12 +311,16 @@ function saveSandbox() {
       object: model.toJSON(),
     }))
     const snapshot = {
-      version: 1,
+      version: 2,
       savedAt: new Date().toISOString(),
       environment: {
         time: Number(time.value),
+        timeEnabled: timeEnabled.value,
         weather: weather.value,
+        weatherEnabled: weatherEnabled.value,
+        rainEnabled: rainEnabled.value,
         wind: Number(wind.value),
+        windEnabled: windEnabled.value,
       },
       selectedModelId: selected?.userData?.sandboxModelId || null,
       models,
@@ -334,7 +342,7 @@ async function restoreSandbox() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return false
     snapshot = JSON.parse(raw)
-    if (snapshot?.version !== 1 || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
+    if (![1, 2].includes(snapshot?.version) || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
     const loader = new THREE.ObjectLoader()
     for (const item of snapshot.models) {
       if (!item?.object || !item?.id) continue
@@ -345,8 +353,12 @@ async function restoreSandbox() {
     }
     if (snapshot.environment) {
       time.value = Number.isFinite(Number(snapshot.environment.time)) ? Number(snapshot.environment.time) : 14
+      timeEnabled.value = snapshot.environment.timeEnabled !== false
       weather.value = snapshot.environment.weather === 'rain' ? 'rain' : 'clear'
+      weatherEnabled.value = snapshot.environment.weatherEnabled !== false
+      rainEnabled.value = snapshot.environment.rainEnabled !== false
       wind.value = Number.isFinite(Number(snapshot.environment.wind)) ? Number(snapshot.environment.wind) : 20
+      windEnabled.value = snapshot.environment.windEnabled !== false
       updateEnvironment()
     }
     if (snapshot.selectedModelId && objectsById.has(snapshot.selectedModelId)) {
@@ -367,9 +379,11 @@ async function restoreSandbox() {
 function updateEnvironment() {
   if (!engine) return
   engine.setEnvironment({
+    // MVP 环境开关由世界配置持有；这里仅把有效值适配到现有 Three.js Runtime。
+    // 关闭时间系统时保留当前小时，关闭天气/降雨时不创建雨效，关闭风力时风速归零。
     time: Number(time.value),
-    weather: weather.value === 'rain' ? 'rain' : 'clear',
-    wind: Number(wind.value) / 100,
+    weather: weatherEnabled.value && rainEnabled.value && weather.value === 'rain' ? 'rain' : 'clear',
+    wind: windEnabled.value ? Number(wind.value) / 100 : 0,
   })
 }
 function executeTask() {
@@ -490,16 +504,20 @@ onBeforeUnmount(() => {
       </section>
       <section>
         <h2>环境</h2>
-        <label class="world-mvp__field"><span>时间 <b>{{ String(Math.floor(time)).padStart(2, '0') }}:{{ String(Math.round((time % 1) * 60)).padStart(2, '0') }}</b></span>
-          <input v-model.number="time" type="range" min="0" max="24" step="0.25" @input="updateEnvironment">
+        <label class="world-mvp__toggle"><input v-model="timeEnabled" type="checkbox" @change="updateEnvironment"><span>时间系统</span><b>{{ timeEnabled ? '开启' : '关闭' }}</b></label>
+        <label class="world-mvp__field"><span>当前时间 <b>{{ String(Math.floor(time)).padStart(2, '0') }}:{{ String(Math.round((time % 1) * 60)).padStart(2, '0') }}</b></span>
+          <input v-model.number="time" type="range" min="0" max="24" step="0.25" :disabled="!timeEnabled" @input="updateEnvironment">
         </label>
-        <label class="world-mvp__field"><span>天气</span>
-          <select v-model="weather" @change="updateEnvironment">
+        <label class="world-mvp__toggle"><input v-model="weatherEnabled" type="checkbox" @change="updateEnvironment"><span>天气总开关</span><b>{{ weatherEnabled ? '开启' : '关闭' }}</b></label>
+        <label class="world-mvp__field"><span>天气模式</span>
+          <select v-model="weather" :disabled="!weatherEnabled" @change="updateEnvironment">
             <option value="clear">晴天</option><option value="rain">下雨</option>
           </select>
         </label>
-        <label class="world-mvp__field"><span>风力 <b>{{ wind }}%</b></span>
-          <input v-model.number="wind" type="range" min="0" max="100" step="5" @input="updateEnvironment">
+        <label class="world-mvp__toggle"><input v-model="rainEnabled" type="checkbox" :disabled="!weatherEnabled" @change="updateEnvironment"><span>降雨效果</span><b>{{ rainEnabled ? '开启' : '关闭' }}</b></label>
+        <label class="world-mvp__toggle"><input v-model="windEnabled" type="checkbox" @change="updateEnvironment"><span>风力系统</span><b>{{ windEnabled ? '开启' : '关闭' }}</b></label>
+        <label class="world-mvp__field"><span>风速 <b>{{ wind }}%</b></span>
+          <input v-model.number="wind" type="range" min="0" max="100" step="5" :disabled="!windEnabled" @input="updateEnvironment">
         </label>
       </section>
 
@@ -562,6 +580,9 @@ onBeforeUnmount(() => {
 .world-mvp__field { display:grid; gap:8px; margin:12px 0; color:#b4c1c1; font-size:11px; }
 .world-mvp__field span { display:flex; justify-content:space-between; }
 .world-mvp__field b { color:#e1ebe4; }
+.world-mvp__toggle { display:flex; align-items:center; gap:8px; margin:10px 0; color:#b4c1c1; font-size:11px; }
+.world-mvp__toggle input { accent-color:#a5c9b1; }
+.world-mvp__toggle b { margin-left:auto; color:#e1ebe4; font-size:10px; font-weight:500; }
 .world-mvp__field input[type=range] { width:100%; accent-color:#a5c9b1; }
 .world-mvp__field select { padding:8px; border:1px solid rgba(255,255,255,.14); border-radius:7px; color:#e4ece8; background:#1b2a32; }
 .world-mvp__command { display:flex; gap:6px; }

@@ -325,8 +325,8 @@ export const modelCapabilityManifest = {
 
 #### 核心职责分离
 
-1. **AI Capability Reasoning（推理层）**：读取模型几何/部件层级、已有能力、用户指令及必要的世界上下文，自主推断对象可能具备的能力、约束和依赖关系。推理结果是建议，不是已生效事实。
-2. **User Capability Control（控制层）**：用户可以接受、拒绝、修改或补充 AI 建议；支持自然语言控制、参数化控制和针对对象/部件/区域的局部覆盖。用户明确指定的内容必须优先于 AI 推断。
+1. **AI Capability Reasoning（推理层）**：读取模型几何/部件层级、已有能力、用户指令及必要的世界上下文，自主推断对象具备的能力、约束和依赖关系；用户未明确提出的部分由 AI 自动补全，不逐项请求确认。推断结果进入自动解析流程，但在 Runtime 编译/执行前仍不代表已生效。
+2. **User Capability Control（控制层）**：用户通过自然语言、参数化控制和对象/部件/区域局部覆盖随时调整结果；用户本轮明确指令优先于已保存覆盖、模型定义和 AI 推断。AI 后续编辑不得静默覆盖用户明确设置。
 3. **Capability Resolver / Compiler（解析编译层）**：合并模型定义、用户覆盖和运行时上下文，检查引用、冲突和依赖，再将可执行部分编译为 Runtime 能消费的声明。
 4. **Capability Runtime（执行层）**：只执行当前确实实现且通过编译的能力；未实现或无法解析的能力保留在数据中并报告状态，不得显示为已生效。
 5. **Diagnostics / Repair Loop（诊断修复层）**：Runtime 回报缺失部件、无效引用、几何冲突、不支持的执行器和执行失败；AI 可基于诊断提出局部修复，用户仍可审阅和控制。
@@ -351,7 +351,7 @@ export const modelCapabilityManifest = {
 - **用户控制覆盖（Override）**：独立保存用户明确接受、修改、禁用或补充的内容，支持全对象、指定部件、指定区域和单项属性范围。清除覆盖后回到推断/定义结果；覆盖不能被后续 AI 自动重写。
 - **Runtime 执行结果（Execution）**：记录编译结果、实际启用的执行器、诊断、支持状态和运行时句柄/派生数据。执行结果是派生数据，不应反向污染模型定义。
 
-建议解析优先级：**用户本轮明确指令 > 已保存的用户覆盖 > 已确认的模型定义 > AI 最新推断 > Runtime 安全默认值**。若用户明确要求 AI 自动应用推断，可将“自动接受策略”作为可配置控制策略；不能把置信度阈值偷偷当作用户授权。
+解析优先级：**用户本轮明确指令 > 已保存的用户覆盖 > 模型定义 > AI 最新推断 > Runtime 安全默认值**。AI 推断默认自动进入解析/编译流程，不设置逐项人工确认或置信度审批门槛；置信度只用于诊断和追溯，不决定是否需要用户批准。
 
 #### 开放数据协议方向
 
@@ -385,7 +385,7 @@ Manifest 继续作为模型固有定义的入口，但不把所有职责塞进�
 
 #### 从意图到执行的标准链路
 
-`Model Geometry / Context + User Intent → AI Reasoning Proposals → User Review / Overrides → Capability Resolver → Spatial/Behavior/Environment Compiler → Runtime Adapter → Diagnostics → AI Repair Proposal`
+`Model Geometry / Context + User Intent → AI Capability Inference → Capability Resolver（用户指令/覆盖优先）→ Spatial/Behavior/Environment Compiler → Runtime Adapter → Diagnostics → AI Repair / Incremental Update`
 
 编译器不是另一个模型类别白名单。它负责把通用能力意图映射到已实现的执行器；执行器能力可以逐步增加，但不能限制 AI 保存和表达未来能力。
 

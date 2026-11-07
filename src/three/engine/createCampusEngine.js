@@ -8,7 +8,8 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
-import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'\nimport { collectModelMovementObstacles } from './modelSpatialRuntime.js'
+import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
+import { collectModelMovementObstacles } from './modelSpatialRuntime.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -361,6 +362,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
   }
 
+  function refreshSandboxModelSpatial(model) {
+    const ownerId = model?.userData?.sandboxModelId
+    if (!ownerId || !collisionWorld) return 0
+    collisionWorld.removeObstaclesByOwner(ownerId)
+    const obstacles = collectModelMovementObstacles(THREE, model, ownerId)
+    let added = 0
+    for (const obstacle of obstacles) {
+      if (collisionWorld.addObstacle(obstacle, ownerId)) added += 1
+    }
+    return added
+  }
+
   function addSandboxModel(model, options = {}) {
     if (!scene || !model?.isObject3D || model.parent) throw new TypeError('AI 建模结果必须是未挂载的 THREE.Object3D')
     const id = options.id ? String(options.id) : 'sandbox_' + (++sandboxModelSequence)
@@ -373,6 +386,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     model.traverse(object => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true } })
     scene.add(model)
     sandboxModels.set(id, model)
+    refreshSandboxModelSpatial(model)
     // ObjectLoader 恢复后以持久化世界状态重建灯光/材质等运行时属性。
     applyWorldStateBindings(model, model.userData.worldState || {})
     applySandboxEnvironmentBindings(model)
@@ -413,7 +427,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     replacement.traverse(object => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true } })
     const parent = current.parent || scene
     parent.add(replacement)
+    collisionWorld?.removeObstaclesByOwner(String(id))
     sandboxModels.set(String(id), replacement)
+    refreshSandboxModelSpatial(replacement)
     applyWorldStateBindings(replacement, replacement.userData.worldState || {})
     applySandboxEnvironmentBindings(replacement)
     if (sandboxSelectedModel === current) {
@@ -459,6 +475,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!model) return false
     if (sandboxSelectedModel === model) selectSandboxModel(null)
     sandboxModels.delete(String(id))
+    collisionWorld?.removeObstaclesByOwner(String(id))
     model.parent?.remove(model)
     disposeObjectGroup(model)
     invalidateShadowMap()
@@ -825,7 +842,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
     sandboxTransform.setMode('translate')
     sandboxTransform.addEventListener('dragging-changed', event => input?.setMovementEnabled(!event.value))
-    sandboxTransform.addEventListener('change', () => {\n      if (sandboxSelectedModel) refreshSandboxModelSpatial(sandboxSelectedModel)\n      requestFrame()\n    })
+    sandboxTransform.addEventListener('change', () => {
+      if (sandboxSelectedModel) refreshSandboxModelSpatial(sandboxSelectedModel)
+      requestFrame()
+    })
     scene.add(sandboxTransform.getHelper())
     renderer.domElement.addEventListener('pointerdown', onSandboxPointerDown)
     renderer.domElement.addEventListener('dblclick', onSandboxDoubleClick)

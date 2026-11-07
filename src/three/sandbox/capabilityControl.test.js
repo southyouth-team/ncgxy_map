@@ -87,3 +87,35 @@ describe('resolveCapabilityRecords', () => {
     expect(JSON.stringify(definitions)).toBe(before)
   })
 })
+
+
+describe('createCapabilityControlDocument', () => {
+  it('derives extensible inference records from every manifest capability namespace', async () => {
+    const { createCapabilityControlDocument } = await import('./capabilityControl.js')
+    const result = createCapabilityControlDocument({
+      manifest: { capabilities: { spatial: { colliders: [] }, customFuture: { enabled: true } } },
+    })
+    expect(result.inference.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ capabilityId: 'model.spatial', status: 'inferred', value: { colliders: [] } }),
+      expect.objectContaining({ capabilityId: 'model.customFuture', value: { enabled: true } }),
+    ]))
+  })
+  it('preserves user overrides, diagnostics and extension fields when rebuilding inference', async () => {
+    const { createCapabilityControlDocument } = await import('./capabilityControl.js')
+    const previousDocument = {
+      version: 1,
+      customExtension: { keep: true },
+      inference: { proposals: [{ capabilityId: 'old', value: 1 }] },
+      overrides: [{ capabilityId: 'model.spatial', action: 'set', value: { enabled: false } }],
+      diagnostics: [{ code: 'previous-warning' }],
+    }
+    const result = createCapabilityControlDocument({
+      manifest: { capabilities: { spatial: { colliders: [] } } },
+      previousDocument,
+    })
+    expect(result.customExtension).toEqual({ keep: true })
+    expect(result.overrides).toEqual(previousDocument.overrides)
+    expect(result.diagnostics).toEqual(previousDocument.diagnostics)
+    expect(result.inference.proposals).toHaveLength(1)
+  })
+})

@@ -981,3 +981,14 @@ export const environmentBindings = [
 2. 浏览器生成含墙体的 AI 模型，分别切换墙体阻挡开/关，验证玩家移动是否真实穿过，并保存刷新验证覆盖仍生效。
 3. 为 AI Prompt 明确要求 collider 输出稳定唯一 ID，并补充重复 ID / 缺失部件诊断。
 4. 再按同一闭环方式接入内部空间/门洞/可进入能力；不提前暴露未实现控制项。
+
+
+---
+
+## 2026-11-07 — 修复 AI 建模 Prompt 字符串语法错误
+
+- 修复 `server/src/modules/assets/image-generation.service.ts:827`：空间 Runtime 提示词字符串缺少结束单引号及数组项逗号，导致 TypeScript 报 `TS1005: ',' expected`。
+- 修改仅涉及该提示词字符串的闭合，不改变模型能力约束或生成行为。
+- 提交：`110b085b938e57309172e929b40d756c298392b3`。
+- 已回读确认空间提示词和下一条 environmentBindings 提示词均为独立、正确闭合的数组字符串。
+- 本轮未运行 TypeScript 编译或后端测试；需在本地 watcher 中确认原有两条语法错误消失。

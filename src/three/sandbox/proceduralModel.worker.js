@@ -66,7 +66,7 @@ self.addEventListener('message', async (event) => {
 
     await reportProgress(port, 'loading-module', '加载模型构建模块')
     modelUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
-    const modelModule = await import(modelUrl)
+    const modelModule = await import(/* @vite-ignore */ modelUrl)
 
     if (typeof modelModule.createModel !== 'function') {
       throw new Error('源码必须导出 createModel(THREE)')

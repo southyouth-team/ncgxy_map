@@ -397,10 +397,14 @@ function executeTask() {
   else if (/雨|rain/i.test(text)) { weather.value = 'rain'; updateEnvironment(); message.value = '环境已切换为雨天' }
   else if (/晴天|放晴|clear/i.test(text)) { weather.value = 'clear'; updateEnvironment(); message.value = '环境已切换为晴天' }
   else if (/(时间|time)[^0-9]*(\d{1,2})/i.test(text)) {
-    const hour = Number(text.match(/(?:时间|time)[^0-9]*(\d{1,2})/i)[1])
-    time.value = Math.min(24, Math.max(0, hour))
-    updateEnvironment()
-    message.value = '时间已调整为 ' + time.value + ':00'
+    if (!timeEnabled.value) {
+      message.value = '时间系统已关闭，请先启用后再调整时间'
+    } else {
+      const hour = Number(text.match(/(?:时间|time)[^0-9]*(\d{1,2})/i)[1])
+      time.value = Math.min(24, Math.max(0, hour))
+      updateEnvironment()
+      message.value = '时间已调整为 ' + time.value + ':00'
+    }
   } else if (/删除|delete/i.test(text)) deleteSelected()
   else if (/复制|duplicate/i.test(text)) duplicateSelected()
   else if (/移动|move/i.test(text)) {

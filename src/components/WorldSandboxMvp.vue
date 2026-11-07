@@ -241,6 +241,11 @@ async function generateAiModel() {
     group.userData.proceduralModelParts = Array.isArray(group.userData.proceduralModelParts) ? group.userData.proceduralModelParts : []
     group.userData.proceduralModelEnvironmentBindings = Array.isArray(group.userData.proceduralModelEnvironmentBindings)
       ? group.userData.proceduralModelEnvironmentBindings : []
+    group.userData.proceduralModelCapabilityManifest = group.userData.proceduralModelCapabilityManifest
+      && typeof group.userData.proceduralModelCapabilityManifest === 'object'
+      ? group.userData.proceduralModelCapabilityManifest
+      : { version: 1, parameters: group.userData.proceduralModelParameters, capabilities: group.userData.proceduralModelEnvironmentBindings.length
+        ? { environmentBindings: group.userData.proceduralModelEnvironmentBindings } : {} }
     group.userData.proceduralModelConfig = {
       protocol: 'threejs-procedural-v1',
       generator: result.generationMethod || 'img2threejs-procedural',
@@ -281,7 +286,7 @@ function modelParameterDefaults(definitions, existing = {}) {
   }
   return values
 }
-async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新', recordHistory = true, environmentBindings = null) {
+async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新', recordHistory = true, environmentBindings = null, modelCapabilityManifest = null) {
   const current = editingModel.value
   if (!current) throw new Error('当前没有正在编辑的模型')
   const id = current.userData.sandboxModelId
@@ -290,11 +295,21 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   const moduleParts = Array.isArray(replacement.userData?.proceduralModelParts) ? replacement.userData.proceduralModelParts : []
   const moduleEnvironmentBindings = Array.isArray(replacement.userData?.proceduralModelEnvironmentBindings)
     ? replacement.userData.proceduralModelEnvironmentBindings : []
+  const moduleCapabilityManifest = replacement.userData?.proceduralModelCapabilityManifest
+    && typeof replacement.userData.proceduralModelCapabilityManifest === 'object'
+    ? replacement.userData.proceduralModelCapabilityManifest : null
   const resolvedDefinitions = Array.isArray(definitions) && definitions.length ? definitions : moduleDefinitions
   const resolvedParts = Array.isArray(parts) && parts.length ? parts : moduleParts
   const resolvedEnvironmentBindings = Array.isArray(environmentBindings)
     ? environmentBindings
     : (moduleEnvironmentBindings.length ? moduleEnvironmentBindings : (current.userData.proceduralModelEnvironmentBindings || []))
+  const resolvedCapabilityManifest = modelCapabilityManifest && typeof modelCapabilityManifest === 'object'
+    ? modelCapabilityManifest
+    : (moduleCapabilityManifest || current.userData.proceduralModelCapabilityManifest || {
+      version: 1,
+      parameters: resolvedDefinitions,
+      capabilities: resolvedEnvironmentBindings.length ? { environmentBindings: resolvedEnvironmentBindings } : {},
+    })
   const resolvedValues = modelParameterDefaults(resolvedDefinitions, values)
   if (JSON.stringify(resolvedValues) !== JSON.stringify(values || {})) {
     replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: resolvedValues })
@@ -305,6 +320,7 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
     proceduralModelParameters: resolvedDefinitions,
     proceduralModelParts: resolvedParts,
     proceduralModelEnvironmentBindings: resolvedEnvironmentBindings,
+    proceduralModelCapabilityManifest: resolvedCapabilityManifest,
     proceduralModelParameterValues: resolvedValues,
     worldState: { ...(current.userData.worldState || {}) },
     environmentOverrides: { ...(current.userData.environmentOverrides || {}) },
@@ -320,6 +336,7 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
       definitions: current.userData.proceduralModelParameters || [],
       parts: current.userData.proceduralModelParts || [],
       environmentBindings: current.userData.proceduralModelEnvironmentBindings || [],
+      modelCapabilityManifest: current.userData.proceduralModelCapabilityManifest || null,
     })
     if (editHistory.value.length > 10) editHistory.value.shift()
   }
@@ -346,6 +363,7 @@ async function handleModelEdit(payload) {
         parameterValues: values,
         parts: current.userData.proceduralModelParts || [],
         environmentBindings: current.userData.proceduralModelEnvironmentBindings || [],
+        modelCapabilityManifest: current.userData.proceduralModelCapabilityManifest || null,
         selectedPartId: payload?.selectedPartId || '',
         instruction: payload?.instruction || '',
         objectType: current.userData.proceduralModelConfig?.objectType || '独立 3D 模型',
@@ -356,7 +374,7 @@ async function handleModelEdit(payload) {
     const result = body.data || body.result || body
     const definitions = Array.isArray(result.parameters) ? result.parameters : (Array.isArray(result.modelParameters) ? result.modelParameters : [])
     const parts = Array.isArray(result.parts) ? result.parts : (Array.isArray(result.modelParts) ? result.modelParts : [])
-    await replaceEditedModel(result.generatedCode, values, definitions, parts, result.changeSummary || 'AI 已完成模型调整', true, result.environmentBindings)
+    await replaceEditedModel(result.generatedCode, values, definitions, parts, result.changeSummary || 'AI 已完成模型调整', true, result.environmentBindings, result.modelCapabilityManifest)
   } catch (error) {
     editError.value = error?.message || '模型调整失败'
   } finally {
@@ -370,7 +388,7 @@ async function undoModelEdit() {
   editBusy.value = true
   editError.value = ''
   try {
-    await replaceEditedModel(snapshot.source, snapshot.values, snapshot.definitions, snapshot.parts, '已恢复上一版本', false, snapshot.environmentBindings)
+    await replaceEditedModel(snapshot.source, snapshot.values, snapshot.definitions, snapshot.parts, '已恢复上一版本', false, snapshot.environmentBindings, snapshot.modelCapabilityManifest)
   } catch (error) {
     editHistory.value.push(snapshot)
     editError.value = error?.message || '恢复失败'

@@ -476,9 +476,14 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   const moduleCapabilityManifest = replacement.userData?.proceduralModelCapabilityManifest
     && typeof replacement.userData.proceduralModelCapabilityManifest === 'object'
     ? replacement.userData.proceduralModelCapabilityManifest : null
-  const resolvedCapabilityManifest = modelCapabilityManifest && typeof modelCapabilityManifest === 'object'
-    ? modelCapabilityManifest
-    : (current.userData.proceduralModelCapabilityManifest || moduleCapabilityManifest || null)
+  // Prefer the manifest exported by the exact source that Worker just executed.
+  // The API envelope may contain a compatibility fallback to the previous manifest.
+  const hasModuleManifest = replacement.userData.proceduralModelCapabilityManifestSource === 'module'
+  const resolvedCapabilityManifest = hasModuleManifest
+    ? moduleCapabilityManifest
+    : (modelCapabilityManifest && typeof modelCapabilityManifest === 'object'
+      ? modelCapabilityManifest
+      : (current.userData.proceduralModelCapabilityManifest || moduleCapabilityManifest || null))
   const manifestCapabilities = resolvedCapabilityManifest?.capabilities && typeof resolvedCapabilityManifest.capabilities === 'object'
     ? resolvedCapabilityManifest.capabilities : {}
   const resolvedDefinitions = Array.isArray(resolvedCapabilityManifest?.parameters)

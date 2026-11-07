@@ -109,3 +109,54 @@ describe('InputController first-person controls', () => {
     expect(controller.keys.size).toBe(0)
   })
 })
+
+
+describe('InputController model support surface grounding', () => {
+  class Vector3 {
+    constructor(x = 0, y = 0, z = 0) { this.set(x, y, z) }
+    set(x, y, z) { this.x = x; this.y = y; this.z = z; return this }
+  }
+  class Raycaster {
+    set(origin, direction) { this.origin = origin; this.direction = direction }
+    intersectObjects() { return this.hits || [] }
+  }
+  class Matrix3 { getNormalMatrix() { return this } }
+  const normal = (y = 1) => ({
+    clone: () => ({
+      applyMatrix3() { return this },
+      normalize() { this.y = y; return this },
+      y,
+    }),
+  })
+
+  function groundedController(hits) {
+    const THREE = { Vector3, Raycaster, Matrix3 }
+    const rig = { player: { x: 2, y: 1.7, z: 3 } }
+    const collision = { supportSurfaces: [{ supportsStanding: true, meshes: [{ matrixWorld: {} }] }] }
+    const controller = new InputController(THREE, {}, rig, null, collision)
+    controller.groundRaycaster.hits = hits
+    return { controller, rig }
+  }
+
+  it('sets player eye height from the nearest declared mesh top', () => {
+    const { controller, rig } = groundedController([{
+      face: { normal: normal(1) }, object: { matrixWorld: {} },
+      point: { x: 2, y: 2.4, z: 3 },
+    }])
+    expect(controller.resolvePlayerGroundHeight(rig.player)).toBeCloseTo(4.1)
+    expect(controller.groundRaycaster.far).toBe(3)
+  })
+
+  it('ignores surfaces steeper than the configured walkable slope', () => {
+    const { controller, rig } = groundedController([{
+      face: { normal: normal(0.2) }, object: { matrixWorld: {} },
+      point: { x: 2, y: 2.4, z: 3 },
+    }])
+    expect(controller.resolvePlayerGroundHeight(rig.player)).toBe(1.7)
+  })
+
+  it('keeps the default ground height when no declared mesh is under the player', () => {
+    const { controller, rig } = groundedController([])
+    expect(controller.resolvePlayerGroundHeight(rig.player)).toBe(1.7)
+  })
+})

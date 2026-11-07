@@ -53,7 +53,7 @@ export function collectModelMovementObstacles(THREE, root, ownerId) {
       : (Array.isArray(root.userData?.proceduralModelParameters) ? root.userData.proceduralModelParameters : [])
     const parameterValues = root.userData?.proceduralModelParameterValues || {}
     let hasParameterBinding = false
-    for (const parameter of parameterDefinitions) {
+    for (const parameter of (hasUserOverride ? [] : parameterDefinitions)) {
       if (!parameter || typeof parameter.id !== 'string' || !Array.isArray(parameter.bindings)) continue
       const binding = parameter.bindings.find(item =>
         item && item.capabilityId === capabilityId && item.property === 'blocksMovement')

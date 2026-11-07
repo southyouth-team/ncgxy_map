@@ -169,10 +169,39 @@ async function captureVisualViews() {
       camera.position.copy(originalTarget).add(view.direction.normalize().multiplyScalar(distance))
       camera.lookAt(originalTarget)
       camera.updateProjectionMatrix()
-      render()
+      const width = 512
+      const height = 384
+      const target = new THREE.WebGLRenderTarget(width, height, {
+        format: THREE.RGBAFormat,
+        type: THREE.UnsignedByteType,
+        depthBuffer: true,
+      })
+      target.texture.colorSpace = THREE.SRGBColorSpace
+      const previousTarget = renderer.getRenderTarget()
+      const pixels = new Uint8Array(width * height * 4)
+      try {
+        renderer.setRenderTarget(target)
+        renderer.setViewport(0, 0, width, height)
+        renderer.render(scene, camera)
+        renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels)
+      } finally {
+        renderer.setRenderTarget(previousTarget)
+        target.dispose()
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('无法创建视觉质检截图画布')
+      const image = context.createImageData(width, height)
+      for (let row = 0; row < height; row += 1) {
+        const sourceStart = (height - row - 1) * width * 4
+        image.data.set(pixels.subarray(sourceStart, sourceStart + width * 4), row * width * 4)
+      }
+      context.putImageData(image, 0, 0)
       screenshots.push({
         label: view.label,
-        imageDataUrl: renderer.domElement.toDataURL('image/jpeg', 0.76),
+        imageDataUrl: canvas.toDataURL('image/jpeg', 0.68),
       })
     }
   } finally {

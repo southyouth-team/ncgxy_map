@@ -10,6 +10,7 @@ import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { collectModelMovementObstacles } from './modelSpatialRuntime.js'
+import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -75,6 +76,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let nearOutdoorEntrance = false
   let nearOutdoorBuildingId = null
   let nearSandboxModelId = null
+  let nearSandboxInteractionTarget = null
+  let nearSandboxInteractionKey = null
   // 建筑入口在场景初始化时索引；玩家未移动时不重复遍历整个校园场景树。
   let outdoorEntranceObjects = []
   let lastEntranceCheckPosition = null
@@ -1645,10 +1648,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (nearSandboxModelId) {
         const target = sandboxModels.get(nearSandboxModelId)
         if (target) {
+          const interaction = nearSandboxInteractionTarget
           callbacks.onSandboxModelInteract?.({
             id: nearSandboxModelId,
-            name: target.name,
-            message: target.userData.interactionMessage || ('你与 ' + target.name + ' 完成了一次交互'),
+            name: interaction?.name || target.name,
+            targetPartId: interaction?.targetPartId || null,
+            config: interaction?.config || target.userData.interactionConfig || null,
+            message: target.userData.interactionMessage || ('你与 ' + (interaction?.name || target.name) + ' 完成了一次交互'),
           })
           return
         }
@@ -1813,22 +1819,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
 
     if (!indoorGroup && cameraRig?.player && isRpgSample) {
-      let nearestSandboxModel = null
-      for (const [id, model] of sandboxModels) {
-        const radius = Number(model.userData.interactionRadius) || 3.5
-        const distance = Math.hypot(cameraRig.player.x - model.position.x, cameraRig.player.z - model.position.z)
-        if (distance <= radius && (!nearestSandboxModel || distance < nearestSandboxModel.distance)) {
-          nearestSandboxModel = { id, name: model.name, distance }
-        }
-      }
+      const nearestSandboxModel = findNearestSandboxInteraction(THREE, sandboxModels, cameraRig.player)
       const nextId = nearestSandboxModel?.id || null
-      if (nextId !== nearSandboxModelId) {
+      const nextKey = nearestSandboxModel
+        ? nextId + ':' + (nearestSandboxModel.targetPartId || 'root')
+        : null
+      if (nextKey !== nearSandboxInteractionKey) {
         nearSandboxModelId = nextId
-        const target = nearestSandboxModel ? sandboxModels.get(nearestSandboxModel.id) : null
-        const promptText = target?.userData?.interactionConfig?.prompt
-          || ('靠近 ' + nearestSandboxModel?.name + '，按 E 交互')
+        nearSandboxInteractionTarget = nearestSandboxModel
+        nearSandboxInteractionKey = nextKey
+        const promptText = nearestSandboxModel?.config?.prompt
+          || ('靠近 ' + (nearestSandboxModel?.name || '') + '，按 E 交互')
         callbacks.onSandboxInteractionPromptChange?.(nearestSandboxModel
-          ? { visible: true, id: nearestSandboxModel.id, name: nearestSandboxModel.name, text: promptText }
+          ? {
+              visible: true,
+              id: nearestSandboxModel.id,
+              name: nearestSandboxModel.name,
+              targetPartId: nearestSandboxModel.targetPartId,
+              text: promptText,
+            }
           : { visible: false })
       }
     }

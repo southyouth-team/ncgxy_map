@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { validateObjectModelSpecV3 } from '../../shared/object-model-spec-v3';
 import { normalizeObjectModelParameterSchema } from '../../shared/object-model-parameter-schema';
 import { applyObjectModelChangeSet, getObjectModelRevision } from '../../shared/object-model-change-set';
-import { resolveModelBuildOrder, type ModelBuildPlan } from './procedural-model-build.protocol';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 

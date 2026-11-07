@@ -383,17 +383,6 @@ async function generateAiModel() {
         result = event.result
         return
       }
-      if (event.type === 'assembly') {
-        updateGenerationProgress({
-          stage: 'assembly-' + event.status,
-          label: event.status === 'started' ? '准备完整模型构建' : '模型源码收集完成',
-          detail: event.status === 'started'
-            ? '所有组件源码正在汇总，接下来会一次性提交隔离 Worker 构建'
-            : 'AI 已返回全部组件源码，等待前端执行完整模型构建',
-          status: event.status === 'complete' ? 'done' : 'active',
-        })
-        return
-      }
       if (event.type === 'error') {
         throw new Error(event.message || '模型构建失败')
       }

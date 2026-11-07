@@ -280,3 +280,84 @@
 2. 执行 `npm test -- --run` 与 `npm run build`；检查测试结果。
 3. 浏览器验收：创建演示 → 靠近墙壁开关 → 按 E 两次验证开/关 → 保存 → 刷新 → 检查状态恢复。
 4. 若通过，再把相同的状态绑定协议用于门/设备等对象；之后进入 World Document 的独立数据迁移。
+
+
+---
+
+## 2026-11-07 — AI 模型环境绑定协议第一阶段
+
+### 本轮目标
+
+让 AI 生成的程序化模型能够声明环境响应能力；沙盒在模型加入、环境变化、模型微调和存档恢复时自动应用这些声明。第一阶段先打通人工灯光全局开关，并提供模型级覆盖 API。
+
+### 实际改动
+
+- `src/three/engine/worldStateRuntime.js`
+  - 新增 `applyEnvironmentBindings`。
+  - 通过 `targetPartId` 匹配部件 `userData.componentId`，读取 `variable` 并映射到受控 Runtime 属性。
+  - 支持模型级 `environmentOverrides` 优先于全局值。
+  - 当前支持 `visible`、`intensity`、`emissiveIntensity`；不执行 AI 任意代码。
+- `src/three/sandbox/proceduralModel.worker.js`
+  - 从 AI 模块读取导出的 `environmentBindings`，保存到 `proceduralModelEnvironmentBindings`，随 Object3D JSON 持久化。
+- `server/src/modules/assets/image-generation.service.ts`
+  - 新模型生成 Prompt 要求导出 `environmentBindings`，用稳定部件 ID 声明实际存在的灯光目标。
+  - 模型微调 Prompt 接收已有绑定；用户要求旧模型接入环境能力时，要求 AI 检查现有源码、增量增加绑定并尽量保留无关结构。
+  - 微调响应返回环境绑定元数据；未返回时保留请求中的既有绑定。
+- `server/src/modules/assets/image-generation.controller.ts`
+  - 微调接口接收并转发 `environmentBindings`。
+- `src/three/engine/createCampusEngine.js`
+  - 新模型加入、模型替换/微调后自动应用环境绑定。
+  - 增加全局 `lighting.artificial.enabled` 环境值。
+  - 增加对象级 `setSandboxModelEnvironmentOverride` / `clearSandboxModelEnvironmentOverride`，显式局部值优先于全局值。
+- `src/components/WorldSandboxMvp.vue`
+  - 增加“人工灯光总开关”，驱动已注册绑定。
+  - 存档升级到 v3，保存全局人工灯光开关；继续兼容 v1/v2。
+  - AI 微调请求携带既有绑定；替换模型时保留 `worldState` 和局部环境覆盖，撤销历史也记录绑定。
+
+### 当前协议示例
+
+```js
+export const environmentBindings = [
+  {
+    id: 'classroom-ceiling-light',
+    targetPartId: 'classroom-ceiling-light',
+    variable: 'lighting.artificial.enabled',
+    property: 'intensity',
+    defaultValue: true,
+    enabledValue: 2.4,
+    disabledValue: 0,
+  },
+]
+```
+
+这是数据声明示例；`targetPartId` 必须对应模型中真实存在的 `userData.componentId`。第一阶段仅实现人工灯光变量，不代表天气、风、温度等所有变量已经动态注册。
+
+### 提交记录
+
+- `c84eaab61dc73928653ea40b48201ee1a5e3357e` — 环境绑定 Runtime。
+- `d1e8f331b2ab3816f6e522a773c4c5c0cbe23d44` — 环境绑定 Runtime 单元测试用例。
+- `15fee3b42a5397d6b11e279ea1d8190911e02d8c` — Worker 读取环境绑定元数据。
+- `4ac43b82449bc4dd2f34b6eec758cc54dcd13ae0` — AI 生成与微调 Prompt/服务协议。
+- `be909379c8162e04aa6212faf50c63a26a4c355a` — 微调 API 传递绑定元数据。
+- `fba8a31e968c6c4d0cc61ab0f9150caadd40850c` — 引擎自动应用全局/局部环境绑定。
+- `7418c53af98e88e36cc15ce0b63f98cb0f0b2963` — UI 全局人工灯光开关、v3 存档及微调状态保留。
+- 本轮架构协议及 M0 顺序更新见 `PROJECT_PLAN.md`。
+
+### 验证状态
+
+- 目标分支源码回读：已完成本轮主要文件的回读；仍需最终 HEAD/文件核验。
+- 自动化测试：新增环境绑定测试用例，**尚未执行**。
+- 前端构建：未执行。
+- 后端测试/类型检查：未执行。
+- CI：尚未取得本轮提交的成功状态记录。
+- 浏览器验收：未执行。
+- main：本轮写入均显式指定功能分支；需在最终核验中再次确认 main 引用未变化。
+
+### 当前限制与待办
+
+1. 当前自动注册只接通 `lighting.artificial.enabled`；其他环境变量尚未接入同一注册数据流。
+2. 模型级覆盖 API 已提供，但尚无 UI 管理入口。
+3. 第一阶段 Runtime 属性映射只支持 `visible`、`intensity`、`emissiveIntensity`；新效果必须增加受控映射。
+4. 需要验证 AI 实际生成的源码是否稳定输出有效绑定，并确保绑定目标部件 ID 确实存在。
+5. 需要验证旧模型通过一句话微调增加灯光绑定时，几何结构、模型 Transform、对象状态、局部覆盖和存档均保持。
+6. 下一轮先运行单测、构建和后端测试；再做真实生成/微调、全局开关、局部覆盖、保存刷新浏览器验收。

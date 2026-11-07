@@ -57,6 +57,28 @@ describe('applyWorldStateBindings', () => {
 })
 
 
+describe('hinged door state binding', () => {
+  it('rotates a hinged part from its model instance boolean state', () => {
+    const door = {
+      rotation: { y: 0 },
+      userData: {
+        stateBinding: {
+          key: 'doorOpen',
+          property: 'rotationY',
+          enabledValue: -Math.PI / 2,
+          disabledValue: 0,
+        },
+      },
+    }
+    const root = makeRoot([door])
+
+    expect(applyWorldStateBindings(root, { doorOpen: true })).toBe(1)
+    expect(door.rotation.y).toBeCloseTo(-Math.PI / 2)
+    expect(applyWorldStateBindings(root, { doorOpen: false })).toBe(1)
+    expect(door.rotation.y).toBeCloseTo(0)
+  })
+})
+
 describe('applyEnvironmentBindings', () => {
   it('applies global environment values to AI-declared component bindings', () => {
     const light = {

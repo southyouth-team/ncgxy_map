@@ -153,6 +153,7 @@ function handleSandboxModelInteract(payload) {
       'target-part-not-found': '交互目标部件不存在，无法执行动作',
       'interior-entry-point-not-found': '内部入口部件不存在，无法进入',
       'interior-entry-point-not-declared': '模型没有声明这个内部入口',
+      'interior-entry-point-blocked': '内部入口位置被碰撞体占据，请调整入口点或墙体碰撞声明',
       'already-inside-model': '当前已经处于一个模型的内部空间',
       'not-inside-target-model': '当前不在这个模型内部，无法从此处退出',
       'interior-source-mismatch': '进入和退出动作必须由当前模型自身触发',

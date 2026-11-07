@@ -1001,6 +1001,99 @@ export class ImageGenerationService {
     emit({ type: 'complete', modelId: 'single-model' });
   }
 
+
+  async inspectProceduralModelVisualQuality(
+    promptInput: unknown, objectTypeInput: unknown, referenceImageInput: unknown,
+    screenshotsInput: unknown, geometryDiagnosticsInput: unknown,
+  ): Promise<any> {
+    const prompt = typeof promptInput === 'string' ? promptInput.trim().slice(0, 40000) : '';
+    const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';
+    const referenceImage = typeof referenceImageInput === 'string' ? referenceImageInput : '';
+    const screenshots = Array.isArray(screenshotsInput) ? screenshotsInput.slice(0, 5) : [];
+    if (!prompt && !referenceImage) throw new BadRequestException('视觉质检缺少原始模型描述或参考图片');
+    if (!screenshots.length) throw new BadRequestException('视觉质检缺少 Three.js 实际渲染截图');
+    const validImage = (value: unknown) => typeof value === 'string'
+      && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)
+      && Buffer.byteLength(value, 'utf8') <= 3 * 1024 * 1024;
+    if (!screenshots.every(item => validImage(item?.imageDataUrl))) {
+      throw new BadRequestException('视觉质检截图格式无效或单张超过 3 MB');
+    }
+    if (referenceImage && !validImage(referenceImage)) {
+      throw new BadRequestException('视觉质检参考图片格式无效或超过 3 MB');
+    }
+    const apiKey = this.config.get<string>('VISION_API_KEY');
+    const model = this.config.get<string>('VISION_MODEL');
+    const baseUrl = (this.config.get<string>('VISION_API_BASE_URL') || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    if (!apiKey || !model) throw new ServiceUnavailableException('视觉质检未配置视觉模型服务');
+    const configuredTimeout = Number(this.config.get<string>('VISION_REQUEST_TIMEOUT_MS') || 600000);
+    const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
+    const geometry = geometryDiagnosticsInput && typeof geometryDiagnosticsInput === 'object'
+      ? JSON.stringify(geometryDiagnosticsInput).slice(0, 18000) : '{}';
+    const content: any[] = [{
+      type: 'text',
+      text: [
+        'Inspect the rendered Three.js model as a visual quality assurance reviewer.',
+        'Compare it with the original user request and optional reference image. Treat the supplied screenshots as the actual rendered output, not concept art.',
+        'Check silhouette/proportions, missing or malformed parts, spatial relationships, visible intersections or floating parts, material/color consistency, detail completeness, and consistency across views.',
+        'Do not report speculative hidden/internal defects that cannot be seen. Geometry diagnostics are supporting evidence only; do not treat bounds overlap alone as a defect.',
+        'Return ONLY valid JSON: {"score":0-100,"passed":true|false,"summary":"...","issues":[{"severity":"critical|major|minor","componentId":"stable id or empty string","issue":"observable problem","repairInstruction":"specific minimal edit instruction"}]}.',
+        'Set passed=true only when there are no critical/major issues and the model is reasonably faithful to the request. If uncertain, lower confidence in summary but do not invent defects.',
+        'Original request: ' + (prompt || 'No text prompt; use reference image as primary target.'),
+        'Object type: ' + objectType,
+        'Geometry diagnostics (evidence, not ground truth): ' + geometry,
+        'Screenshot labels: ' + screenshots.map((item: any) => String(item?.label || 'view')).join(', '),
+      ].join('\n'),
+    }];
+    if (referenceImage) content.push({ type: 'image_url', image_url: { url: referenceImage, detail: 'high' } });
+    for (const shot of screenshots) content.push({ type: 'image_url', image_url: { url: shot.imageDataUrl, detail: 'high' } });
+    let response: Response;
+    try {
+      response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          model, temperature: 0.1, response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content }],
+        }),
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.error('模型视觉质检请求失败：' + detail);
+      throw new ServiceUnavailableException('模型视觉质检服务连接失败');
+    }
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 1000);
+      this.logger.warn('模型视觉质检 API HTTP ' + response.status + '：' + detail);
+      throw new ServiceUnavailableException('模型视觉质检失败（HTTP ' + response.status + '）');
+    }
+    const payload = await response.json() as any;
+    const raw = payload?.choices?.[0]?.message?.content;
+    if (typeof raw !== 'string' || !raw.trim()) throw new ServiceUnavailableException('视觉模型未返回质检报告');
+    let result: any;
+    try {
+      result = JSON.parse(raw.trim().replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/, ''));
+    } catch {
+      throw new ServiceUnavailableException('视觉模型返回的质检报告不是有效 JSON');
+    }
+    const issues = Array.isArray(result?.issues) ? result.issues.slice(0, 30).map((item: any) => ({
+      severity: ['critical', 'major', 'minor'].includes(item?.severity) ? item.severity : 'minor',
+      componentId: typeof item?.componentId === 'string' ? item.componentId.slice(0, 160) : '',
+      issue: typeof item?.issue === 'string' ? item.issue.slice(0, 600) : '',
+      repairInstruction: typeof item?.repairInstruction === 'string' ? item.repairInstruction.slice(0, 1200) : '',
+    })) : [];
+    const score = Math.max(0, Math.min(100, Math.round(Number(result?.score) || 0)));
+    const passed = result?.passed === true && !issues.some(item => item.severity === 'critical' || item.severity === 'major');
+    return {
+      score, passed,
+      summary: typeof result?.summary === 'string' ? result.summary.slice(0, 1200) : '视觉质检完成',
+      issues,
+      inspectedAt: new Date().toISOString(),
+      model,
+      screenshotCount: screenshots.length,
+    };
+  }
+
   async modifyProceduralObjectFromInstruction(
     sourceInput: unknown, parametersInput: unknown, parameterValuesInput: unknown, partsInput: unknown,
     selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown, environmentBindingsInput?: unknown, modelCapabilityManifestInput?: unknown, geometryDiagnosticsInput?: unknown,

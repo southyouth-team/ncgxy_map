@@ -269,12 +269,13 @@ describe('InputController vertical camera synchronization', () => {
   it('updates the camera while the player falls without horizontal input', () => {
     const { controller, cameraRig } = createController()
     controller.mode = 'thirdPerson'
+    cameraRig.player.y = 4
     controller.grounded = false
     controller.verticalVelocity = -4
 
     controller.update(0.05)
 
-    expect(cameraRig.player.y).toBeLessThan(1.7)
+    expect(cameraRig.player.y).toBeLessThan(4)
     expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
   })
 

@@ -992,3 +992,67 @@ export const environmentBindings = [
 - 提交：`110b085b938e57309172e929b40d756c298392b3`。
 - 已回读确认空间提示词和下一条 environmentBindings 提示词均为独立、正确闭合的数组字符串。
 - 本轮未运行 TypeScript 编译或后端测试；需在本地 watcher 中确认原有两条语法错误消失。
+
+
+---
+
+## 2026-11-07 — Spatial Runtime v2 第一增量：门洞分段与状态驱动门扇
+
+### 本轮目标
+
+在现有模型部件级 Box Collider Runtime 上，打通门洞无墙体阻挡、门扇按实例状态启停碰撞，以及门扇旋转的基础链路。保持 Model Definition、Capability Override、Model Instance State 三层数据分离。
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`
+- 开始时精确读取 branch HEAD：`85ea9147de25b209bb5f93cf136adec7333d8ab3`
+- 重新读取 `PROJECT_PLAN.md`、`PROGRESS.md)、`modelSpatialRuntime.js`、`modelSpatialRuntime.test.js`、`CollisionWorld.js`、`createCampusEngine.js`、`worldStateRuntime.js`、Worker 与 AI 生成/微调 Prompt。
+- 确认 v1 Runtime 只消费 Box Collider；`setSandboxModelState` 原先只应用视觉绑定，没有刷新空间碰撞。
+
+### 实际改动
+
+- `src/three/engine/modelSpatialRuntime.js`
+  - 支持 collider 的可选 `stateCondition: { key, equals, defaultValue }`。
+  - Runtime 从模型实例 `userData.worldState` 读取条件状态；缺少状态时使用 defaultValue。
+  - 条件不满足时不注册该 collider 的移动障碍。
+  - 显式用户 capability override 优先于 stateCondition，未修改 AI 原始 Manifest。
+- `src/three/engine/createCampusEngine.js`
+  - `setSandboxModelState` 更新实例状态后调用 `refreshSandboxModelSpatial`，使门扇开关状态能同步改变碰撞。
+- `src/three/engine/worldStateRuntime.js`
+  - 增加受控 `rotationY` 状态绑定；门扇部件可根据 boolean 实例状态在 enabledValue/disabledValue 间旋转。
+  - emissiveIntensity 关闭值同时尊重声明的 disabledValue。
+- `src/three/engine/modelSpatialRuntime.test.js`
+  - 新增门扇 closed/open 状态切换碰撞测试。
+  - 新增用户显式 collider override 优先于门扇状态条件的测试。
+- `server/src/modules/assets/image-generation.service.ts`
+  - 生成与微调 Prompt 要求 collider 输出稳定唯一 ID。
+  - 明确墙体需围绕门洞拆分，门洞净空不生成墙体 collider。
+  - 明确门扇使用独立 collider、`doorOpen` 实例状态条件和铰链旋转绑定。
+  - 明确 Portal、室内导航、楼层连接尚未接入 Runtime，不得声称已生效。
+- `PROJECT_PLAN.md`
+  - 新增 Spatial Runtime v2 当前执行协议、能力边界和后续顺序。
+
+### 当前边界
+
+- 本轮没有实现从任意完整墙体 Mesh 自动识别/切割门洞；AI 必须生成墙体分段和独立门扇部件。
+- 当前 `setSandboxModelState` 可驱动 `doorOpen` 状态，但玩家按键/近距离交互触发开门尚未接入 Interaction Runtime。
+- 室内区域、Portal/Traversal Zone、可行走地面、楼层、楼梯、电梯仍未实现。
+- 旧模型不会自动获得门洞或门扇声明；需要通过模型编辑器自然语言微调补充结构。
+- 当前会话只有 GitHub 远程读写能力，没有本地 Node/Vitest/浏览器执行环境。
+
+### 验证状态
+
+- 已新增两项 Vitest 用例，但本轮未实际执行 Vitest。
+- 未执行前端 build/typecheck、后端测试/typecheck。
+- 未核验 CI。
+- 未进行浏览器玩家穿门实测。
+- 代码已写入目标功能分支；提交 SHA 与最终 HEAD 将在回读后记录。
+- 未修改 `main`，未创建 PR。
+
+### 下一步
+
+1. 本地执行 `modelSpatialRuntime.test.js` 和前后端构建/typecheck，修正实际发现的问题。
+2. 浏览器生成带门洞的模型，检查墙体分段是否正确；将 `doorOpen` 从 false 切换为 true/false，验证门扇旋转与碰撞同步。
+3. 增加门扇交互入口，使玩家可以在门附近开关门，而不是仅通过模型实例状态 API。
+4. 再实现内部空间与可行走区域/Portal 连接；随后推进楼层、楼梯和电梯。

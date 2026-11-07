@@ -420,6 +420,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function replaceSandboxModel(id, replacement, metadata = {}) {
     const current = sandboxModels.get(String(id))
     if (!current || !replacement?.isObject3D || replacement.parent) return false
+    if (activeSandboxInterior?.modelId === String(id)) return false
     replacement.userData = {
       ...(replacement.userData || {}),
       ...(metadata.userData || {}),
@@ -482,7 +483,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function removeSandboxModel(id) {
     const model = sandboxModels.get(String(id))
-    if (!model) return false
+    if (!model || activeSandboxInterior?.modelId === String(id)) return false
     if (sandboxSelectedModel === model) selectSandboxModel(null)
     sandboxModels.delete(String(id))
     removeSandboxModelSpatialRegistration(id)

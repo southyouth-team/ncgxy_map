@@ -12,6 +12,7 @@ import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateR
 import { refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
 import { executeSandboxInteractionAction } from './sandboxActionRuntime.js'
+import { resolveSandboxInteriorEntryPoint } from './sandboxInteriorRuntime.js'
 import { cloneSandboxMaterial, disposeSandboxMaterial } from './sandboxModelLifecycle.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
@@ -106,6 +107,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   const generatedAssets = new Map()
   const sandboxModels = new Map()
   let sandboxModelSequence = 0
+  let activeSandboxInterior = null
   let sandboxSelectedModel = null
   let sandboxTransform = null
   let placementState = null
@@ -529,6 +531,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function refreshPlayerCameraAfterTeleport() {
+    if (cameraRig?.mode === 'firstPerson') cameraRig.updateFirstPersonDesired()
+    else cameraRig?.updateThirdPersonDesired()
+    requestFrame()
+  }
+
   function applySandboxModelInteraction(payload = {}) {
     const sourceModelId = String(payload.id || '')
     const sourceModel = sandboxModels.get(sourceModelId)
@@ -544,6 +552,34 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       config,
     })
     if (!result.ok) return result
+
+    if (result.action === 'enter') {
+      if (activeSandboxInterior) return { ok: false, reason: 'already-inside-model' }
+      const entry = resolveSandboxInteriorEntryPoint(THREE, targetModel, result.entryPointId)
+      if (!entry) return { ok: false, reason: 'interior-entry-point-not-found' }
+      activeSandboxInterior = {
+        modelId: targetModelId,
+        player: cameraRig.player.clone(),
+        mode: cameraRig.mode,
+      }
+      // Manifest positions are floor-level local coordinates; the controller stores eye height.
+      cameraRig.player.set(entry.position.x, entry.position.y + 1.7, entry.position.z)
+      refreshPlayerCameraAfterTeleport()
+      return { ...result, targetModelId, transition: 'entered' }
+    }
+
+    if (result.action === 'exit') {
+      if (!activeSandboxInterior || activeSandboxInterior.modelId !== targetModelId) {
+        return { ok: false, reason: 'not-inside-target-model' }
+      }
+      cameraRig.player.copy(activeSandboxInterior.player)
+      cameraRig.setMode(activeSandboxInterior.mode)
+      input?.setMode(activeSandboxInterior.mode)
+      activeSandboxInterior = null
+      refreshPlayerCameraAfterTeleport()
+      return { ...result, targetModelId, transition: 'exited' }
+    }
+
     if (result.statePatch) {
       const state = setSandboxModelState(targetModelId, result.statePatch)
       return state ? { ...result, targetModelId, state } : { ok: false, reason: 'state-update-failed' }

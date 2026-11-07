@@ -506,4 +506,55 @@ describe('ImageGenerationService', () => {
     }
   });
 
+  it('inspects actual multi-view Three.js screenshots and returns a normalized visual QA report', async () => {
+    const service = createService({
+      VISION_API_KEY: 'vision-key',
+      VISION_API_BASE_URL: 'http://vision.local/v1',
+      VISION_MODEL: 'vision-test',
+    });
+    const report = {
+      score: 92,
+      passed: true,
+      summary: '主体比例和各视角结构一致',
+      issues: [],
+    };
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(report) } }] }),
+    });
+    global.fetch = fetchMock as never;
+    const imageDataUrl = 'data:image/png;base64,' + png.toString('base64');
+
+    const result = await service.inspectProceduralModelVisualQuality(
+      '一栋现代教学楼',
+      '教学楼',
+      imageDataUrl,
+      [
+        { label: 'front', imageDataUrl },
+        { label: 'side', imageDataUrl },
+        { label: 'top', imageDataUrl },
+        { label: 'isometric', imageDataUrl },
+      ],
+      { summary: { meshCount: 4, diagnosticCount: 0 }, diagnostics: [] },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request.model).toBe('vision-test');
+    expect(request.messages[0].content.filter((item: any) => item.type === 'image_url')).toHaveLength(5);
+    expect(result).toMatchObject({
+      score: 92,
+      passed: true,
+      summary: '主体比例和各视角结构一致',
+      screenshotCount: 4,
+    });
+  });
+
+  it('rejects visual inspection without actual rendered screenshots', async () => {
+    const service = createService({ VISION_API_KEY: 'vision-key', VISION_MODEL: 'vision-test' });
+    await expect(service.inspectProceduralModelVisualQuality(
+      '一个模型', '模型', '', [], null,
+    )).rejects.toBeInstanceOf(BadRequestException);
+  });
+
 });

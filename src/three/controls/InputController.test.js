@@ -263,3 +263,27 @@ describe('InputController step traversal', () => {
       .toMatchObject({ x: 0, z: 0 })
   })
 })
+
+
+describe('InputController vertical camera synchronization', () => {
+  it('updates the camera while the player falls without horizontal input', () => {
+    const { controller, cameraRig } = createController()
+    controller.mode = 'thirdPerson'
+    controller.grounded = false
+    controller.verticalVelocity = -4
+
+    controller.update(0.05)
+
+    expect(cameraRig.player.y).toBeLessThan(1.7)
+    expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
+  })
+
+  it('does not update the camera every idle frame while grounded', () => {
+    const { controller, cameraRig } = createController()
+    controller.grounded = true
+
+    controller.update(0.05)
+
+    expect(cameraRig.updateThirdPersonDesired).not.toHaveBeenCalled()
+  })
+})

@@ -1543,3 +1543,31 @@ export const environmentBindings = [
 - 刷新页面确认异步组件可正常加载。
 - 生成一个走 components 分支的模型，确认首个组件能通过工厂格式检查并进入 Worker 预览。
 - 再验证 single 分支不受影响。
+
+
+---
+
+## 2026-11-07 — 修复模型编辑 Prompt 字符串语法错误
+
+### 问题与根因
+
+- 用户本地 TypeScript watcher 报错：`image-generation.service.ts:1152:501 - TS1005: ',' expected`。
+- 根因是 Geometry diagnostics Prompt 数组中的两段字符串之间误写了字面量 `\\n`，而不是源码换行；反斜杠转义字符落在字符串结束符之外，破坏 TypeScript 语法。
+
+### 本轮改动
+
+- 将该处错误的 `',\\n      '` 改为正常的数组元素分隔和源码换行。
+- 扫描该 Service 文件后，目标 Prompt 区域未发现其他同类字面量分隔问题。
+- 未修改 Prompt 语义、模型生成逻辑或其他 Runtime。
+
+### 提交与验证
+
+- 代码提交：`c7da8d70680942758ac7ecdf8b08b3d165abdd92`。
+- GitHub 回读确认 Geometry diagnostics 与 Preserve existing model 两个字符串现已是独立数组元素。
+- 未在本会话运行 TypeScript/Nest 构建；需由本地 watcher 自动重编译或执行后端 build 验证。
+- 未修改 `main`，未创建 PR。
+
+### 后续验收
+
+- 等待本地 watcher 重新编译，确认 TS1005 消失。
+- 若出现新的首条编译错误，按首个真实错误继续定位，不做无关重构。

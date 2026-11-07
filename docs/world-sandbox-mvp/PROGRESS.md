@@ -1056,3 +1056,70 @@ export const environmentBindings = [
 2. 浏览器生成带门洞的模型，检查墙体分段是否正确；将 `doorOpen` 从 false 切换为 true/false，验证门扇旋转与碰撞同步。
 3. 增加门扇交互入口，使玩家可以在门附近开关门，而不是仅通过模型实例状态 API。
 4. 再实现内部空间与可行走区域/Portal 连接；随后推进楼层、楼梯和电梯。
+
+
+---
+
+## 2026-11-07 — Spatial Runtime v2 第二增量：玩家近距离开关门
+
+### 本轮目标
+
+将门扇实例状态从内部 API 操作扩展为玩家可触发的最小交互闭环：靠近门扇部件显示提示，按 E 切换 `doorOpen`，驱动门扇旋转与碰撞刷新。
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`
+- 开始时分支 HEAD：`181620eadced6ec9eeb546facd046d002cf2f1e5`
+- 重新读取项目计划、进度、引擎玩家按键/附近交互循环、模型状态 API、World State Runtime、模型 Worker 序列化路径、沙盒页面交互处理器及 AI 生成/微调 Prompt。
+- 确认现有引擎已有按 E 交互和模型根级交互回调，但没有部件级交互目标定位；Worker 通过 Object3D.toJSON 序列化，部件 userData 可随模型返回。
+
+### 实际改动
+
+- 新增 `src/three/engine/sandboxInteractionRuntime.js`
+  - 新增 `findNearestSandboxInteraction`。
+  - 遍历沙盒模型部件的 `userData.interactionConfig`，按部件世界坐标/可选局部 interactionPoint 和声明半径筛选最近交互目标。
+  - 返回所属模型 ID、部件 ID、目标名称和声明式交互配置。
+  - 没有部件级交互声明时，保留模型根级交互回退。
+- 新增 `src/three/engine/sandboxInteractionRuntime.test.js`
+  - 覆盖部件级门扇交互目标解析。
+  - 覆盖旧模型根级交互回退。
+  - 覆盖交互半径边界。
+- `src/three/engine/createCampusEngine.js`
+  - 玩家附近目标扫描改为使用部件级交互解析器。
+  - 提示内容支持来自部件的 prompt。
+  - 按 E 时将模型 ID、目标部件 ID 和配置传给页面，不执行资产内函数。
+- `src/components/WorldSandboxMvp.vue`
+  - 交互处理器读取事件携带的部件级配置。
+  - 支持受控 `toggle-state`，同模型门扇默认更新所属模型的 `worldState`；保留原有外部 targetId 灯具开关兼容。
+  - 状态更新后提示门开/门关，并提示保存沙盒。
+- `src/three/engine/worldStateRuntime.test.js`
+  - 增加 boolean 实例状态驱动铰链 `rotationY` 的测试。
+- `server/src/modules/assets/image-generation.service.ts`
+  - 生成与微调 Prompt 增加玩家操作门扇的声明要求：门扇部件使用 `toggle-state`、`doorOpen`、交互半径和提示；同模型门扇不硬编码 targetId。
+- `PROJECT_PLAN.md`
+  - 记录部件级交互协议和当前 Runtime 边界。
+
+### 当前边界
+
+- 当前只实现 `toggle-state` 这一种受控动作，不代表通用 Interaction Registry 已完成。
+- 玩家按 E 的附近交互扫描沿用现有 RPG 沙盒循环；其他场景模式尚未统一接入。
+- 门洞仍由 AI 输出的墙体分段实现；Runtime 不会自动从单一墙体 Mesh 中挖洞。
+- 门扇需由 AI 正确设置铰链局部原点、独立碰撞体、stateBinding 和 interactionConfig；错误枢轴或不匹配 collider 仍会造成旋转/碰撞不一致。
+- 室内区域、Portal/Traversal Zone、室内导航、楼层/楼梯/电梯尚未实现。
+
+### 验证状态
+
+- 已新增部件级交互解析测试和门扇旋转状态测试。
+- 静态回读和提交后源码断言待本轮结束前执行。
+- 未执行 Vitest、前端 build/typecheck、后端测试/typecheck。
+- 未核验 CI，未进行浏览器按 E 开关门实测。
+- 当前会话没有本地仓库执行环境，不能替用户运行本地命令。
+- 未修改 `main`，未创建 PR。
+
+### 下一步
+
+1. 在本地执行 `sandboxInteractionRuntime.test.js`、`modelSpatialRuntime.test.js`、`worldStateRuntime.test.js`。
+2. 生成或微调一栋包含独立门扇的建筑，确认 AI 输出部件级 `interactionConfig`、`stateBinding` 和稳定 collider ID。
+3. 浏览器中靠近门，确认提示出现；按 E 开门，再按 E 关门，确认门扇旋转、碰撞启停与沙盒保存恢复一致。
+4. 该闭环通过后，再推进内部空间可行走区域与入口连接。

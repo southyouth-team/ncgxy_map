@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
+import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
 
 describe('normalizeModelCapabilityManifest', () => {
   it('creates a v1 manifest from legacy model metadata', () => {
@@ -36,9 +36,8 @@ describe('normalizeModelCapabilityManifest', () => {
 })
 
   
-  it('identifies an explicit module manifest without treating arrays as manifests', async () => {
-    const { hasExplicitModelCapabilityManifest } = await import('./modelCapabilityManifest.js')
-    expect(hasExplicitModelCapabilityManifest({ version: 1, capabilities: {} })).toBe(true)
-    expect(hasExplicitModelCapabilityManifest(null)).toBe(false)
-    expect(hasExplicitModelCapabilityManifest([])).toBe(false)
-  })
+it('identifies an explicit module manifest without treating arrays as manifests', () => {
+  expect(hasExplicitModelCapabilityManifest({ version: 1, capabilities: {} })).toBe(true)
+  expect(hasExplicitModelCapabilityManifest(null)).toBe(false)
+  expect(hasExplicitModelCapabilityManifest([])).toBe(false)
+})

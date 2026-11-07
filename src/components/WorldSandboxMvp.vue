@@ -29,6 +29,7 @@ const weatherEnabled = ref(true)
 const rainEnabled = ref(true)
 const wind = ref(20)
 const windEnabled = ref(true)
+const artificialLightingEnabled = ref(true)
 const transformMode = ref('translate')
 const objectTypes = [
   { id: 'box', label: '立方体' }, { id: 'sphere', label: '球体' },
@@ -238,6 +239,8 @@ async function generateAiModel() {
     const modelParameters = Array.isArray(group.userData.proceduralModelParameters) ? group.userData.proceduralModelParameters : []
     group.userData.proceduralModelParameterValues = modelParameterDefaults(modelParameters)
     group.userData.proceduralModelParts = Array.isArray(group.userData.proceduralModelParts) ? group.userData.proceduralModelParts : []
+    group.userData.proceduralModelEnvironmentBindings = Array.isArray(group.userData.proceduralModelEnvironmentBindings)
+      ? group.userData.proceduralModelEnvironmentBindings : []
     group.userData.proceduralModelConfig = {
       protocol: 'threejs-procedural-v1',
       generator: result.generationMethod || 'img2threejs-procedural',
@@ -278,15 +281,20 @@ function modelParameterDefaults(definitions, existing = {}) {
   }
   return values
 }
-async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新', recordHistory = true) {
+async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新', recordHistory = true, environmentBindings = null) {
   const current = editingModel.value
   if (!current) throw new Error('当前没有正在编辑的模型')
   const id = current.userData.sandboxModelId
   let replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: values })
   const moduleDefinitions = Array.isArray(replacement.userData?.proceduralModelParameters) ? replacement.userData.proceduralModelParameters : []
   const moduleParts = Array.isArray(replacement.userData?.proceduralModelParts) ? replacement.userData.proceduralModelParts : []
+  const moduleEnvironmentBindings = Array.isArray(replacement.userData?.proceduralModelEnvironmentBindings)
+    ? replacement.userData.proceduralModelEnvironmentBindings : []
   const resolvedDefinitions = Array.isArray(definitions) && definitions.length ? definitions : moduleDefinitions
   const resolvedParts = Array.isArray(parts) && parts.length ? parts : moduleParts
+  const resolvedEnvironmentBindings = Array.isArray(environmentBindings)
+    ? environmentBindings
+    : (moduleEnvironmentBindings.length ? moduleEnvironmentBindings : (current.userData.proceduralModelEnvironmentBindings || []))
   const resolvedValues = modelParameterDefaults(resolvedDefinitions, values)
   if (JSON.stringify(resolvedValues) !== JSON.stringify(values || {})) {
     replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: resolvedValues })
@@ -296,7 +304,10 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
     proceduralModelSource: source,
     proceduralModelParameters: resolvedDefinitions,
     proceduralModelParts: resolvedParts,
+    proceduralModelEnvironmentBindings: resolvedEnvironmentBindings,
     proceduralModelParameterValues: resolvedValues,
+    worldState: { ...(current.userData.worldState || {}) },
+    environmentOverrides: { ...(current.userData.environmentOverrides || {}) },
     proceduralModelConfig: { ...(current.userData.proceduralModelConfig || {}), updatedAt: new Date().toISOString() },
     interactionRadius: Number(current.userData.interactionRadius) || 4.5,
   }
@@ -308,6 +319,7 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
       values: { ...(current.userData.proceduralModelParameterValues || {}) },
       definitions: current.userData.proceduralModelParameters || [],
       parts: current.userData.proceduralModelParts || [],
+      environmentBindings: current.userData.proceduralModelEnvironmentBindings || [],
     })
     if (editHistory.value.length > 10) editHistory.value.shift()
   }
@@ -333,6 +345,7 @@ async function handleModelEdit(payload) {
         parameters: current.userData.proceduralModelParameters || [],
         parameterValues: values,
         parts: current.userData.proceduralModelParts || [],
+        environmentBindings: current.userData.proceduralModelEnvironmentBindings || [],
         selectedPartId: payload?.selectedPartId || '',
         instruction: payload?.instruction || '',
         objectType: current.userData.proceduralModelConfig?.objectType || '独立 3D 模型',
@@ -343,7 +356,7 @@ async function handleModelEdit(payload) {
     const result = body.data || body.result || body
     const definitions = Array.isArray(result.parameters) ? result.parameters : (Array.isArray(result.modelParameters) ? result.modelParameters : [])
     const parts = Array.isArray(result.parts) ? result.parts : (Array.isArray(result.modelParts) ? result.modelParts : [])
-    await replaceEditedModel(result.generatedCode, values, definitions, parts, result.changeSummary || 'AI 已完成模型调整')
+    await replaceEditedModel(result.generatedCode, values, definitions, parts, result.changeSummary || 'AI 已完成模型调整', true, result.environmentBindings)
   } catch (error) {
     editError.value = error?.message || '模型调整失败'
   } finally {
@@ -357,7 +370,7 @@ async function undoModelEdit() {
   editBusy.value = true
   editError.value = ''
   try {
-    await replaceEditedModel(snapshot.source, snapshot.values, snapshot.definitions, snapshot.parts, '已恢复上一版本', false)
+    await replaceEditedModel(snapshot.source, snapshot.values, snapshot.definitions, snapshot.parts, '已恢复上一版本', false, snapshot.environmentBindings)
   } catch (error) {
     editHistory.value.push(snapshot)
     editError.value = error?.message || '恢复失败'
@@ -396,7 +409,7 @@ function saveSandbox() {
       object: model.toJSON(),
     }))
     const snapshot = {
-      version: 2,
+      version: 3,
       savedAt: new Date().toISOString(),
       environment: {
         time: Number(time.value),
@@ -406,6 +419,7 @@ function saveSandbox() {
         rainEnabled: rainEnabled.value,
         wind: Number(wind.value),
         windEnabled: windEnabled.value,
+        artificialLightingEnabled: artificialLightingEnabled.value,
       },
       selectedModelId: selected?.userData?.sandboxModelId || null,
       models,
@@ -427,7 +441,7 @@ async function restoreSandbox() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return false
     snapshot = JSON.parse(raw)
-    if (![1, 2].includes(snapshot?.version) || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
+    if (![1, 2, 3].includes(snapshot?.version) || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
     const loader = new THREE.ObjectLoader()
     for (const item of snapshot.models) {
       if (!item?.object || !item?.id) continue
@@ -444,6 +458,7 @@ async function restoreSandbox() {
       rainEnabled.value = snapshot.environment.rainEnabled !== false
       wind.value = Number.isFinite(Number(snapshot.environment.wind)) ? Number(snapshot.environment.wind) : 20
       windEnabled.value = snapshot.environment.windEnabled !== false
+      artificialLightingEnabled.value = snapshot.environment.artificialLightingEnabled !== false
       updateEnvironment()
     }
     if (snapshot.selectedModelId && objectsById.has(snapshot.selectedModelId)) {
@@ -469,6 +484,7 @@ function updateEnvironment() {
     time: Number(time.value),
     weather: weatherEnabled.value && rainEnabled.value && weather.value === 'rain' ? 'rain' : 'clear',
     wind: windEnabled.value ? Number(wind.value) / 100 : 0,
+    artificialLightingEnabled: artificialLightingEnabled.value,
   })
 }
 function executeTask() {
@@ -605,6 +621,7 @@ onBeforeUnmount(() => {
           </select>
         </label>
         <label class="world-mvp__toggle"><input v-model="rainEnabled" type="checkbox" :disabled="!weatherEnabled" @change="updateEnvironment"><span>降雨效果</span><b>{{ rainEnabled ? '开启' : '关闭' }}</b></label>
+        <label class="world-mvp__toggle"><input v-model="artificialLightingEnabled" type="checkbox" @change="updateEnvironment"><span>人工灯光总开关</span><b>{{ artificialLightingEnabled ? '开启' : '关闭' }}</b></label>
         <label class="world-mvp__toggle"><input v-model="windEnabled" type="checkbox" @change="updateEnvironment"><span>风力系统</span><b>{{ windEnabled ? '开启' : '关闭' }}</b></label>
         <label class="world-mvp__field"><span>风速 <b>{{ wind }}%</b></span>
           <input v-model.number="wind" type="range" min="0" max="100" step="5" :disabled="!windEnabled" @input="updateEnvironment">

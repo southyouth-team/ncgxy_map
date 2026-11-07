@@ -119,3 +119,50 @@ describe('createCapabilityControlDocument', () => {
     expect(result.inference.proposals).toHaveLength(1)
   })
 })
+
+
+describe('capability override continuity across model replacement', () => {
+  it('keeps user overrides while refreshing AI inference from the replacement manifest', async () => {
+    const { createCapabilityControlDocument } = await import('./capabilityControl.js')
+    const previousDocument = {
+      version: 1,
+      inference: { proposals: [{ capabilityId: 'model.spatial', value: { old: true } }] },
+      overrides: [{
+        capabilityId: 'spatial.collider.door-leaf.blocksMovement',
+        scope: { targetType: 'part', targetId: 'door-leaf' },
+        action: 'set',
+        value: { blocksMovement: false },
+      }],
+      diagnostics: [{ code: 'user-reviewed' }],
+    }
+    const nextManifest = {
+      version: 1,
+      capabilities: {
+        spatial: { colliders: [{ id: 'door-leaf', targetPartId: 'door-leaf', shape: 'box' }] },
+        interior: { enterable: true },
+      },
+    }
+    const nextDocument = createCapabilityControlDocument({
+      manifest: nextManifest,
+      previousDocument,
+    })
+    expect(nextDocument.overrides).toEqual(previousDocument.overrides)
+    expect(nextDocument.diagnostics).toEqual(previousDocument.diagnostics)
+    expect(nextDocument.inference.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ capabilityId: 'model.spatial', value: nextManifest.capabilities.spatial }),
+      expect.objectContaining({ capabilityId: 'model.interior', value: nextManifest.capabilities.interior }),
+    ]))
+    const resolved = resolveCapabilityRecords({
+      definitions: [{
+        capabilityId: 'spatial.collider.door-leaf.blocksMovement',
+        scope: { targetType: 'part', targetId: 'door-leaf' },
+        value: { blocksMovement: true },
+      }],
+      overrides: nextDocument.overrides,
+    })
+    expect(resolved).toEqual([expect.objectContaining({
+      source: 'user-override',
+      value: { blocksMovement: false },
+    })])
+  })
+})

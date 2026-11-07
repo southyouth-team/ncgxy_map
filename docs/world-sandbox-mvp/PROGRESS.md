@@ -1441,3 +1441,73 @@ export const environmentBindings = [
 3. Worker 增加同一隔离上下文中的 chunk 构建与增量快照；每块执行成功后再发布预览，失败保留最近有效快照并允许重试。
 4. 简单模型继续走原 one-shot 路径；复杂模型只有在 plan 明确需要拆分时才走 chunk 路径。
 5. 在真实服务端确认 SSE/NDJSON 代理透传、取消请求与超时行为后，再把“实时”标记为验收通过。
+
+---
+
+## 2026-11-07 — 自适应增量模型构建与工作台逐块预览（第一阶段）
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 功能分支：`feat/world-sandbox-conversational-model-editor`
+- 开始 HEAD：`5eae7991663bc3aa1fb18643308772622510ff5f`
+- `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`
+- 已重新读取计划、进度、Controller、Service、协议、Worker、执行器和统一工作台。
+
+### 实际改动
+
+- `image-generation.service.ts`
+  - 新增自适应生成方法：AI 首次响应决定 `single` 或 `components`。
+  - 简单模型在同一次模型响应中返回完整源码，避免先规划再生成导致额外请求。
+  - 复杂模型返回 ModelBuildPlan，后端按父级/显式依赖排序，逐组件生成 ComponentChunk。
+  - 每个 chunk 上下文携带完整计划、当前组件和已完成组件摘要。
+  - 设置 40 个组件、30 KB 单组件源码、15 分钟整条构建时限。
+  - 服务端不执行 AI 源码。
+- `image-generation.controller.ts`
+  - 新增 POST `generate-procedural-object-stream`。
+  - 使用 `application/x-ndjson`，逐条写出构建事件；保留原 JSON 接口。
+- `procedural-model-build.protocol.ts`
+  - 增加 stage/single 事件类型。
+- `WorldSandboxMvp.vue`
+  - 新建模型改为 Fetch ReadableStream 消费 NDJSON。
+  - 简单模型沿用完整模型 Worker 构建。
+  - 复杂模型每收到完整组件块，就组合已完成源码并在隔离 Worker 重建当前模型，更新工作台预览。
+  - 组合源码保留 Manifest、参数、部件和环境绑定导出。
+  - 根据 `parentId` 将组件 Group 还原为同一 Object3D 层级。
+  - 下一块构建失败时保留上一次成功预览；最终仍走原草稿保存流程。
+- `image-generation.procedural.spec.ts`
+  - 新增 one-shot 快速路径事件测试。
+  - 新增复杂模型依赖排序与组件事件测试。
+- `PROJECT_PLAN.md`
+  - 新增 3.17 节，记录接口、事件、复杂度策略、资源上限与当前缺口。
+
+### 提交记录
+
+- `39cd367bf95bdd8a624325ceedd8b15bf782aec1` — 自适应增量构建 Service
+- `fdeb202962f72c1df4d2e2549671cf1cb0f14134` — NDJSON Controller
+- `8a883da89c1a223ae7e168846fbaca61090cda9` — 扩展构建事件协议
+- `5c708ede3ef884cd73f9b566aae3aa33a40d630d` — 修正 NDJSON 换行帧
+- `3ad3d788c02f79969edc105768f907e9e2dd98fc` — 限制组件源码大小
+- `91d26a99f41cceaf74684befca9a793bf59acc0e` — 工作台接入增量事件
+- `5bf66f4a513ef8da3a2731f4c85c38002dfd318e` — 组件层级和能力导出
+- `991543d26338582db7616c51234ee63fd1d9ecd2` — 限制整条构建时长
+- `5f38772b147045d8886f8ae5bbe53dbe79b9b37d` — 增加服务端构建路径测试
+- `6dfc94c90cc051da80a97e84873b9abea0aa68a3` — 修正组合源码转义
+- `c461774c2daa2a7d9179a311374e8416cd3b9226` — 修正组件工厂匹配表达式
+
+### 验证状态与边界
+
+- GitHub 写入已完成；待最终完整回读。
+- 本会话没有本地仓库执行环境，未运行 Jest、Nest build/typecheck、前端 build/typecheck。
+- CI 尚未核验；浏览器端 NDJSON 代理透传、逐块预览和保存流程未验收。
+- 当前组件预览采用“累计已完成源码在 Worker 中重建”的实现，便于保留统一模型上下文；不是在 Worker 内持久保留一个逐块可变场景。随着组件增加，重建成本会上升，需通过实际模型压测决定是否改为持久 Worker 会话。
+- 单块失败保留最近有效预览，但当前还没有针对失败组件的单独重试 UI。
+- 视觉模型服务是否支持 token SSE 不影响本实现：本方案使用普通模型请求，应用层生成完成事件后通过 NDJSON 推送。
+- 未修改 `main`，未创建或合并 PR。
+
+### 下一步
+
+1. 最终回读新增 Service/Controller/工作台代码和测试，核对最终分支 HEAD。
+2. 在本地运行 `npx jest --runInBand src/modules/assets/image-generation.procedural.spec.ts src/modules/assets/procedural-model-build.protocol.spec.ts`、Nest build 和前端 build/typecheck。
+3. 浏览器验证简单模型单次响应、复杂模型逐块预览、组件失败保留上一预览、保存后双击编辑。
+4. 若累计 Worker 重建性能不足，再改成同一 Worker 会话的持久组件注册；不要提前引入复杂消息协议。

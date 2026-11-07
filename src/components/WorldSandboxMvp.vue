@@ -420,6 +420,7 @@ async function handleModelEdit(payload) {
         parts: current.userData.proceduralModelParts || [],
         environmentBindings: current.userData.proceduralModelEnvironmentBindings || [],
         modelCapabilityManifest: current.userData.proceduralModelCapabilityManifest || null,
+        geometryDiagnostics: current.userData.proceduralModelGeometryDiagnostics || null,
         selectedPartId: payload?.selectedPartId || '',
         instruction: payload?.instruction || '',
         objectType: current.userData.proceduralModelConfig?.objectType || '独立 3D 模型',

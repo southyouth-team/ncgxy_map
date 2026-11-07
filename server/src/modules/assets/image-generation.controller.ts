@@ -97,6 +97,20 @@ export class ImageGenerationController {
     }
   }
 
+  @Post('inspect-procedural-object')
+  @ApiOperation({ summary: '基于 Three.js 多视角渲染截图执行 AI 视觉质量检测' })
+  inspectProceduralObject(
+    @Body('prompt') prompt: string,
+    @Body('objectType') objectType: string,
+    @Body('referenceImageDataUrl') referenceImageDataUrl: string,
+    @Body('screenshots') screenshots: unknown,
+    @Body('geometryDiagnostics') geometryDiagnostics: unknown,
+  ) {
+    return this.service.inspectProceduralModelVisualQuality(
+      prompt, objectType, referenceImageDataUrl, screenshots, geometryDiagnostics,
+    );
+  }
+
   @Post('modify-procedural-object')
   @ApiOperation({ summary: '通过对话修改 Three.js 程序化模型、动态参数和部件结构' })
   modifyProceduralObject(

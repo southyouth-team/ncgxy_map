@@ -178,7 +178,8 @@ function setMode(mode) {
 function deleteSelected() {
   if (!selected) return
   const id = selected.userData.sandboxModelId
-  engine?.removeSandboxModel(id)
+  const removed = engine?.removeSandboxModel(id)
+  if (!removed) return
   objectsById.delete(id)
   selected = null
   syncObjects()
@@ -622,11 +623,10 @@ async function handleParameterChange(payload) {
 function saveSandbox() {
   if (!engine) return false
   try {
-    const models = Array.from(objectsById.entries()).map(([id, model]) => ({
-      id,
-      name: model.name,
-      object: model.toJSON(),
-    }))
+    const models = engine.getSandboxModels().flatMap(({ id, name }) => {
+      const model = engine.getSandboxModel(id)
+      return model ? [{ id, name: model.name || name, object: model.toJSON() }] : []
+    })
     const snapshot = {
       version: 3,
       savedAt: new Date().toISOString(),
@@ -664,17 +664,31 @@ async function restoreSandbox() {
     snapshot = JSON.parse(raw)
     if (![1, 2, 3].includes(snapshot?.version) || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
     const loader = new THREE.ObjectLoader()
-    for (const item of snapshot.models) {
-      if (!item?.object || !item?.id) continue
-      const model = loader.parse(item.object)
-      model.name = item.name || model.name || '已保存模型'
-      model.userData = {
-        ...(model.userData || {}),
-        proceduralModelCapabilityControlDocument: model.userData?.proceduralModelCapabilityControlDocument
-          || createCapabilityControlDocument({ manifest: model.userData?.proceduralModelCapabilityManifest }),
+    const restoredModels = snapshot.models
+      .filter(item => item?.object && item?.id)
+      .map(item => {
+        const model = loader.parse(item.object)
+        model.name = item.name || model.name || '已保存模型'
+        model.userData = {
+          ...(model.userData || {}),
+          proceduralModelCapabilityControlDocument: model.userData?.proceduralModelCapabilityControlDocument
+            || createCapabilityControlDocument({ manifest: model.userData?.proceduralModelCapabilityManifest }),
+        }
+        return { id: String(item.id), model }
+      })
+    const registeredIds = []
+    try {
+      for (const { id, model } of restoredModels) {
+        const registeredId = engine.addSandboxModel(model, { name: model.name, id })
+        registeredIds.push(registeredId)
+        objectsById.set(registeredId, model)
       }
-      const id = engine.addSandboxModel(model, { name: model.name, id: item.id })
-      objectsById.set(id, model)
+    } catch (error) {
+      for (const id of registeredIds) {
+        engine.removeSandboxModel(id)
+        objectsById.delete(id)
+      }
+      throw error
     }
     if (snapshot.environment) {
       time.value = Number.isFinite(Number(snapshot.environment.time)) ? Number(snapshot.environment.time) : 14

@@ -1402,3 +1402,42 @@ export const environmentBindings = [
 3. 实现复杂模型的两阶段请求：先生成 ModelBuildPlan，再按依赖批次生成 ComponentChunk；简单模型继续走原接口。
 4. 将后端事件通过 POST + NDJSON/SSE 传给统一工作台；只有组件块完整且 Worker 构建成功后才显示为已完成预览。
 5. Worker 支持多个 chunk 在同一隔离上下文中构建并装配；失败保留上一个有效预览，不丢弃已完成块。
+
+
+---
+
+## 2026-11-07 — 增量构建协议边界修正
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 功能分支：`feat/world-sandbox-conversational-model-editor`
+- 开始 HEAD：`8603e388db04c570dfee719be3da03b913cedea0`
+- `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`
+- 已重新读取项目计划、进度、协议文件、协议测试、生成 Service/Controller、Worker、执行器和工作台生成流程。
+
+### 代码核查结论
+
+- 后端当前仍然调用一次 `/chat/completions`，未设置 `stream: true`，读取完整 `choices[0].message.content` 后才返回 JSON。
+- Controller 当前只有普通 JSON POST；没有 SSE/NDJSON 输出。
+- Worker 当前只接受完整 `createModel` 源码并构建完整 Group；没有 ComponentChunk 输入和增量 Object3D 返回。
+- 当前视觉模型服务是否支持 SSE 尚未证实；当前仓库实现未启用流式。
+
+### 本轮改动
+
+- 修正协议排序器对直接自依赖的处理：之前删除自身依赖边会静默接受 `id -> id`，现在明确报错。
+- 测试覆盖 `dependsOn: [自身 ID]` 与 `parentId: 自身 ID` 两种直接自依赖。
+- 更新计划文档，明确协议定义与真正的实时分块生成之间的实现边界。
+
+### 验证边界
+
+- GitHub 写入后需回读确认；本会话无本地仓库执行环境，未运行 Jest、TypeScript、Build 或浏览器验收。
+- 未修改 `main`，未创建或合并 PR。
+
+### 下一步（实时构建链路）
+
+1. 后端新增 plan 请求与 component chunk 请求；每次 chunk 上下文必须包含完整 plan、坐标约定、已完成组件摘要和依赖约束。
+2. 用 POST + NDJSON 传输事件，避免 EventSource 对 POST 请求体支持不足；客户端通过 fetch ReadableStream 消费。
+3. Worker 增加同一隔离上下文中的 chunk 构建与增量快照；每块执行成功后再发布预览，失败保留最近有效快照并允许重试。
+4. 简单模型继续走原 one-shot 路径；复杂模型只有在 plan 明确需要拆分时才走 chunk 路径。
+5. 在真实服务端确认 SSE/NDJSON 代理透传、取消请求与超时行为后，再把“实时”标记为验收通过。

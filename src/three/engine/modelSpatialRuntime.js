@@ -39,7 +39,21 @@ export function collectModelMovementObstacles(THREE, root, ownerId) {
     if (collider.shape !== 'box' || typeof collider.targetPartId !== 'string') continue
     const capabilityId = 'spatial.collider.' + String(collider.id || collider.targetPartId) + '.blocksMovement'
     const capability = resolvedByKey.get(capabilityId + ':' + collider.targetPartId)
-    const blocksMovement = capability?.value?.blocksMovement ?? collider.blocksMovement !== false
+    const hasUserOverride = capability?.source === 'user-override'
+    let blocksMovement = capability?.value?.blocksMovement ?? collider.blocksMovement !== false
+
+    // A state-conditioned collider is used for movable parts such as a hinged
+    // door leaf. The model instance state is authoritative; absent state uses
+    // the declared defaultValue. Explicit user capability overrides take priority.
+    const condition = collider.stateCondition
+    if (!hasUserOverride && condition && typeof condition.key === 'string') {
+      const worldState = root.userData?.worldState || {}
+      const stateValue = Object.prototype.hasOwnProperty.call(worldState, condition.key)
+        ? worldState[condition.key]
+        : condition.defaultValue
+      blocksMovement = blocksMovement && stateValue === condition.equals
+    }
+
     if (capability?.enabled === false || !blocksMovement) continue
     const part = parts.get(collider.targetPartId)
     if (!part) continue

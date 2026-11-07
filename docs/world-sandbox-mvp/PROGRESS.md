@@ -1189,3 +1189,73 @@ export const environmentBindings = [
 2. 执行 `modelSpatialRuntime.test.js`，修复任何测试问题。
 3. 使用一个普通模型做端到端参数绑定验收：自然语言新增布尔参数 → 编辑器显示 → 切换后目标 collider 即时启停 → 保存刷新后保持。
 4. 再推进通用室内空间与室内视角 Runtime；先核对模型是否真的包含内部几何和可行走区域，不从校园旧楼层数据推断。
+
+---
+
+## 2026-11-07 — 通用几何诊断 v1 与 AI 微调上下文接入
+
+### 本轮目标
+
+在不引入模型类别专用规则的前提下，建立真实 Three.js 几何诊断快照，并让 AI 微调请求能够读取诊断证据，支持后续局部修复。
+
+### 实际改动
+
+- `src/three/sandbox/geometryDiagnostics.js`（新增）
+  - 遍历真实 THREE.Mesh / BufferGeometry。
+  - 采集稳定 componentId（若存在）、顶点数、局部边界和世界边界。
+  - 记录缺失 position attribute、零顶点几何、非有限顶点、非有限世界变换、非有限世界边界和整体退化边界。
+  - 不依赖模型类别、Mesh.name 或显示名称；平面/薄片只因单轴厚度为零不会被判为退化。
+  - AABB 重叠不作为缺陷结论；不执行自动修复。
+- `src/three/sandbox/proceduralModel.worker.js`
+  - 在隔离 Worker 中执行生成模型后采集诊断，并将数据写入根节点 `userData.proceduralModelGeometryDiagnostics`。
+  - 诊断随 Object3D JSON 序列化回主线程；生成源码仍只在 Worker 执行。
+- `src/components/WorldSandboxMvp.vue`
+  - AI 微调请求携带当前模型的几何诊断快照。
+- `server/src/modules/assets/image-generation.controller.ts`
+  - 接收 `geometryDiagnostics` 请求字段并传给 Service。
+- `server/src/modules/assets/image-generation.service.ts`
+  - 对诊断输入做结构化截取和大小限制，再加入 AI 编辑上下文。
+  - Prompt 明确区分数值异常与空间线索，不将边界相交视为缺陷，不按名称/类别判断。
+- 新增 `src/three/sandbox/geometryDiagnostics.test.js`，覆盖正常网格、重叠网格不误报、空/退化几何、平面几何、非有限顶点/变换及稳定组件 ID。
+- `server/src/modules/assets/image-generation.procedural.spec.ts`
+  - 增加诊断快照进入 AI 编辑上下文的服务测试。
+- `PROJECT_PLAN.md`
+  - 写入诊断采集字段、判断边界、数据传递和当前非目标。
+
+### 关键边界
+
+- 这是几何数据采集与基础数值诊断，不是完整拓扑分析器。
+- 不检查任意曲面是否连续覆盖，不证明部件是否正确接触，也不自动判断屋顶/烟囱等结构关系。
+- 不自动修复、不阻止模型加入世界；诊断是 AI 的辅助证据。
+- 对缺失 componentId 的 Mesh 仍可采集几何，但无法稳定定位到部件；后续需由生成过程补足稳定 ID。
+- 当前诊断在模型创建/微调 Worker 执行后刷新；用户在外部直接修改几何后，尚无独立的实时重诊断触发器。
+
+### 提交记录
+
+- `3d688f9e1afc21c9a99188e4b4ca01067ce2b77c` — 新增通用几何诊断采集器
+- `7bb670927362df594c73e55b39e5dd90db291133` — 新增几何诊断测试
+- `70eb3a83f8b215494c4e58e3af3e170f619226c5` — Worker 生成后附加诊断快照
+- `390e900bfcb1bee053d79a4582ee0c80eaa404da` — Controller 接收诊断上下文
+- `b26ef8a1390e33f9831a7109c91fc1190950ea1a` — Service 将诊断传入 AI 编辑 Prompt
+- `834cf91082105c50fbfc028f013b3451ee328e4b` — 前端微调请求携带诊断
+- `e340f98c47532e3a698af7c00e8637f54fb0b87b` — 增加 AI 编辑上下文测试
+- `c44666b7a1e0156d67e1c4e1fdd657f7bcaca353` — 补充零顶点几何测试
+- `b2747c0d0d38ae7c32b13edcf2509a650173738f` — 更新项目计划
+
+### 验证状态
+
+- GitHub 文件回读与静态断言：待本轮最终核对。
+- Vitest / Jest：未执行（当前会话无本地仓库执行环境）。
+- 前端 build / typecheck：未执行。
+- 后端 typecheck：未执行。
+- CI：待核验。
+- 浏览器生成模型及 AI 局部修复：未验收。
+- 未修改 `main`，未创建 PR。
+
+### 下一步
+
+1. 最终回读 Worker、诊断采集器、AI 请求传递链路和测试文件，核对分支 HEAD。
+2. 本地执行 `npx vitest run src/three/sandbox/geometryDiagnostics.test.js src/three/engine/modelSpatialRuntime.test.js`。
+3. 本地执行后端 `image-generation.procedural.spec.ts` 对应 Jest 测试及前端 build/typecheck。
+4. 浏览器生成一个任意模型，检查其诊断是否写入模型 userData；再发起局部微调，确认 AI 请求上下文包含诊断且不破坏无关部件。
+5. 根据真实模型诊断结果，再决定是否需要下一层几何关系诊断；不预设对象类别规则。

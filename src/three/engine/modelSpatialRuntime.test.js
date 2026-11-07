@@ -41,6 +41,29 @@ describe('collectModelMovementObstacles', () => {
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_2')).toEqual([])
   })
 
+  it('applies a part-scoped user override without changing the model manifest', () => {
+    const root = new THREE.Group()
+    const wall = new THREE.Group()
+    wall.userData.componentId = 'wall-a'
+    root.add(wall)
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1, capabilities: { spatial: { colliders: [{
+        id: 'wall-a-collider', targetPartId: 'wall-a', shape: 'box',
+        size: { x: 2, y: 2, z: 0.3 },
+      }] } },
+    }
+    root.userData.proceduralModelCapabilityControlDocument = {
+      version: 1, inference: { proposals: [] }, diagnostics: [],
+      overrides: [{
+        capabilityId: 'spatial.collider.wall-a-collider.blocksMovement',
+        scope: { targetType: 'part', targetId: 'wall-a' },
+        action: 'set', value: { blocksMovement: false },
+      }],
+    }
+    expect(collectModelMovementObstacles(THREE, root, 'sandbox_override')).toEqual([])
+    expect(root.userData.proceduralModelCapabilityManifest.capabilities.spatial.colliders[0].blocksMovement).toBeUndefined()
+  })
+
   it('keeps models without spatial declarations non-blocking', () => {
     const root = new THREE.Group()
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_3')).toEqual([])

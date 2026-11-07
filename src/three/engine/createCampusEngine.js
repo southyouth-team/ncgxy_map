@@ -11,7 +11,7 @@ import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { collectModelMovementObstacles, collectModelSupportSurfaces } from './modelSpatialRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
-import { cloneSandboxMaterial } from './sandboxModelLifecycle.js'
+import { cloneSandboxMaterial, disposeSandboxMaterial } from './sandboxModelLifecycle.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -946,12 +946,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
 
   function disposeMaterial(material) {
-    if (!material) return
-    // 材质贴图需要单独释放；像素样板新增 CanvasTexture 后不能只 dispose 材质本身。
-    for (const key of ['map', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap']) {
-      material[key]?.dispose?.()
-    }
-    material.dispose?.()
+    // 复制后的实例拥有独立纹理；遍历全部直接纹理属性，避免遗漏 AO/位移等贴图。
+    disposeSandboxMaterial(material)
   }
 
   function disposeObjectGroup(group) {

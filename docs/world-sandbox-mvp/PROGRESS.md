@@ -1598,3 +1598,69 @@ export const environmentBindings = [
 
 - 等待本地 Nest watcher 重新编译，确认两处 TS18047 消失。
 - 如果继续出现编译错误，按新的首条错误继续定位。
+
+
+---
+
+## 2026-11-07 — 调整模型生成体验：完成后一次性预览
+
+### 本轮目标
+
+- 用户反馈逐组件同步预览没有必要，生成期间反复重建模型也增加等待和视觉干扰。
+- 调整为“AI 全部生成完成 → Worker 一次性构建完整模型 → 展示最终预览”。
+- 保留真实分块生成能力，但生成中的组件只暂存源码，不执行、不展示半成品。
+- 让长时间等待有可读的阶段与组件进度，不伪造百分比。
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 功能分支：`feat/world-sandbox-conversational-model-editor`
+- 开始 HEAD：`949dd3e5e68dcce2b4c9f199d0e72cac4f61e4dc`
+- `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`
+- 已读取项目计划、进度、WorldSandboxMvp.vue、ProceduralModelEditor.vue、Worker、构建 Service 和协议。
+
+### 实际改动
+
+- `src/components/WorldSandboxMvp.vue`
+  - 组件完成事件只缓存 ComponentChunk，并将该组件进度标记为完成。
+  - 移除每收到一个组件就组合累计源码、调用 Worker、替换 `editingModel` 的同步预览流程。
+  - 收到 `complete` 后，才一次性组合全部组件源码并调用隔离 Worker 构建完整模型。
+  - Worker 成功返回后才设置 `editingModel`，生成失败时不展示半成品。
+  - 进度列表支持明确的 done 状态；组件进度显示序号/总数、组件名称、源码接收状态和源码大小。
+  - AI 请求阶段显示等待模型结构分析；组件请求阶段显示正在等待该组件完整源码；最终阶段显示完整模型一次性构建。
+  - 不展示伪造百分比，不把模型服务等待描述成 Worker 正在执行。
+  - 删除不再使用的 assembly 事件 UI 分支。
+- `src/three/sandbox/proceduralModel.worker.js`
+  - 对 Blob URL 动态导入增加 `/* @vite-ignore */`，明确告知 Vite 该运行时 URL 无法静态分析，抑制对应 warning；没有改变 Worker 隔离和动态模块加载行为。
+- `server/src/modules/assets/image-generation.service.ts`
+  - planning 阶段事件增加明确等待说明。
+  - 删除原先紧邻 complete 事件、没有实际执行工作的占位 assembly started/complete 事件，避免制造虚假的装配进度。
+- `server/src/modules/assets/procedural-model-build.protocol.ts`
+  - stage 事件允许携带可选 detail 字段。
+- `docs/world-sandbox-mvp/PROJECT_PLAN.md`
+  - 更新 3.16/3.17 生成策略，明确组件只暂存，全部生成后才进入 Worker 和最终预览。
+
+### 提交记录
+
+- `dcc58b6332618bb5cd1cef118626b1ebae74b385` — 前端改为完整模型生成后一次性预览。
+- `b2765b63c7c82e81548d45700b906b8e801bdc91` — 标记 Worker Blob 动态导入为 Vite ignore。
+- `b9b0642014f163319a8a286246458cff2f82189d` — 增加 planning 等待说明并删除占位 assembly 事件。
+- `04bef503d33e821c71395c4b525188c1f0e646d2` — 扩展 stage detail 类型。
+- `7e7067147f2ed3760fe492a277fb04b65c5a2b1b` — 更新项目计划。
+- `00ffc5c1c83e1debc0e5aa5a0ce52c00720b3ed4` — 清理前端过时 assembly 事件处理。
+
+### 验证状态与边界
+
+- 已通过 GitHub 文件回读核对：组件完成事件不再调用 Worker；最终 Worker 构建位于 NDJSON complete 事件之后；Worker Blob 动态导入已添加 Vite ignore 注释。
+- 本会话没有本地仓库执行环境，未运行前端 build/typecheck、Nest build、Jest 或浏览器端生成验收。
+- Vite warning 是否在用户本地消失，需要本地 Vite watcher 刷新确认。
+- NDJSON 后端仍按复杂度分块生成；本轮没有取消分块生成，也没有改成单次超长 AI 请求。
+- 未修改 `main`，未创建或合并 PR。
+
+### 本地验收步骤
+
+1. 刷新前端，确认 Vite 不再提示 Blob URL 动态 import 无法分析。
+2. 生成一个复杂模型：生成过程中左侧不应出现逐块模型或闪烁预览。
+3. 右侧应先显示结构分析等待状态，再逐项显示组件名称、序号、等待 AI 返回、源码接收完成。
+4. 所有组件完成后显示一次性 Worker 构建阶段；只有 Worker 成功后才出现完整模型预览。
+5. 分别验证 single 和 components 两条路径；任一路径失败都应显示明确失败阶段，不能展示半成品。

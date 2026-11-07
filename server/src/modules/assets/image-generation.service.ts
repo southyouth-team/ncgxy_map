@@ -972,7 +972,7 @@ export class ImageGenerationService {
       catch { throw new ServiceUnavailableException('视觉模型构建规划 JSON 格式无效'); }
     };
 
-    emit({ type: 'stage', stage: 'planning', label: '分析模型结构并选择构建策略' });
+    emit({ type: 'stage', stage: 'planning', label: '分析模型结构并选择构建策略', detail: '正在等待 AI 完成整体结构分析；此阶段尚未开始模型预览' });
     const planningMessages: any[] = [
       {
         role: 'system',
@@ -1076,8 +1076,6 @@ export class ImageGenerationService {
         bounds: component.bounds,
       });
     }
-    emit({ type: 'assembly', status: 'started' });
-    emit({ type: 'assembly', status: 'complete' });
     emit({ type: 'complete', modelId: String(plan.modelId || 'generated-model') });
   }
 

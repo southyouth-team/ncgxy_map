@@ -381,7 +381,8 @@ function closeModelEditor() {
 function saveEditorModel() {
   const model = editingModel.value
   if (!model) return
-  if (isDraftModel.value) {
+  const wasDraft = isDraftModel.value
+  if (wasDraft) {
     const name = model.userData?.assetName || model.name || 'AI 程序化模型'
     registerModel(model, name + ' ' + (objects.value.length + 1))
     isDraftModel.value = false
@@ -392,7 +393,7 @@ function saveEditorModel() {
   saveSandbox()
   editorOpen.value = false
   editingModel.value = null
-  message.value = '模型已保存' + (isDraftModel.value ? '' : '并更新沙盒存档')
+  message.value = wasDraft ? '模型已加入沙盒并保存存档' : '模型修改已保存到沙盒存档'
 }
 function modelParameterDefaults(definitions, existing = {}) {
   const values = { ...(existing || {}) }

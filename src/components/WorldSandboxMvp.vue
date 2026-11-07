@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
+import { createCapabilityControlDocument } from '../three/sandbox/capabilityControl.js'
 import ProceduralModelEditor from './ProceduralModelEditor.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
@@ -286,11 +287,17 @@ function modelParameterDefaults(definitions, existing = {}) {
   }
   return values
 }
-async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新', recordHistory = true, environmentBindings = null, modelCapabilityManifest = null) {
+async function replaceEditedModel(source, values, definitions, parts, summary = '模型已更新', recordHistory = true, environmentBindings = null, modelCapabilityManifest = null, capabilityControlDocument = null) {
   const current = editingModel.value
   if (!current) throw new Error('当前没有正在编辑的模型')
   const id = current.userData.sandboxModelId
-  let replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: values })
+  const previousCapabilityControlDocument = capabilityControlDocument
+    || current.userData.proceduralModelCapabilityControlDocument || null
+  let replacement = await executeProceduralModel(source, {
+    timeoutMs: 60000,
+    parameters: values,
+    capabilityControlDocument: previousCapabilityControlDocument,
+  })
   const moduleDefinitions = Array.isArray(replacement.userData?.proceduralModelParameters) ? replacement.userData.proceduralModelParameters : []
   const moduleParts = Array.isArray(replacement.userData?.proceduralModelParts) ? replacement.userData.proceduralModelParts : []
   const moduleEnvironmentBindings = Array.isArray(replacement.userData?.proceduralModelEnvironmentBindings)
@@ -319,7 +326,11 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   }
   const resolvedValues = modelParameterDefaults(resolvedDefinitions, values)
   if (JSON.stringify(resolvedValues) !== JSON.stringify(values || {})) {
-    replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: resolvedValues })
+    replacement = await executeProceduralModel(source, {
+      timeoutMs: 60000,
+      parameters: resolvedValues,
+      capabilityControlDocument: previousCapabilityControlDocument,
+    })
   }
   replacement.userData = {
     ...(replacement.userData || {}),
@@ -328,6 +339,8 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
     proceduralModelParts: resolvedParts,
     proceduralModelEnvironmentBindings: resolvedEnvironmentBindings,
     proceduralModelCapabilityManifest: finalCapabilityManifest,
+    proceduralModelCapabilityControlDocument: replacement.userData.proceduralModelCapabilityControlDocument
+      || createCapabilityControlDocument({ manifest: finalCapabilityManifest, previousDocument: previousCapabilityControlDocument }),
     proceduralModelParameterValues: resolvedValues,
     worldState: { ...(current.userData.worldState || {}) },
     environmentOverrides: { ...(current.userData.environmentOverrides || {}) },
@@ -344,6 +357,7 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
       parts: current.userData.proceduralModelParts || [],
       environmentBindings: current.userData.proceduralModelEnvironmentBindings || [],
       modelCapabilityManifest: current.userData.proceduralModelCapabilityManifest || null,
+      capabilityControlDocument: current.userData.proceduralModelCapabilityControlDocument || null,
     })
     if (editHistory.value.length > 10) editHistory.value.shift()
   }
@@ -395,7 +409,7 @@ async function undoModelEdit() {
   editBusy.value = true
   editError.value = ''
   try {
-    await replaceEditedModel(snapshot.source, snapshot.values, snapshot.definitions, snapshot.parts, '已恢复上一版本', false, snapshot.environmentBindings, snapshot.modelCapabilityManifest)
+    await replaceEditedModel(snapshot.source, snapshot.values, snapshot.definitions, snapshot.parts, '已恢复上一版本', false, snapshot.environmentBindings, snapshot.modelCapabilityManifest, snapshot.capabilityControlDocument)
   } catch (error) {
     editHistory.value.push(snapshot)
     editError.value = error?.message || '恢复失败'
@@ -472,6 +486,11 @@ async function restoreSandbox() {
       if (!item?.object || !item?.id) continue
       const model = loader.parse(item.object)
       model.name = item.name || model.name || '已保存模型'
+      model.userData = {
+        ...(model.userData || {}),
+        proceduralModelCapabilityControlDocument: model.userData?.proceduralModelCapabilityControlDocument
+          || createCapabilityControlDocument({ manifest: model.userData?.proceduralModelCapabilityManifest }),
+      }
       const id = engine.addSandboxModel(model, { name: model.name, id: item.id })
       objectsById.set(id, model)
     }

@@ -37,11 +37,23 @@ describe('resolveCapabilityRecords', () => {
     })
     expect(result[0]).toMatchObject({ source: 'model-definition', value: { passThrough: false } })
   })
-  it('keeps unaccepted AI inference pending instead of silently activating it', () => {
+  it('automatically applies AI inference when the user has not specified an alternative', () => {
     const result = resolveCapabilityRecords({
-      proposals: [{ capabilityId, scope, status: 'proposed', confidence: 0.99, value: { passThrough: true } }],
+      proposals: [{ capabilityId, scope, confidence: 0.99, evidence: ['door-like opening'], value: { passThrough: true } }],
     })
-    expect(result[0]).toMatchObject({ source: 'ai-inference', status: 'pending', enabled: false })
+    expect(result[0]).toMatchObject({ source: 'ai-inference', status: 'inferred', enabled: true, value: { passThrough: true } })
+  })
+  it('does not require a legacy proposed status to apply an inference', () => {
+    const result = resolveCapabilityRecords({
+      proposals: [{ capabilityId, scope, status: 'proposed', value: { passThrough: true } }],
+    })
+    expect(result[0]).toMatchObject({ source: 'ai-inference', status: 'inferred', enabled: true })
+  })
+  it('preserves an explicit disabled flag on an automatically inferred capability', () => {
+    const result = resolveCapabilityRecords({
+      proposals: [{ capabilityId, scope, enabled: false, value: { passThrough: true } }],
+    })
+    expect(result[0]).toMatchObject({ source: 'ai-inference', status: 'inferred', enabled: false })
   })
   it('allows a user rejection/disable to suppress a capability', () => {
     const result = resolveCapabilityRecords({

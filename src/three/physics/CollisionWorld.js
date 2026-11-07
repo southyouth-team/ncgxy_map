@@ -12,6 +12,7 @@ export class CollisionWorld {
       item.maxX > item.minX && item.maxZ > item.minZ,
     )
     this.radius = Math.max(0.1, Number(radius) || 0.55)
+    this.supportSurfaces = []
   }
 
   addObstacle(bounds, ownerId = null) {
@@ -31,6 +32,27 @@ export class CollisionWorld {
     const before = this.obstacles.length
     this.obstacles = this.obstacles.filter(obstacle => obstacle.ownerId !== String(ownerId))
     return before - this.obstacles.length
+  }
+
+  addSupportSurface(surface) {
+    if (!surface || !surface.ownerId || !surface.surfaceId || !Array.isArray(surface.meshes) || !surface.meshes.length) return false
+    if (surface.supportsStanding !== true && surface.walkable !== true) return false
+    this.supportSurfaces.push({
+      ownerId: String(surface.ownerId),
+      surfaceId: String(surface.surfaceId),
+      targetPartId: String(surface.targetPartId || ''),
+      supportsStanding: surface.supportsStanding === true,
+      walkable: surface.walkable === true,
+      meshes: surface.meshes,
+    })
+    return true
+  }
+
+  removeSupportSurfacesByOwner(ownerId) {
+    if (!ownerId) return 0
+    const before = this.supportSurfaces.length
+    this.supportSurfaces = this.supportSurfaces.filter(surface => surface.ownerId !== String(ownerId))
+    return before - this.supportSurfaces.length
   }
 
   addCircleObstacle({ x, z, radius } = {}) {

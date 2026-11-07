@@ -1241,6 +1241,8 @@ export const environmentBindings = [
 - `e340f98c47532e3a698af7c00e8637f54fb0b87b` — 增加 AI 编辑上下文测试
 - `c44666b7a1e0156d67e1c4e1fdd657f7bcaca353` — 补充零顶点几何测试
 - `b2747c0d0d38ae7c32b13edcf2509a650173738f` — 更新项目计划
+- `65238525e1e321a97e4c183059aa185d72d7bfb0` — 严格限制 AI 诊断上下文的字段与大小
+- `09edaf82f54f66a399387ed06279c15ef2afb618` — 校正诊断上下文归一化测试断言
 
 ### 验证状态
 

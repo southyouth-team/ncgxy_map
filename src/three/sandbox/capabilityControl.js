@@ -46,7 +46,8 @@ export function resolveCapabilityRecords({ definitions = [], proposals = [], ove
       if (action && action !== 'set' && action !== 'accept') continue
       resolved.set(key, {
         ...record, scope: isRecord(record.scope) ? record.scope : {},
-        enabled: record.enabled !== false, value: record.value, source,
+        enabled: mode === 'proposal' && status !== 'accepted' ? false : record.enabled !== false,
+        value: record.value, source,
         status: mode === 'proposal' && status !== 'accepted' ? 'pending' : 'resolved', priority,
       })
     }

@@ -555,6 +555,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!result.ok) return result
 
     if (result.action === 'enter') {
+      if (sourceModelId !== targetModelId) return { ok: false, reason: 'interior-source-mismatch' }
       if (activeSandboxInterior) return { ok: false, reason: 'already-inside-model' }
       const entry = resolveSandboxInteriorEntryPoint(THREE, targetModel, result.entryPointId)
       if (!entry) return { ok: false, reason: 'interior-entry-point-not-found' }
@@ -562,20 +563,39 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         modelId: targetModelId,
         player: cameraRig.player.clone(),
         mode: cameraRig.mode,
+        cameraState: {
+          firstYaw: cameraRig.firstYaw,
+          firstPitch: cameraRig.firstPitch,
+          thirdYaw: cameraRig.thirdYaw,
+          thirdPitch: cameraRig.thirdPitch,
+          thirdDistance: cameraRig.thirdDistance,
+        },
       }
       // Manifest positions are floor-level local coordinates; the controller stores eye height.
-      cameraRig.player.set(entry.position.x, entry.position.y + 1.7, entry.position.z)
+      const entered = input?.teleportPlayer?.({
+        x: entry.position.x,
+        y: entry.position.y + 1.7,
+        z: entry.position.z,
+      })
+      if (!entered) {
+        activeSandboxInterior = null
+        return { ok: false, reason: 'player-teleport-failed' }
+      }
       refreshPlayerCameraAfterTeleport()
       return { ...result, targetModelId, transition: 'entered' }
     }
 
     if (result.action === 'exit') {
+      if (sourceModelId !== targetModelId) return { ok: false, reason: 'interior-source-mismatch' }
       if (!activeSandboxInterior || activeSandboxInterior.modelId !== targetModelId) {
         return { ok: false, reason: 'not-inside-target-model' }
       }
-      cameraRig.player.copy(activeSandboxInterior.player)
-      cameraRig.setMode(activeSandboxInterior.mode)
-      input?.setMode(activeSandboxInterior.mode)
+      const previousInterior = activeSandboxInterior
+      cameraRig.setMode(previousInterior.mode)
+      input?.setMode(previousInterior.mode)
+      Object.assign(cameraRig, previousInterior.cameraState || {})
+      const restored = input?.teleportPlayer?.(previousInterior.player)
+      if (!restored) return { ok: false, reason: 'player-teleport-failed' }
       activeSandboxInterior = null
       refreshPlayerCameraAfterTeleport()
       return { ...result, targetModelId, transition: 'exited' }

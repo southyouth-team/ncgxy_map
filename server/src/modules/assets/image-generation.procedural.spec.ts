@@ -138,4 +138,43 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('Bounds overlap is only a spatial clue');
   });
 
+  it('streams a one-shot fast path selected by the model planner', async () => {
+    const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
+    const generatedCode = 'export function createModel(THREE, params = {}) { return new THREE.Group(); }';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ strategy: 'single', generatedCode }) } }] }),
+    });
+    global.fetch = fetchMock as never;
+    const events: any[] = [];
+
+    await service.streamProceduralObjectBuild('一个简单的木箱', '物体', 'stylized', undefined, event => events.push(event));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(events.map(event => event.type)).toEqual(['stage', 'single', 'complete']);
+    expect(events[1].result.generatedCode).toBe(generatedCode);
+  });
+
+  it('plans complex models and streams dependency-ordered component chunks', async () => {
+    const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
+    const plan = {
+      version: 1, modelId: 'complex-1', name: 'Complex model',
+      coordinateSystem: { upAxis: 'Y', units: 'scene' },
+      components: [{ id: 'child', parentId: 'root', purpose: 'child part' }, { id: 'root', purpose: 'root part' }],
+    };
+    const source = 'export function createComponent(THREE, context = {}) { return new THREE.Group(); }';
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ strategy: 'components', plan }) } }] }) })
+      .mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: source } }] }) });
+    global.fetch = fetchMock as never;
+    const events: any[] = [];
+
+    await service.streamProceduralObjectBuild('复杂模型', '物体', 'stylized', undefined, event => events.push(event));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(events.filter(event => event.type === 'component-complete').map(event => event.componentId))
+      .toEqual(['root', 'child']);
+    expect(events[events.length - 1]).toMatchObject({ type: 'complete', modelId: 'complex-1' });
+  });
+
 });

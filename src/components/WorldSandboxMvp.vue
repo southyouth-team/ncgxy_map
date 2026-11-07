@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
@@ -10,6 +10,7 @@ import ProceduralModelEditor from './ProceduralModelEditor.vue'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
 const viewport = ref(null)
+const proceduralModelEditorRef = ref(null)
 const selectedName = ref('')
 const objects = ref([])
 const command = ref('')
@@ -248,6 +249,121 @@ function updateGenerationProgress(event) {
   generationProgress.value = next
 }
 
+async function runModelVisualQualityControl(originalPrompt) {
+  updateGenerationProgress({
+    stage: 'visual-inspection',
+    label: 'AI 多视角视觉质量检测',
+    detail: '正在从 Three.js 实际预览采集正面、侧面、顶部和等轴视图',
+    status: 'active',
+  })
+  try {
+    await nextTick()
+    const screenshots = await proceduralModelEditorRef.value?.captureVisualViews?.()
+    if (!Array.isArray(screenshots) || screenshots.length < 3) {
+      throw new Error('无法从模型预览采集足够的多视角截图')
+    }
+    let latestReport = null
+    for (let round = 0; round <= 2; round += 1) {
+      const current = editingModel.value
+      if (!current) throw new Error('视觉质检时模型实例已丢失')
+      updateGenerationProgress({
+        stage: 'visual-inspection',
+        label: round === 0 ? 'AI 视觉质量检测' : `第 ${round} 轮修正后复检`,
+        detail: `正在分析 ${screenshots.length} 个实际渲染视角`,
+        status: 'active',
+      })
+      const inspectResponse = await fetch(API_BASE + '/assets/ai-image/inspect-procedural-object', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+        body: JSON.stringify({
+          prompt: originalPrompt,
+          objectType: current.userData.proceduralModelConfig?.objectType || '独立 3D 模型',
+          referenceImageDataUrl: referenceImageDataUrl.value || undefined,
+          screenshots,
+          geometryDiagnostics: current.userData.proceduralModelGeometryDiagnostics || null,
+        }),
+      })
+      const inspectBody = await inspectResponse.json().catch(() => ({}))
+      if (!inspectResponse.ok) throw new Error(inspectBody.message || 'AI 视觉质量检测失败：HTTP ' + inspectResponse.status)
+      latestReport = inspectBody.data || inspectBody.result || inspectBody
+      current.userData.proceduralModelVisualQuality = latestReport
+      if (latestReport.passed === true) {
+        updateGenerationProgress({
+          stage: 'visual-inspection',
+          label: '视觉质量检测通过',
+          detail: `评分 ${latestReport.score}/100：${latestReport.summary || '未发现需要自动修复的主要视觉问题'}`,
+          status: 'done',
+        })
+        return latestReport
+      }
+      const actionable = (latestReport.issues || []).filter(item =>
+        ['critical', 'major'].includes(item.severity) && item.repairInstruction,
+      )
+      if (round === 2 || !actionable.length) {
+        updateGenerationProgress({
+          stage: 'visual-inspection',
+          label: '视觉质检未通过，保留人工调整',
+          detail: latestReport.summary || '检测到问题，但没有可安全自动执行的明确修复建议',
+          status: 'failed',
+        })
+        return latestReport
+      }
+      updateGenerationProgress({
+        stage: 'visual-repair',
+        label: `自动定向修正（${round + 1}/2）`,
+        detail: actionable.map(item => item.issue).join('；').slice(0, 500),
+        status: 'active',
+      })
+      const instruction = [
+        '这是自动视觉质检后的定向修复。请根据以下可观察问题做最小必要修改，不要整体重建模型，不要修改无关部件，保留模型身份、现有稳定 componentId、参数、能力声明和交互结构。',
+        ...actionable.map((item, index) => `${index + 1}. [${item.componentId || '整体模型'}] ${item.issue}。修复要求：${item.repairInstruction}`),
+      ].join('\n')
+      const repairResponse = await fetch(API_BASE + '/assets/ai-image/modify-procedural-object', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+        body: JSON.stringify({
+          source: current.userData.proceduralModelSource,
+          parameters: current.userData.proceduralModelParameters || [],
+          parameterValues: current.userData.proceduralModelParameterValues || {},
+          parts: current.userData.proceduralModelParts || [],
+          environmentBindings: current.userData.proceduralModelEnvironmentBindings || [],
+          modelCapabilityManifest: current.userData.proceduralModelCapabilityManifest || null,
+          geometryDiagnostics: current.userData.proceduralModelGeometryDiagnostics || null,
+          selectedPartId: '',
+          instruction,
+          objectType: current.userData.proceduralModelConfig?.objectType || '独立 3D 模型',
+        }),
+      })
+      const repairBody = await repairResponse.json().catch(() => ({}))
+      if (!repairResponse.ok) throw new Error(repairBody.message || 'AI 自动修正失败：HTTP ' + repairResponse.status)
+      const result = repairBody.data || repairBody.result || repairBody
+      await replaceEditedModel(
+        result.generatedCode,
+        current.userData.proceduralModelParameterValues || {},
+        result.parameters || result.modelParameters || current.userData.proceduralModelParameters || [],
+        result.parts || result.modelParts || current.userData.proceduralModelParts || [],
+        'AI 视觉质检自动修正完成',
+        true,
+        result.environmentBindings,
+        result.modelCapabilityManifest,
+      )
+      await nextTick()
+      const refreshed = await proceduralModelEditorRef.value?.captureVisualViews?.()
+      if (!Array.isArray(refreshed) || refreshed.length < 3) throw new Error('自动修正后无法重新采集视觉截图')
+      screenshots.splice(0, screenshots.length, ...refreshed)
+    }
+    return latestReport
+  } catch (error) {
+    updateGenerationProgress({
+      stage: 'visual-inspection',
+      label: '视觉质检未完成',
+      detail: error?.message || '视觉检测服务异常',
+      status: 'failed',
+    })
+    return null
+  }
+}
+
 async function generateAiModel() {
   const prompt = aiPrompt.value.trim()
   if ((!prompt && !referenceImageDataUrl.value) || aiBusy.value) return
@@ -364,7 +480,10 @@ async function generateAiModel() {
       ? model.userData.proceduralModelCapabilityManifest
       : { version: 1, parameters: model.userData.proceduralModelParameters, capabilities: {} }
     model.name = model.userData.assetName || result.objectType || 'AI 程序化模型'
-    generationProgress.value = generationProgress.value.map(item => ({ ...item, status: 'done' }))
+    await runModelVisualQualityControl(prompt)
+    generationProgress.value = generationProgress.value.map(item => item.stage === 'visual-inspection' || item.stage === 'visual-repair'
+      ? item
+      : ({ ...item, status: 'done' }))
     generationProgress.value.push({
       stage: 'preview-ready',
       label: '模型预览已就绪',
@@ -916,6 +1035,7 @@ onBeforeUnmount(() => {
       </section>
     </aside>
     <ProceduralModelEditor
+      ref="proceduralModelEditorRef"
       v-if="editorOpen"
       :model="editingModel"
       :mode="editorMode"

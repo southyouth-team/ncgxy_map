@@ -1500,7 +1500,7 @@ export const environmentBindings = [
 
 ### 验证状态与边界
 
-- GitHub 文件回读与静态断言：12/12 通过；功能分支最终 HEAD 为 `8ac9d6ddeeaa8a9c990ab95e167d044c6afa496c`，`main` 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`。
+- 本轮代码静态断言：12/12 通过；最终文档回读确认记录与提交 SHA 一致；代码提交完成后的功能分支 HEAD 为 `8ac9d6ddeeaa8a9c990ab95e167d044c6afa496c`；进度文档最终提交后 HEAD 为 `e1425c1859f6cf535ba23786c7c82815d32caf1c`，`main` 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`。
 - 本会话没有本地仓库执行环境，未运行 Jest、Nest build/typecheck、前端 build/typecheck。
 - CI 状态接口返回空状态列表，没有可确认的 CI 通过记录；浏览器端 NDJSON 代理透传、逐块预览和保存流程未验收。
 - 当前组件预览采用“累计已完成源码在 Worker 中重建”的实现，便于保留统一模型上下文；不是在 Worker 内持久保留一个逐块可变场景。随着组件增加，重建成本会上升，需通过实际模型压测决定是否改为持久 Worker 会话。

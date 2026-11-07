@@ -201,6 +201,7 @@ onBeforeUnmount(() => {
           <div v-if="busy" class="model-editor__loading-rings" aria-hidden="true">
             <span class="model-editor__loading-ring"></span>
             <span class="model-editor__loading-ring"></span>
+            <span class="model-editor__loading-ring"></span>
             <span class="model-editor__loading-core"></span>
           </div>
           <strong>{{ busy ? (activeProgress?.label || '正在生成模型') : '模型预览' }}</strong>
@@ -309,21 +310,23 @@ onBeforeUnmount(() => {
 .model-editor__preview-empty span { position:relative; z-index:1; max-width:340px; color:#91a5a2; font-size:10px; line-height:1.6; }
 .model-editor__preview-empty.is-loading { background:radial-gradient(ellipse at center,rgba(76,132,116,.2),rgba(35,62,59,.08) 36%,transparent 70%); }
 .model-editor__loading-rings { position:relative; flex:none; width:184px; height:184px; margin:0 0 2px; }
-.model-editor__loading-ring { position:absolute; left:50%; top:50%; width:48px; height:48px; margin:0; box-sizing:border-box; border:1px solid rgba(157,218,190,.8); border-radius:50%; box-shadow:0 0 18px rgba(111,203,162,.16),inset 0 0 12px rgba(111,203,162,.08); transform:translate(-50%,-50%) scale(.35); transform-origin:center; animation:model-editor-ripple 2.8s cubic-bezier(.12,.62,.28,1) infinite; }
-.model-editor__loading-ring:nth-child(2) { animation-delay:1.4s; }
-.model-editor__loading-core { position:absolute; left:50%; top:50%; width:9px; height:9px; margin:0; border-radius:50%; background:#b6e8c9; box-shadow:0 0 12px 4px rgba(130,224,171,.48),0 0 34px 12px rgba(105,202,159,.18); transform:translate(-50%,-50%); animation:model-editor-core-pulse 1.8s ease-in-out infinite; }
+.model-editor__loading-ring { position:absolute; left:50%; top:50%; width:28px; height:28px; margin:0; box-sizing:border-box; border:1.5px solid rgba(157,218,190,.9); border-radius:50%; box-shadow:0 0 14px rgba(111,203,162,.2),inset 0 0 8px rgba(111,203,162,.08); transform:translate(-50%,-50%) scale(.05); transform-origin:center; animation:model-editor-ripple 2.7s cubic-bezier(.15,.55,.35,1) infinite; }
+.model-editor__loading-ring:nth-child(1) { animation-delay:-1.8s; }
+.model-editor__loading-ring:nth-child(2) { animation-delay:-.9s; }
+.model-editor__loading-ring:nth-child(3) { animation-delay:0s; }
+.model-editor__loading-core { position:absolute; left:50%; top:50%; width:9px; height:9px; margin:0; border-radius:50%; background:#c5f3d5; box-shadow:0 0 10px 4px rgba(130,224,171,.58),0 0 30px 12px rgba(105,202,159,.24); transform:translate(-50%,-50%); animation:model-editor-core-pulse 1.8s ease-in-out infinite; }
 @keyframes model-editor-ripple {
-  0% { transform:translate(-50%,-50%) scale(.35); opacity:.9; }
-  75%,100% { transform:translate(-50%,-50%) scale(3.65); opacity:0; }
+  0% { transform:translate(-50%,-50%) scale(.05); opacity:.95; }
+  65% { opacity:.32; }
+  100% { transform:translate(-50%,-50%) scale(5.8); opacity:0; }
 }
 @keyframes model-editor-core-pulse {
-  0%,100% { transform:translate(-50%,-50%) scale(.82); opacity:.72; }
-  50% { transform:translate(-50%,-50%) scale(1.2); opacity:1; }
+  0%,100% { transform:translate(-50%,-50%) scale(.86); opacity:.78; }
+  50% { transform:translate(-50%,-50%) scale(1.12); opacity:1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .model-editor__loading-ring,.model-editor__loading-core { animation:none; }
-  .model-editor__loading-ring { transform:translate(-50%,-50%) scale(2.25); opacity:.35; }
-  .model-editor__loading-ring:nth-child(2) { transform:translate(-50%,-50%) scale(1.55); }
+  .model-editor__loading-ring { transform:translate(-50%,-50%) scale(3.8); opacity:.3; }
 }
 .model-editor__footer { display:flex; flex:none; align-items:center; justify-content:space-between; gap:12px; padding:12px 18px; border-top:1px solid rgba(255,255,255,.1); color:#92a4a5; font-size:10px; }
 .model-editor__footer .primary { border-color:#a5c9b1; color:#14251c; background:#a5c9b1; font-weight:700; }

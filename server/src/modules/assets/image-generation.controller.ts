@@ -80,7 +80,7 @@ export class ImageGenerationController {
         prompt, objectType, visualStyle, imageDataUrl,
         event => {
           if (!response.writableEnded && !response.destroyed) {
-            response.write(JSON.stringify(event) + '\\n');
+            response.write(JSON.stringify(event) + '\n');
           }
         },
       );
@@ -90,7 +90,7 @@ export class ImageGenerationController {
           type: 'error',
           stage: 'server',
           message: error instanceof Error ? error.message : '增量模型构建失败',
-        }) + '\\n');
+        }) + '\n');
       }
     } finally {
       if (!response.writableEnded) response.end();

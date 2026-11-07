@@ -11,6 +11,7 @@ import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { collectModelMovementObstacles, collectModelSupportSurfaces } from './modelSpatialRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
+import { cloneSandboxMaterial } from './sandboxModelLifecycle.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -365,12 +366,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
   }
 
+  function removeSandboxModelSpatialRegistration(ownerId) {
+    if (!ownerId) return
+    collisionWorld?.removeObstaclesByOwner(String(ownerId))
+    collisionWorld?.removeSupportSurfacesByOwner(String(ownerId))
+  }
+
   function refreshSandboxModelSpatial(model) {
     const ownerId = model?.userData?.sandboxModelId
     if (!ownerId || !collisionWorld) return 0
     model.updateWorldMatrix?.(true, true)
-    collisionWorld.removeObstaclesByOwner(ownerId)
-    collisionWorld.removeSupportSurfacesByOwner(ownerId)
+    removeSandboxModelSpatialRegistration(ownerId)
     const obstacles = collectModelMovementObstacles(THREE, model, ownerId)
     const surfaces = collectModelSupportSurfaces(model, ownerId)
     let added = 0
@@ -384,6 +390,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function addSandboxModel(model, options = {}) {
     if (!scene || !model?.isObject3D || model.parent) throw new TypeError('AI 建模结果必须是未挂载的 THREE.Object3D')
     const id = options.id ? String(options.id) : 'sandbox_' + (++sandboxModelSequence)
+    if (sandboxModels.has(id)) throw new Error('沙盒模型实例 ID 已存在：' + id)
     const restoredSequence = Number(id.match(/^sandbox_(\\d+)$/)?.[1] || 0)
     sandboxModelSequence = Math.max(sandboxModelSequence, restoredSequence)
     model.userData = { ...(model.userData || {}), sandboxModelId: id, isSandboxModel: true }
@@ -424,6 +431,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     replacement.userData = {
       ...(replacement.userData || {}),
       ...(metadata.userData || {}),
+      // 实例运行状态与局部环境覆盖属于实例，不应因 AI 重建几何而丢失。
+      worldState: metadata.userData?.worldState ?? replacement.userData?.worldState ?? current.userData?.worldState ?? {},
+      environmentOverrides: metadata.userData?.environmentOverrides
+        ?? replacement.userData?.environmentOverrides ?? current.userData?.environmentOverrides ?? {},
       sandboxModelId: String(id),
       isSandboxModel: true,
     }
@@ -434,8 +445,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     replacement.traverse(object => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true } })
     const parent = current.parent || scene
     parent.add(replacement)
-    collisionWorld?.removeObstaclesByOwner(String(id))
-    collisionWorld?.removeSupportSurfacesByOwner(String(id))
+    removeSandboxModelSpatialRegistration(id)
     sandboxModels.set(String(id), replacement)
     refreshSandboxModelSpatial(replacement)
     applyWorldStateBindings(replacement, replacement.userData.worldState || {})
@@ -483,8 +493,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!model) return false
     if (sandboxSelectedModel === model) selectSandboxModel(null)
     sandboxModels.delete(String(id))
-    collisionWorld?.removeObstaclesByOwner(String(id))
-    collisionWorld?.removeSupportSurfacesByOwner(String(id))
+    removeSandboxModelSpatialRegistration(id)
     model.parent?.remove(model)
     disposeObjectGroup(model)
     invalidateShadowMap()
@@ -574,8 +583,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const copy = source.clone(true)
     copy.traverse(object => {
       if (object.geometry) object.geometry = object.geometry.clone()
-      if (Array.isArray(object.material)) object.material = object.material.map(material => material.clone())
-      else if (object.material) object.material = object.material.clone()
+      if (Array.isArray(object.material)) object.material = object.material.map(cloneSandboxMaterial)
+      else if (object.material) object.material = cloneSandboxMaterial(object.material)
     })
     copy.position.x += 3
     copy.name = source.name + ' 副本'
@@ -2575,6 +2584,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform?.detach()
     sandboxTransform?.dispose()
     sandboxTransform = null
+    for (const id of sandboxModels.keys()) removeSandboxModelSpatialRegistration(id)
     sandboxModels.clear()
     sandboxSelectedModel = null
     clearSelection()

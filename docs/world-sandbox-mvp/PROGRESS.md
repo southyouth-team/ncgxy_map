@@ -2274,3 +2274,38 @@ export const environmentBindings = [
 - GitHub 静态回读通过；Vitest、前端构建、浏览器保存/刷新/恢复和人物实际碰撞验收均未执行。
 - CI 状态需以最新 HEAD 的状态接口为准；没有可用成功检查时不得标记通过。
 - `main` 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`；未修改 main，未创建或合并 PR。
+
+
+---
+
+## 2026-11-08 — P2.4 通用交互 Action Runtime（源码修改）
+
+### 开发基线
+
+- 分支：`feat/world-sandbox-conversational-model-editor`
+- 本轮开始审查基线：`6d4cad733ff1a554dd8e8dbfa0f84e72f3b5f98d`
+- 已重新读取项目计划、进度、交互检测、世界状态 Runtime、引擎、页面和模型生成/编辑 Prompt。
+- 现状：近邻检测已有；页面只执行 `toggle-state`，没有通用动作执行层。
+
+### 实际改动
+
+- 新增 `src/three/engine/sandboxActionRuntime.js`：实现 `toggle`（兼容 `toggle-state`）、`set`、`rotate`、`translate`；按稳定部件 ID 解析目标；拒绝未知动作、非法向量和缺失目标。
+- `createCampusEngine.js` 新增 `applySandboxModelInteraction`：统一执行动作；状态动作委托现有 `setSandboxModelState`，Transform 动作刷新世界矩阵、碰撞/支撑注册和阴影。
+- `WorldSandboxMvp.vue` 页面层不再专门解释 `toggle-state`，统一调用引擎动作入口。
+- 模型生成/编辑 Prompt 增加四类受控动作的数据声明格式。
+- 新增 `src/three/engine/sandboxActionRuntime.test.js`，覆盖旧协议兼容、状态 set、局部 rotate/translate、同模型显式目标、未知动作和非法输入。
+
+### 已实现能力与限制
+
+- 源码链路为“近邻检测 → 动作声明 → Action Runtime → 实例状态/部件 Transform → 视觉与空间刷新”。
+- `set` 当前只写入模型实例 `worldState`；只有已有 stateBinding 对应受支持属性时才会产生视觉效果。
+- `rotate/translate` 是局部 Transform 增量，不包含动画插值、连续扫掠碰撞或跨模型事务。
+- `enter/pickup/drop` 尚未实现；能力声明不能代替 Runtime。
+- 交互配置位于部件 `userData.interactionConfig`，Object3D JSON 可保存；端到端存档恢复仍需实测。
+
+### 验证状态
+
+- GitHub 源码写入与回读后记录最终 HEAD。
+- 本会话没有本地仓库执行器/浏览器；Vitest、前端构建、AI 实际生成、玩家按 E、浏览器存档恢复均未执行。
+- CI 以最终 HEAD 查询为准；无成功状态检查不得标记通过。
+- 不修改 `main`，不创建或合并 PR。

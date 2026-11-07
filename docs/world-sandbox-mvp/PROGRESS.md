@@ -2183,3 +2183,14 @@ export const environmentBindings = [
   - 记录 Manifest 来源为 `module` 或 `legacy`，并随模型 userData 返回。
 - `src/components/WorldSandboxMvp.vue`
   - AI 编辑替换时，若刚执行的源码显式导出 Manifest，则优先采用该定义；接口响应仅作为兼容回退。
+
+
+### P2.3 验证状态
+
+- 开始分支 HEAD：`d2faed4d98ab7553e47db88c4be4474b2a6da9f5`；最新功能分支 HEAD：`55b6c5ea07ea8310c0528b581f2098d27525e54c`。
+- GitHub 源码写入与回读：完成；已回读 Worker、Manifest 归一化模块、编辑页面和测试源码。
+- 静态核对：确认 Worker 对显式模块 Manifest 标记来源；编辑替换优先采用刚执行源码的 Manifest；服务端响应 Manifest 和当前模型 Manifest 保留兼容回退。
+- 自动化测试：新增测试源码，但本轮未执行 Vitest。
+- 前端构建、服务端构建、CI、浏览器真实生成/编辑/入场验收：未执行或无可用成功状态。
+- `main` 当前为 `608a9f2c1f739cd581acb833b1e70410672e258b`；未修改 main，未创建或合并 PR。
+- 当前只修复 Manifest 来源优先级风险；不代表生成 API、真实模型质量、门洞/室内导航或完整环境响应已经端到端验收。

@@ -90,6 +90,52 @@ describe('collectModelMovementObstacles', () => {
     expect(result[0].ownerId).toBe('sandbox_scope')
   })
 
+  it('toggles a door-leaf collider from closed to open using persisted model state', () => {
+    const root = new THREE.Group()
+    const door = new THREE.Group()
+    door.userData.componentId = 'door-panel'
+    root.add(door)
+    root.userData.worldState = { doorOpen: false }
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: { colliders: [{
+        id: 'door-leaf-collider', targetPartId: 'door-panel', shape: 'box',
+        size: { x: 0.9, y: 2, z: 0.12 }, blocksMovement: true,
+        stateCondition: { key: 'doorOpen', equals: false, defaultValue: false },
+      }] } },
+    }
+
+    expect(collectModelMovementObstacles(THREE, root, 'door-model')).toHaveLength(1)
+    root.userData.worldState = { doorOpen: true }
+    expect(collectModelMovementObstacles(THREE, root, 'door-model')).toEqual([])
+  })
+
+  it('lets an explicit user collider override take precedence over door state', () => {
+    const root = new THREE.Group()
+    const door = new THREE.Group()
+    door.userData.componentId = 'door-panel'
+    root.add(door)
+    root.userData.worldState = { doorOpen: true }
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: { colliders: [{
+        id: 'door-leaf-collider', targetPartId: 'door-panel', shape: 'box',
+        size: { x: 0.9, y: 2, z: 0.12 }, blocksMovement: true,
+        stateCondition: { key: 'doorOpen', equals: false, defaultValue: false },
+      }] } },
+    }
+    root.userData.proceduralModelCapabilityControlDocument = {
+      version: 1, inference: { proposals: [] }, diagnostics: [],
+      overrides: [{
+        capabilityId: 'spatial.collider.door-leaf-collider.blocksMovement',
+        scope: { targetType: 'part', targetId: 'door-panel' },
+        action: 'set', value: { blocksMovement: true },
+      }],
+    }
+
+    expect(collectModelMovementObstacles(THREE, root, 'door-override')).toHaveLength(1)
+  })
+
   it('keeps models without spatial declarations non-blocking', () => {
     const root = new THREE.Group()
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_3')).toEqual([])

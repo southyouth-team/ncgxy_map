@@ -1123,3 +1123,69 @@ export const environmentBindings = [
 2. 生成或微调一栋包含独立门扇的建筑，确认 AI 输出部件级 `interactionConfig`、`stateBinding` 和稳定 collider ID。
 3. 浏览器中靠近门，确认提示出现；按 E 开门，再按 E 关门，确认门扇旋转、碰撞启停与沙盒保存恢复一致。
 4. 该闭环通过后，再推进内部空间可行走区域与入口连接。
+
+
+---
+
+## 2026-11-07 — 通用几何一致性与动态空间参数绑定第一增量
+
+### 仓库与分支基线
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 分支：`feat/world-sandbox-conversational-model-editor`
+- 本轮开始 HEAD：`3b4853974bee6bbc91221c1e1b8f2f4b9e612139`
+- 本轮所有代码和文档写入均显式指定上述功能分支；未修改 main，未创建 PR。
+
+### 本轮目标
+
+按通用性原则推进模型质量和能力参数化：不增加房屋/屋顶/烟囱等模型类别特例；让 AI 动态参数能够控制已接入 Runtime 的具体空间能力。
+
+### 实际改动
+
+- `server/src/modules/assets/image-generation.service.ts`
+  - 初始程序化生成 Prompt 增加通用几何一致性要求：统一坐标系、父子局部变换、世界变换/几何边界、连接接触、表面覆盖、异常裁切、非预期悬空和部件脱离。
+  - 明确保留有依据的开口、间隙、悬挑、空腔和几何交叠；不把所有 AABB 重叠或部件不接触误判为缺陷。
+  - 明确不按对象类别、Mesh 名称或部件名称生成专用规则。
+  - AI 编辑 Prompt 支持参数定义通过稳定 capabilityId 绑定当前已实现的部件级 `spatial.collider.*.blocksMovement`，并声明参数只影响目标 collider。
+  - 明确未接入 Runtime 的 enterable/interior 能力不能被宣称已生效。
+- `src/three/engine/modelSpatialRuntime.js`
+  - 从 Manifest 参数定义及实例参数值读取声明式 `bindings`。
+  - 当前支持参数绑定到具体 Box Collider 的 `blocksMovement` 属性。
+  - 优先级为显式用户 capability override > 参数绑定 > 状态条件/模型定义。
+- `src/three/engine/modelSpatialRuntime.test.js`
+  - 增加参数启停部件碰撞的测试。
+  - 增加显式用户覆盖高于参数绑定的优先级测试。
+- `docs/world-sandbox-mvp/PROJECT_PLAN.md`
+  - 新增通用几何一致性、动态参数绑定和后续阶段的架构约束。
+
+### 提交
+
+- `1ea2fad27bad17187275f9f9325e70ef7eb25abf` — 参数绑定到空间能力
+- `f5aeef61a693f832bc7903cae75a824c16502ff0` — 参数绑定 Runtime 测试
+- `30128dc9e86d9269167259fb3751a802935c5931` — 修正用户覆盖优先级
+- `38fef4063dddb6747a4cf831a561d26e6003b239` — 通用几何推理与参数绑定 Prompt
+- `0c28fd8fa1fa9c3903d6a2b128cc164026c71e62` — 更新项目计划
+
+### 当前能力边界
+
+- 参数绑定当前只执行 `spatial.collider.*.blocksMovement`；不是任意能力属性的通用执行器。
+- 用户通过自然语言要求 AI 新增参数时，AI 需要返回带有正确稳定 capabilityId 的参数 binding；需用真实生成结果验证参数是否出现、是否驱动碰撞。
+- 本轮几何一致性改动是生成/编辑 Prompt 的通用约束，尚未实现 Worker 级几何诊断、自动修复循环或几何拓扑质量保证；不能据此宣称烟囱/屋顶错位问题已被程序化检测或修复。
+- `enterable`、室内外视角切换、室内遮挡和独立 AI 建筑内部空间仍未接通 Runtime。
+- 本轮没有把 AI 生成源码混入沙盒主程序；模型仍经独立 Worker 执行并以 Object3D 数据进入沙盒。
+
+### 验证状态
+
+- GitHub 文件回读/静态修改：已提交；尚未进行本轮最终完整回读。
+- Vitest：未执行。
+- 前端 build/typecheck：未执行。
+- 后端测试/typecheck：未执行。
+- CI：未核验。
+- 浏览器：未验收。
+
+### 下一步
+
+1. 回读本轮代码并核对最终分支 HEAD、main HEAD。
+2. 执行 `modelSpatialRuntime.test.js`，修复任何测试问题。
+3. 使用一个普通模型做端到端参数绑定验收：自然语言新增布尔参数 → 编辑器显示 → 切换后目标 collider 即时启停 → 保存刷新后保持。
+4. 再推进通用室内空间与室内视角 Runtime；先核对模型是否真的包含内部几何和可行走区域，不从校园旧楼层数据推断。

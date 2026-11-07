@@ -2238,3 +2238,27 @@ export const environmentBindings = [
 - GitHub 源码写入与回读完成后再记录最终 HEAD。
 - 自动化测试、前端构建、浏览器人物通行/站立验收：本轮未执行；测试源码不等于测试通过。
 - CI 状态待检查；`main` 不修改，不创建或合并 PR。
+
+
+---
+
+## 2026-11-08 — P2.3 Capability Override 与空间存档恢复回归
+
+### 审查结论
+
+- AI 编辑 Worker 已将当前模型的 Capability Control Document 作为 `previousDocument` 传入 `createCapabilityControlDocument`；该函数会用新 Manifest 重建 inference proposals，同时保留原 overrides、diagnostics 和扩展字段。
+- 页面替换模型时将 Worker 返回的 Capability Control Document 写入新 Object3D，再由引擎替换实例；引擎不会用新 Manifest 重置该文档。
+- 沙盒保存使用 `Object3D.toJSON()`；恢复使用 `ObjectLoader.parse()`，然后调用 `engine.addSandboxModel`。后者会按恢复对象当前 Manifest 重新建立空间注册。
+- 当前恢复路径已有回滚逻辑：批量注册失败时移除已注册实例及其空间句柄。
+
+### 本轮测试源码
+
+- `capabilityControl.test.js`：新增模型 Manifest 更新后，验证 AI inference 更新、用户对门扇碰撞的 override 与 diagnostics 保留，并且 override 仍优先于模型定义。
+- `modelSpatialRuntime.test.js`：新增 Object3D JSON 序列化/反序列化回归，验证恢复后碰撞体数量/边界一致、支撑面元数据一致、Mesh 引用指向恢复后的对象，且用户 override 仍被执行。
+- 测试源码已写入仓库；本会话未运行 Vitest 或构建，不能标记测试通过。
+
+### 验证边界
+
+- GitHub 源码回读与静态检查完成后记录最终 HEAD。
+- 本轮没有本地执行器或浏览器环境；未完成真实页面刷新恢复与人物通行验收。
+- 不修改 `main`，不创建或合并 PR。

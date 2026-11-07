@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
 
 /**
  * Dedicated module worker for generated model code.
@@ -70,30 +71,13 @@ self.addEventListener('message', async (event) => {
       throw new Error('模型根节点不能预先挂载到其他对象')
     }
 
-    const declaredManifest = modelModule.modelCapabilityManifest
-      && typeof modelModule.modelCapabilityManifest === 'object'
-      && !Array.isArray(modelModule.modelCapabilityManifest)
-      ? modelModule.modelCapabilityManifest : {}
-    const manifestCapabilities = declaredManifest.capabilities
-      && typeof declaredManifest.capabilities === 'object'
-      && !Array.isArray(declaredManifest.capabilities)
-      ? { ...declaredManifest.capabilities } : {}
-    const manifestParameters = Array.isArray(declaredManifest.parameters)
-      ? declaredManifest.parameters
-      : (Array.isArray(modelModule.modelParameters) ? modelModule.modelParameters : [])
-    const manifestEnvironmentBindings = Array.isArray(manifestCapabilities.environmentBindings)
-      ? manifestCapabilities.environmentBindings
-      : (Array.isArray(modelModule.environmentBindings) ? modelModule.environmentBindings : [])
-    const modelCapabilityManifest = {
-      ...declaredManifest,
-      version: Number.isInteger(declaredManifest.version) ? declaredManifest.version : 1,
-      parameters: manifestParameters,
-      capabilities: {
-        ...manifestCapabilities,
-        ...(manifestCapabilities.environmentBindings || modelModule.environmentBindings
-          ? { environmentBindings: manifestEnvironmentBindings } : {}),
-      },
-    }
+    const modelCapabilityManifest = normalizeModelCapabilityManifest(
+      modelModule.modelCapabilityManifest,
+      modelModule.modelParameters,
+      modelModule.environmentBindings,
+    )
+    const manifestEnvironmentBindings = Array.isArray(modelCapabilityManifest.capabilities.environmentBindings)
+      ? modelCapabilityManifest.capabilities.environmentBindings : []
 
     root.userData = {
       ...(root.userData || {}),

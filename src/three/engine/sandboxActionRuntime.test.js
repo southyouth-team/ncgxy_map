@@ -39,6 +39,13 @@ describe('executeSandboxInteractionAction', () => {
     expect(executeSandboxInteractionAction({ model, sourcePartId: 'part', config: { action: 'translate', offset: { x: Number.NaN } } }).ok).toBe(false)
     expect(part.position.x).toBe(0)
   })
+  it('rejects non-primitive or non-finite set values', () => {
+    const model = new THREE.Group()
+    expect(executeSandboxInteractionAction({ model, config: { action: 'set', stateKey: 'payload', value: { unsafe: true } } }).reason)
+      .toBe('invalid-state-value')
+    expect(executeSandboxInteractionAction({ model, config: { action: 'set', stateKey: 'amount', value: Number.POSITIVE_INFINITY } }).reason)
+      .toBe('invalid-state-value')
+  })
   it('rejects missing targets and state keys', () => {
     const model = new THREE.Group()
     expect(executeSandboxInteractionAction({ model, sourcePartId: 'missing', config: { action: 'rotate', rotation: { y: 1 } } }).reason).toBe('target-part-not-found')

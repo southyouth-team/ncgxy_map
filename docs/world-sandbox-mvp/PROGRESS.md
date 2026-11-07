@@ -238,7 +238,7 @@
   - 状态变化后触发 `onSandboxModelStateChange` 回调、请求重绘并失效阴影贴图。
   - 加载模型时根据持久化状态重建运行时绑定。
 - 新增 `src/three/engine/worldStateRuntime.js`
-  - 提供最小 `applyWorldStateBindings`，支持 boolean 状态映射到 `visible`、`intensity`、`emissiveIntensity)。
+  - 提供最小 `applyWorldStateBindings`，支持 boolean 状态映射到 `visible`、`intensity`、`emissiveIntensity`。
 - 新增 `src/three/engine/worldStateRuntime.test.js`
   - 覆盖可见性、光照强度、材质发光强度、多材质和未知绑定。
 - `src/components/WorldSandboxMvp.vue`
@@ -277,6 +277,6 @@
 ### 下一步
 
 1. 核验功能分支和 main 的 ref SHA，确认所有提交落点。
-2. 执行 `npm test -- --run` 与 `npm run build)；检查测试结果。
+2. 执行 `npm test -- --run` 与 `npm run build`；检查测试结果。
 3. 浏览器验收：创建演示 → 靠近墙壁开关 → 按 E 两次验证开/关 → 保存 → 刷新 → 检查状态恢复。
 4. 若通过，再把相同的状态绑定协议用于门/设备等对象；之后进入 World Document 的独立数据迁移。

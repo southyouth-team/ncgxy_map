@@ -368,6 +368,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function refreshSandboxModelSpatial(model) {
     const ownerId = model?.userData?.sandboxModelId
     if (!ownerId || !collisionWorld) return 0
+    model.updateWorldMatrix?.(true, true)
     collisionWorld.removeObstaclesByOwner(ownerId)
     collisionWorld.removeSupportSurfacesByOwner(ownerId)
     const obstacles = collectModelMovementObstacles(THREE, model, ownerId)
@@ -496,6 +497,34 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function getSandboxModelState(id) {
     const model = sandboxModels.get(String(id))
     return model ? { ...(model.userData.worldState || {}) } : null
+  }
+
+  // 所有程序化 Transform 修改统一经过此入口，保证世界矩阵、碰撞体、支撑面和阴影同步。
+  function setSandboxModelTransform(id, transform = {}) {
+    const model = sandboxModels.get(String(id))
+    if (!model || !transform || typeof transform !== 'object') return false
+
+    let changed = false
+    for (const key of ['position', 'rotation', 'scale']) {
+      const values = transform[key]
+      if (!values || typeof values !== 'object') continue
+      const target = model[key]
+      for (const axis of ['x', 'y', 'z']) {
+        if (!Object.prototype.hasOwnProperty.call(values, axis)) continue
+        const value = Number(values[axis])
+        if (!Number.isFinite(value)) continue
+        if (target[axis] !== value) {
+          target[axis] = value
+          changed = true
+        }
+      }
+    }
+    if (!changed) return true
+    model.updateMatrixWorld(true)
+    refreshSandboxModelSpatial(model)
+    invalidateShadowMap()
+    requestFrame()
+    return true
   }
 
   function setSandboxModelState(id, patch = {}) {
@@ -852,10 +881,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
     sandboxTransform.setMode('translate')
     sandboxTransform.addEventListener('dragging-changed', event => input?.setMovementEnabled(!event.value))
-    sandboxTransform.addEventListener('change', () => {
-      if (sandboxSelectedModel) refreshSandboxModelSpatial(sandboxSelectedModel)
-      requestFrame()
+    sandboxTransform.addEventListener('objectChange', () => {
+      if (sandboxSelectedModel) {
+        const model = sandboxSelectedModel
+        setSandboxModelTransform(model.userData.sandboxModelId, {
+          position: model.position,
+          rotation: model.rotation,
+          scale: model.scale,
+        })
+      }
     })
+    sandboxTransform.addEventListener('change', requestFrame)
     scene.add(sandboxTransform.getHelper())
     renderer.domElement.addEventListener('pointerdown', onSandboxPointerDown)
     renderer.domElement.addEventListener('dblclick', onSandboxDoubleClick)
@@ -2557,5 +2593,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

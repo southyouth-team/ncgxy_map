@@ -281,6 +281,43 @@ export const modelCapabilityManifest = {
 - 当前没有 Spatial/Interior/通用 Interaction Manifest Runtime；这些字段即使已保存，也只代表模型声明，不代表碰撞、室内导航或交互已生效。
 - 后续版本通过 `version` 演进，并以显式迁移处理旧字段；不要在这一阶段一次性迁移全部 World Document。
 
+### 3.14 Spatial Runtime v1 — 部件级地面移动碰撞
+
+第一阶段只实现可验证的地面移动阻挡，不把 Manifest 中所有空间声明都视为已支持。
+
+#### 当前执行协议
+
+`modelCapabilityManifest.capabilities.spatial.colliders` 可声明部件级碰撞体：
+
+```js
+{
+  id: "wall-collider",
+  targetPartId: "wall-part",
+  shape: "box",
+  center: { x: 0, y: 1, z: 0 },
+  size: { x: 4, y: 2, z: 0.3 },
+  blocksMovement: true,
+  enabled: true
+}
+```
+
+- `targetPartId` 必须对应模型部件的稳定 `userData.componentId`。
+- `center` / `size` 使用目标部件局部坐标；Runtime 根据部件世界矩阵转换为世界空间 AABB。
+- 当前玩家控制器在 XZ 平面移动；只注册与地面站立高度区间相交的碰撞体。
+- 仅 `shape: "box"` 且未显式禁用、未显式设为非阻挡的声明参与当前 Runtime。
+- 碰撞体按模型实例 ID 归属；模型移动/旋转/缩放、替换和删除时更新或清理对应障碍。
+- 门洞通过墙体分段/独立部件表达：墙体有碰撞声明，门洞本身不生成碰撞体。不得用整栋建筑根对象碰撞体封死入口，也不得用根对象可穿透来绕过墙体碰撞。
+- 缺少 spatial.colliders 的旧模型继续保持原有行为，不自动推断碰撞。
+
+#### 当前未实现
+
+- 圆形/胶囊/多边形/网格碰撞体。
+- traversalZones、可行走面、门/楼梯/电梯连接、室内楼层导航。
+- 动态门开关对碰撞体启停的状态绑定。
+- 垂直方向完整胶囊体物理、重力、跳跃和刚体模拟。
+
+以上字段即使被 Manifest 保存，也不代表当前 Runtime 已执行。
+
 ## 4. 推荐系统边界
 
 ```text

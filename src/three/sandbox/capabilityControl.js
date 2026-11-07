@@ -58,3 +58,34 @@ export function resolveCapabilityRecords({ definitions = [], proposals = [], ove
   apply(overrides, 'user-override', 30)
   return [...resolved.values()].map(({ priority, ...record }) => record)
 }
+
+
+/**
+ * Build the per-model capability control document from the AI-authored
+ * manifest. Each top-level capability namespace is retained as an extensible
+ * inference record; existing user overrides and diagnostics survive edits.
+ */
+export function createCapabilityControlDocument({ manifest, previousDocument, source = 'ai-model-manifest' } = {}) {
+  const previous = normalizeCapabilityControlDocument(previousDocument)
+  const capabilities = isRecord(manifest?.capabilities) ? manifest.capabilities : {}
+  const proposals = Object.entries(capabilities).map(([name, value]) => ({
+    capabilityId: 'model.' + name,
+    scope: { targetType: 'model' },
+    source,
+    status: 'inferred',
+    enabled: true,
+    evidence: ['Declared in modelCapabilityManifest.capabilities.' + name],
+    value,
+  }))
+  return {
+    ...previous,
+    version: 1,
+    inference: {
+      ...(previous.inference || {}),
+      proposals,
+      updatedAt: new Date().toISOString(),
+    },
+    overrides: previous.overrides,
+    diagnostics: previous.diagnostics,
+  }
+}

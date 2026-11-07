@@ -1571,3 +1571,30 @@ export const environmentBindings = [
 
 - 等待本地 watcher 重新编译，确认 TS1005 消失。
 - 若出现新的首条编译错误，按首个真实错误继续定位，不做无关重构。
+
+
+---
+
+## 2026-11-07 — 修复 geometryDiagnostics 严格空值检查
+
+### 问题与根因
+
+- 用户本地 TypeScript watcher 报错：`TS18047: 'geometryDiagnostics' is possibly 'null'`，位置为模型编辑上下文的诊断数据截断分支。
+- 原条件只检查 `geometryDiagnosticsJson.length`，TypeScript 无法据此推导另一个可空变量 `geometryDiagnostics` 非 null。
+
+### 本轮改动
+
+- 将条件改为显式检查 `geometryDiagnostics && geometryDiagnosticsJson.length > 24000`。
+- 超过大小限制时才生成精简诊断对象；未超限或输入为空时直接保留原值（包括 null）。
+- 不使用非空断言，不改变诊断数据上限、Prompt 内容或模型编辑行为。
+
+### 提交与验证
+
+- 代码修复提交：`599cc139e4ebcfa4c782ac600554875a45d17d82`。
+- GitHub 回读与 TypeScript 构建尚待确认；本会话没有本地仓库执行环境，未运行 Nest build/typecheck。
+- 未修改 `main`，未创建或合并 PR。
+
+### 后续验收
+
+- 等待本地 Nest watcher 重新编译，确认两处 TS18047 消失。
+- 如果继续出现编译错误，按新的首条错误继续定位。

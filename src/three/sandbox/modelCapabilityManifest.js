@@ -28,3 +28,21 @@ export function normalizeModelCapabilityManifest(input, legacyParameters = [], l
 export function hasExplicitModelCapabilityManifest(input) {
   return Boolean(input && typeof input === 'object' && !Array.isArray(input))
 }
+
+
+/**
+ * Resolve part metadata from the source that actually produced the current
+ * Object3D. An explicitly exported empty array is meaningful: it removes all
+ * parts and must not be replaced by stale API/current-model metadata.
+ */
+export function resolveProceduralModelParts({
+  moduleParts,
+  modulePartsSource,
+  responseParts,
+  currentParts,
+} = {}) {
+  if (modulePartsSource === 'module') return Array.isArray(moduleParts) ? moduleParts : []
+  if (Array.isArray(responseParts) && responseParts.length) return responseParts
+  if (Array.isArray(moduleParts) && moduleParts.length) return moduleParts
+  return Array.isArray(currentParts) ? currentParts : []
+}

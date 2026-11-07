@@ -381,6 +381,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return sandboxModels.get(String(id)) || null
   }
 
+  function getPlayerPosition() {
+    return cameraRig?.player
+      ? { x: cameraRig.player.x, y: cameraRig.player.y, z: cameraRig.player.z }
+      : null
+  }
+
   function replaceSandboxModel(id, replacement, metadata = {}) {
     const current = sandboxModels.get(String(id))
     if (!current || !replacement?.isObject3D || replacement.parent) return false
@@ -476,6 +482,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
     })
     callbacks.onSandboxModelStateChange?.({ id: String(id), previous, state: next, patch: { ...patch } })
+    invalidateShadowMap()
     requestFrame()
     return next
   }
@@ -2488,5 +2495,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getSandboxModelState, setSandboxModelState, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

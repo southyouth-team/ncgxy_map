@@ -110,4 +110,32 @@ describe('ImageGenerationService procedural generation', () => {
     });
   });
 
+  it('passes bounded geometry diagnostics into conversational model-edit context', async () => {
+    const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
+    const generatedCode = 'export function createModel(THREE, params = {}) { const group = new THREE.Group(); return group; }';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
+        generatedCode, parameters: [], parts: [], changeSummary: '模型已更新',
+      }) } }] }),
+    });
+    global.fetch = fetchMock as never;
+    const geometryDiagnostics = {
+      version: 1,
+      summary: { meshCount: 1, vertexCount: 8, diagnosticCount: 1 },
+      meshes: [{ componentId: 'part-a', vertexCount: 8, localBounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } } }],
+      diagnostics: [{ code: 'non-finite-vertex', severity: 'error', componentId: 'part-a' }],
+    };
+
+    await service.modifyProceduralObjectFromInstruction(
+      'export function createModel(THREE) { return new THREE.Group(); }',
+      [], {}, [], '', '修复模型', '独立 3D 模型', [], {}, geometryDiagnostics,
+    );
+
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const context = JSON.parse(request.messages[1].content);
+    expect(context.currentGeometryDiagnostics).toEqual(geometryDiagnostics);
+    expect(request.messages[0].content).toContain('Bounds overlap is only a spatial clue');
+  });
+
 });

@@ -407,9 +407,11 @@ Manifest 继续作为模型固有定义的入口，但不把所有职责塞进�
 
 #### 当前 Spatial Runtime 的定位
 
-当前 `modelCapabilityManifest.capabilities.spatial.colliders` 和 `collectModelMovementObstacles` 只是第一个底层执行切片：把明确声明的 box blocker 转换为 XZ 移动障碍。它不等于通用能力推理，也没有自动理解所有模型的穿越、承载、进入或连接能力。
+当前 `modelCapabilityManifest.capabilities.spatial.colliders` 和 `collectModelMovementObstacles` 是第一个底层执行切片：把明确声明的 box blocker 转换为 XZ 移动障碍。模型编辑器已提供能力概览，并允许用户对指定部件的 box collider 设置 `blocksMovement` 覆盖；Runtime 通过 Capability Resolver 合并模型定义与用户覆盖后重建障碍。该闭环不等于通用能力推理，也没有自动理解所有模型的穿越、承载、进入或连接能力。
 
-下一阶段不得继续把“让 AI 直接输出更多 collider 形状”当作整体方案。应先建立推断记录、用户覆盖、能力解析和诊断之间的边界，再将现有 colliders 作为 Spatial Compiler 的一种兼容输出。当前 Runtime 只执行 box movement blockers；其他空间/行为能力必须如实标记为未执行。
+能力面板按 Manifest 的能力命名空间展示能力声明，并标注当前 Runtime 接入范围。当前只有空间 box movement blocker 提供实际控制；其他能力只展示“未接入 Runtime”，不提供伪开关。用户覆盖写入独立的 `capabilityControlDocument.overrides`，不修改 AI 原始 Manifest；该文档随 Object3D JSON 存档、恢复和模型微调生命周期保留。
+
+当前 Runtime 只执行 box movement blockers；其他空间/行为能力必须如实标记为未执行。后续增加能力时，沿用“声明 → 用户覆盖 → Resolver → 对应 Runtime adapter → 实际效果”的闭环，不按模型类别建立固定白名单。
 
 ## 4. 推荐系统边界
 

@@ -497,6 +497,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const next = { ...previous, ...patch }
     model.userData.worldState = next
     applyWorldStateBindings(model, next)
+    // Door/hinge state can change movement collision without rebuilding the model.
+    refreshSandboxModelSpatial(model)
     callbacks.onSandboxModelStateChange?.({ id: String(id), previous, state: next, patch: { ...patch } })
     invalidateShadowMap()
     requestFrame()

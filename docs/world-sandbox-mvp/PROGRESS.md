@@ -1514,3 +1514,32 @@ export const environmentBindings = [
 2. 在本地运行 `npx jest --runInBand src/modules/assets/image-generation.procedural.spec.ts src/modules/assets/procedural-model-build.protocol.spec.ts`、Nest build 和前端 build/typecheck。
 3. 浏览器验证简单模型单次响应、复杂模型逐块预览、组件失败保留上一预览、保存后双击编辑。
 4. 若累计 Worker 重建性能不足，再改成同一 Worker 会话的持久组件注册；不要提前引入复杂消息协议。
+
+
+---
+
+## 2026-11-07 — 修复增量组件工厂正则运行时异常
+
+### 问题与根因
+
+- 浏览器报错：`Invalid regular expression: /^\\s*function\\s+createComponent\\s*\\\\(\\s*THREE\\s*,/: Unterminated group`。
+- 根因位于 `src/components/WorldSandboxMvp.vue` 的组件工厂格式检查：正则字面量错误地使用 `\\\\(`，把左括号前多写了一层反斜杠，导致正则解析器将后续括号识别为未闭合分组。
+- 正确表达式应使用 `\\(` 匹配普通左括号。
+
+### 本轮改动
+
+- 将工厂匹配正则修正为 `/^\\s*function\\s+createComponent\\s*\\(\\s*THREE\\s*,/`。
+- 未调整组件构建协议、AI Prompt、Worker 执行或模型数据结构。
+- 仅修改功能分支 `feat/world-sandbox-conversational-model-editor`，未修改 `main`，未创建 PR。
+
+### 提交与验证
+
+- 代码修复提交：`cc28837f08b76f471f58125c1da34b0f4fbe1f54`。
+- 已通过 GitHub Contents API 写入；尚未完成修复后文件回读。
+- 本会话没有本地仓库执行环境，未运行前端构建、TypeScript 检查或浏览器回归；不能据此宣称运行时问题已验证解决。
+
+### 后续验收
+
+- 刷新页面确认异步组件可正常加载。
+- 生成一个走 components 分支的模型，确认首个组件能通过工厂格式检查并进入 Worker 预览。
+- 再验证 single 分支不受影响。

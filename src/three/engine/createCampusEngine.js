@@ -559,6 +559,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (activeSandboxInterior) return { ok: false, reason: 'already-inside-model' }
       const entry = resolveSandboxInteriorEntryPoint(THREE, targetModel, result.entryPointId)
       if (!entry) return { ok: false, reason: 'interior-entry-point-not-found' }
+      if (collisionWorld?.isBlocked?.(entry.position.x, entry.position.z)) {
+        return { ok: false, reason: 'interior-entry-point-blocked' }
+      }
       activeSandboxInterior = {
         modelId: targetModelId,
         player: cameraRig.player.clone(),

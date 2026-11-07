@@ -916,18 +916,43 @@ export class ImageGenerationService {
       ? modelCapabilityManifestInput : null;
     const rawGeometryDiagnostics = geometryDiagnosticsInput && typeof geometryDiagnosticsInput === 'object' && !Array.isArray(geometryDiagnosticsInput)
       ? geometryDiagnosticsInput as Record<string, any> : null;
+    const normalizeBounds = (input: any) => {
+      if (!input || typeof input !== 'object') return null;
+      const point = (value: any) => {
+        if (!value || typeof value !== 'object') return null;
+        const result = { x: Number(value.x), y: Number(value.y), z: Number(value.z) };
+        return Object.values(result).every(Number.isFinite) ? result : null;
+      };
+      const min = point(input.min);
+      const max = point(input.max);
+      return min && max ? { min, max } : null;
+    };
     const geometryDiagnostics = rawGeometryDiagnostics ? {
-      version: rawGeometryDiagnostics.version,
-      summary: rawGeometryDiagnostics.summary && typeof rawGeometryDiagnostics.summary === 'object' ? rawGeometryDiagnostics.summary : {},
-      meshes: Array.isArray(rawGeometryDiagnostics.meshes) ? rawGeometryDiagnostics.meshes.slice(0, 120) : [],
-      diagnostics: Array.isArray(rawGeometryDiagnostics.diagnostics) ? rawGeometryDiagnostics.diagnostics.slice(0, 120) : [],
+      version: Number(rawGeometryDiagnostics.version) || 1,
+      summary: {
+        meshCount: Math.max(0, Number(rawGeometryDiagnostics.summary?.meshCount) || 0),
+        vertexCount: Math.max(0, Number(rawGeometryDiagnostics.summary?.vertexCount) || 0),
+        diagnosticCount: Math.max(0, Number(rawGeometryDiagnostics.summary?.diagnosticCount) || 0),
+      },
+      meshes: (Array.isArray(rawGeometryDiagnostics.meshes) ? rawGeometryDiagnostics.meshes : []).slice(0, 120).map((item: any) => ({
+        componentId: typeof item?.componentId === 'string' ? item.componentId.slice(0, 160) : null,
+        vertexCount: Math.max(0, Number(item?.vertexCount) || 0),
+        localBounds: normalizeBounds(item?.localBounds),
+        worldBounds: normalizeBounds(item?.worldBounds),
+      })),
+      diagnostics: (Array.isArray(rawGeometryDiagnostics.diagnostics) ? rawGeometryDiagnostics.diagnostics : []).slice(0, 120).map((item: any) => ({
+        code: typeof item?.code === 'string' ? item.code.slice(0, 100) : 'unknown',
+        severity: item?.severity === 'error' ? 'error' : 'warning',
+        componentId: typeof item?.componentId === 'string' ? item.componentId.slice(0, 160) : null,
+        detail: typeof item?.detail === 'string' ? item.detail.slice(0, 300) : '',
+      })),
       truncated: (Array.isArray(rawGeometryDiagnostics.meshes) && rawGeometryDiagnostics.meshes.length > 120)
         || (Array.isArray(rawGeometryDiagnostics.diagnostics) && rawGeometryDiagnostics.diagnostics.length > 120),
     } : null;
     const geometryDiagnosticsJson = geometryDiagnostics ? JSON.stringify(geometryDiagnostics) : '';
     const boundedGeometryDiagnostics = geometryDiagnosticsJson.length <= 24000
       ? geometryDiagnostics
-      : { version: geometryDiagnostics.version, summary: geometryDiagnostics.summary, meshes: [], diagnostics: geometryDiagnostics.diagnostics.slice(0, 40), truncated: true };
+      : { version: geometryDiagnostics.version, summary: geometryDiagnostics.summary, meshes: [], diagnostics: geometryDiagnostics.diagnostics.slice(0, 20), truncated: true };
     const selectedPartId = typeof selectedPartIdInput === 'string' ? selectedPartIdInput.slice(0, 160) : '';
     const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';
     const apiKey = this.config.get<string>('VISION_API_KEY');

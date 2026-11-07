@@ -147,26 +147,23 @@ function addLightSwitchDemo() {
 }
 
 function handleSandboxModelInteract(payload) {
-  const source = payload?.id ? objectsById.get(payload.id) : null
-  const config = payload?.config || source?.userData?.interactionConfig
-  if (config?.action === 'toggle-state' && config.stateKey) {
-    const targetId = String(config.targetId || payload.id || '')
-    const current = targetId ? engine?.getSandboxModelState?.(targetId) : null
-    if (!current) {
-      message.value = '交互目标不存在，无法切换状态'
-      return
-    }
-    const nextValue = !Boolean(current[config.stateKey])
-    const next = engine.setSandboxModelState(targetId, { [config.stateKey]: nextValue })
-    const defaultOn = config.stateKey === 'doorOpen' ? '门已打开' : '状态已开启'
-    const defaultOff = config.stateKey === 'doorOpen' ? '门已关闭' : '状态已关闭'
-    message.value = next
-      ? (nextValue ? (config.openMessage || defaultOn) : (config.closeMessage || defaultOff))
-      : '交互状态更新失败'
-    saveStatus.value = '状态已变更，记得保存'
+  const result = engine?.applySandboxModelInteraction?.(payload || {})
+  if (!result?.ok) {
+    message.value = result?.reason === 'target-part-not-found'
+      ? '交互目标部件不存在，无法执行动作'
+      : '当前模型未声明可执行的交互动作'
     return
   }
-  message.value = payload?.message || ('已与 ' + (payload?.name || '模型') + ' 交互')
+  const config = payload?.config || {}
+  if (result.statePatch) {
+    const enabled = Boolean(result.state?.[result.stateKey])
+    const defaultOn = result.stateKey === 'doorOpen' ? '门已打开' : '状态已开启'
+    const defaultOff = result.stateKey === 'doorOpen' ? '门已关闭' : '状态已关闭'
+    message.value = enabled ? (config.openMessage || defaultOn) : (config.closeMessage || defaultOff)
+  } else {
+    message.value = config.successMessage || ('已执行 ' + result.action + ' 动作')
+  }
+  saveStatus.value = '状态已变更，记得保存'
 }
 
 function selectModel(object) {

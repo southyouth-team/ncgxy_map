@@ -1721,7 +1721,7 @@ export const environmentBindings = [
 - 目标分支：`feat/world-sandbox-conversational-model-editor`
 - 开始 HEAD：`0392bc4290409ee51428ad2415e62209933e3934`
 - 开始时 `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`
-- 本轮结束前功能分支 HEAD：`a95de95b4ea27a461de7017107c656925bfed7c8`
+- 进度文档更新前功能分支 HEAD：`67e81a5741e3684e5ef97dfcabee7fa6a93e5440`
 - 未修改 `main`，未创建或合并 PR。
 
 ### 架构决策
@@ -1769,6 +1769,7 @@ export const environmentBindings = [
 - `8d6621bb8b4cb66621de90429b3b89487ee55e4d` — 修正测试中的 Prompt 断言。
 - `2fdc1e1cef152f5e8ace7c36bdbff7b6774bccef` — 限制超时最多自动重试一次。
 - `a95de95b4ea27a461de7017107c656925bfed7c8` — 明确超时重试策略文档。
+- `67e81a5741e3684e5ef97dfcabee7fa6a93e5440` — 移除已停用的组件构建协议未使用导入。
 
 ### 验证状态与边界
 

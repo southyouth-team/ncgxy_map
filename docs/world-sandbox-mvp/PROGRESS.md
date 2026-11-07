@@ -361,3 +361,71 @@ export const environmentBindings = [
 4. 需要验证 AI 实际生成的源码是否稳定输出有效绑定，并确保绑定目标部件 ID 确实存在。
 5. 需要验证旧模型通过一句话微调增加灯光绑定时，几何结构、模型 Transform、对象状态、局部覆盖和存档均保持。
 6. 下一轮先运行单测、构建和后端测试；再做真实生成/微调、全局开关、局部覆盖、保存刷新浏览器验收。
+
+
+---
+
+## 2026-11-07 — 模型定义、世界环境与实例状态三层边界定型
+
+### 本轮目标
+
+根据产品讨论，明确“模型是否可穿越/可进入、是否响应外部环境”等能力属于建模阶段声明的模型固有定义；世界环境提供外部变量；灯具开关、门状态等属于实例运行状态。避免把三类数据混在一个参数集合中。
+
+### 仓库与分支核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`（通过分支搜索确认分支存在）。
+- `main` 基线：`608a9f2c1f739cd581acb833b1e70410672e258b`。
+- 目标分支文档和源码均通过显式 ref 回读；GitHub compare 接口对该分支返回异常大的 ahead 计数，且未给出可直接核验的 head SHA，因此本轮不据此声称已核验精确分支 HEAD。
+- 本轮只计划修改功能分支文档，不修改 main，不创建 PR。
+
+### 源码审查发现
+
+1. **现有环境绑定链路已部分打通**：
+   - AI 生成 Prompt 要求导出 `environmentBindings`。
+   - Worker 读取导出数组并保存到根节点 `userData.proceduralModelEnvironmentBindings`。
+   - 新模型加入沙盒时调用环境绑定 Runtime；当前实际变量仅为 `lighting.artificial.enabled`。
+   - Runtime 目前只支持 `visible`、`intensity`、`emissiveIntensity` 三种渲染属性。
+2. **新模型生成的元数据链路**：
+   - `WorldSandboxMvp.vue` 调用生成接口后，通过 Worker 执行源码；Worker 负责从模块导出中读取环境绑定数组。
+   - 参考图用户消息模板没有单独重复列出 `environmentBindings`，但系统 Prompt 已要求导出；后续应统一所有生成入口的导出契约。
+3. **AI 增量编辑链路**：
+   - 页面已将旧环境绑定传入微调接口；后端 Prompt 要求保留/增量修改绑定；响应未提供数组时回退到旧绑定。
+   - 模型替换时保留实例 Transform、`worldState` 和 `environmentOverrides`；撤销记录包含旧绑定。
+   - 当前没有统一的模型能力 Manifest；碰撞、通行、可进入、内部空间和通用交互声明尚未进入这一 AI 元数据协议。
+4. **数据边界现状**：
+   - `modelParameters` 当前主要描述几何/材质编辑控件，不应承载世界环境真值或实例运行状态。
+   - `worldState` 保存如灯具 enabled 的实例状态。
+   - `environmentBindings` 是模型对世界环境的订阅/响应声明，不是环境变量本身。
+   - 当前仍将多类元数据放在 Three.js 根节点 `userData` 中作为过渡方案；尚未迁移到独立 World Document。
+
+### 本轮文档决策
+
+- 在 `PROJECT_PLAN.md` 新增“三层数据边界”：
+  1. Model Definition：模型几何、动态编辑参数、碰撞/通行/可进入、内部空间、环境响应声明、交互能力声明。
+  2. World Environment：由沙盒统一管理的环境变量定义、开关、参数值和作用范围。
+  3. Model Instance State：灯具开关、门开合、设备状态等运行时状态。
+- 明确模型能力按实际情况可选声明；缺失能力段不要求补空模板。
+- 明确环境绑定属于模型固有定义，但环境值不属于模型。
+- 明确未知能力可以随定义保存；没有对应 Runtime 时不宣称已生效，也不因模型类别未知而拒绝模型。
+- 调整 M0 顺序：先定三层数据边界和 Manifest，再打通 AI 生成/保存/恢复、增量编辑，之后按 Spatial → Interior → Interaction → Environment 扩展 Runtime。
+
+### 本轮代码变更
+
+- 无。本轮是架构决策定型和源码链路审查；没有修改运行时代码。
+
+### 验证状态
+
+- 目标分支文档和关键源码回读：已完成。
+- 自动化测试/前端构建/后端测试：未执行（本轮无代码变更）。
+- CI：未核验。
+- 浏览器验收：未执行。
+- 精确目标分支 HEAD SHA：连接器当前无法可靠提供；已避免使用旧 SHA 作为本轮基线。
+- main：未发起任何写入。
+
+### 下一步
+
+1. 基于三层边界定义最小 `Model Capability Manifest` 数据契约，并明确与现有 `modelParameters`、`environmentBindings`、`worldState` 的兼容映射。
+2. 优先修正 AI 新模型生成、Worker 解析、模型替换、存档恢复链路，使 Manifest 在全生命周期内不丢失。
+3. 增量编辑接收并返回 Manifest；先确保元数据可保存和可编辑，再逐项实现 Spatial/Interior/Interaction Runtime。
+4. 完成代码后执行可用的单测、构建和 CI；当前没有这些验证结果。

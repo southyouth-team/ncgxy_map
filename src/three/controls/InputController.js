@@ -152,7 +152,7 @@ export class InputController {
     const surfaces = this.collisionWorld?.supportSurfaces || []
     const meshes = surfaces
       .filter(surface => surface.enabled !== false && (
-        walking ? surface.walkable === true : surface.supportsStanding === true
+        walking ? surface.walkable === true : (surface.supportsStanding === true || surface.walkable === true)
       ))
       .flatMap(surface => surface.meshes || [])
     if (!meshes.length) return null
@@ -181,7 +181,7 @@ export class InputController {
 
     // 只有从上方接近支撑面时才落地；向上运动不会被地面射线吸住。
     if (this.verticalVelocity <= 0 && player.y <= groundEyeY + this.maxStepHeight) {
-      if (player.y >= groundEyeY - 0.08 || (this.grounded && player.y <= groundEyeY + this.maxStepHeight)) {
+      if (player.y >= groundEyeY - this.maxStepHeight && player.y <= groundEyeY + 0.08) {
         player.y = groundEyeY
         this.verticalVelocity = 0
         this.grounded = true

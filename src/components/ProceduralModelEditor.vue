@@ -9,7 +9,7 @@ const props = defineProps({
   error: { type: String, default: '' },
   canUndo: { type: Boolean, default: false },
 })
-const emit = defineEmits(['close', 'edit', 'parameter-change', 'part-select', 'undo'])
+const emit = defineEmits(['close', 'edit', 'parameter-change', 'part-select', 'capability-change', 'undo'])
 const canvasHost = ref(null)
 const instruction = ref('')
 const selectedPartId = ref('')
@@ -18,6 +18,28 @@ const parameterValues = ref({})
 const previewParts = ref([])
 const parameters = ref([])
 
+const capabilityManifest = computed(() => props.model?.userData?.proceduralModelCapabilityManifest || {})
+const capabilityControl = computed(() => props.model?.userData?.proceduralModelCapabilityControlDocument || {})
+const capabilityNamespaces = computed(() => {
+  const capabilities = capabilityManifest.value.capabilities || {}
+  return Object.entries(capabilities).map(([id, value]) => ({
+    id, runtime: id === 'spatial' ? '部分接入：box collider 阻挡' : '尚未接入 Runtime', value,
+  }))
+})
+const spatialColliders = computed(() => {
+  const colliders = capabilityManifest.value.capabilities?.spatial?.colliders
+  if (!Array.isArray(colliders)) return []
+  return colliders.filter(item => item && typeof item.targetPartId === 'string')
+    .filter(item => !selectedPartId.value || item.targetPartId === selectedPartId.value)
+    .map(item => {
+      const capabilityId = 'spatial.collider.' + String(item.id || item.targetPartId) + '.blocksMovement'
+      const override = (capabilityControl.value.overrides || []).find(record => record?.capabilityId === capabilityId && String(record.scope?.targetId || '') === item.targetPartId && record.scope?.targetType === 'part')
+      return { ...item, capabilityId, blocksMovement: override?.value?.blocksMovement ?? item.blocksMovement !== false, source: override ? '用户覆盖' : '模型定义', runtimeSupported: item.shape === 'box' }
+    })
+})
+function updateColliderBlocking(collider, value) {
+  emit('capability-change', { capabilityId: collider.capabilityId, targetPartId: collider.targetPartId, blocksMovement: Boolean(value) })
+}
 function syncModelMetadata(model = props.model) {
   const userData = model?.userData || {}
   previewParts.value = Array.isArray(userData.proceduralModelParts) ? [...userData.proceduralModelParts] : []
@@ -172,6 +194,25 @@ onBeforeUnmount(() => {
           <button class="primary" :disabled="busy || !instruction.trim()" @click="submitEdit">{{ busy ? 'AI 正在修改模型…' : '发送调整指令' }}</button>
           <p v-if="error" class="model-editor__error">{{ error }}</p>
         </div>
+        <div class="model-editor__capabilities">
+          <div class="model-editor__section-title"><h3>模型能力</h3><span>AI 自动推断 · 可随时调整</span></div>
+          <p v-if="!capabilityNamespaces.length" class="model-editor__empty">模型尚未声明能力。AI 可在后续建模或对话编辑中补充。</p>
+          <div v-for="item in capabilityNamespaces" :key="item.id" class="model-editor__capability-row">
+            <div><strong>{{ item.id }}</strong><small>{{ item.runtime }}</small></div>
+            <span class="model-editor__runtime-state">{{ item.id === 'spatial' ? '部分支持' : '未接入' }}</span>
+          </div>
+          <div class="model-editor__capability-controls">
+            <h4>{{ selectedPartId ? '当前部件的空间控制' : '模型空间控制' }}</h4>
+            <p v-if="!spatialColliders.length" class="model-editor__empty">当前范围没有可控制的 box 碰撞体。选择模型部件可查看其能力。</p>
+            <label v-for="collider in spatialColliders" :key="collider.capabilityId" class="model-editor__capability-control">
+              <span><strong>{{ previewParts.find(part => part.id === collider.targetPartId)?.name || collider.targetPartId }}</strong><small>{{ collider.id || '空间碰撞体' }} · {{ collider.source }} · {{ collider.runtimeSupported ? 'Runtime 已接入' : 'Runtime 未支持该形状' }}</small></span>
+              <span class="model-editor__toggle">
+                <input type="checkbox" :checked="collider.blocksMovement" :disabled="!collider.runtimeSupported || busy" @change="updateColliderBlocking(collider, $event.target.checked)">
+                <span>阻挡玩家移动</span>
+              </span>
+            </label>
+          </div>
+        </div>
         <div class="model-editor__parameters">
           <div class="model-editor__section-title"><h3>模型结构参数</h3><span>由 AI 动态声明</span></div>
           <p v-if="!parameters.length" class="model-editor__empty">当前模型还没有可调参数。通过上方对话要求 AI 新增控制参数。</p>
@@ -210,11 +251,19 @@ onBeforeUnmount(() => {
 .model-editor__preview-hint { bottom:14px; }.model-editor__part-chip { top:14px; }
 .model-editor__controls { min-height:0; overflow:auto; padding:16px; }
 .model-editor__scope { display:flex; align-items:center; gap:10px; margin-bottom:14px; }.model-editor__scope span,.model-editor__section-title span { color:#92a4a5; font-size:10px; }
-.model-editor__chat,.model-editor__parameters,.model-editor__parts { padding:13px 0; border-top:1px solid rgba(255,255,255,.1); }
+.model-editor__chat,.model-editor__parameters,.model-editor__parts,.model-editor__capabilities { padding:13px 0; border-top:1px solid rgba(255,255,255,.1); }
 .model-editor h3 { margin:0 0 10px; font-size:12px; }.model-editor__chat textarea,.model-editor__field input:not([type=checkbox]),.model-editor__field select { width:100%; box-sizing:border-box; padding:9px; border:1px solid rgba(255,255,255,.13); border-radius:7px; outline:none; color:#e8efed; background:#1a2931; font:inherit; font-size:11px; }
 .model-editor__chat textarea { resize:vertical; line-height:1.5; }.model-editor__chat .primary { width:100%; margin-top:8px; border-color:#a5c9b1; color:#14251c; background:#a5c9b1; font-weight:700; }
 .model-editor__error { color:#ffaaa1; font-size:10px; }.model-editor__empty { color:#91a2a4; font-size:11px; line-height:1.6; }
 .model-editor__section-title { display:flex; align-items:center; justify-content:space-between; }.model-editor__field { display:grid; grid-template-columns:1fr minmax(110px,.8fr); align-items:center; gap:12px; margin:10px 0; color:#cbd7d2; font-size:11px; }.model-editor__field small { display:block; margin-top:4px; color:#85999a; font-size:9px; }.model-editor__field input[type=color] { width:100%; height:34px; border:0; background:transparent; }
+.model-editor__capability-row,.model-editor__capability-control { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.07); color:#cbd7d2; font-size:11px; }
+.model-editor__capability-row strong,.model-editor__capability-control strong { display:block; font-size:11px; }
+.model-editor__capability-row small,.model-editor__capability-control small { display:block; margin-top:4px; color:#85999a; font-size:9px; }
+.model-editor__runtime-state { flex:none; color:#a9c8b1; font-size:9px; }
+.model-editor__capability-controls { margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,.1); }
+.model-editor__capability-controls h4 { margin:0 0 7px; font-size:11px; }
+.model-editor__toggle { display:flex; align-items:center; gap:6px; flex:none; font-size:10px; }
+.model-editor__toggle input { accent-color:#a5c9b1; }
 .model-editor__parts { display:flex; flex-wrap:wrap; gap:6px; }.model-editor__parts h3 { width:100%; }
 @media(max-width:760px) { .model-editor { inset:1vh 1vw; }.model-editor__body { grid-template-columns:1fr; grid-template-rows:minmax(220px,.8fr) minmax(280px,1fr); }.model-editor__preview { border-right:0; border-bottom:1px solid rgba(255,255,255,.1); } }
 </style>

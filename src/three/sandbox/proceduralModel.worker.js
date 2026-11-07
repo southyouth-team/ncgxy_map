@@ -45,6 +45,12 @@ function disableNetworkApis() {
 
 disableNetworkApis()
 
+async function reportProgress(port, stage, label, detail = '') {
+  port.postMessage({ type: 'progress', stage, label, detail, timestamp: Date.now() })
+  // Yield between real worker milestones so the host can paint the latest state.
+  await new Promise(resolve => setTimeout(resolve, 0))
+}
+
 self.addEventListener('message', async (event) => {
   const port = event.ports?.[0]
   if (event.data?.type !== 'run' || !port) return
@@ -53,10 +59,12 @@ self.addEventListener('message', async (event) => {
   let modelUrl
 
   try {
+    await reportProgress(port, 'validating', '检查生成源码')
     if (typeof source !== 'string' || !source.trim()) {
       throw new TypeError('AI 未返回 Three.js 程序化源码')
     }
 
+    await reportProgress(port, 'loading-module', '加载模型构建模块')
     modelUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
     const modelModule = await import(modelUrl)
 
@@ -65,7 +73,8 @@ self.addEventListener('message', async (event) => {
     }
 
     const parameters = event.data?.parameters && typeof event.data.parameters === 'object' ? event.data.parameters : {}
-    const root = modelModule.createModel(THREE, parameters)
+    await reportProgress(port, 'building', '执行 Three.js 模型构建')
+    const root = await modelModule.createModel(THREE, parameters)
     if (!root || root.isGroup !== true) {
       throw new Error('createModel(THREE) 必须返回 THREE.Group')
     }
@@ -73,6 +82,7 @@ self.addEventListener('message', async (event) => {
       throw new Error('模型根节点不能预先挂载到其他对象')
     }
 
+    await reportProgress(port, 'metadata', '整理模型参数与能力声明')
     const modelCapabilityManifest = normalizeModelCapabilityManifest(
       modelModule.modelCapabilityManifest,
       modelModule.modelParameters,
@@ -96,7 +106,9 @@ self.addEventListener('message', async (event) => {
       proceduralModelParameterValues: parameters,
     }
     root.updateMatrixWorld(true)
+    await reportProgress(port, 'diagnostics', '采集几何诊断信息')
     root.userData.proceduralModelGeometryDiagnostics = collectProceduralModelGeometryDiagnostics(THREE, root)
+    await reportProgress(port, 'serializing', '序列化模型预览数据')
     port.postMessage({
       ok: true,
       serialized: root.toJSON(),

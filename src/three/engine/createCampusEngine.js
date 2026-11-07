@@ -449,6 +449,37 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  // 世界状态保存在稳定的沙盒对象 ID 上；子节点通过 stateBinding 声明如何映射到 Runtime 属性。
+  function getSandboxModelState(id) {
+    const model = sandboxModels.get(String(id))
+    return model ? { ...(model.userData.worldState || {}) } : null
+  }
+
+  function setSandboxModelState(id, patch = {}) {
+    const model = sandboxModels.get(String(id))
+    if (!model || !patch || typeof patch !== 'object') return false
+    const previous = { ...(model.userData.worldState || {}) }
+    const next = { ...previous, ...patch }
+    model.userData.worldState = next
+    model.traverse(object => {
+      const binding = object.userData?.stateBinding
+      if (!binding?.key || !Object.prototype.hasOwnProperty.call(next, binding.key)) return
+      const value = next[binding.key]
+      if (binding.property === 'visible') object.visible = Boolean(value)
+      else if (binding.property === 'intensity' && 'intensity' in object) {
+        object.intensity = value ? Number(binding.enabledValue ?? 1) : 0
+      } else if (binding.property === 'emissiveIntensity' && object.material) {
+        const materials = Array.isArray(object.material) ? object.material : [object.material]
+        materials.forEach(material => {
+          if ('emissiveIntensity' in material) material.emissiveIntensity = value ? Number(binding.enabledValue ?? 1) : 0
+        })
+      }
+    })
+    callbacks.onSandboxModelStateChange?.({ id: String(id), previous, state: next, patch: { ...patch } })
+    requestFrame()
+    return next
+  }
+
   function duplicateSandboxModel(id) {
     const source = sandboxModels.get(String(id))
     if (!source) return null
@@ -1738,8 +1769,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const nextId = nearestSandboxModel?.id || null
       if (nextId !== nearSandboxModelId) {
         nearSandboxModelId = nextId
+        const target = nearestSandboxModel ? sandboxModels.get(nearestSandboxModel.id) : null
+        const promptText = target?.userData?.interactionConfig?.prompt
+          || ('靠近 ' + nearestSandboxModel?.name + '，按 E 交互')
         callbacks.onSandboxInteractionPromptChange?.(nearestSandboxModel
-          ? { visible: true, id: nearestSandboxModel.id, name: nearestSandboxModel.name, text: '靠近 ' + nearestSandboxModel.name + '，按 E 交互' }
+          ? { visible: true, id: nearestSandboxModel.id, name: nearestSandboxModel.name, text: promptText }
           : { visible: false })
       }
     }
@@ -2454,5 +2488,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getSandboxModelState, setSandboxModelState, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

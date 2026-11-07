@@ -861,10 +861,7 @@ export class ImageGenerationService {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({
-            model, temperature: 0.25, messages,
-            ...(requireJsonObject ? { response_format: { type: 'json_object' } } : {}),
-          }),
+        body: JSON.stringify({ model, temperature: 0.25, messages }),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -947,7 +944,10 @@ export class ImageGenerationService {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(Math.max(1000, remainingMs)),
-          body: JSON.stringify({ model, temperature: 0.25, messages }),
+          body: JSON.stringify({
+            model, temperature: 0.25, messages,
+            ...(requireJsonObject ? { response_format: { type: 'json_object' } } : {}),
+          }),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

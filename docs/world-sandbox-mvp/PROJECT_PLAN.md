@@ -830,3 +830,11 @@ P1 分为两个可独立验收的子阶段，避免将射线检测等同于完�
 - 刷新前按 ownerId 清理旧碰撞体和旧 Mesh 支撑面句柄；新声明缺失/清空时不保留旧注册。
 - 通过 CollisionWorld 实例级测试覆盖：旧墙/旧地面替换为新墙/新地面、移除全部空间声明、Transform 后世界矩阵更新。
 - 这些单元测试仅证明注册表数据变化，不替代 InputController 的真实人物通行/站立浏览器验收。
+
+
+### P2.3 Capability Override 与存档恢复回归
+
+- AI 编辑替换模型时，Worker 以旧 Capability Control Document 为 previousDocument，重新生成 AI inference proposals，但保留用户 overrides、diagnostics 和扩展字段。
+- 回归测试必须验证：替换 Manifest 更新后，用户对具体部件碰撞能力的 override 仍然优先于新模型声明。
+- 存档沿用 Object3D JSON，模型 userData 中的 Manifest 与 Capability Control Document 应一同持久化；恢复后必须重新从恢复对象注册碰撞体和支撑 Mesh，不能复用旧场景 Mesh 引用。
+- 验收需区分声明持久化、Runtime 注册重建与人物实际物理行为；本阶段单测只覆盖前两项。

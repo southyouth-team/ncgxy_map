@@ -1916,3 +1916,47 @@ export const environmentBindings = [
 
 - 源码静态修改与 GitHub 回读核验；尚未运行 Jest、TypeScript 构建或真实模型 API 请求。
 - 如果上游模型服务不支持 OpenAI JSON mode，可能返回 HTTP 400；需结合实际服务商兼容性和运行日志进一步确认。
+
+
+---
+
+## 2026-11-08 — P0：建立模型支撑面/行走面声明与沙盒注册
+
+### 开发基线
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 分支：`feat/world-sandbox-conversational-model-editor`
+- 开始 HEAD：`1db22fc8e3ff50d39ea0dfa456a92bf369c56861`
+- `main` 基线：`608a9f2c1f739cd581acb833b1e70410672e258b`
+- 已读取 `PROJECT_PLAN.md`、`PROGRESS.md`、模型空间 Runtime、CollisionWorld、人物输入控制器和沙盒引擎集成代码。
+
+### 本轮目标与边界
+
+- 本轮只落地 P0 空间数据协议与注册，不宣称人物已经能站上平台或沿坡/楼梯移动。
+- P1 将单独改造人物地面求解器，避免将“声明已保存”误报为“人物行为已实现”。
+
+### 实际改动
+
+1. `modelCapabilityManifest.capabilities.spatial.surfaces[]`
+   - 新增声明字段：`id`、`targetPartId`、`shape: "mesh"`、`supportsStanding`、`walkable`、`enabled`。
+   - 支撑与行走是独立布尔属性；没有声明不自动视为可行走。
+2. `src/three/engine/modelSpatialRuntime.js`
+   - 新增 `collectModelSupportSurfaces(root, ownerId)`。
+   - 通过稳定 `componentId` 找到目标部件，收集真实后代 Mesh 和 position attribute；缺失目标、空几何、禁用声明和不支持形状会被忽略。
+   - 返回的 Mesh 引用仅供 Runtime 使用，不写回 Manifest。
+3. `src/three/physics/CollisionWorld.js`
+   - 增加独立 `supportSurfaces` 注册表及按模型实例 ownerId 移除能力。
+   - 支撑面注册不会被塞进 `obstacles`，不会错误地阻挡人物水平移动。
+4. `src/three/engine/createCampusEngine.js`
+   - 模型空间刷新时同时刷新阻挡体和支撑面注册。
+   - 模型替换/删除时按 ownerId 清理旧支撑面，避免悬挂引用。
+5. `server/src/modules/assets/image-generation.service.ts`
+   - 新建模型与对话微调 Prompt 都要求 AI 按实际几何声明 surfaces，并明确不可把墙体/装饰面标记为可行走。
+   - Prompt 明确当前阶段仅注册声明，不能声称人物地面求解已支持。
+6. 新增测试用例覆盖真实 Mesh 解析、无效声明过滤、Group 后代 Mesh 解析、CollisionWorld 注册与按 owner 清理。
+
+### 验证边界
+
+- 已提交各文件修改并将继续回读确认；本会话没有本地运行环境，未执行 Vitest、前端构建、浏览器操作或实际人物移动验收。
+- P0 已建立模型定义到沙盒空间注册表的数据链路；人物仍由现有 XZ 控制器驱动，当前不能据此声称平台站立、坡道或楼梯行走已可用。
+- 未修改 `main`，未创建或合并 PR。

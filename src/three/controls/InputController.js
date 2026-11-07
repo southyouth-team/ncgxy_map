@@ -182,10 +182,12 @@ export class InputController {
 
     if (this.grounded && currentSupport) {
       // 有站立支撑的平台边缘：不允许跨到不可行走区域或超过台阶上限的高差。
-      if (!nextWalkable) return previous
-      const currentY = currentSupport.point.y
-      const nextY = nextWalkable.point.y
-      if (nextY - currentY > this.maxStepHeight) return previous
+      if (nextStanding && !nextWalkable) return previous
+      if (nextWalkable) {
+        const currentY = currentSupport.point.y
+        const nextY = nextWalkable.point.y
+        if (nextY - currentY > this.maxStepHeight) return previous
+      }
     } else if (this.grounded && nextStanding && !nextWalkable) {
       return previous
     }

@@ -74,6 +74,7 @@ self.addEventListener('message', async (event) => {
       ...(root.userData || {}),
       proceduralModelParameters: Array.isArray(modelModule.modelParameters) ? modelModule.modelParameters : [],
       proceduralModelParts: Array.isArray(modelModule.modelParts) ? modelModule.modelParts : [],
+      proceduralModelEnvironmentBindings: Array.isArray(modelModule.environmentBindings) ? modelModule.environmentBindings : [],
       proceduralModelParameterValues: parameters,
     }
     root.updateMatrixWorld(true)

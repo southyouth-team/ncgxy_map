@@ -298,18 +298,25 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   const moduleCapabilityManifest = replacement.userData?.proceduralModelCapabilityManifest
     && typeof replacement.userData.proceduralModelCapabilityManifest === 'object'
     ? replacement.userData.proceduralModelCapabilityManifest : null
-  const resolvedDefinitions = Array.isArray(definitions) && definitions.length ? definitions : moduleDefinitions
-  const resolvedParts = Array.isArray(parts) && parts.length ? parts : moduleParts
-  const resolvedEnvironmentBindings = Array.isArray(environmentBindings)
-    ? environmentBindings
-    : (moduleEnvironmentBindings.length ? moduleEnvironmentBindings : (current.userData.proceduralModelEnvironmentBindings || []))
   const resolvedCapabilityManifest = modelCapabilityManifest && typeof modelCapabilityManifest === 'object'
     ? modelCapabilityManifest
-    : (moduleCapabilityManifest || current.userData.proceduralModelCapabilityManifest || {
-      version: 1,
-      parameters: resolvedDefinitions,
-      capabilities: resolvedEnvironmentBindings.length ? { environmentBindings: resolvedEnvironmentBindings } : {},
-    })
+    : (moduleCapabilityManifest || current.userData.proceduralModelCapabilityManifest || null)
+  const manifestCapabilities = resolvedCapabilityManifest?.capabilities && typeof resolvedCapabilityManifest.capabilities === 'object'
+    ? resolvedCapabilityManifest.capabilities : {}
+  const resolvedDefinitions = Array.isArray(resolvedCapabilityManifest?.parameters)
+    ? resolvedCapabilityManifest.parameters
+    : (Array.isArray(definitions) && definitions.length ? definitions : moduleDefinitions)
+  const resolvedParts = Array.isArray(parts) && parts.length ? parts : moduleParts
+  const resolvedEnvironmentBindings = Array.isArray(manifestCapabilities.environmentBindings)
+    ? manifestCapabilities.environmentBindings
+    : (Array.isArray(environmentBindings)
+      ? environmentBindings
+      : (moduleEnvironmentBindings.length ? moduleEnvironmentBindings : (current.userData.proceduralModelEnvironmentBindings || [])))
+  const finalCapabilityManifest = resolvedCapabilityManifest || {
+    version: 1,
+    parameters: resolvedDefinitions,
+    capabilities: resolvedEnvironmentBindings.length ? { environmentBindings: resolvedEnvironmentBindings } : {},
+  }
   const resolvedValues = modelParameterDefaults(resolvedDefinitions, values)
   if (JSON.stringify(resolvedValues) !== JSON.stringify(values || {})) {
     replacement = await executeProceduralModel(source, { timeoutMs: 60000, parameters: resolvedValues })
@@ -320,7 +327,7 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
     proceduralModelParameters: resolvedDefinitions,
     proceduralModelParts: resolvedParts,
     proceduralModelEnvironmentBindings: resolvedEnvironmentBindings,
-    proceduralModelCapabilityManifest: resolvedCapabilityManifest,
+    proceduralModelCapabilityManifest: finalCapabilityManifest,
     proceduralModelParameterValues: resolvedValues,
     worldState: { ...(current.userData.worldState || {}) },
     environmentOverrides: { ...(current.userData.environmentOverrides || {}) },

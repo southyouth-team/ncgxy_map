@@ -213,3 +213,70 @@
 - 本轮页面与文档写入分别返回独立 commit SHA，相关提交均可由 GitHub commit 查询读取。
 - 仓库最近提交查询返回的默认分支最新提交仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`；本轮所有写入请求均显式指定功能分支，没有向 `main` 发起写入。
 - 当前连接器没有提供直接读取 Git ref SHA 的操作，因此无法独立输出功能分支的 ref HEAD SHA；以目标分支文件回读和提交对象可读取作为本轮落点证据。后续若连接器提供 ref 查询，应补充精确 SHA 核验。
+
+
+---
+
+## 2026-11-07 — 玩家开关灯最小交互闭环（第一阶段）
+
+### 本轮目标与验收标准
+
+打通一个可复用的最小世界状态链路，不先建设大型通用动作框架：
+
+1. 玩家靠近墙壁开关时显示交互提示。
+2. 玩家按 E，交互入口根据稳定对象 ID 找到关联灯具。
+3. State 更新灯具 `worldState.enabled`。
+4. Runtime 根据部件声明的 `stateBinding` 更新 PointLight 可见性和灯泡材质发光强度。
+5. 状态随现有 Object3D 存档保存，刷新后恢复。
+
+### 实际改动
+
+- `src/three/engine/createCampusEngine.js`
+  - 新增 `getSandboxModelState`、`setSandboxModelState`，对象状态保存在模型根节点 `userData.worldState`。
+  - 新增 `getPlayerPosition`，供演示交互对象在玩家附近生成。
+  - E 键交互入口仍复用已有的距离检测与提示机制；提示文本可由对象 `interactionConfig.prompt` 自定义。
+  - 状态变化后触发 `onSandboxModelStateChange` 回调、请求重绘并失效阴影贴图。
+  - 加载模型时根据持久化状态重建运行时绑定。
+- 新增 `src/three/engine/worldStateRuntime.js`
+  - 提供最小 `applyWorldStateBindings`，支持 boolean 状态映射到 `visible`、`intensity`、`emissiveIntensity)。
+- 新增 `src/three/engine/worldStateRuntime.test.js`
+  - 覆盖可见性、光照强度、材质发光强度、多材质和未知绑定。
+- `src/components/WorldSandboxMvp.vue`
+  - 新增“创建开关灯交互演示”入口，一次创建演示灯具和墙壁开关。
+  - 墙壁开关通过 `interactionConfig.targetId` 关联灯具稳定 ID。
+  - 玩家靠近开关按 E 后切换灯具 enabled 状态，并同步实际 PointLight 与灯泡发光效果。
+  - 提示玩家保存沙盒，现有存档会保存模型状态和关联配置。
+
+### 当前边界
+
+- 这是一个最小可验证闭环，不是完整 Interaction Registry / Event Bus。
+- 交互动作目前为受控的 `toggle-state`，状态目标通过稳定对象 ID 关联。
+- Runtime 绑定当前只覆盖可见性、灯光强度、材质发光强度；后续可按实际对象需求扩展。
+- 演示灯具是沙盒内生成的 PointLight + 灯泡 Mesh；尚未将 AI 模型自然识别为灯具，也没有 AI 自动生成交互关系的流程。
+- 状态随现有模型 Object3D JSON 持久化，尚未迁移到独立 World Document。
+
+### 提交记录
+
+- `9d6a949082059b2ba151aa2e0459af4e696c31e2` — 引擎对象状态 API 与交互提示配置。
+- `cb4df7acf3eb0a0171226db1f633e802e9c9217d` — 页面开关灯演示与玩家交互回调。
+- `39c48932f0b86c81028149fa3b3c6c806b6a6c92` — 玩家坐标 API 与状态变化阴影失效。
+- `721f39213c62b3f16ac559b790d2174ef76ee158` — 演示对象生成在玩家附近。
+- `a808de98ca86c66516addf21d3ef802165241e61` — 新增状态绑定 Runtime。
+- `fe6fc3be355f7b50ec260b64258eb4878ca6a50a` — 新增状态绑定单元测试。
+- `ba14a04b411848c1eaf49fe903e4b064722cfb76` — 状态绑定接入引擎并在加载时恢复。
+
+### 验证状态
+
+- 源码回读：已完成本轮实现路径核对；仍需最终提交后再回读确认。
+- 单元测试：新增 4 项测试，**尚未执行**。
+- 前端构建：未执行。
+- CI：尚未取得本轮提交的成功状态记录。
+- 浏览器验收：未执行；需实际验证靠近提示、按 E 开/关灯、保存刷新恢复。
+- 功能分支与 main 的精确 HEAD：待最终 ref 核验；本轮写入均显式指定功能分支，未向 main 发起写入。
+
+### 下一步
+
+1. 核验功能分支和 main 的 ref SHA，确认所有提交落点。
+2. 执行 `npm test -- --run` 与 `npm run build)；检查测试结果。
+3. 浏览器验收：创建演示 → 靠近墙壁开关 → 按 E 两次验证开/关 → 保存 → 刷新 → 检查状态恢复。
+4. 若通过，再把相同的状态绑定协议用于门/设备等对象；之后进入 World Document 的独立数据迁移。

@@ -934,13 +934,16 @@ export class ImageGenerationService {
     const configuredTimeout = Number(this.config.get<string>('VISION_REQUEST_TIMEOUT_MS') || 600000);
     const timeoutMs = Number.isFinite(configuredTimeout)
       ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
+    const buildDeadline = Date.now() + Math.min(900000, timeoutMs);
     const requestText = async (messages: any[]): Promise<string> => {
+      const remainingMs = buildDeadline - Date.now();
+      if (remainingMs <= 0) throw new ServiceUnavailableException('增量模型构建超过 15 分钟总时限');
       let response: Response;
       try {
         response = await fetch(baseUrl + '/chat/completions', {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(timeoutMs),
+          signal: AbortSignal.timeout(Math.max(1000, remainingMs)),
           body: JSON.stringify({ model, temperature: 0.25, messages }),
         });
       } catch (error) {

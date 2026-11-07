@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { collectModelMovementObstacles } from './modelSpatialRuntime.js'
+import { collectModelMovementObstacles, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
+import { CollisionWorld } from '../physics/CollisionWorld.js'
 
 describe('collectModelMovementObstacles', () => {
   it('converts a declared part-local box collider into world-space bounds', () => {
@@ -261,5 +262,82 @@ describe('collectModelSupportSurfaces', () => {
       }] } },
     }
     expect(collectModelSupportSurfaces(root, 'sandbox_stairs')[0].meshes).toEqual([steps])
+  })
+})
+
+
+describe('refreshModelSpatialRegistration', () => {
+  function createSpatialModel(id = 'instance-a') {
+    const root = new THREE.Group()
+    root.userData.sandboxModelId = id
+    const wall = new THREE.Group()
+    wall.userData.componentId = 'wall-v1'
+    root.add(wall)
+    const floor = new THREE.Group()
+    floor.userData.componentId = 'floor-v1'
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 4), new THREE.MeshBasicMaterial())
+    floor.add(mesh)
+    root.add(floor)
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: {
+        colliders: [{ id: 'wall-v1-collider', targetPartId: 'wall-v1', shape: 'box', center: { x: 0, y: 1, z: 0 }, size: { x: 2, y: 2, z: 0.3 } }],
+        surfaces: [{ id: 'floor-v1-surface', targetPartId: 'floor-v1', shape: 'mesh', supportsStanding: true, walkable: true }],
+      } },
+    }
+    return { root, mesh }
+  }
+
+  it('rebuilds live obstacles and support mesh handles from the replacement manifest', () => {
+    const collisionWorld = new CollisionWorld({ minX: -20, maxX: 20, minZ: -20, maxZ: 20 })
+    const { root, mesh: oldMesh } = createSpatialModel()
+    expect(refreshModelSpatialRegistration(THREE, root, collisionWorld)).toBe(1)
+    expect(collisionWorld.obstacles).toHaveLength(1)
+    expect(collisionWorld.supportSurfaces).toHaveLength(1)
+    expect(collisionWorld.supportSurfaces[0].meshes).toEqual([oldMesh])
+
+    const oldWall = root.children.find(part => part.userData.componentId === 'wall-v1')
+    const oldFloor = root.children.find(part => part.userData.componentId === 'floor-v1')
+    root.remove(oldWall, oldFloor)
+    const newWall = new THREE.Group()
+    newWall.userData.componentId = 'wall-v2'
+    root.add(newWall)
+    const newFloor = new THREE.Group()
+    newFloor.userData.componentId = 'floor-v2'
+    const newMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 0.2, 6), new THREE.MeshBasicMaterial())
+    newFloor.add(newMesh)
+    root.add(newFloor)
+    root.userData.proceduralModelCapabilityManifest.capabilities.spatial = {
+      colliders: [{ id: 'wall-v2-collider', targetPartId: 'wall-v2', shape: 'box', center: { x: 3, y: 1, z: 0 }, size: { x: 2, y: 2, z: 0.3 } }],
+      surfaces: [{ id: 'floor-v2-surface', targetPartId: 'floor-v2', shape: 'mesh', supportsStanding: true, walkable: true }],
+    }
+
+    expect(refreshModelSpatialRegistration(THREE, root, collisionWorld)).toBe(1)
+    expect(collisionWorld.obstacles).toHaveLength(1)
+    expect(collisionWorld.obstacles[0]).toMatchObject({ ownerId: 'instance-a', minX: 2, maxX: 4 })
+    expect(collisionWorld.supportSurfaces).toHaveLength(1)
+    expect(collisionWorld.supportSurfaces[0]).toMatchObject({
+      ownerId: 'instance-a', surfaceId: 'floor-v2-surface', targetPartId: 'floor-v2',
+    })
+    expect(collisionWorld.supportSurfaces[0].meshes).toEqual([newMesh])
+    expect(collisionWorld.supportSurfaces[0].meshes).not.toContain(oldMesh)
+  })
+
+  it('removes prior registrations when the replacement no longer declares spatial capabilities', () => {
+    const collisionWorld = new CollisionWorld({ minX: -20, maxX: 20, minZ: -20, maxZ: 20 })
+    const { root } = createSpatialModel()
+    refreshModelSpatialRegistration(THREE, root, collisionWorld)
+    root.userData.proceduralModelCapabilityManifest.capabilities.spatial = {}
+    expect(refreshModelSpatialRegistration(THREE, root, collisionWorld)).toBe(0)
+    expect(collisionWorld.obstacles).toEqual([])
+    expect(collisionWorld.supportSurfaces).toEqual([])
+  })
+
+  it('updates world matrices before rebuilding transformed collider bounds', () => {
+    const collisionWorld = new CollisionWorld({ minX: -20, maxX: 20, minZ: -20, maxZ: 20 })
+    const { root } = createSpatialModel()
+    root.position.set(10, 0, 5)
+    refreshModelSpatialRegistration(THREE, root, collisionWorld)
+    expect(collisionWorld.obstacles[0]).toMatchObject({ minX: 9, maxX: 11, minZ: 4.85, maxZ: 5.15 })
   })
 })

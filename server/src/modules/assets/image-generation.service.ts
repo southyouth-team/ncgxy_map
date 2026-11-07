@@ -938,13 +938,13 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('视觉模型未返回程序化 Three.js 源码');
       }
       generatedCode = raw.trim()
-        .replace(/^\`\`\`(?:javascript|js|typescript|ts)?\\s*/i, '')
-        .replace(/\\s*\`\`\`$/, '');
+        .replace(/^```(?:javascript|js|typescript|ts)?\s*/i, '')
+        .replace(/\s*```$/, '');
       if (generatedCode.length > 120000) {
         throw new ServiceUnavailableException('程序化模型源码超过 120 KB');
       }
-      if (!/export\\s+function\\s+createModel\\s*\\(\\s*THREE(?:\\s*,[^)]*)?\\)/.test(generatedCode)
-        || !/return\\s+[A-Za-z_$][\\w$]*\\s*;?/.test(generatedCode)) {
+      if (!/export\s+function\s+createModel\s*\(\s*THREE(?:\s*,[^)]*)?\)/.test(generatedCode)
+        || !/return\s+[A-Za-z_$][\w$]*\s*;?/.test(generatedCode)) {
         throw new ServiceUnavailableException('程序化模型源码缺少 createModel(THREE) 工厂或 Group 返回语句');
       }
       break;

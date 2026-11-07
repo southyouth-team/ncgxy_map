@@ -62,7 +62,7 @@ export class ImageGenerationController {
 
 
   @Post('generate-procedural-object-stream')
-  @ApiOperation({ summary: '按模型复杂度选择一次生成或增量组件构建，并通过 NDJSON 推送进度' })
+  @ApiOperation({ summary: '一次性生成完整 Three.js 模型并通过 NDJSON 推送阶段进度' })
   async streamProceduralObject(
     @Body('prompt') prompt: string,
     @Body('objectType') objectType: string,
@@ -89,7 +89,7 @@ export class ImageGenerationController {
         response.write(JSON.stringify({
           type: 'error',
           stage: 'server',
-          message: error instanceof Error ? error.message : '增量模型构建失败',
+          message: error instanceof Error ? error.message : '完整模型生成失败',
         }) + '\n');
       }
     } finally {

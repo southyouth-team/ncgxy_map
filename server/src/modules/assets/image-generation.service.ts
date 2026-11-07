@@ -822,7 +822,7 @@ export class ImageGenerationService {
           'You are an expert procedural Three.js asset artist using the img2threejs editable procedural-draft approach.',
           'Return JavaScript ES module source code only. Do not return JSON, Markdown fences, explanations, TypeScript annotations, imports, or external dependencies.',
           'Legacy factory contract: export function createModel(THREE) remains callable. New factory signature: export function createModel(THREE, params = {}) { ... }.',
-          'Export modelParameters, modelParts and environmentBindings arrays as named constants. modelParameters describes dynamic controls using id, label, type, default, optional min/max/step/options/group/description. Supported UI types are number, color, boolean, select and text; declare only useful controls for this model. modelParts describes stable part ids, names and parentId values. These arrays are metadata, not a geometry whitelist.',
+          'Export modelCapabilityManifest as the primary model-definition contract: { version: 1, parameters: [...], capabilities: { ... } }. Include only capability sections that this specific model actually has; supported sections include spatial, interior, environmentBindings and interactions, but this is an extensible data contract, not a model-category whitelist. parameters describes model-intrinsic editable controls using id, label, type, default and optional min/max/step/options/group/description. Spatial declarations may describe part-level colliders, traversal/portal regions and enterable behavior; interior declarations may describe floors, spaces and connections; interactions declare stable targets and supported action data. Preserve arbitrary additional declarative fields without inventing unsupported behavior. Also export legacy modelParameters, modelParts and environmentBindings aliases for compatibility; manifest.parameters and manifest.capabilities.environmentBindings must match those aliases when present.',
           'environmentBindings declares how this model responds to sandbox environment values. Each entry uses { id, targetPartId, variable, property, defaultValue, enabledValue, disabledValue }. targetPartId must match a stable userData.componentId on an actual target Object3D. Use variable "lighting.artificial.enabled" for controllable artificial light sources; bind actual THREE.Light objects with property "visible" or "intensity", and emissive bulb meshes with property "emissiveIntensity". Export an empty array when the model has no environment-responsive parts. Do not invent bindings for components that do not exist.',
           'When a model contains multiple independent lamps or controllable devices, declare separate bindings for their actual target parts. Do not use display names or mesh names as identifiers. The sandbox applies global values by default and may apply per-model overrides.',
           'Every adjustable feature must actually read its value from params inside createModel. Use parameter defaults when a value is absent. Keep stable userData.componentId on part groups and on every environment binding target so parts can be selected and bound.',
@@ -899,7 +899,7 @@ export class ImageGenerationService {
 
   async modifyProceduralObjectFromInstruction(
     sourceInput: unknown, parametersInput: unknown, parameterValuesInput: unknown, partsInput: unknown,
-    selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown, environmentBindingsInput?: unknown,
+    selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown, environmentBindingsInput?: unknown, modelCapabilityManifestInput?: unknown,
   ): Promise<any> {
     const source = typeof sourceInput === 'string' ? sourceInput.trim() : '';
     const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 12000) : '';
@@ -908,7 +908,9 @@ export class ImageGenerationService {
     const parameterDefinitions = Array.isArray(parametersInput) ? parametersInput.slice(0, 100) : [];
     const parameterValues = parameterValuesInput && typeof parameterValuesInput === 'object' && !Array.isArray(parameterValuesInput) ? parameterValuesInput : {};
     const parts = Array.isArray(partsInput) ? partsInput.slice(0, 300) : [];
-    const environmentBindings = Array.isArray(environmentBindingsInput) ? environmentBindingsInput.slice(0, 100) : [];
+    const environmentBindings = Array.isArray(environmentBindingsInput) ? environmentBindingsInput : [];
+    const modelCapabilityManifest = modelCapabilityManifestInput && typeof modelCapabilityManifestInput === 'object' && !Array.isArray(modelCapabilityManifestInput)
+      ? modelCapabilityManifestInput : null;
     const selectedPartId = typeof selectedPartIdInput === 'string' ? selectedPartIdInput.slice(0, 160) : '';
     const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';
     const apiKey = this.config.get<string>('VISION_API_KEY');
@@ -919,21 +921,21 @@ export class ImageGenerationService {
     const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
     const system = [
       'You are editing an existing procedural Three.js model for a real-time 3D sandbox.',
-      'Return one valid JSON object only, with keys generatedCode, parameters, parts, environmentBindings, changeSummary. Do not use Markdown fences.',
-      'generatedCode must be a complete self-contained JavaScript ES module exporting createModel(THREE, params = {}), modelParameters, modelParts and environmentBindings.',
-      'environmentBindings must describe actual environment-responsive target components in the model. Preserve existing bindings unless the user explicitly changes them. If the user asks to connect an existing lamp/device to the sandbox environment, inspect the current source and component IDs, add missing bindings without rebuilding unrelated geometry, and return the same bindings in both the JSON environmentBindings field and the named export in generatedCode.',
+      'Return one valid JSON object only, with keys generatedCode, parameters, parts, modelCapabilityManifest, environmentBindings, changeSummary. Do not use Markdown fences.',
+      'generatedCode must be a complete self-contained JavaScript ES module exporting createModel(THREE, params = {}), modelCapabilityManifest, modelParameters, modelParts and environmentBindings. The manifest is the primary contract; legacy exports remain compatibility aliases.',
+      'modelCapabilityManifest must describe the model intrinsic definition and only the capabilities actually present. Preserve unknown declarative capability sections from the existing manifest unless the user explicitly changes them. Add or update spatial, interior, environmentBindings and interactions declarations as needed; do not infer that every model is enterable or has interior spaces. Return the complete updated manifest in the JSON modelCapabilityManifest field and as the named export in generatedCode. The legacy environmentBindings JSON field/export must mirror modelCapabilityManifest.capabilities.environmentBindings when present.',
       'For artificial lighting, use variable "lighting.artificial.enabled" and bind existing THREE.Light objects to visible/intensity and emissive bulb meshes to emissiveIntensity. Each binding must reference a real stable userData.componentId in the generated model. If no suitable light exists, add the minimum required light component while preserving the rest of the model.',
       'Preserve the existing model identity and visual structure unless the instruction explicitly requests a structural change. Do not replace the whole model unnecessarily.',
       'For part-scoped edits, change only the selected part and the minimum dependent geometry/material required. Keep all unrelated parts and their stable component IDs.',
       'For parameter requests, add or update dynamic controls in modelParameters and make createModel read those values from params. Do not invent a fixed global parameter catalogue; declare model-specific controls.',
       'modelParameters entries should use id, label, type, default, and optional min, max, step, options, group, description. UI types: number, color, boolean, select, text.',
       'modelParts entries should use stable id, name, and optional parentId. Give editable THREE.Group objects matching userData.componentId values.',
-      'environmentBindings is a data-only array of { id, targetPartId, variable, property, defaultValue, enabledValue, disabledValue }. targetPartId must match a real userData.componentId in generatedCode. Use "lighting.artificial.enabled" for artificial light components; use only visible, intensity or emissiveIntensity properties. Preserve existing bindings unless the instruction changes them. For a natural-language request to connect an existing model to the environment, add bindings without unnecessarily rebuilding unrelated geometry.',
+      'Within modelCapabilityManifest.capabilities.environmentBindings, use data-only binding declarations that reference real stable component IDs. World environment values remain owned by the sandbox; the model only declares its response. Spatial collision/traversal declarations must be part/region-specific rather than disabling collision for an entire building with an entrance. Interaction declarations describe stable source/target IDs and action data, not executable code. Do not return JavaScript callbacks, eval payloads or runtime scripts in the manifest.',
       'Do not use external dependencies, imports, network, DOM, browser globals, Node APIs, eval, Function, dynamic imports, animation loops or renderers.',
       'The factory must synchronously return one THREE.Group, use only THREE and params, and keep the model centered near X/Z origin, Y-up, standing on Y=0.',
       'Avoid unbounded loops and pathological geometry. Do not claim that geometry intersections have been automatically detected.',
     ].join('\n');
-    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameterDefinitions: parameterDefinitions, currentParameterValues: parameterValues, currentParts: parts, currentEnvironmentBindings: environmentBindings, currentSource: source, instruction });
+    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameterDefinitions: parameterDefinitions, currentParameterValues: parameterValues, currentParts: parts, currentEnvironmentBindings: environmentBindings, currentModelCapabilityManifest: modelCapabilityManifest, currentSource: source, instruction });
     let response: Response;
     try {
       response = await fetch(baseUrl + '/chat/completions', {
@@ -970,6 +972,9 @@ export class ImageGenerationService {
       generatedCode: result.generatedCode,
       parameters: Array.isArray(result.parameters) ? result.parameters : [],
       parts: Array.isArray(result.parts) ? result.parts : [],
+      modelCapabilityManifest: result.modelCapabilityManifest && typeof result.modelCapabilityManifest === 'object' && !Array.isArray(result.modelCapabilityManifest)
+        ? result.modelCapabilityManifest
+        : (modelCapabilityManifest || { version: 1, parameters: parameterDefinitions, capabilities: environmentBindings.length ? { environmentBindings } : {} }),
       environmentBindings: Array.isArray(result.environmentBindings) ? result.environmentBindings : environmentBindings,
       changeSummary: typeof result.changeSummary === 'string' ? result.changeSummary : '模型已更新',
       generatedAt: new Date().toISOString(),

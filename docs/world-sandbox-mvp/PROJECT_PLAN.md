@@ -395,7 +395,7 @@ Manifest 继续作为模型固有定义的入口，但不把所有职责塞进�
 
 第一阶段先建立不依赖 Three.js 的纯数据解析层，避免将推断、覆盖和执行耦合进当前碰撞代码：
 
-- `capabilityControlDocument` 暂采用独立文档结构：`version`、`inference.proposals[]`、`overrides[]`、`diagnostics[])。未知顶层字段和记录字段必须原样保留。
+- `capabilityControlDocument` 暂采用独立文档结构：`version`、`inference.proposals[]`、`overrides[]`、`diagnostics[]`。未知顶层字段和记录字段必须原样保留。该文档随模型根节点 `userData.proceduralModelCapabilityControlDocument` 进入 Object3D JSON，因此随模型复制/保存/恢复传递；Worker 根据 AI 输出的 Manifest capability namespaces 自动构建 inference proposals，模型替换时保留已有 overrides/diagnostics。
 - 每条记录以 `capabilityId` 和 scope 定位；scope 可指向 model、part、region 或未来的其他稳定目标。能力 ID 不经过白名单校验。
 - AI 推断记录携带 source、confidence、evidence、scope 和 value 等可追溯信息；不要求用户逐项确认。AI 推断默认自动进入解析结果，旧版 status=proposed 仅作为兼容输入，不再代表等待人工审批。
 - 用户明确指令与已保存用户覆盖独立记录，支持 set、disable、reject 等控制语义；AI 后续推断/编辑不得静默覆盖用户明确设置。
@@ -403,7 +403,7 @@ Manifest 继续作为模型固有定义的入口，但不把所有职责塞进�
 - AI 未提及某项能力时，由 AI 根据模型结构和上下文自主推断；若明确无法判断，应采用保守默认值并保留推断依据/不确定性，而不是要求用户确认。
 - 解析器只产出解析记录，不调用 Three.js、不执行代码、不宣称 Runtime 已生效。后续需区分 resolved、compiled、applied，并由 Runtime adapter 确认执行后才能标记 applied。
 - 显式 enabled=false、disable 或 reject 可关闭对应能力；AI 推断默认 enabled=true，但记录自身明确声明 enabled=false 时必须保留该值。
-- 该 helper 是协议第一阶段，当前尚未接入页面状态、模型 Worker、AI Prompt 或存档；不得将“有 resolver 单测”表述为端到端能力已交付。
+- Capability Control 文档已接入模型 Worker、模型根节点 userData、编辑替换/撤销及 Object3D JSON 保存恢复；该接入目前负责推断记录派生和文档生命周期，不代表 overrides 已有用户编辑 UI，也不代表 resolved capabilities 已接入各 Runtime。
 
 #### 当前 Spatial Runtime 的定位
 

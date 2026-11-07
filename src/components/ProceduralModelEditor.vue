@@ -29,12 +29,22 @@ const capabilityNamespaces = computed(() => {
 const spatialColliders = computed(() => {
   const colliders = capabilityManifest.value.capabilities?.spatial?.colliders
   if (!Array.isArray(colliders)) return []
+  const partIds = new Set()
+  props.model?.traverse?.(object => {
+    if (object.userData?.componentId != null) partIds.add(String(object.userData.componentId))
+  })
   return colliders.filter(item => item && typeof item.targetPartId === 'string')
     .filter(item => !selectedPartId.value || item.targetPartId === selectedPartId.value)
     .map(item => {
       const capabilityId = 'spatial.collider.' + String(item.id || item.targetPartId) + '.blocksMovement'
       const override = (capabilityControl.value.overrides || []).find(record => record?.capabilityId === capabilityId && String(record.scope?.targetId || '') === item.targetPartId && record.scope?.targetType === 'part')
-      return { ...item, capabilityId, blocksMovement: override?.value?.blocksMovement ?? item.blocksMovement !== false, source: override ? '用户覆盖' : '模型定义', runtimeSupported: item.shape === 'box' }
+      return {
+        ...item,
+        capabilityId,
+        blocksMovement: override?.value?.blocksMovement ?? item.blocksMovement !== false,
+        source: override ? '用户覆盖' : '模型定义',
+        runtimeSupported: item.shape === 'box' && item.enabled !== false && partIds.has(item.targetPartId),
+      }
     })
 })
 function updateColliderBlocking(collider, value) {

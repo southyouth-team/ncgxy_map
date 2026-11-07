@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyWorldStateBindings } from './worldStateRuntime.js'
+import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 
 function makeRoot(objects) {
   return {
@@ -52,6 +52,64 @@ describe('applyWorldStateBindings', () => {
 
     expect(applyWorldStateBindings(makeRoot([object]), {})).toBe(0)
     expect(applyWorldStateBindings(makeRoot([object]), { active: false })).toBe(0)
+    expect(object.visible).toBe(true)
+  })
+})
+
+
+describe('applyEnvironmentBindings', () => {
+  it('applies global environment values to AI-declared component bindings', () => {
+    const light = {
+      intensity: 2.4,
+      userData: { componentId: 'ceiling-light' },
+    }
+    const root = makeRoot([light])
+    root.userData = {
+      proceduralModelEnvironmentBindings: [{
+        targetPartId: 'ceiling-light',
+        variable: 'lighting.artificial.enabled',
+        property: 'intensity',
+        enabledValue: 2.4,
+        disabledValue: 0,
+        defaultValue: true,
+      }],
+    }
+
+    expect(applyEnvironmentBindings(root, { 'lighting.artificial.enabled': false })).toBe(1)
+    expect(light.intensity).toBe(0)
+    expect(applyEnvironmentBindings(root, { 'lighting.artificial.enabled': true })).toBe(1)
+    expect(light.intensity).toBe(2.4)
+  })
+
+  it('gives explicit per-model overrides precedence over global values', () => {
+    const light = { visible: true, userData: { componentId: 'room-light' } }
+    const root = makeRoot([light])
+    root.userData = {
+      proceduralModelEnvironmentBindings: [{
+        targetPartId: 'room-light',
+        variable: 'lighting.artificial.enabled',
+        property: 'visible',
+      }],
+      environmentOverrides: { 'lighting.artificial.enabled': true },
+    }
+
+    applyEnvironmentBindings(root, { 'lighting.artificial.enabled': false })
+    expect(light.visible).toBe(true)
+    root.userData.environmentOverrides['lighting.artificial.enabled'] = false
+    applyEnvironmentBindings(root, { 'lighting.artificial.enabled': true })
+    expect(light.visible).toBe(false)
+  })
+
+  it('ignores unknown targets and unsupported runtime properties', () => {
+    const object = { visible: true, userData: { componentId: 'part-a' } }
+    const root = makeRoot([object])
+    root.userData = {
+      proceduralModelEnvironmentBindings: [
+        { targetPartId: 'missing', variable: 'lighting.artificial.enabled', property: 'visible' },
+        { targetPartId: 'part-a', variable: 'lighting.artificial.enabled', property: 'executeCode' },
+      ],
+    }
+    expect(applyEnvironmentBindings(root, { 'lighting.artificial.enabled': false })).toBe(0)
     expect(object.visible).toBe(true)
   })
 })

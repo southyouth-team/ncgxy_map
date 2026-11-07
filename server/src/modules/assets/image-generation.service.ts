@@ -1088,7 +1088,12 @@ export class ImageGenerationService {
       response = await fetch(baseUrl + '/chat/completions', {
         method: 'POST', headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({ model, temperature: 0.2, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        }),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1108,7 +1113,8 @@ export class ImageGenerationService {
       const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
       result = JSON.parse(cleaned);
     } catch {
-      throw new ServiceUnavailableException('AI 模型编辑结果不是有效 JSON');
+      this.logger.error('程序化模型 AI 编辑响应不是有效 JSON；响应内容预览：' + raw.trim().slice(0, 500));
+      throw new ServiceUnavailableException('AI 模型编辑结果不是有效 JSON（已启用 JSON 输出模式，请检查上游模型响应）');
     }
     if (!result || typeof result.generatedCode !== 'string' || !result.generatedCode.trim()
       || result.generatedCode.length > 120000

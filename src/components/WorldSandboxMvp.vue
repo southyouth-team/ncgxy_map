@@ -235,6 +235,52 @@ function updateGenerationProgress(event) {
   generationProgress.value = next
 }
 
+function buildCompositeComponentSource(plan, chunks) {
+  const manifest = plan?.modelCapabilityManifest && typeof plan.modelCapabilityManifest === 'object'
+    ? plan.modelCapabilityManifest : { version: 1, parameters: [], capabilities: {} }
+  const parts = Array.isArray(plan?.components) ? plan.components : []
+  const declarations = ['const __buildPlan = ' + JSON.stringify(plan) + ';']
+  const builders = chunks.map((entry, index) => {
+    const component = parts.find(item => item.id === entry.componentId) || { id: entry.componentId }
+    const completedDependencies = chunks.slice(0, index).map(item => ({
+      componentId: item.componentId,
+      purpose: String(parts.find(part => part.id === item.componentId)?.purpose || item.componentId),
+    }))
+    const source = String(entry.source || '').replace(/^\s*export\s+function\s+createComponent/, 'function createComponent')
+    if (!/^\s*function\s+createComponent\s*\(\s*THREE\s*,/.test(source)) {
+      throw new Error('组件 ' + entry.componentId + ' 的源码工厂格式无效')
+    }
+    if (source.length > 30000) throw new Error('组件 ' + entry.componentId + ' 源码超过 30 KB')
+    return [
+      '{',
+      source,
+      'const __part = createComponent(THREE, { plan: __buildPlan, component: ' + JSON.stringify(component)
+        + ', completedDependencies: ' + JSON.stringify(completedDependencies) + ', params });',
+      'if (!__part || __part.isGroup !== true) throw new Error(' + JSON.stringify('组件 ' + entry.componentId + ' 必须返回 THREE.Group') + ');',
+      '__part.userData = { ...( __part.userData || {}), componentId: ' + JSON.stringify(entry.componentId) + ' };',
+      'root.add(__part);',
+      '}',
+    ].join('\n')
+  })
+  const source = [
+    ...declarations,
+    'export function createModel(THREE, params = {}) {',
+    'const root = new THREE.Group();',
+    ...builders,
+    'root.name = ' + JSON.stringify(plan?.name || 'AI 程序化模型') + ';',
+    'root.userData = { ...(root.userData || {}), assetName: root.name, proceduralModelCapabilityManifest: '
+      + JSON.stringify(manifest) + ', proceduralModelParameters: '
+      + JSON.stringify(Array.isArray(manifest.parameters) ? manifest.parameters : []) + ', proceduralModelParts: '
+      + JSON.stringify(parts.map(item => ({ id: item.id, name: item.name || item.purpose || item.id })))
+      + ', proceduralModelEnvironmentBindings: '
+      + JSON.stringify(Array.isArray(manifest.capabilities?.environmentBindings) ? manifest.capabilities.environmentBindings : []) + ' };',
+    'return root;',
+    '}',
+  ].join('\n')
+  if (source.length > 120000) throw new Error('累计模型源码超过 120 KB，请减少组件细节或拆分为更精简的部件')
+  return source
+}
+
 async function generateAiModel() {
   const prompt = aiPrompt.value.trim()
   if ((!prompt && !referenceImageDataUrl.value) || aiBusy.value) return
@@ -248,14 +294,14 @@ async function generateAiModel() {
   editError.value = ''
   generationProgress.value = [{
     stage: 'request',
-    label: '请求 AI 生成模型源码',
-    detail: '正在向模型生成服务提交描述与参考图',
+    label: '请求 AI 规划模型',
+    detail: '正在提交描述与参考图，AI 将根据结构复杂度选择生成策略',
     status: 'active',
   }]
-  message.value = '正在生成 Three.js 程序化模型源码…'
+  message.value = '正在规划并生成 Three.js 程序化模型…'
 
   try {
-    const response = await fetch(API_BASE + '/assets/ai-image/generate-procedural-object', {
+    const response = await fetch(API_BASE + '/assets/ai-image/generate-procedural-object-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
       body: JSON.stringify({
@@ -265,42 +311,140 @@ async function generateAiModel() {
         imageDataUrl: referenceImageDataUrl.value || undefined,
       }),
     })
-    const payload = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(payload.message || '程序化模型生成失败：HTTP ' + response.status)
-    const result = payload.data || payload.result || payload
-    if (typeof result.generatedCode !== 'string' || !result.generatedCode.trim()) {
-      throw new Error('生成接口没有返回 Three.js 程序化源码')
+    if (!response.ok || !response.body) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload.message || '增量模型生成失败：HTTP ' + response.status)
     }
 
-    generationProgress.value = generationProgress.value.map(item => ({ ...item, status: 'done' }))
-    updateGenerationProgress({ stage: 'worker-start', label: '启动隔离建模 Worker', detail: '生成源码已返回，开始构建真实 Three.js 对象' })
-    const group = await executeProceduralModel(result.generatedCode, {
-      timeoutMs: 60000,
-      onProgress: updateGenerationProgress,
-    })
-    const modelName = group.userData.assetName || result.objectType || 'AI 程序化模型'
-    const modelParameters = Array.isArray(group.userData.proceduralModelParameters) ? group.userData.proceduralModelParameters : []
-    group.userData.proceduralModelParameterValues = modelParameterDefaults(modelParameters)
-    group.userData.proceduralModelParts = Array.isArray(group.userData.proceduralModelParts) ? group.userData.proceduralModelParts : []
-    group.userData.proceduralModelEnvironmentBindings = Array.isArray(group.userData.proceduralModelEnvironmentBindings)
-      ? group.userData.proceduralModelEnvironmentBindings : []
-    group.userData.proceduralModelCapabilityManifest = group.userData.proceduralModelCapabilityManifest
-      && typeof group.userData.proceduralModelCapabilityManifest === 'object'
-      ? group.userData.proceduralModelCapabilityManifest
-      : { version: 1, parameters: group.userData.proceduralModelParameters, capabilities: group.userData.proceduralModelEnvironmentBindings.length
-        ? { environmentBindings: group.userData.proceduralModelEnvironmentBindings } : {} }
-    group.userData.proceduralModelConfig = {
-      protocol: 'threejs-procedural-v1',
-      generator: result.generationMethod || 'img2threejs-procedural',
-      objectType: result.objectType || '独立 3D 模型',
-      visualStyle: result.visualStyle || 'stylized',
-      prompt,
-      hasReferenceImage: Boolean(referenceImageDataUrl.value),
-      generatedAt: result.generatedAt || new Date().toISOString(),
+    let buffer = ''
+    let plan = null
+    let result = null
+    const chunks = []
+    let completed = false
+    const decoder = new TextDecoder()
+    const processEvent = async event => {
+      if (!event || typeof event.type !== 'string') return
+      if (event.type === 'stage') {
+        updateGenerationProgress({ stage: event.stage, label: event.label || event.stage })
+        return
+      }
+      if (event.type === 'plan') {
+        plan = event.plan
+        updateGenerationProgress({
+          stage: 'plan-ready',
+          label: '模型结构规划完成',
+          detail: '共 ' + (plan?.components?.length || 0) + ' 个组件，已确定共享坐标系和依赖关系',
+        })
+        return
+      }
+      if (event.type === 'component-start') {
+        updateGenerationProgress({
+          stage: 'component-' + event.componentId,
+          label: '生成组件 ' + (Number(event.index) + 1) + '/' + event.total,
+          detail: event.componentId,
+        })
+        return
+      }
+      if (event.type === 'component-complete') {
+        if (!plan || !event.chunk?.source) throw new Error('组件事件缺少 ModelPlan 或组件源码')
+        chunks.push(event.chunk)
+        const compositeSource = buildCompositeComponentSource(plan, chunks)
+        updateGenerationProgress({
+          stage: 'worker-component-' + event.componentId,
+          label: '构建并预览组件 ' + chunks.length + '/' + event.total,
+          detail: '组件源码已完整返回，正在隔离 Worker 中重建当前有效模型',
+        })
+        const group = await executeProceduralModel(compositeSource, {
+          timeoutMs: 60000,
+          onProgress: updateGenerationProgress,
+        })
+        group.userData.proceduralModelSource = compositeSource
+        group.userData.proceduralModelBuildPlan = plan
+        group.userData.proceduralModelBuildChunks = chunks.map(item => ({
+          componentId: item.componentId,
+          source: item.source,
+        }))
+        group.userData.proceduralModelConfig = {
+          protocol: 'threejs-procedural-build-v1',
+          generator: 'img2threejs-procedural-components',
+          objectType: '独立 3D 模型',
+          visualStyle: 'stylized',
+          prompt,
+          hasReferenceImage: Boolean(referenceImageDataUrl.value),
+          generatedAt: new Date().toISOString(),
+        }
+        group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
+        editingModel.value = group
+        return
+      }
+      if (event.type === 'single') {
+        result = event.result
+        return
+      }
+      if (event.type === 'assembly') {
+        updateGenerationProgress({
+          stage: 'assembly-' + event.status,
+          label: event.status === 'started' ? '整合完整模型' : '模型整合完成',
+        })
+        return
+      }
+      if (event.type === 'error') {
+        throw new Error(event.message || '模型构建失败')
+      }
+      if (event.type === 'complete') {
+        completed = true
+      }
     }
-    group.userData.proceduralModelSource = result.generatedCode
-    group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
-    group.name = modelName
+
+    const reader = response.body.getReader()
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let newline
+      while ((newline = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newline).trim()
+        buffer = buffer.slice(newline + 1)
+        if (line) await processEvent(JSON.parse(line))
+      }
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) await processEvent(JSON.parse(buffer.trim()))
+    if (!completed) throw new Error('模型构建事件流提前结束，未收到 complete 事件')
+
+    if (result) {
+      updateGenerationProgress({ stage: 'worker-start', label: '启动隔离建模 Worker', detail: '一次性模型源码已返回' })
+      const group = await executeProceduralModel(result.generatedCode, {
+        timeoutMs: 60000,
+        onProgress: updateGenerationProgress,
+      })
+      group.userData.proceduralModelParameterValues = modelParameterDefaults(group.userData.proceduralModelParameters || [])
+      group.userData.proceduralModelConfig = {
+        protocol: 'threejs-procedural-v1',
+        generator: result.generationMethod || 'img2threejs-procedural',
+        objectType: result.objectType || '独立 3D 模型',
+        visualStyle: result.visualStyle || 'stylized',
+        prompt,
+        hasReferenceImage: Boolean(referenceImageDataUrl.value),
+        generatedAt: result.generatedAt || new Date().toISOString(),
+      }
+      group.userData.proceduralModelSource = result.generatedCode
+      group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
+      editingModel.value = group
+    }
+
+    const model = editingModel.value
+    if (!model) throw new Error('构建完成但没有可预览的模型')
+    model.userData.proceduralModelParameterValues = modelParameterDefaults(model.userData.proceduralModelParameters || [])
+    model.userData.proceduralModelParts = Array.isArray(model.userData.proceduralModelParts)
+      ? model.userData.proceduralModelParts : []
+    model.userData.proceduralModelEnvironmentBindings = Array.isArray(model.userData.proceduralModelEnvironmentBindings)
+      ? model.userData.proceduralModelEnvironmentBindings : []
+    model.userData.proceduralModelCapabilityManifest = model.userData.proceduralModelCapabilityManifest
+      && typeof model.userData.proceduralModelCapabilityManifest === 'object'
+      ? model.userData.proceduralModelCapabilityManifest
+      : { version: 1, parameters: model.userData.proceduralModelParameters, capabilities: {} }
+    model.name = model.userData.assetName || plan?.name || result?.objectType || 'AI 程序化模型'
     generationProgress.value = generationProgress.value.map(item => ({ ...item, status: 'done' }))
     generationProgress.value.push({
       stage: 'preview-ready',
@@ -308,7 +452,6 @@ async function generateAiModel() {
       detail: '已获得可编辑的 Three.js 模型；尚未加入沙盒，等待用户保存',
       status: 'done',
     })
-    editingModel.value = group
     message.value = '模型生成完成，可继续调整参数或通过 AI 对话编辑；保存后才会加入沙盒。'
   } catch (error) {
     const next = [...generationProgress.value]

@@ -74,6 +74,93 @@ function addModel(type) {
   group.add(mesh)
   registerModel(group, mesh.name + ' ' + (objects.value.length + 1))
 }
+function addLightSwitchDemo() {
+  const origin = engine?.getSandboxModel?.('__never__')
+  void origin
+  const player = { x: 0, z: 14 }
+  const lamp = new THREE.Group()
+  lamp.name = '演示灯具'
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.34, 0.42, 0.28, 20),
+    new THREE.MeshStandardMaterial({ color: '#343b42', metalness: 0.65, roughness: 0.35 }),
+  )
+  base.position.y = 0.14
+  lamp.add(base)
+  const stem = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.09, 1.5, 12),
+    new THREE.MeshStandardMaterial({ color: '#69747b', metalness: 0.7, roughness: 0.3 }),
+  )
+  stem.position.y = 0.95
+  lamp.add(stem)
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.42, 20, 16),
+    new THREE.MeshStandardMaterial({
+      color: '#fff0b5',
+      emissive: '#ffd36a',
+      emissiveIntensity: 1.4,
+      roughness: 0.25,
+    }),
+  )
+  bulb.position.y = 1.9
+  bulb.userData.stateBinding = { key: 'enabled', property: 'emissiveIntensity', enabledValue: 1.4 }
+  lamp.add(bulb)
+  const pointLight = new THREE.PointLight('#ffd98a', 2.2, 11, 1.8)
+  pointLight.position.set(0, 1.9, 0)
+  pointLight.castShadow = true
+  pointLight.userData.stateBinding = { key: 'enabled', property: 'visible' }
+  lamp.add(pointLight)
+  lamp.userData.worldState = { enabled: true }
+  const lampPosition = { x: player.x + 5, y: 0, z: player.z + 2 }
+  const lampRoot = registerModel(lamp, '演示灯具', lampPosition)
+
+  const switchRoot = new THREE.Group()
+  switchRoot.name = '墙壁开关'
+  const plate = new THREE.Mesh(
+    new THREE.BoxGeometry(0.75, 1.05, 0.12),
+    new THREE.MeshStandardMaterial({ color: '#e7e5dc', roughness: 0.55 }),
+  )
+  plate.position.y = 1.2
+  switchRoot.add(plate)
+  const button = new THREE.Mesh(
+    new THREE.BoxGeometry(0.28, 0.38, 0.1),
+    new THREE.MeshStandardMaterial({ color: '#b7c6c0', roughness: 0.35 }),
+  )
+  button.position.set(0, 1.2, 0.11)
+  switchRoot.add(button)
+  switchRoot.userData.interactionRadius = 4.8
+  switchRoot.userData.interactionConfig = {
+    action: 'toggle-state',
+    targetId: lampRoot.userData.sandboxModelId,
+    stateKey: 'enabled',
+    prompt: '靠近墙壁开关，按 E 切换演示灯具',
+  }
+  switchRoot.userData.interactionMessage = '你按下了墙壁开关'
+  const switchPosition = { x: player.x + 2, y: 0, z: player.z + 2 }
+  registerModel(switchRoot, '墙壁开关', switchPosition)
+  message.value = '已创建灯具与墙壁开关演示。靠近开关按 E，验证灯具亮灭。'
+  saveStatus.value = '未保存演示场景'
+}
+
+function handleSandboxModelInteract(payload) {
+  const source = payload?.id ? objectsById.get(payload.id) : null
+  const config = source?.userData?.interactionConfig
+  if (config?.action === 'toggle-state' && config.targetId && config.stateKey) {
+    const current = engine?.getSandboxModelState?.(config.targetId)
+    if (!current) {
+      message.value = '交互目标不存在，无法切换状态'
+      return
+    }
+    const nextValue = !Boolean(current[config.stateKey])
+    const next = engine.setSandboxModelState(config.targetId, { [config.stateKey]: nextValue })
+    message.value = next
+      ? (nextValue ? '灯具已开启' : '灯具已关闭')
+      : '灯具状态更新失败'
+    saveStatus.value = '状态已变更，记得保存'
+    return
+  }
+  message.value = payload?.message || ('已与 ' + (payload?.name || '模型') + ' 交互')
+}
+
 function selectModel(object) {
   if (object) engine?.selectSandboxModel(object.userData.sandboxModelId)
 }
@@ -433,7 +520,7 @@ onMounted(async () => {
         if (payload?.visible) message.value = payload.text
         else if (message.value.startsWith('靠近 ')) message.value = '使用 WASD 或方向键移动人物，靠近模型按 E 交互。'
       },
-      onSandboxModelInteract: payload => { message.value = payload?.message || ('已与 ' + (payload?.name || '模型') + ' 交互') },
+      onSandboxModelInteract: handleSandboxModelInteract,
     }, {
       // 直接复用仓库已有的小型 RPG 样板场景，不加载完整校园 GIS 主地图。
       sceneType: 'rpg-sample',
@@ -488,6 +575,7 @@ onBeforeUnmount(() => {
         <div class="world-mvp__model-grid">
           <button v-for="item in objectTypes" :key="item.id" @click="addModel(item.id)">＋ {{ item.label }}</button>
         </div>
+        <button class="world-mvp__demo-button" @click="addLightSwitchDemo">创建开关灯交互演示</button>
         <div class="world-mvp__selected">
           <span>当前对象</span><strong>{{ selectedName || '未选择' }}</strong>
           <button :disabled="!selectedName" @click="duplicateSelected">复制</button><button :disabled="!selectedName" @click="deleteSelected">删除</button>
@@ -573,6 +661,7 @@ onBeforeUnmount(() => {
 .world-mvp__panel section { padding:15px 0; border-bottom:1px solid rgba(255,255,255,.09); }
 .world-mvp__panel h2 { margin:0 0 12px; font-size:12px; }
 .world-mvp__model-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
+.world-mvp .world-mvp__demo-button { width:100%; margin-top:7px; border-color:rgba(165,201,177,.45); color:#c6e4ce; }
 .world-mvp__selected { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:6px; margin-top:10px; padding:9px; border:1px solid rgba(255,255,255,.1); border-radius:7px; }
 .world-mvp__selected span { color:#8e9fa3; font-size:10px; }
 .world-mvp__selected strong { grid-column:1; font-size:11px; }

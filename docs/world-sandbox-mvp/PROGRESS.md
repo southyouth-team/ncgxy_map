@@ -2129,3 +2129,26 @@ export const environmentBindings = [
 - GitHub 源码写入与回读：待本轮写入后核对。
 - 单元测试、构建、CI、浏览器验收：未执行；当前连接环境没有本地仓库执行器或浏览器运行时。
 - 本轮只处理 Transform 同步，不代表完整 World Runtime 生命周期已经统一。
+
+
+---
+
+## 2026-11-08 — P2.2 模型实例生命周期一致性（源码修改）
+
+### 本轮目标
+
+统一模型替换、删除、引擎销毁时的空间注册清理；避免实例 ID 冲突导致场景对象与 Map 注册不一致；修复复制模型时材质纹理共享造成的跨实例资源释放风险；减少页面对象索引与引擎实例注册表之间的数据分歧。
+
+### 实际改动
+
+- `src/three/engine/createCampusEngine.js`
+  - 新增 `removeSandboxModelSpatialRegistration(ownerId)`，统一清理模型拥有的碰撞体与支撑面；替换、删除、引擎销毁复用该入口。
+  - `addSandboxModel` 拒绝重复实例 ID，避免覆盖 Map 记录但旧模型仍挂在场景中。
+  - `replaceSandboxModel` 在调用方未显式提供时保留原实例 `worldState` 和 `environmentOverrides`。
+  - `duplicateSandboxModel` 使用独立材质和独立纹理副本，避免删除副本时释放原模型仍在使用的纹理。
+- 新增 `src/three/engine/sandboxModelLifecycle.js`：提供材质克隆与纹理所有权隔离函数。
+- 新增 `src/three/engine/sandboxModelLifecycle.test.js`：覆盖材质克隆、纹理克隆、源对象隔离和无材质输入。
+- `src/components/WorldSandboxMvp.vue`
+  - 保存模型列表改为从引擎实例注册表读取，不再以页面辅助 Map 作为权威集合。
+  - 恢复时先解析全部模型，再注册实例；注册阶段失败会回滚已注册模型。
+  - 删除时只有引擎确认成功后才清理页面辅助引用。

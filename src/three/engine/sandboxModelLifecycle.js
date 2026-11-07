@@ -8,11 +8,26 @@
 export function cloneSandboxMaterial(material) {
   if (!material?.clone) return material
   const clone = material.clone()
+  const textures = new Map()
   for (const key of Object.keys(clone)) {
-    const value = clone[key]
-    if (value?.isTexture && typeof value.clone === 'function') {
-      clone[key] = value.clone()
-    }
+    const texture = clone[key]
+    if (!texture?.isTexture || typeof texture.clone !== 'function') continue
+    if (!textures.has(texture)) textures.set(texture, texture.clone())
+    clone[key] = textures.get(texture)
   }
   return clone
+}
+
+/**
+ * Dispose all direct texture properties and the material exactly once.
+ */
+export function disposeSandboxMaterial(material) {
+  if (!material) return
+  const textures = new Set()
+  for (const key of Object.keys(material)) {
+    const value = material[key]
+    if (value?.isTexture) textures.add(value)
+  }
+  textures.forEach(texture => texture.dispose?.())
+  material.dispose?.()
 }

@@ -12,6 +12,11 @@ export class InputController {
     this.groundRayDirection = THREE?.Vector3 ? new THREE.Vector3(0, -1, 0) : null
     this.playerEyeHeight = 1.7
     this.maxWalkableSlopeDegrees = 50
+    this.gravity = 24
+    this.verticalVelocity = 0
+    this.grounded = true
+    this.maxStepHeight = 0.45
+    this.groundProbeDistance = 60
     this.mode = 'overview'
     this.movementEnabled = true
     this.keys = new Set()
@@ -118,6 +123,8 @@ export class InputController {
   resetPosition(position = { x: 0, z: 24 }) {
     this.keys.clear()
     this.cameraRig.player.set(Number(position.x) || 0, 1.7, Number(position.z) || 0)
+    this.verticalVelocity = 0
+    this.grounded = true
   }
 
   setNavigationPath(path) {
@@ -140,28 +147,61 @@ export class InputController {
     if (!this.movementEnabled) this.keys.clear()
   }
 
-  resolvePlayerGroundHeight(player) {
-    if (!this.groundRaycaster || !this.groundRayOrigin || !this.groundRayDirection) return player.y
+  getPlayerSupportHit(player, { walking = false } = {}) {
+    if (!this.groundRaycaster || !this.groundRayOrigin || !this.groundRayDirection) return null
     const surfaces = this.collisionWorld?.supportSurfaces || []
     const meshes = surfaces
-      .filter(surface => surface.enabled !== false && (surface.supportsStanding || surface.walkable))
+      .filter(surface => surface.enabled !== false && (
+        walking ? surface.walkable === true : surface.supportsStanding === true
+      ))
       .flatMap(surface => surface.meshes || [])
-    if (!meshes.length) return 1.7
+    if (!meshes.length) return null
 
-    this.groundRayOrigin.set(player.x, player.y + 0.35, player.z)
+    this.groundRayOrigin.set(player.x, player.y + 0.2, player.z)
     this.groundRayDirection.set(0, -1, 0)
     this.groundRaycaster.set(this.groundRayOrigin, this.groundRayDirection)
-    this.groundRaycaster.far = 3
+    this.groundRaycaster.far = this.groundProbeDistance
     const hits = this.groundRaycaster.intersectObjects(meshes, false)
     const maxSlopeCos = Math.cos(this.maxWalkableSlopeDegrees * Math.PI / 180)
     for (const hit of hits) {
-      if (!hit.face || !hit.object) continue
+      if (!hit.face || !hit.object || !Number.isFinite(hit.point?.y)) continue
       const normalMatrix = new this.THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)
       const normal = hit.face.normal.clone().applyMatrix3(normalMatrix).normalize()
       if (normal.y < maxSlopeCos) continue
-      return hit.point.y + this.playerEyeHeight
+      return hit
     }
-    return 1.7
+    return null
+  }
+
+  updateVerticalMotion(player, delta, { walking = false } = {}) {
+    const dt = Math.max(0, Math.min(Number(delta) || 0, 0.05))
+    if (!dt) return
+    const hit = this.getPlayerSupportHit(player, { walking })
+    const groundEyeY = hit ? hit.point.y + this.playerEyeHeight : this.playerEyeHeight
+
+    // 只有从上方接近支撑面时才落地；向上运动不会被地面射线吸住。
+    if (this.verticalVelocity <= 0 && player.y <= groundEyeY + this.maxStepHeight) {
+      if (player.y >= groundEyeY - 0.08 || (this.grounded && player.y <= groundEyeY + this.maxStepHeight)) {
+        player.y = groundEyeY
+        this.verticalVelocity = 0
+        this.grounded = true
+        return
+      }
+    }
+
+    this.grounded = false
+    this.verticalVelocity -= this.gravity * dt
+    player.y += this.verticalVelocity * dt
+    if (player.y <= this.playerEyeHeight) {
+      player.y = this.playerEyeHeight
+      this.verticalVelocity = 0
+      this.grounded = true
+    }
+  }
+
+  resolvePlayerGroundHeight(player) {
+    const hit = this.getPlayerSupportHit(player, { walking: false })
+    return hit ? hit.point.y + this.playerEyeHeight : this.playerEyeHeight
   }
 
   update(delta) {
@@ -187,14 +227,24 @@ export class InputController {
       const movement = this.collisionWorld.move(player, dx / distance * travel, dz / distance * travel)
       const moved = Math.hypot(movement.x - player.x, movement.z - player.z)
       if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
+      const previousX = player.x, previousZ = player.z
       player.x = movement.x
       player.z = movement.z
-      player.y = this.resolvePlayerGroundHeight(player)
+      const support = this.getPlayerSupportHit(player, { walking: true })
+      const standing = this.getPlayerSupportHit(player, { walking: false })
+      if (this.grounded && !support && standing) {
+        player.x = previousX
+        player.z = previousZ
+      }
+      this.updateVerticalMotion(player, delta, { walking: Boolean(support) })
       if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
       else this.cameraRig.updateFirstPersonDesired()
       return
     }
-    if (!forward && !strafe) return
+    if (!forward && !strafe) {
+      this.updateVerticalMotion(this.cameraRig.player, delta)
+      return
+    }
     const speed = (this.keys.has('shift') ? 18 : 9) * delta
     // 第三人称 yaw 描述的是相机相对角色的偏移方向，角色前进方向与其相反。
     const yaw = this.mode === 'firstPerson' ? this.cameraRig.firstYaw : this.cameraRig.thirdYaw + Math.PI
@@ -206,9 +256,16 @@ export class InputController {
     const dz = Math.cos(yaw) * f + Math.sin(yaw) * s
     const player = this.cameraRig.player
     const movement = this.collisionWorld.move(player, dx * speed, dz * speed)
+    const previousX = player.x, previousZ = player.z
     player.x = movement.x
     player.z = movement.z
-    player.y = this.resolvePlayerGroundHeight(player)
+    const support = this.getPlayerSupportHit(player, { walking: true })
+    const standing = this.getPlayerSupportHit(player, { walking: false })
+    if (this.grounded && !support && standing) {
+      player.x = previousX
+      player.z = previousZ
+    }
+    this.updateVerticalMotion(player, delta, { walking: Boolean(support) })
     if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
     else this.cameraRig.updateFirstPersonDesired()
   }

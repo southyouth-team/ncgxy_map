@@ -270,6 +270,38 @@ async function generateAiModel() {
   }
 }
 
+function handleCapabilityChange(payload) {
+  const model = editingModel.value
+  if (!model || !payload?.capabilityId || !payload?.targetPartId) return
+  const document = model.userData.proceduralModelCapabilityControlDocument
+    || createCapabilityControlDocument({ manifest: model.userData.proceduralModelCapabilityManifest })
+  const scope = { targetType: 'part', targetId: String(payload.targetPartId) }
+  const overrides = [...(document.overrides || [])]
+  const index = overrides.findIndex(record =>
+    record?.capabilityId === payload.capabilityId &&
+    record.scope?.targetType === scope.targetType &&
+    String(record.scope?.targetId || '') === scope.targetId)
+  const nextOverride = {
+    capabilityId: payload.capabilityId,
+    scope,
+    action: 'set',
+    value: { blocksMovement: Boolean(payload.blocksMovement) },
+    updatedAt: new Date().toISOString(),
+  }
+  if (index >= 0) overrides[index] = nextOverride
+  else overrides.push(nextOverride)
+  model.userData.proceduralModelCapabilityControlDocument = {
+    ...document,
+    overrides,
+  }
+  const updated = engine?.refreshSandboxModelSpatial?.(model)
+  message.value = payload.blocksMovement
+    ? '已启用该部件的玩家移动阻挡'
+    : '已关闭该部件的玩家移动阻挡'
+  if (updated === undefined) message.value += '（碰撞 Runtime 刷新接口不可用）'
+  saveStatus.value = '能力已调整，记得保存沙盒'
+}
+
 function openModelEditor(payload) {
   const model = payload?.id ? engine?.getSandboxModel(payload.id) : selected
   if (!model?.userData?.proceduralModelSource) {
@@ -697,6 +729,7 @@ onBeforeUnmount(() => {
       @close="editingModel = null"
       @edit="handleModelEdit"
       @parameter-change="handleParameterChange"
+      @capability-change="handleCapabilityChange"
     />
     <footer class="world-mvp__help">WASD / 方向键移动人物 · 点击建模组选择 · 双击 AI 模型打开微调编辑器 · 拖动坐标轴编辑模型</footer>
   </main>

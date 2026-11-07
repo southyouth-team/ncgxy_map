@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
@@ -18,7 +18,8 @@ const aiPrompt = ref('')
 const referenceImageDataUrl = ref('')
 const referenceImageName = ref('')
 const aiBusy = ref(false)
-const editingModel = ref(null)
+// Three.js Object3D must remain raw; deep Vue proxies violate Three.js property invariants.
+const editingModel = shallowRef(null)
 const editorOpen = ref(false)
 const editorMode = ref('edit')
 const isDraftModel = ref(false)

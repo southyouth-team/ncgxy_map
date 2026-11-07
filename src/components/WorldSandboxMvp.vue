@@ -228,7 +228,7 @@ function updateGenerationProgress(event) {
     stage: event.stage,
     label: event.label || event.stage,
     detail: event.detail || '',
-    status: 'active',
+    status: event.status || 'active',
   }
   if (index >= 0) next[index] = entry
   else next.push(entry)
@@ -341,7 +341,11 @@ async function generateAiModel() {
     const processEvent = async event => {
       if (!event || typeof event.type !== 'string') return
       if (event.type === 'stage') {
-        updateGenerationProgress({ stage: event.stage, label: event.label || event.stage })
+        updateGenerationProgress({
+          stage: event.stage,
+          label: event.label || event.stage,
+          detail: event.detail || '已提交模型结构分析请求，正在等待 AI 返回结果',
+        })
         return
       }
       if (event.type === 'plan') {
@@ -349,48 +353,30 @@ async function generateAiModel() {
         updateGenerationProgress({
           stage: 'plan-ready',
           label: '模型结构规划完成',
-          detail: '共 ' + (plan?.components?.length || 0) + ' 个组件，已确定共享坐标系和依赖关系',
+          detail: '识别出 ' + (plan?.components?.length || 0) + ' 个组件，已确定统一坐标系和构建依赖',
+          status: 'done',
         })
         return
       }
       if (event.type === 'component-start') {
+        const component = plan?.components?.find(item => item.id === event.componentId)
+        const componentLabel = component?.name || component?.purpose || event.componentId
         updateGenerationProgress({
           stage: 'component-' + event.componentId,
-          label: '生成组件 ' + (Number(event.index) + 1) + '/' + event.total,
-          detail: event.componentId,
+          label: '生成组件 ' + (Number(event.index) + 1) + '/' + event.total + '：' + componentLabel,
+          detail: '已提交该组件的生成请求，正在等待 AI 返回完整组件源码；此阶段不会刷新模型预览',
         })
         return
       }
       if (event.type === 'component-complete') {
         if (!plan || !event.chunk?.source) throw new Error('组件事件缺少 ModelPlan 或组件源码')
         chunks.push(event.chunk)
-        const compositeSource = buildCompositeComponentSource(plan, chunks)
         updateGenerationProgress({
-          stage: 'worker-component-' + event.componentId,
-          label: '构建并预览组件 ' + chunks.length + '/' + event.total,
-          detail: '组件源码已完整返回，正在隔离 Worker 中重建当前有效模型',
+          stage: 'component-' + event.componentId,
+          label: '组件已完成 ' + chunks.length + '/' + event.total + '：' + (plan.components.find(item => item.id === event.componentId)?.name || event.componentId),
+          detail: '源码已接收，约 ' + (event.chunk.source.length / 1024).toFixed(1) + ' KB；等待剩余组件生成',
+          status: 'done',
         })
-        const group = await executeProceduralModel(compositeSource, {
-          timeoutMs: 60000,
-          onProgress: updateGenerationProgress,
-        })
-        group.userData.proceduralModelSource = compositeSource
-        group.userData.proceduralModelBuildPlan = plan
-        group.userData.proceduralModelBuildChunks = chunks.map(item => ({
-          componentId: item.componentId,
-          source: item.source,
-        }))
-        group.userData.proceduralModelConfig = {
-          protocol: 'threejs-procedural-build-v1',
-          generator: 'img2threejs-procedural-components',
-          objectType: '独立 3D 模型',
-          visualStyle: 'stylized',
-          prompt,
-          hasReferenceImage: Boolean(referenceImageDataUrl.value),
-          generatedAt: new Date().toISOString(),
-        }
-        group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
-        editingModel.value = group
         return
       }
       if (event.type === 'single') {
@@ -400,7 +386,11 @@ async function generateAiModel() {
       if (event.type === 'assembly') {
         updateGenerationProgress({
           stage: 'assembly-' + event.status,
-          label: event.status === 'started' ? '整合完整模型' : '模型整合完成',
+          label: event.status === 'started' ? '准备完整模型构建' : '模型源码收集完成',
+          detail: event.status === 'started'
+            ? '所有组件源码正在汇总，接下来会一次性提交隔离 Worker 构建'
+            : 'AI 已返回全部组件源码，等待前端执行完整模型构建',
+          status: event.status === 'complete' ? 'done' : 'active',
         })
         return
       }
@@ -409,6 +399,12 @@ async function generateAiModel() {
       }
       if (event.type === 'complete') {
         completed = true
+        updateGenerationProgress({
+          stage: 'ai-generation-complete',
+          label: 'AI 模型源码生成完成',
+          detail: 'AI 生成阶段已结束，正在准备完整模型的一次性构建',
+          status: 'done',
+        })
       }
     }
 
@@ -429,7 +425,11 @@ async function generateAiModel() {
     if (!completed) throw new Error('模型构建事件流提前结束，未收到 complete 事件')
 
     if (result) {
-      updateGenerationProgress({ stage: 'worker-start', label: '启动隔离建模 Worker', detail: '一次性模型源码已返回' })
+      updateGenerationProgress({
+        stage: 'worker-start',
+        label: '启动隔离建模 Worker',
+        detail: '完整模型源码已返回，开始一次性构建 Three.js 对象',
+      })
       const group = await executeProceduralModel(result.generatedCode, {
         timeoutMs: 60000,
         onProgress: updateGenerationProgress,
@@ -445,6 +445,34 @@ async function generateAiModel() {
         generatedAt: result.generatedAt || new Date().toISOString(),
       }
       group.userData.proceduralModelSource = result.generatedCode
+      group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
+      editingModel.value = group
+    } else if (plan && chunks.length) {
+      const compositeSource = buildCompositeComponentSource(plan, chunks)
+      updateGenerationProgress({
+        stage: 'worker-final-build',
+        label: '一次性构建完整模型',
+        detail: '已收齐 ' + chunks.length + ' 个组件源码，正在隔离 Worker 中完成最终装配与几何诊断',
+      })
+      const group = await executeProceduralModel(compositeSource, {
+        timeoutMs: 60000,
+        onProgress: updateGenerationProgress,
+      })
+      group.userData.proceduralModelSource = compositeSource
+      group.userData.proceduralModelBuildPlan = plan
+      group.userData.proceduralModelBuildChunks = chunks.map(item => ({
+        componentId: item.componentId,
+        source: item.source,
+      }))
+      group.userData.proceduralModelConfig = {
+        protocol: 'threejs-procedural-build-v1',
+        generator: 'img2threejs-procedural-components',
+        objectType: '独立 3D 模型',
+        visualStyle: 'stylized',
+        prompt,
+        hasReferenceImage: Boolean(referenceImageDataUrl.value),
+        generatedAt: new Date().toISOString(),
+      }
       group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
       editingModel.value = group
     }

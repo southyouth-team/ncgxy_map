@@ -387,7 +387,11 @@ describe('spatial registration persistence', () => {
     expect(collisionWorld.supportSurfaces).toHaveLength(1)
 
     const restored = new THREE.ObjectLoader().parse(root.toJSON())
-    const restoredFloor = restored.getObjectByProperty('userData.componentId', 'floor-main')
+    let restoredFloor = null
+    restored.traverse(object => {
+      if (object.userData?.componentId === 'floor-main') restoredFloor = object
+    })
+    expect(restoredFloor).toBeTruthy()
     const restoredFloorMesh = restoredFloor.children[0]
     const restoredWorld = new CollisionWorld({ minX: -20, maxX: 20, minZ: -20, maxZ: 20 })
     expect(refreshModelSpatialRegistration(THREE, restored, restoredWorld)).toBe(1)

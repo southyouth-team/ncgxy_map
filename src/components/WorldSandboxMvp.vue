@@ -17,6 +17,10 @@ const referenceImageDataUrl = ref('')
 const referenceImageName = ref('')
 const aiBusy = ref(false)
 const editingModel = ref(null)
+const editorOpen = ref(false)
+const editorMode = ref('edit')
+const isDraftModel = ref(false)
+const generationProgress = ref([])
 const editBusy = ref(false)
 const editError = ref('')
 const editHistory = ref([])
@@ -214,11 +218,42 @@ function onReferenceImageChange(event) {
   reader.onerror = () => { message.value = '参考图读取失败' }
   reader.readAsDataURL(file)
 }
+function updateGenerationProgress(event) {
+  const next = [...generationProgress.value]
+  const index = next.findIndex(item => item.stage === event.stage)
+  for (let i = 0; i < next.length; i++) {
+    if (next[i].status === 'active') next[i] = { ...next[i], status: 'done' }
+  }
+  const entry = {
+    stage: event.stage,
+    label: event.label || event.stage,
+    detail: event.detail || '',
+    status: 'active',
+  }
+  if (index >= 0) next[index] = entry
+  else next.push(entry)
+  generationProgress.value = next
+}
+
 async function generateAiModel() {
   const prompt = aiPrompt.value.trim()
   if ((!prompt && !referenceImageDataUrl.value) || aiBusy.value) return
+
   aiBusy.value = true
+  editorOpen.value = true
+  editorMode.value = 'create'
+  isDraftModel.value = true
+  editingModel.value = null
+  editHistory.value = []
+  editError.value = ''
+  generationProgress.value = [{
+    stage: 'request',
+    label: '请求 AI 生成模型源码',
+    detail: '正在向模型生成服务提交描述与参考图',
+    status: 'active',
+  }]
   message.value = '正在生成 Three.js 程序化模型源码…'
+
   try {
     const response = await fetch(API_BASE + '/assets/ai-image/generate-procedural-object', {
       method: 'POST',
@@ -237,8 +272,12 @@ async function generateAiModel() {
       throw new Error('生成接口没有返回 Three.js 程序化源码')
     }
 
-    message.value = '源码已返回，正在隔离执行并构建 THREE.Group…'
-    const group = await executeProceduralModel(result.generatedCode, { timeoutMs: 60000 })
+    generationProgress.value = generationProgress.value.map(item => ({ ...item, status: 'done' }))
+    updateGenerationProgress({ stage: 'worker-start', label: '启动隔离建模 Worker', detail: '生成源码已返回，开始构建真实 Three.js 对象' })
+    const group = await executeProceduralModel(result.generatedCode, {
+      timeoutMs: 60000,
+      onProgress: updateGenerationProgress,
+    })
     const modelName = group.userData.assetName || result.objectType || 'AI 程序化模型'
     const modelParameters = Array.isArray(group.userData.proceduralModelParameters) ? group.userData.proceduralModelParameters : []
     group.userData.proceduralModelParameterValues = modelParameterDefaults(modelParameters)
@@ -259,15 +298,26 @@ async function generateAiModel() {
       hasReferenceImage: Boolean(referenceImageDataUrl.value),
       generatedAt: result.generatedAt || new Date().toISOString(),
     }
-    // 源码保留在实例元数据中，后续可用于重生成；场景实际使用的是 ObjectLoader 还原的 THREE.Group。
     group.userData.proceduralModelSource = result.generatedCode
     group.userData.interactionRadius = Number(group.userData.interactionRadius) || 4.5
-    registerModel(group, modelName + ' ' + (objects.value.length + 1))
-    aiPrompt.value = ''
-    referenceImageDataUrl.value = ''
-    referenceImageName.value = ''
+    group.name = modelName
+    generationProgress.value = generationProgress.value.map(item => ({ ...item, status: 'done' }))
+    generationProgress.value.push({
+      stage: 'preview-ready',
+      label: '模型预览已就绪',
+      detail: '已获得可编辑的 Three.js 模型；尚未加入沙盒，等待用户保存',
+      status: 'done',
+    })
+    editingModel.value = group
+    message.value = '模型生成完成，可继续调整参数或通过 AI 对话编辑；保存后才会加入沙盒。'
   } catch (error) {
-    message.value = 'AI 程序化建模失败：' + (error?.message || '未知错误')
+    const next = [...generationProgress.value]
+    const activeIndex = next.findIndex(item => item.status === 'active')
+    if (activeIndex >= 0) next[activeIndex] = { ...next[activeIndex], status: 'failed', detail: error?.message || '未知错误' }
+    else next.push({ stage: 'failed', label: '模型生成失败', detail: error?.message || '未知错误', status: 'failed' })
+    generationProgress.value = next
+    editError.value = error?.message || '未知错误'
+    message.value = 'AI 程序化建模失败：' + editError.value
   } finally {
     aiBusy.value = false
   }
@@ -297,7 +347,7 @@ function handleCapabilityChange(payload) {
     ...document,
     overrides,
   }
-  const updated = engine?.refreshSandboxModelSpatial?.(model)
+  const updated = isDraftModel.value ? true : engine?.refreshSandboxModelSpatial?.(model)
   message.value = payload.blocksMovement
     ? '已启用该部件的玩家移动阻挡'
     : '已关闭该部件的玩家移动阻挡'
@@ -312,8 +362,37 @@ function openModelEditor(payload) {
     return
   }
   editingModel.value = model
+  editorOpen.value = true
+  editorMode.value = 'edit'
+  isDraftModel.value = false
   editHistory.value = []
   editError.value = ''
+}
+
+function closeModelEditor() {
+  editorOpen.value = false
+  editingModel.value = null
+  if (isDraftModel.value) {
+    isDraftModel.value = false
+    message.value = '已取消创建，模型未加入沙盒'
+  }
+}
+
+function saveEditorModel() {
+  const model = editingModel.value
+  if (!model) return
+  if (isDraftModel.value) {
+    const name = model.userData?.assetName || model.name || 'AI 程序化模型'
+    registerModel(model, name + ' ' + (objects.value.length + 1))
+    isDraftModel.value = false
+    aiPrompt.value = ''
+    referenceImageDataUrl.value = ''
+    referenceImageName.value = ''
+  }
+  saveSandbox()
+  editorOpen.value = false
+  editingModel.value = null
+  message.value = '模型已保存' + (isDraftModel.value ? '' : '并更新沙盒存档')
 }
 function modelParameterDefaults(definitions, existing = {}) {
   const values = { ...(existing || {}) }
@@ -383,7 +462,14 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
     interactionRadius: Number(current.userData.interactionRadius) || 4.5,
   }
   replacement.name = current.name
-  if (!engine.replaceSandboxModel(id, replacement, { name: current.name })) throw new Error('模型替换失败，原模型已保留')
+  if (isDraftModel.value) {
+    replacement.position.copy(current.position)
+    replacement.quaternion.copy(current.quaternion)
+    replacement.scale.copy(current.scale)
+    replacement.updateMatrixWorld(true)
+  } else if (!engine.replaceSandboxModel(id, replacement, { name: current.name })) {
+    throw new Error('模型替换失败，原模型已保留')
+  }
   if (recordHistory) {
     editHistory.value.push({
       source: current.userData.proceduralModelSource,
@@ -396,8 +482,10 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
     })
     if (editHistory.value.length > 10) editHistory.value.shift()
   }
-  objectsById.set(id, replacement)
-  selected = replacement
+  if (id) {
+    objectsById.set(id, replacement)
+    selected = replacement
+  }
   editingModel.value = replacement
   syncObjects()
   message.value = summary
@@ -724,13 +812,16 @@ onBeforeUnmount(() => {
       </section>
     </aside>
     <ProceduralModelEditor
-      v-if="editingModel"
+      v-if="editorOpen"
       :model="editingModel"
-      :busy="editBusy"
+      :mode="editorMode"
+      :progress="generationProgress"
+      :busy="aiBusy || editBusy"
       :error="editError"
       :can-undo="editHistory.length > 0"
       @undo="undoModelEdit"
-      @close="editingModel = null"
+      @close="closeModelEditor"
+      @save="saveEditorModel"
       @edit="handleModelEdit"
       @parameter-change="handleParameterChange"
       @capability-change="handleCapabilityChange"

@@ -3,6 +3,8 @@
  * Coordinates are expressed in the target part's local space and transformed
  * into world-space AABBs. CollisionWorld currently resolves movement on XZ.
  */
+import { resolveCapabilityRecords } from '../sandbox/capabilityControl.js'
+
 export function collectModelMovementObstacles(THREE, root, ownerId) {
   if (!THREE?.Box3 || !root?.traverse || !ownerId) return []
   const manifest = root.userData?.proceduralModelCapabilityManifest
@@ -16,10 +18,29 @@ export function collectModelMovementObstacles(THREE, root, ownerId) {
     if (id != null) parts.set(String(id), object)
   })
 
+  const control = root.userData?.proceduralModelCapabilityControlDocument || {}
+  const definitions = colliders.filter(collider => collider && typeof collider.targetPartId === 'string').map(collider => ({
+    capabilityId: 'spatial.collider.' + String(collider.id || collider.targetPartId) + '.blocksMovement',
+    scope: { targetType: 'part', targetId: collider.targetPartId },
+    value: { blocksMovement: collider.blocksMovement !== false },
+  }))
+  const resolved = resolveCapabilityRecords({
+    definitions,
+    proposals: control.inference?.proposals || [],
+    overrides: control.overrides || [],
+  })
+  const resolvedByKey = new Map(resolved.map(record => [
+    record.capabilityId + ':' + String(record.scope?.targetId || '*'),
+    record,
+  ]))
   const obstacles = []
   for (const collider of colliders) {
-    if (!collider || collider.enabled === false || collider.blocksMovement === false) continue
+    if (!collider || collider.enabled === false) continue
     if (collider.shape !== 'box' || typeof collider.targetPartId !== 'string') continue
+    const capabilityId = 'spatial.collider.' + String(collider.id || collider.targetPartId) + '.blocksMovement'
+    const capability = resolvedByKey.get(capabilityId + ':' + collider.targetPartId)
+    const blocksMovement = capability?.value?.blocksMovement ?? collider.blocksMovement !== false
+    if (capability?.enabled === false || !blocksMovement) continue
     const part = parts.get(collider.targetPartId)
     if (!part) continue
     const center = collider.center || {}

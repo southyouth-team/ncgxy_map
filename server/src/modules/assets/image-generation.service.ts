@@ -1083,7 +1083,9 @@ export class ImageGenerationService {
       repairInstruction: typeof item?.repairInstruction === 'string' ? item.repairInstruction.slice(0, 1200) : '',
     })) : [];
     const score = Math.max(0, Math.min(100, Math.round(Number(result?.score) || 0)));
-    const passed = result?.passed === true && !issues.some(item => item.severity === 'critical' || item.severity === 'major');
+    const passed = result?.passed === true && !issues.some(
+      (item: { severity: string }) => item.severity === 'critical' || item.severity === 'major',
+    );
     return {
       score, passed,
       summary: typeof result?.summary === 'string' ? result.summary.slice(0, 1200) : '视觉质检完成',

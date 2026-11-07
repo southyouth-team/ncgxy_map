@@ -46,6 +46,18 @@ describe('executeSandboxInteractionAction', () => {
     expect(executeSandboxInteractionAction({ model, config: { action: 'set', stateKey: 'amount', value: Number.POSITIVE_INFINITY } }).reason)
       .toBe('invalid-state-value')
   })
+  it('accepts enter only when the model declares the requested interior entry point', () => {
+    const model = new THREE.Group()
+    model.userData.proceduralModelCapabilityManifest = { capabilities: { interior: { entryPoints: [{ id: 'ground-floor', targetPartId: 'spawn' }] } } }
+    expect(executeSandboxInteractionAction({ model, config: { action: 'enter', entryPointId: 'ground-floor' } }))
+      .toMatchObject({ ok: true, action: 'enter', entryPointId: 'ground-floor' })
+    expect(executeSandboxInteractionAction({ model, config: { action: 'enter', entryPointId: 'unknown' } }).ok).toBe(false)
+  })
+  it('routes exit to the engine transition handler', () => {
+    const model = new THREE.Group()
+    expect(executeSandboxInteractionAction({ model, config: { action: 'exit' } }))
+      .toMatchObject({ ok: true, action: 'exit' })
+  })
   it('rejects missing targets and state keys', () => {
     const model = new THREE.Group()
     expect(executeSandboxInteractionAction({ model, sourcePartId: 'missing', config: { action: 'rotate', rotation: { y: 1 } } }).reason).toBe('target-part-not-found')

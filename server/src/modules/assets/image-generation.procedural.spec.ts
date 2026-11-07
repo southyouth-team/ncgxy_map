@@ -153,7 +153,7 @@ describe('ImageGenerationService procedural generation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const request = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(request.response_format).toBeUndefined();
-    expect(request.messages[0].content).toContain('complete editable procedural Three.js model');
+    expect(request.messages[0].content).toContain('img2threejs editable procedural-draft');
     expect(events.map(event => event.type)).toEqual(['stage', 'stage', 'single', 'complete']);
     expect(events.some(event => event.type.startsWith('component-') || event.type === 'plan')).toBe(false);
     expect(events.find(event => event.type === 'single').result.generatedCode).toBe(generatedCode);

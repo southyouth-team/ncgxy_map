@@ -877,11 +877,12 @@ export class ImageGenerationService {
           || /timeout|timed out|aborted/i.test(message);
         const retryable = timedOut || error instanceof TypeError;
         this.logger.warn('程序化 Three.js 生成请求失败（' + attempt + '/' + maxAttempts + '）：' + message);
-        if (retryable && attempt < maxAttempts) {
+        const retryLimit = timedOut ? 2 : maxAttempts;
+        if (retryable && attempt < retryLimit) {
           onProgress?.({
             stage: 'retry',
             label: timedOut ? '生成请求超时，正在重试' : '生成服务连接异常，正在重试',
-            detail: '第 ' + (attempt + 1) + '/' + maxAttempts + ' 次尝试；不会重新规划或拆分模型',
+            detail: '第 ' + (attempt + 1) + '/' + retryLimit + ' 次尝试；不会重新规划或拆分模型',
           });
           await new Promise(resolve => setTimeout(resolve, 800 * attempt));
           continue;

@@ -205,3 +205,11 @@
 
 - 修改 `src/components/WorldSandboxMvp.vue`：时间系统关闭时，任务输入中的“时间 N 点”指令也会被拒绝，避免绕过 UI 禁用状态改变太阳光照。
 - 修正提交：`6738d0e0fddab19a19e77155e8b9ada028f110af`。
+
+
+### 本轮提交落点复核补充
+
+- 已通过目标分支名重新读取页面、计划和进度文件，确认上述变更内容均可从 `feat/world-sandbox-conversational-model-editor` 读取。
+- 本轮页面与文档写入分别返回独立 commit SHA，相关提交均可由 GitHub commit 查询读取。
+- 仓库最近提交查询返回的默认分支最新提交仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`；本轮所有写入请求均显式指定功能分支，没有向 `main` 发起写入。
+- 当前连接器没有提供直接读取 Git ref SHA 的操作，因此无法独立输出功能分支的 ref HEAD SHA；以目标分支文件回读和提交对象可读取作为本轮落点证据。后续若连接器提供 ref 查询，应补充精确 SHA 核验。

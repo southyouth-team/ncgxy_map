@@ -149,9 +149,14 @@ function addLightSwitchDemo() {
 function handleSandboxModelInteract(payload) {
   const result = engine?.applySandboxModelInteraction?.(payload || {})
   if (!result?.ok) {
-    message.value = result?.reason === 'target-part-not-found'
-      ? '交互目标部件不存在，无法执行动作'
-      : '当前模型未声明可执行的交互动作'
+    const errors = {
+      'target-part-not-found': '交互目标部件不存在，无法执行动作',
+      'interior-entry-point-not-found': '内部入口部件不存在，无法进入',
+      'interior-entry-point-not-declared': '模型没有声明这个内部入口',
+      'already-inside-model': '当前已经处于一个模型的内部空间',
+      'not-inside-target-model': '当前不在这个模型内部，无法从此处退出',
+    }
+    message.value = errors[result?.reason] || '当前模型未声明可执行的交互动作'
     return
   }
   const config = payload?.config || {}
@@ -160,6 +165,10 @@ function handleSandboxModelInteract(payload) {
     const defaultOn = result.stateKey === 'doorOpen' ? '门已打开' : '状态已开启'
     const defaultOff = result.stateKey === 'doorOpen' ? '门已关闭' : '状态已关闭'
     message.value = enabled ? (config.openMessage || defaultOn) : (config.closeMessage || defaultOff)
+  } else if (result.action === 'enter') {
+    message.value = '已进入模型内部空间'
+  } else if (result.action === 'exit') {
+    message.value = '已返回进入前的位置'
   } else {
     message.value = config.successMessage || ('已执行 ' + result.action + ' 动作')
   }

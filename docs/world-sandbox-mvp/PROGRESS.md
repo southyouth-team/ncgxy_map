@@ -2102,3 +2102,30 @@ export const environmentBindings = [
 - 在本地运行 npx vitest run src/three/controls/InputController.test.js src/three/physics/CollisionWorld.test.js。
 - 运行前端构建。
 - 浏览器实测平地、坡面、连续踏步、平台边缘静止下落、模型碰撞、门洞通行和自动寻路；重点观察人物与相机是否同步、是否出现悬浮/穿透/卡台阶。
+
+
+---
+
+## 2026-11-08 — P2.1 模型 Transform 联动统一（源码修改）
+
+### 本轮目标
+
+修复自然语言移动/旋转命令直接修改 Three.js Object3D、但没有刷新碰撞体与支撑面的问题；统一编辑器控件与程序化变换的空间同步路径。
+
+### 实际改动
+
+- `src/three/engine/createCampusEngine.js`
+  - 新增 `setSandboxModelTransform(id, patch)`，支持 position、rotation、scale 的 x/y/z 轴向部分更新。
+  - 过滤非有限数值；不改变未传入的轴向。
+  - 变换后更新世界矩阵，刷新该模型的碰撞体和支撑面，并失效阴影贴图、请求重绘。
+  - `refreshSandboxModelSpatial` 在采集空间数据前显式更新模型及后代世界矩阵。
+  - TransformControls 改为在 `objectChange` 时通过统一 Transform API 刷新空间注册；`change` 事件仅请求重绘。
+  - 将 `setSandboxModelTransform` 暴露给页面层。
+- `src/components/WorldSandboxMvp.vue`
+  - 自然语言移动/旋转命令改为调用引擎 Transform API，不再直接写 Object3D 的 position/rotation。
+
+### 验证状态
+
+- GitHub 源码写入与回读：待本轮写入后核对。
+- 单元测试、构建、CI、浏览器验收：未执行；当前连接环境没有本地仓库执行器或浏览器运行时。
+- 本轮只处理 Transform 同步，不代表完整 World Runtime 生命周期已经统一。

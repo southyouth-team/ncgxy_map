@@ -127,6 +127,18 @@ export class InputController {
     this.grounded = true
   }
 
+  teleportPlayer(position) {
+    const values = ['x', 'y', 'z'].map(axis => Number(position?.[axis]))
+    if (!values.every(Number.isFinite)) return false
+    this.keys.clear()
+    this.setNavigationPath(null)
+    this.pointerDown = false
+    this.verticalVelocity = 0
+    this.grounded = true
+    this.cameraRig.player.set(values[0], values[1], values[2])
+    return true
+  }
+
   setNavigationPath(path) {
     this.navigationPath = Array.isArray(path) && path.length > 1
       ? path.map(point => ({ x: Number(point.x), z: Number(point.z) })).filter(point => Number.isFinite(point.x) && Number.isFinite(point.z))

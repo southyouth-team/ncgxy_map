@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
 import { createCapabilityControlDocument } from '../three/sandbox/capabilityControl.js'
+import { resolveProceduralModelParts } from '../three/sandbox/modelCapabilityManifest.js'
 import ProceduralModelEditor from './ProceduralModelEditor.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
@@ -489,7 +490,12 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
   const resolvedDefinitions = Array.isArray(resolvedCapabilityManifest?.parameters)
     ? resolvedCapabilityManifest.parameters
     : (Array.isArray(definitions) && definitions.length ? definitions : moduleDefinitions)
-  const resolvedParts = Array.isArray(parts) && parts.length ? parts : moduleParts
+  const resolvedParts = resolveProceduralModelParts({
+    moduleParts,
+    modulePartsSource: replacement.userData.proceduralModelPartsSource,
+    responseParts: parts,
+    currentParts: current.userData.proceduralModelParts,
+  })
   const resolvedEnvironmentBindings = Array.isArray(manifestCapabilities.environmentBindings)
     ? manifestCapabilities.environmentBindings
     : (Array.isArray(environmentBindings)

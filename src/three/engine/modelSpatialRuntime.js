@@ -45,8 +45,31 @@ export function collectModelMovementObstacles(THREE, root, ownerId) {
     // A state-conditioned collider is used for movable parts such as a hinged
     // door leaf. The model instance state is authoritative; absent state uses
     // the declared defaultValue. Explicit user capability overrides take priority.
+    // Model parameters may bind to a capability property without coupling the
+    // parameter UI to a particular model category. Explicit capability overrides
+    // remain authoritative; otherwise a bound parameter controls this collider.
+    const parameterDefinitions = Array.isArray(manifest.parameters)
+      ? manifest.parameters
+      : (Array.isArray(root.userData?.proceduralModelParameters) ? root.userData.proceduralModelParameters : [])
+    const parameterValues = root.userData?.proceduralModelParameterValues || {}
+    let hasParameterBinding = false
+    for (const parameter of parameterDefinitions) {
+      if (!parameter || typeof parameter.id !== 'string' || !Array.isArray(parameter.bindings)) continue
+      const binding = parameter.bindings.find(item =>
+        item && item.capabilityId === capabilityId && item.property === 'blocksMovement')
+      if (!binding) continue
+      const value = Object.prototype.hasOwnProperty.call(parameterValues, parameter.id)
+        ? parameterValues[parameter.id]
+        : parameter.default
+      if (typeof value === 'boolean') {
+        blocksMovement = value
+        hasParameterBinding = true
+      }
+      break
+    }
+
     const condition = collider.stateCondition
-    if (!hasUserOverride && condition && typeof condition.key === 'string') {
+    if (!hasUserOverride && !hasParameterBinding && condition && typeof condition.key === 'string') {
       const worldState = root.userData?.worldState || {}
       const stateValue = Object.prototype.hasOwnProperty.call(worldState, condition.key)
         ? worldState[condition.key]

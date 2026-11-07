@@ -1707,3 +1707,84 @@ export const environmentBindings = [
 - 根因：上轮批量替换将条件参数误插入到不属于增量规划请求的普通生成方法；真正的 `requestText(messages, requireJsonObject)` 请求体却未接入该参数。
 - 修复：普通模型生成请求恢复原始请求体；仅增量构建的局部 `requestText` 在 `requireJsonObject=true` 时附加 JSON Object response_format。规划调用显式传 true，组件源码调用保持默认 false。
 - 已回读核对两个请求作用域；本会话未运行 Nest build/typecheck/Jest，仍需本地 watcher 验证。
+
+
+---
+
+## 2026-11-07 — 新建模型改为整体一次性生成并补充请求级重试
+
+### 本轮目标与基线
+
+- 用户反馈复杂模型在“生成组件 6/7：Gabled Shingle Roof”阶段出现 `The operation was aborted due to timeout`，且没有自动重试。
+- 用户确认模型通常是一个整体，部件之间存在空间/结构引用；当前阶段不采用组件并发，也不再默认拆分为多次串行生成。
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`
+- 开始 HEAD：`0392bc4290409ee51428ad2415e62209933e3934`
+- 开始时 `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`
+- 本轮结束前功能分支 HEAD：`a95de95b4ea27a461de7017107c656925bfed7c8`
+- 未修改 `main`，未创建或合并 PR。
+
+### 架构决策
+
+- 新建模型统一采用“整体理解、一次请求生成完整 Three.js 工厂、Worker 一次构建”的默认路径。
+- 取消新建流程中的 AI 策略规划请求、`single/components` 分支判断、逐组件 ComponentChunk 请求和组件级进度。
+- ModelBuildPlan / ComponentChunk 协议文件暂时保留，但不再由当前新建模型接口调用；后续是否删除需独立评估其他引用，不在本轮扩大清理范围。
+- NDJSON 仅用于推送阶段进度，不代表模型服务 token 级流式输出。
+- 局部修改继续使用既有模型编辑接口，不纳入首次生成请求。
+
+### 实际改动
+
+1. `server/src/modules/assets/image-generation.service.ts`
+   - `streamProceduralObjectBuild` 不再请求规划 JSON，不再循环生成组件。
+   - 直接复用 `generateProceduralObjectFromPrompt` 的完整模型 Prompt 和源码生成能力。
+   - 阶段事件调整为整体生成、重试、源码生成完成、complete。
+   - 网络连接异常、响应 JSON 不完整、HTTP 408/425/429/5xx 采用有限重试；超时最多重试 1 次，其他暂时性错误最多 3 次总尝试。
+   - HTTP 400/402 等非暂时性错误不重试；429 尝试遵守 Retry-After，等待上限 30 秒。
+   - 记录生成耗时、尝试次数和源码字节数；结果携带 `generationMetrics`。
+   - AI 源码仍只在隔离 Worker 中执行，服务端不执行生成代码。
+2. `server/src/modules/assets/image-generation.controller.ts`
+   - 更新 NDJSON 接口描述为“完整模型一次性生成和阶段进度”。
+3. `src/components/WorldSandboxMvp.vue`
+   - 移除组件源码组合函数、ModelPlan/Chunk 暂存和组件进度事件处理。
+   - 前端只消费整体生成、重试、完整源码返回、Worker 构建、预览就绪等阶段。
+   - 完整源码返回后只调用一次 `executeProceduralModel`。
+   - 进度不显示组件序号/组件名称，不模拟百分比。
+4. `server/src/modules/assets/image-generation.procedural.spec.ts`
+   - 更新流式接口测试，断言一次完整模型请求、不发起规划/组件请求。
+   - 新增超时后自动重试测试。
+   - 新增 HTTP 402 不重试测试。
+5. `docs/world-sandbox-mvp/PROJECT_PLAN.md`
+   - 将旧 3.17/3.18 组件分块流程标记为历史实现/当前新建流程停用。
+   - 新增 3.19 整体一次性生成和有限重试策略及验收标准。
+
+### 提交记录
+
+- `6eb06b7afe546d111b970af5af8258172cb1a008` — Service 改为整体生成流。
+- `a44bd37d882055b80998eb185f4d426d09be72d3` — 修正完整模型源码校验正则。
+- `b2b5b756fb36f647a6ab6d5b690e3b5a8e122af0` — 前端移除组件进度和源码组合。
+- `1b203fcbdd55c1015674ad1750553dc48caa8082` — 修正 NDJSON 换行解析。
+- `9518123ef996b470dd5e2e028c84e83784aeda0f` — 增加整体生成与重试测试。
+- `e961c9867c7f1d955dbe8c9b61bfb795d80bfe20` — 更新 Controller 接口说明。
+- `66eebd1d35c398f22fadf33a2466193ba1b0a55f` — 更新整体生成架构计划。
+- `8d6621bb8b4cb66621de90429b3b89487ee55e4d` — 修正测试中的 Prompt 断言。
+- `2fdc1e1cef152f5e8ace7c36bdbff7b6774bccef` — 限制超时最多自动重试一次。
+- `a95de95b4ea27a461de7017107c656925bfed7c8` — 明确超时重试策略文档。
+
+### 验证状态与边界
+
+- 已通过 GitHub 回读核对目标分支、源码修改和文档修改。
+- 已静态核对前端 NDJSON 解析按换行拆分，组件组合函数和组件进度处理已移除。
+- 已新增 Jest 用例，但本会话没有本地仓库执行环境，未运行 Jest、Nest build/typecheck、前端 build 或浏览器真实模型生成。
+- 未执行真实视觉模型 API 请求，因此不能确认上游服务超时后是否能稳定重试，也不能宣称生成速度已经达到目标。
+- 本轮没有实现模型服务 token 级流式输出；整体源码仍需等待模型完整响应后才进入 Worker。
+- 请求超时重试会重新提交一次完整生成请求，可能产生额外 Token/费用；最多一次超时重试，避免无限重试。
+- 需要用户本地拉取分支后验证 TypeScript 编译、Jest、复杂模型整体生成、超时重试以及 402 不重试。
+
+### 本地验收
+
+1. 拉取当前功能分支并重启 Nest 与前端。
+2. 生成一个复杂模型，确认后端只有一次正常完整模型请求；不再出现 planning、生成组件 1/N 等事件。
+3. 检查前端只显示整体生成、Worker 构建和完成阶段。
+4. 模拟或等待一次超时，确认显示“生成请求超时，正在重试”，且最多再请求一次。
+5. 使用 HTTP 402 账户余额不足响应，确认不重试并直接显示错误。
+6. 确认完整源码返回后 Worker 只构建一次，模型成功后才展示预览。

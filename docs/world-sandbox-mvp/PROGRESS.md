@@ -2262,3 +2262,15 @@ export const environmentBindings = [
 - GitHub 源码回读与静态检查完成后记录最终 HEAD。
 - 本轮没有本地执行器或浏览器环境；未完成真实页面刷新恢复与人物通行验收。
 - 不修改 `main`，不创建或合并 PR。
+
+
+### P2.3 最终静态回读记录
+
+- 本轮开始 HEAD：`87e53ac06c8df0d3239630319d5c9ef527f0889e`。
+- 本轮最终代码/文档 HEAD：`395b9bbd73d570f07d233dc84104aad3d96fcd3c`。
+- 已回读确认 Capability Control 测试包含“新 Manifest 更新 proposals、保留用户 override/diagnostics、override 继续覆盖新定义”的断言。
+- 已回读确认空间存档测试通过 `Object3D.toJSON()` 与 `ObjectLoader.parse()` 恢复对象，再从恢复对象重建 CollisionWorld；验证碰撞边界、支撑面声明、恢复后的 Mesh 引用及 Capability Override 均保留。
+- 修正测试中恢复部件的查找方式：通过遍历读取 `userData.componentId`，不把嵌套属性路径误当作 Object3D 的直接属性名。
+- GitHub 静态回读通过；Vitest、前端构建、浏览器保存/刷新/恢复和人物实际碰撞验收均未执行。
+- CI 状态需以最新 HEAD 的状态接口为准；没有可用成功检查时不得标记通过。
+- `main` 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`；未修改 main，未创建或合并 PR。

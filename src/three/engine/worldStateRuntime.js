@@ -20,11 +20,14 @@ export function applyWorldStateBindings(root, state = {}) {
       let changed = false
       materials.forEach(material => {
         if ('emissiveIntensity' in material) {
-          material.emissiveIntensity = enabled ? Number(binding.enabledValue ?? 1) : 0
+          material.emissiveIntensity = enabled ? Number(binding.enabledValue ?? 1) : Number(binding.disabledValue ?? 0)
           changed = true
         }
       })
       if (changed) applied += 1
+    } else if (binding.property === 'rotationY') {
+      object.rotation.y = enabled ? Number(binding.enabledValue ?? 1) : Number(binding.disabledValue ?? 0)
+      applied += 1
     }
   })
   return applied

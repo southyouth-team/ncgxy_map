@@ -32,6 +32,12 @@ export function executeSandboxInteractionAction({ model, sourcePartId = null, co
     const current = model.userData?.worldState && typeof model.userData.worldState === 'object' ? model.userData.worldState : {}
     const value = action === 'toggle' ? !Boolean(current[stateKey]) : config.value
     if (action === 'set' && value === undefined) return { ok: false, reason: 'missing-state-value' }
+    if (action === 'set' && value !== null && !['boolean', 'string', 'number'].includes(typeof value)) {
+      return { ok: false, reason: 'invalid-state-value' }
+    }
+    if (action === 'set' && typeof value === 'number' && !Number.isFinite(value)) {
+      return { ok: false, reason: 'invalid-state-value' }
+    }
     return { ok: true, action, stateKey, statePatch: { [stateKey]: value } }
   }
   if (action === 'rotate' || action === 'translate') {

@@ -746,3 +746,57 @@ export const environmentBindings = [
 3. 为模型定义/推断/覆盖建立持久化容器和版本迁移，不把推断元数据塞进旧 Manifest 的 capabilities 执行声明。
 4. 修改 AI 生成/微调 Prompt，使 AI 输出可审阅的推断建议与证据；用户确认后才进入模型定义/覆盖。
 5. 接入首个 Runtime 编译器前，先定义 diagnostics 的状态机与“resolved/compiled/applied”区别。
+
+
+---
+
+## 2026-11-07 — Capability Control 自动推断策略调整
+
+### 本轮目标与决策
+
+用户明确取消能力推断的逐项确认：用户明确说到的要求直接执行；用户没有提及的能力由 AI 根据模型结构和上下文自主推断。用户仍可随时通过自然语言调整，已明确表达的用户要求不得被后续 AI 推断覆盖。
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`，分支搜索确认存在。
+- 已重新读取 `PROJECT_PLAN.md`、`PROGRESS.md`、`capabilityControl.js`、对应测试和 AI 生成服务。
+- 当前 resolver 仍把非 accepted 的 proposal 标记为 pending/disabled，测试也明确要求人工确认；与最新产品决策冲突。
+- GitHub compare 可确认目标分支与 main 的差异状态，但连接器没有稳定提供目标分支 HEAD 的独立 SHA；不以文件 blob SHA 冒充分支 HEAD。
+
+### 实际改动
+
+- `src/three/sandbox/capabilityControl.js`
+  - AI proposals 不再要求 status=accepted；缺省、旧版 proposed 状态均自动进入解析结果。
+  - 自动推断默认 enabled=true，但尊重记录显式 enabled=false。
+  - AI 推断结果状态标记为 inferred；不再输出 pending。
+  - 保留用户 override > model definition > AI inference > Runtime fallback 的数据优先级。
+  - 解析仍然只是数据解析，不代表能力已经编译或 Runtime 已应用。
+- `src/three/sandbox/capabilityControl.test.js`
+  - 删除“等待人工确认”的测试预期。
+  - 新增默认自动应用、兼容旧 proposed 状态、尊重显式 disabled 三个用例。
+  - 保留用户覆盖优先级、模型定义优先级、拒绝/禁用、scope 隔离、未知能力扩展和无副作用测试。
+- `docs/world-sandbox-mvp/PROJECT_PLAN.md`
+  - 将能力策略改为自动推断，无逐项确认。
+  - 明确当前轮用户指令 > 已保存用户覆盖 > 模型定义 > AI 推断 > Runtime 默认值。
+  - 明确用户控制仍然有效，Runtime 未支持能力不得伪称生效。
+
+### 本轮非目标与边界
+
+- 本轮不声称已把 Capability Control 接入页面、Worker、AI Prompt 或存档；这些端到端链路仍未完成。
+- 本轮不新增 Runtime 执行器，不把 resolved/inferred 等同于 compiled/applied。
+- AI 无法判断时采用保守默认并保留不确定性，不以逐项确认作为默认工作流。
+
+### 验证状态
+
+- GitHub 文件读取成功；代码/测试/文档内容在写入前均来自目标功能分支。
+- 本轮提交后需回读文件做静态核验。
+- 当前会话没有本地仓库执行环境；Vitest、build、后端测试、CI 和浏览器验收均未执行。
+- 未修改 main，未创建 PR。
+
+### 下一步
+
+1. 将自动推断记录接入模型生成/微调输出与 Worker/模型生命周期。
+2. 将当前轮自然语言指令转成临时最高优先级 override，持久化用户明确设置。
+3. 建立 capabilityControlDocument 的存档往返与迁移。
+4. 实现 resolved → compiled → applied 状态与 Runtime diagnostics；先接通一个真实能力闭环。

@@ -144,3 +144,26 @@ export function collectModelSupportSurfaces(root, ownerId) {
   }
   return result
 }
+
+
+/**
+ * Replace an instance's live collision/support registrations from its current
+ * manifest and Object3D hierarchy. The registry is rebuilt from the same model
+ * that the renderer currently owns, so removed declarations cannot leave stale
+ * obstacle or Mesh handles behind.
+ */
+export function refreshModelSpatialRegistration(THREE, model, collisionWorld) {
+  const ownerId = model?.userData?.sandboxModelId
+  if (!ownerId || !collisionWorld) return 0
+  model.updateWorldMatrix?.(true, true)
+  collisionWorld.removeObstaclesByOwner?.(String(ownerId))
+  collisionWorld.removeSupportSurfacesByOwner?.(String(ownerId))
+  const obstacles = collectModelMovementObstacles(THREE, model, ownerId)
+  const surfaces = collectModelSupportSurfaces(model, ownerId)
+  let added = 0
+  for (const obstacle of obstacles) {
+    if (collisionWorld.addObstacle(obstacle, ownerId)) added += 1
+  }
+  for (const surface of surfaces) collisionWorld.addSupportSurface(surface)
+  return added
+}

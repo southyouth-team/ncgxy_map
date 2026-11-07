@@ -8,7 +8,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
-import { applyWorldStateBindings } from './worldStateRuntime.js'
+import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -124,7 +124,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let rainEffect = null
   let rainParticleCount = 360
   let windSwayTargets = []
-  let environmentConfig = { time: 14, timeOfDay: 'day', weather: 'clear', wind: 0 }
+  let environmentConfig = { time: 14, timeOfDay: 'day', weather: 'clear', wind: 0, artificialLightingEnabled: true }
 
   /**
    * Generated asset definitions stay independent from the sandbox. This group stores
@@ -355,6 +355,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     callbacks.onSandboxModelDoubleClick?.({ id, name: root.name })
   }
 
+  function applySandboxEnvironmentBindings(model) {
+    return applyEnvironmentBindings(model, {
+      'lighting.artificial.enabled': environmentConfig.artificialLightingEnabled,
+    })
+  }
+
   function addSandboxModel(model, options = {}) {
     if (!scene || !model?.isObject3D || model.parent) throw new TypeError('AI 建模结果必须是未挂载的 THREE.Object3D')
     const id = options.id ? String(options.id) : 'sandbox_' + (++sandboxModelSequence)
@@ -369,6 +375,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxModels.set(id, model)
     // ObjectLoader 恢复后以持久化世界状态重建灯光/材质等运行时属性。
     applyWorldStateBindings(model, model.userData.worldState || {})
+    applySandboxEnvironmentBindings(model)
     selectSandboxModel(id)
     invalidateShadowMap()
     requestFrame()
@@ -407,6 +414,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const parent = current.parent || scene
     parent.add(replacement)
     sandboxModels.set(String(id), replacement)
+    applyWorldStateBindings(replacement, replacement.userData.worldState || {})
+    applySandboxEnvironmentBindings(replacement)
     if (sandboxSelectedModel === current) {
       sandboxSelectedModel = replacement
       sandboxTransform?.attach(replacement)
@@ -475,6 +484,29 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     invalidateShadowMap()
     requestFrame()
     return next
+  }
+
+  function setSandboxModelEnvironmentOverride(id, variable, value) {
+    const model = sandboxModels.get(String(id))
+    if (!model || typeof variable !== 'string' || !variable) return false
+    model.userData.environmentOverrides = { ...(model.userData.environmentOverrides || {}), [variable]: value }
+    applySandboxEnvironmentBindings(model)
+    invalidateShadowMap()
+    requestFrame()
+    return true
+  }
+
+  function clearSandboxModelEnvironmentOverride(id, variable) {
+    const model = sandboxModels.get(String(id))
+    if (!model || typeof variable !== 'string' || !variable) return false
+    const overrides = { ...(model.userData.environmentOverrides || {}) }
+    if (!Object.prototype.hasOwnProperty.call(overrides, variable)) return false
+    delete overrides[variable]
+    model.userData.environmentOverrides = overrides
+    applySandboxEnvironmentBindings(model)
+    invalidateShadowMap()
+    requestFrame()
+    return true
   }
 
   function duplicateSandboxModel(id) {
@@ -557,7 +589,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const weather = ['clear', 'rain'].includes(config.weather) ? config.weather : environmentConfig.weather
     const windValue = config.wind === undefined ? environmentConfig.wind : Number(config.wind)
     const wind = Number.isFinite(windValue) ? Math.max(0, Math.min(1, windValue)) : environmentConfig.wind
-    environmentConfig = { time, timeOfDay, weather, wind }
+    const artificialLightingEnabled = config.artificialLightingEnabled === undefined
+      ? environmentConfig.artificialLightingEnabled
+      : Boolean(config.artificialLightingEnabled)
+    environmentConfig = { time, timeOfDay, weather, wind, artificialLightingEnabled }
+    for (const model of sandboxModels.values()) applySandboxEnvironmentBindings(model)
     if (!scene) return { ...environmentConfig }
 
     const night = solar.isNight
@@ -2485,5 +2521,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

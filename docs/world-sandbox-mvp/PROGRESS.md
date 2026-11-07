@@ -1699,3 +1699,11 @@ export const environmentBindings = [
 2. 生成一个简单模型，确认 planning 请求成功返回 JSON 并进入 single 路径。
 3. 生成一个复杂模型，确认 planning 返回合法 plan 并进入组件请求。
 4. 若仍失败，提供新的 HTTP 状态及后端日志；现在日志会包含 JSON 解析原因和有限响应片段。
+
+
+## 2026-11-07 — 修复 JSON 模式参数作用域编译错误
+
+- 用户本地 watcher 报错：`TS2304 Cannot find name 'requireJsonObject'`，位置在原始完整模型生成方法中。
+- 根因：上轮批量替换将条件参数误插入到不属于增量规划请求的普通生成方法；真正的 `requestText(messages, requireJsonObject)` 请求体却未接入该参数。
+- 修复：普通模型生成请求恢复原始请求体；仅增量构建的局部 `requestText` 在 `requireJsonObject=true` 时附加 JSON Object response_format。规划调用显式传 true，组件源码调用保持默认 false。
+- 已回读核对两个请求作用域；本会话未运行 Nest build/typecheck/Jest，仍需本地 watcher 验证。

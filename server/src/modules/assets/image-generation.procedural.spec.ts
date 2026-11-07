@@ -99,6 +99,7 @@ describe('ImageGenerationService procedural generation', () => {
     );
 
     const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request.response_format).toEqual({ type: 'json_object' });
     const context = JSON.parse(request.messages[1].content);
     expect(context.currentParameterValues.oldColor).toBe('#ffffff');
     expect(context.selectedPartId).toBe('roof');

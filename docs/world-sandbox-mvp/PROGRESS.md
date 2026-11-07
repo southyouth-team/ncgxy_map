@@ -540,3 +540,86 @@ export const environmentBindings = [
 - 自动化测试、前端构建、后端类型检查/测试：未执行；当前会话没有本地仓库执行环境。
 - 浏览器验收：未执行。
 - 本轮没有修改 main，没有创建 PR。
+
+---
+
+## 2026-11-07 — Spatial Runtime v1：部件级地面移动碰撞第一步
+
+### 本轮目标
+
+让 Manifest 中的模型部件级 box collider 真正影响玩家地面移动；建立按实例归属的障碍物生命周期。此轮不实现完整物理引擎、室内导航或门/楼梯连接。
+
+### 仓库与分支
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`
+- 所有源码与文档写入均显式指定目标功能分支。
+- 本轮未向 `main` 写入，未创建 PR。
+- 连接器未提供可靠的分支 HEAD 查询结果；以下以各文件更新返回的提交 SHA 和最终文件回读作为落点依据，不声称已独立核验 ref HEAD。
+
+### 实际改动
+
+1. `src/three/engine/modelSpatialRuntime.js`
+   - 新增 `collectModelMovementObstacles`。
+   - 读取 `modelCapabilityManifest.capabilities.spatial.colliders`。
+   - 通过 `targetPartId` 匹配部件 `userData.componentId`。
+   - 将部件局部 box collider 转换为世界空间 AABB。
+   - 只把与当前地面角色高度区间相交的碰撞体交给 XZ 移动碰撞系统。
+   - 未知形状、缺失部件、disabled 或 blocksMovement=false 的声明不会进入当前 Runtime。
+
+2. `src/three/physics/CollisionWorld.js`
+   - `addObstacle` 增加可选 ownerId。
+   - 新增 `removeObstaclesByOwner`，支持按模型实例清理碰撞障碍。
+
+3. `src/three/engine/createCampusEngine.js`
+   - 新增模型空间碰撞刷新流程。
+   - 模型加入时注册 Manifest 碰撞体。
+   - TransformControls 修改模型时重算选中模型碰撞体。
+   - 模型替换时移除旧障碍并注册新障碍；删除时清理该实例障碍。
+   - 保持旧模型无 spatial.colliders 时原有通行行为不变。
+
+4. `server/src/modules/assets/image-generation.service.ts`
+   - 新建与微调 Prompt 明确当前可执行碰撞声明格式。
+   - 要求碰撞体引用真实 componentId，墙体分段声明，门洞/通道不生成障碍。
+   - 明确当前只有 box movement collider 生效，不误导 AI 声称 traversal/interior Runtime 已实现。
+
+5. `src/three/engine/modelSpatialRuntime.test.js`
+   - 新增 3 个用例：局部坐标转世界坐标、过滤禁用/无效/高空碰撞体、无空间声明保持非阻挡。
+
+6. `PROJECT_PLAN.md`
+   - 新增 Spatial Runtime v1 协议和明确的未实现边界。
+
+### 当前能力边界与风险
+
+- 当前只支持部件级 box collider，并将其投影为 XZ AABB；旋转物体的包围盒会扩大，可能产生保守阻挡。
+- 当前地面角色碰撞不具备完整 3D 胶囊体/重力模拟；碰撞体按地面站立高度区间过滤。
+- 门洞需要 AI 将墙体拆为独立部件并只为实体墙段声明 collider；当前没有 door state 自动启停碰撞的能力。
+- 当前没有 traversalZones、可行走面、楼层、楼梯、电梯或室内导航 Runtime。
+- AI 生成是否稳定产出正确的部件 ID 和碰撞声明，尚未进行真实生成验收。
+
+### 提交记录
+
+- `b9092e4655f641ed7e1e657f5c6bfdc938424206` — CollisionWorld 初始实例障碍接口（随后在本轮修正 owner 归属实现）。
+- `b9f1e4161a0b79343d52361fb949df08c70dc498` — 引擎空间碰撞接入初始提交（随后在本轮修正换行与接入逻辑）。
+- `3200fc71f84a3b07439d51844683d9d797cb28ba` — 新增模型空间碰撞解析模块。
+- `6bc6b0d901878b248d960c5df42f54a9cbd760b0` — 新增空间 Runtime 单测。
+- `9cbf9305ad39fed8b600812a2d1cff58ce7731b2` — 修正障碍物 ownerId 保存与清理。
+- `df3069a345cbf13adbf4381322196c159f61fdcd` — 修正引擎接入、模型生命周期与 Transform 更新。
+
+### 验证状态
+
+- 目标分支文件：已再次读取 CollisionWorld、createCampusEngine、Spatial Runtime helper 和测试文件；仍需对完整文件做最终静态复核。
+- 自动化测试：新增 3 个用例，**未执行**（当前会话无本地仓库执行环境）。
+- 前端构建：未执行。
+- 后端测试/类型检查：未执行。
+- CI：未取得本轮提交成功记录。
+- 浏览器验收：未执行；需要验证墙体阻挡、门洞通行、模型移动后碰撞跟随、模型删除后碰撞消失。
+- `main`：本轮没有写入。
+
+### 下一步
+
+1. 对完整源码做静态复核，确认碰撞障碍 owner 生命周期和 TransformControls 事件没有语法/逻辑问题。
+2. 在本地运行新增测试、相关 CollisionWorld 测试及前端 build。
+3. 用 AI 生成一个由独立墙段构成、带门洞的房间；检查墙体阻挡、门洞可通行。
+4. 验证移动/旋转/缩放/替换/删除模型时碰撞体同步。
+5. 通过后再接 traversalZones 与室内空间，不提前扩展完整物理系统。

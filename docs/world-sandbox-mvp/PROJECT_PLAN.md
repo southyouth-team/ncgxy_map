@@ -683,3 +683,11 @@ Persistence & Infrastructure
 - 原 `generate-procedural-object` JSON 接口保留，作为兼容入口；工作台新建流程改用增量接口。
 - 本阶段没有使用模型服务的 token SSE；NDJSON 是应用层按完整计划/组件事件推送。部署代理是否正确透传长连接仍需实际环境验收。
 - 本阶段没有实现失败组件的 UI 单独重试按钮、截图视觉复核或自动修复；生成或最终 Worker 构建失败时不展示半成品，右侧进度列表标记失败阶段并显示错误。
+
+
+### 3.18 规划响应结构化输出
+
+- 增量模型构建的首轮规划请求显式启用 OpenAI-compatible JSON Object response format，降低规划内容混入 Markdown、解释文本或非法 JSON 的概率。
+- 服务端仍对返回内容执行 JSON 解析和 ModelBuildPlan 结构检查；结构化输出模式不替代业务数据校验。
+- 解析失败时记录受限长度的响应首尾片段与解析器错误，便于区分模型输出问题和解析边界问题；不记录 API Key。
+- 组件源码请求不启用 JSON Object 模式，因为组件响应是 JavaScript ES module 源码。

@@ -505,6 +505,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!model || !transform || typeof transform !== 'object') return false
 
     let changed = false
+    let hasValidTransformInput = false
     for (const key of ['position', 'rotation', 'scale']) {
       const values = transform[key]
       if (!values || typeof values !== 'object') continue
@@ -513,13 +514,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         if (!Object.prototype.hasOwnProperty.call(values, axis)) continue
         const value = Number(values[axis])
         if (!Number.isFinite(value)) continue
+        hasValidTransformInput = true
         if (target[axis] !== value) {
           target[axis] = value
           changed = true
         }
       }
     }
-    if (!changed) return true
+    // TransformControls 已经先修改了 Object3D；即使传入值与当前值相同，也必须刷新空间注册。
+    if (!hasValidTransformInput) return true
     model.updateMatrixWorld(true)
     refreshSandboxModelSpatial(model)
     invalidateShadowMap()

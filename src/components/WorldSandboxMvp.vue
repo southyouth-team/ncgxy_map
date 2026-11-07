@@ -300,7 +300,7 @@ async function replaceEditedModel(source, values, definitions, parts, summary = 
     ? replacement.userData.proceduralModelCapabilityManifest : null
   const resolvedCapabilityManifest = modelCapabilityManifest && typeof modelCapabilityManifest === 'object'
     ? modelCapabilityManifest
-    : (moduleCapabilityManifest || current.userData.proceduralModelCapabilityManifest || null)
+    : (current.userData.proceduralModelCapabilityManifest || moduleCapabilityManifest || null)
   const manifestCapabilities = resolvedCapabilityManifest?.capabilities && typeof resolvedCapabilityManifest.capabilities === 'object'
     ? resolvedCapabilityManifest.capabilities : {}
   const resolvedDefinitions = Array.isArray(resolvedCapabilityManifest?.parameters)

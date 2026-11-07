@@ -1012,14 +1012,14 @@ export class ImageGenerationService {
     const screenshots = Array.isArray(screenshotsInput) ? screenshotsInput.slice(0, 5) : [];
     if (!prompt && !referenceImage) throw new BadRequestException('视觉质检缺少原始模型描述或参考图片');
     if (!screenshots.length) throw new BadRequestException('视觉质检缺少 Three.js 实际渲染截图');
-    const validImage = (value: unknown) => typeof value === 'string'
+    const validImage = (value: unknown, maxBytes = 3 * 1024 * 1024) => typeof value === 'string'
       && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)
-      && Buffer.byteLength(value, 'utf8') <= 3 * 1024 * 1024;
+      && Buffer.byteLength(value, 'utf8') <= maxBytes;
     if (!screenshots.every(item => validImage(item?.imageDataUrl))) {
       throw new BadRequestException('视觉质检截图格式无效或单张超过 3 MB');
     }
-    if (referenceImage && !validImage(referenceImage)) {
-      throw new BadRequestException('视觉质检参考图片格式无效或超过 3 MB');
+    if (referenceImage && !validImage(referenceImage, 14 * 1024 * 1024)) {
+      throw new BadRequestException('视觉质检参考图片格式无效或超过 14 MB');
     }
     const apiKey = this.config.get<string>('VISION_API_KEY');
     const model = this.config.get<string>('VISION_MODEL');

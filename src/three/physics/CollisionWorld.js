@@ -14,7 +14,7 @@ export class CollisionWorld {
     this.radius = Math.max(0.1, Number(radius) || 0.55)
   }
 
-  addObstacle(bounds) {
+  addObstacle(bounds, ownerId = null) {
     if (!bounds || !Number.isFinite(bounds.minX) || !Number.isFinite(bounds.maxX) ||
       !Number.isFinite(bounds.minZ) || !Number.isFinite(bounds.maxZ) ||
       bounds.maxX <= bounds.minX || bounds.maxZ <= bounds.minZ) return false

@@ -2392,3 +2392,23 @@ export const environmentBindings = [
 - 已新增服务测试源码；**尚未运行 Jest、服务端构建、前端构建或浏览器真实渲染验收**。
 - 目前不能声称视觉质检端到端通过；需要本地启动前后端，使用支持图像输入的 `VISION_MODEL` 实际生成模型，确认四视角截图非空、视觉接口可识别图片、修正后复检结果及失败回退。
 - 未修改 `main`，未创建或合并 PR。
+
+---
+
+## 2026-11-08 — 保存模型后实例 ID 冲突与 Three.js Vue Proxy 修复
+
+### 问题定位
+
+- createCampusEngine.js 从持久化实例 ID 恢复序号时，正则错误地使用了双反斜杠，导致 sandbox_1 等 ID 的数字部分无法匹配；恢复已有实例后，新建模型可能再次分配 sandbox_1，触发重复 ID 异常。
+- WorldSandboxMvp.vue 使用深层 ref(null) 保存正在编辑的 Three.js Object3D。模型对象被 Vue Proxy 包装后，Three.js 渲染访问只读且不可配置的矩阵属性时可能违反 Proxy 不变量，导致渲染循环持续报错。
+
+### 实际修改
+
+- src/three/engine/createCampusEngine.js：修正实例序号正则为单个转义的数字匹配；保留重复 ID 防护，不允许静默覆盖已有实例。
+- src/components/WorldSandboxMvp.vue：将 editingModel 改为 shallowRef(null)，使 Three.js 对象保持原始引用，避免 Vue 深层代理。
+
+### 验证边界
+
+- GitHub 源码写入后已回读确认：序号正则可匹配数字，编辑模型状态使用 shallowRef。
+- 本轮未运行前端构建、Vitest 或浏览器保存回归；不能据此宣称页面卡死问题已端到端验证通过。
+- 需要本地验证：刷新恢复已有模型后再新建并保存；编辑已有模型并保存；连续渲染期间确认不再出现 modelViewMatrix Proxy 错误。

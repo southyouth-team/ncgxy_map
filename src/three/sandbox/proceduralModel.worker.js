@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
 import { createCapabilityControlDocument } from './capabilityControl.js'
+import { collectProceduralModelGeometryDiagnostics } from './geometryDiagnostics.js'
 
 /**
  * Dedicated module worker for generated model code.
@@ -95,6 +96,7 @@ self.addEventListener('message', async (event) => {
       proceduralModelParameterValues: parameters,
     }
     root.updateMatrixWorld(true)
+    root.userData.proceduralModelGeometryDiagnostics = collectProceduralModelGeometryDiagnostics(THREE, root)
     port.postMessage({
       ok: true,
       serialized: root.toJSON(),

@@ -236,21 +236,37 @@ function updateGenerationProgress(event) {
 }
 
 function buildCompositeComponentSource(plan, chunks) {
-  const manifest = plan?.modelCapabilityManifest && typeof plan.modelCapabilityManifest === 'object'
-    ? plan.modelCapabilityManifest : { version: 1, parameters: [], capabilities: {} }
+  const rawManifest = plan?.modelCapabilityManifest && typeof plan.modelCapabilityManifest === 'object'
+    ? plan.modelCapabilityManifest : {}
+  const manifest = {
+    ...rawManifest,
+    version: 1,
+    parameters: Array.isArray(rawManifest.parameters) ? rawManifest.parameters : [],
+    capabilities: rawManifest.capabilities && typeof rawManifest.capabilities === 'object' ? rawManifest.capabilities : {},
+  }
   const parts = Array.isArray(plan?.components) ? plan.components : []
-  const declarations = ['const __buildPlan = ' + JSON.stringify(plan) + ';']
+  const partMetadata = parts.map(item => ({ id: item.id, name: item.name || item.purpose || item.id }))
+  const environmentBindings = Array.isArray(manifest.capabilities.environmentBindings)
+    ? manifest.capabilities.environmentBindings : []
+  const declarations = [
+    'const __buildPlan = ' + JSON.stringify(plan) + ';',
+    'export const modelCapabilityManifest = ' + JSON.stringify(manifest) + ';',
+    'export const modelParameters = ' + JSON.stringify(manifest.parameters) + ';',
+    'export const modelParts = ' + JSON.stringify(partMetadata) + ';',
+    'export const environmentBindings = ' + JSON.stringify(environmentBindings) + ';',
+  ]
   const builders = chunks.map((entry, index) => {
     const component = parts.find(item => item.id === entry.componentId) || { id: entry.componentId }
     const completedDependencies = chunks.slice(0, index).map(item => ({
       componentId: item.componentId,
       purpose: String(parts.find(part => part.id === item.componentId)?.purpose || item.componentId),
     }))
-    const source = String(entry.source || '').replace(/^\s*export\s+function\s+createComponent/, 'function createComponent')
-    if (!/^\s*function\s+createComponent\s*\(\s*THREE\s*,/.test(source)) {
+    const source = String(entry.source || '').replace(/^\\s*export\\s+function\\s+createComponent/, 'function createComponent')
+    if (!/^\\s*function\\s+createComponent\\s*\\(\\s*THREE\\s*,/.test(source)) {
       throw new Error('组件 ' + entry.componentId + ' 的源码工厂格式无效')
     }
     if (source.length > 30000) throw new Error('组件 ' + entry.componentId + ' 源码超过 30 KB')
+    const parentId = typeof component.parentId === 'string' ? component.parentId : ''
     return [
       '{',
       source,
@@ -258,25 +274,24 @@ function buildCompositeComponentSource(plan, chunks) {
         + ', completedDependencies: ' + JSON.stringify(completedDependencies) + ', params });',
       'if (!__part || __part.isGroup !== true) throw new Error(' + JSON.stringify('组件 ' + entry.componentId + ' 必须返回 THREE.Group') + ');',
       '__part.userData = { ...( __part.userData || {}), componentId: ' + JSON.stringify(entry.componentId) + ' };',
-      'root.add(__part);',
+      'const __parent = ' + (parentId ? '__componentRefs[' + JSON.stringify(parentId) + ']' : 'root') + ';',
+      'if (!__parent) throw new Error(' + JSON.stringify('组件父级尚未构建：' + parentId) + ');',
+      '__parent.add(__part);',
+      '__componentRefs[' + JSON.stringify(entry.componentId) + '] = __part;',
       '}',
-    ].join('\n')
+    ].join('\\n')
   })
   const source = [
     ...declarations,
     'export function createModel(THREE, params = {}) {',
     'const root = new THREE.Group();',
+    'const __componentRefs = Object.create(null);',
     ...builders,
     'root.name = ' + JSON.stringify(plan?.name || 'AI 程序化模型') + ';',
-    'root.userData = { ...(root.userData || {}), assetName: root.name, proceduralModelCapabilityManifest: '
-      + JSON.stringify(manifest) + ', proceduralModelParameters: '
-      + JSON.stringify(Array.isArray(manifest.parameters) ? manifest.parameters : []) + ', proceduralModelParts: '
-      + JSON.stringify(parts.map(item => ({ id: item.id, name: item.name || item.purpose || item.id })))
-      + ', proceduralModelEnvironmentBindings: '
-      + JSON.stringify(Array.isArray(manifest.capabilities?.environmentBindings) ? manifest.capabilities.environmentBindings : []) + ' };',
+    'root.userData = { ...(root.userData || {}), assetName: root.name };',
     'return root;',
     '}',
-  ].join('\n')
+  ].join('\\n')
   if (source.length > 120000) throw new Error('累计模型源码超过 120 KB，请减少组件细节或拆分为更精简的部件')
   return source
 }

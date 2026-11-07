@@ -134,7 +134,7 @@ describe('ImageGenerationService procedural generation', () => {
 
     const request = JSON.parse(fetchMock.mock.calls[0][1].body);
     const context = JSON.parse(request.messages[1].content);
-    expect(context.currentGeometryDiagnostics).toEqual(geometryDiagnostics);
+    expect(context.currentGeometryDiagnostics).toEqual({ ...geometryDiagnostics, truncated: false });
     expect(request.messages[0].content).toContain('Bounds overlap is only a spatial clue');
   });
 

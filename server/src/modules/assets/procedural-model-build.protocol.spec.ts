@@ -36,6 +36,13 @@ describe('procedural model build protocol', () => {
       .toThrow('Unknown component dependency');
   });
 
+  it('rejects direct self-dependencies', () => {
+    expect(() => resolveModelBuildOrder(createPlan([{ id: 'self', dependsOn: ['self'] }])) )
+      .toThrow('cannot depend on itself');
+    expect(() => resolveModelBuildOrder(createPlan([{ id: 'self', parentId: 'self' }])) )
+      .toThrow('cannot depend on itself');
+  });
+
   it('reports dependency cycles without imposing component-category rules', () => {
     const plan = createPlan([
       { id: 'alpha', dependsOn: ['beta'] },

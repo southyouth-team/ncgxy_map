@@ -738,11 +738,21 @@ function executeTask() {
     const match = text.match(/(-?\d+(?:\.\d+)?)[,，\s]+(-?\d+(?:\.\d+)?)[,，\s]+(-?\d+(?:\.\d+)?)/)
     if (!selected) message.value = '请先选择一个模型'
     else if (!match) message.value = '移动指令格式：移动 2,0,3'
-    else { selected.position.set(Number(match[1]), Number(match[2]), Number(match[3])); message.value = '模型已移动到指定坐标' }
+    else {
+      engine?.setSandboxModelTransform(selected.userData.sandboxModelId, {
+        position: { x: Number(match[1]), y: Number(match[2]), z: Number(match[3]) },
+      })
+      message.value = '模型已移动到指定坐标'
+    }
   } else if (/旋转|rotate/i.test(text)) {
     const degrees = Number((text.match(/-?\d+(?:\.\d+)?/) || [0])[0])
     if (!selected) message.value = '请先选择一个模型'
-    else { selected.rotation.y += THREE.MathUtils.degToRad(degrees); message.value = '模型已旋转 ' + degrees + '°' }
+    else {
+      engine?.setSandboxModelTransform(selected.userData.sandboxModelId, {
+        rotation: { y: selected.rotation.y + THREE.MathUtils.degToRad(degrees) },
+      })
+      message.value = '模型已旋转 ' + degrees + '°'
+    }
   } else message.value = '试试：创建球体、移动 2,0,3、旋转 45、切换雨天、时间 18 点、复制、删除。'
   command.value = ''
   syncObjects()

@@ -511,3 +511,32 @@ export const environmentBindings = [
 2. 在可执行环境运行前端 build、相关单测、后端类型检查/测试。
 3. 浏览器验收：新建模型 → 保存刷新 → 查看 Manifest 元数据保留；对旧模型用自然语言增加能力声明 → 替换模型 → 撤销 → 再次保存恢复。
 4. 数据链路稳定后，再开始 Spatial Runtime 的最小端到端用例；优先部件级碰撞体与通行区域。
+
+
+### 本轮源码回读与一致性复核补充
+
+- 已回读 Worker、生成/微调 Service、Controller、页面替换/撤销、Manifest helper/test 和两份项目文档。
+- Worker 的 Manifest 参数定义读取修正为使用归一化后的 `manifest.parameters`，避免重构后引用旧局部变量。
+- Manifest 归一化逻辑抽取为 `src/three/sandbox/modelCapabilityManifest.js`，保留未知 capability 字段、显式空环境绑定数组和版本号；旧字段仅在 Manifest 缺失对应字段时回退。
+- 新增 `modelCapabilityManifest.test.js`，覆盖旧模型兼容、未知能力保留、显式空绑定和旧字段回退，共 4 个用例；测试文件已提交但未执行。
+- 页面参数重新生成时优先保留当前实例已持有的 Manifest，避免旧源码未导出 Manifest 时将 AI 增量添加的未知能力声明丢失。
+- 微调 Service 统一输出 Manifest 与兼容参数/环境绑定字段；显式存在的 Manifest 能力声明优先，缺失字段再回退旧响应字段。
+
+### 本轮追加提交
+
+- `ba37d1e0699ff5332441cb62ed8f74e4098a5921` — Worker 使用 Manifest 归一化工具。
+- `200df55cdf794e0f60092d0731328f0e062a263f` — 新增 Manifest 归一化工具。
+- `ec43be0b5f0f2da2852f0df1aa28a25a447ab61d` — 新增 Manifest 兼容单元测试。
+- `80b7ed49d87560c40bb4938b5c770f357951c75a` — 修正 Worker 从归一化 Manifest 读取参数定义。
+- `f7a43eabf2b54f7de6b5c76c209b9b4fa68c33fd` — 修正微调响应中的 Manifest/旧字段回退与同步。
+- `058fba2b6dd3df4050f6f37a1ea88d04f22de024` — 参数重新生成时保留现有 Manifest 能力。
+
+### 最终核验状态（本轮）
+
+- 目标分支 HEAD：`058fba2b6dd3df4050f6f37a1ea88d04f22de024`，通过 Git ref API 实际读取。
+- `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`，与本轮开始时基线一致。
+- 目标分支文件回读：Manifest helper、测试、Worker、Service、Controller、页面、PROJECT_PLAN 和 PROGRESS 均可从目标分支读取。
+- GitHub Actions：该 HEAD 对应的 PR workflow runs 返回空数组；没有可判定成功的 CI 记录。
+- 自动化测试、前端构建、后端类型检查/测试：未执行；当前会话没有本地仓库执行环境。
+- 浏览器验收：未执行。
+- 本轮没有修改 main，没有创建 PR。

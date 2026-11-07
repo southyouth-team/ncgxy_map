@@ -1131,9 +1131,9 @@ export class ImageGenerationService {
         || (Array.isArray(rawGeometryDiagnostics.diagnostics) && rawGeometryDiagnostics.diagnostics.length > 120),
     } : null;
     const geometryDiagnosticsJson = geometryDiagnostics ? JSON.stringify(geometryDiagnostics) : '';
-    const boundedGeometryDiagnostics = geometryDiagnosticsJson.length <= 24000
-      ? geometryDiagnostics
-      : { version: geometryDiagnostics.version, summary: geometryDiagnostics.summary, meshes: [], diagnostics: geometryDiagnostics.diagnostics.slice(0, 20), truncated: true };
+    const boundedGeometryDiagnostics = geometryDiagnostics && geometryDiagnosticsJson.length > 24000
+      ? { version: geometryDiagnostics.version, summary: geometryDiagnostics.summary, meshes: [], diagnostics: geometryDiagnostics.diagnostics.slice(0, 20), truncated: true }
+      : geometryDiagnostics;
     const selectedPartId = typeof selectedPartIdInput === 'string' ? selectedPartIdInput.slice(0, 160) : '';
     const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';
     const apiKey = this.config.get<string>('VISION_API_KEY');

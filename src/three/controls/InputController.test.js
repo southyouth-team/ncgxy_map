@@ -225,3 +225,41 @@ describe('InputController gravity and traversal semantics', () => {
     expect(controller.getPlayerSupportHit(controller.cameraRig.player, { walking: false })).not.toBeNull()
   })
 })
+
+
+describe('InputController step traversal', () => {
+  const hitAt = y => ({ point: { y } })
+  function controllerWithSupports(currentSupport, nextWalkable, nextStanding) {
+    const controller = new InputController({}, {}, { player: { x: 0, y: 2.7, z: 0 } }, null, {})
+    controller.grounded = true
+    controller.getPlayerSupportHit = vi.fn((player, { walking = false } = {}) => {
+      if (player.x === 0) return currentSupport
+      return walking ? nextWalkable : nextStanding
+    })
+    return controller
+  }
+
+  it('allows moving up a walkable stair tread within the step-height limit', () => {
+    const controller = controllerWithSupports(hitAt(1), hitAt(1.3), hitAt(1.3))
+    expect(controller.resolveHorizontalPosition({ x: 0, y: 2.7, z: 0 }, { x: 1, z: 0 }))
+      .toMatchObject({ x: 1, z: 0 })
+  })
+
+  it('blocks a step higher than the configured maximum', () => {
+    const controller = controllerWithSupports(hitAt(1), hitAt(1.6), hitAt(1.6))
+    expect(controller.resolveHorizontalPosition({ x: 0, y: 2.7, z: 0 }, { x: 1, z: 0 }))
+      .toMatchObject({ x: 0, z: 0 })
+  })
+
+  it('allows leaving a platform edge so gravity can take over', () => {
+    const controller = controllerWithSupports(hitAt(1), null, null)
+    expect(controller.resolveHorizontalPosition({ x: 0, y: 2.7, z: 0 }, { x: 1, z: 0 }))
+      .toMatchObject({ x: 1, z: 0 })
+  })
+
+  it('does not allow walking onto a surface that only supports standing', () => {
+    const controller = controllerWithSupports(hitAt(1), null, hitAt(1))
+    expect(controller.resolveHorizontalPosition({ x: 0, y: 2.7, z: 0 }, { x: 1, z: 0 }))
+      .toMatchObject({ x: 0, z: 0 })
+  })
+})

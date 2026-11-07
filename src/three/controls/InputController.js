@@ -7,6 +7,11 @@ export class InputController {
     this.cameraRig = cameraRig
     this.bounds = bounds || { minX: -75, maxX: 75, minZ: -75, maxZ: 75 }
     this.collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
+    this.groundRaycaster = THREE?.Raycaster ? new THREE.Raycaster() : null
+    this.groundRayOrigin = THREE?.Vector3 ? new THREE.Vector3() : null
+    this.groundRayDirection = THREE?.Vector3 ? new THREE.Vector3(0, -1, 0) : null
+    this.playerEyeHeight = 1.7
+    this.maxWalkableSlopeDegrees = 50
     this.mode = 'overview'
     this.movementEnabled = true
     this.keys = new Set()
@@ -135,6 +140,30 @@ export class InputController {
     if (!this.movementEnabled) this.keys.clear()
   }
 
+  resolvePlayerGroundHeight(player) {
+    if (!this.groundRaycaster || !this.groundRayOrigin || !this.groundRayDirection) return player.y
+    const surfaces = this.collisionWorld?.supportSurfaces || []
+    const meshes = surfaces
+      .filter(surface => surface.enabled !== false && (surface.supportsStanding || surface.walkable))
+      .flatMap(surface => surface.meshes || [])
+    if (!meshes.length) return 1.7
+
+    this.groundRayOrigin.set(player.x, player.y + 50, player.z)
+    this.groundRayDirection.set(0, -1, 0)
+    this.groundRaycaster.set(this.groundRayOrigin, this.groundRayDirection)
+    this.groundRaycaster.far = 100
+    const hits = this.groundRaycaster.intersectObjects(meshes, false)
+    const maxSlopeCos = Math.cos(this.maxWalkableSlopeDegrees * Math.PI / 180)
+    for (const hit of hits) {
+      if (!hit.face || !hit.object) continue
+      const normalMatrix = new this.THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)
+      const normal = hit.face.normal.clone().applyMatrix3(normalMatrix).normalize()
+      if (normal.y < maxSlopeCos) continue
+      return hit.point.y + this.playerEyeHeight
+    }
+    return 1.7
+  }
+
   update(delta) {
     if (this.mode === 'overview' || !this.movementEnabled) return
     const forward = (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0) - (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0)
@@ -160,6 +189,7 @@ export class InputController {
       if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
       player.x = movement.x
       player.z = movement.z
+      player.y = this.resolvePlayerGroundHeight(player)
       if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
       else this.cameraRig.updateFirstPersonDesired()
       return
@@ -178,6 +208,7 @@ export class InputController {
     const movement = this.collisionWorld.move(player, dx * speed, dz * speed)
     player.x = movement.x
     player.z = movement.z
+    player.y = this.resolvePlayerGroundHeight(player)
     if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
     else this.cameraRig.updateFirstPersonDesired()
   }

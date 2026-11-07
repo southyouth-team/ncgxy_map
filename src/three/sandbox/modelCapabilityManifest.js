@@ -20,3 +20,11 @@ export function normalizeModelCapabilityManifest(input, legacyParameters = [], l
     capabilities,
   }
 }
+
+/**
+ * Distinguish an explicitly exported manifest from legacy metadata fallback.
+ * The generated module is the runtime source of truth when it exports one.
+ */
+export function hasExplicitModelCapabilityManifest(input) {
+  return Boolean(input && typeof input === 'object' && !Array.isArray(input))
+}

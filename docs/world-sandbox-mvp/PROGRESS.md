@@ -683,3 +683,66 @@ export const environmentBindings = [
 3. 让 AI 生成/微调 Prompt 输出“推断建议”而非把推断直接伪装成已生效能力；保留当前 box collider 输出作为兼容编译结果。
 4. 建立用户覆盖的保存/恢复和优先级测试，再接第一个非空间能力用例，证明机制确实通用。
 5. 只有在编译器/诊断链路明确后，才逐项扩展 Runtime 执行器。
+
+
+---
+
+## 2026-11-07 — Capability Control 纯数据协议第一阶段
+
+### 本轮目标
+
+实现与 Three.js 解耦的通用能力控制数据解析层，覆盖任意 capability ID、对象/部件/区域 scope、AI 推断状态和用户覆盖优先级。当前阶段不接 Runtime、不修改 AI Prompt 和页面存档。
+
+### 本轮源码基线
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 分支：`feat/world-sandbox-conversational-model-editor`（分支搜索确认存在）。
+- 开始前重新读取 `PROJECT_PLAN.md`、`PROGRESS.md`、Manifest helper/test、Spatial Runtime、Worker 和 AI 生成/微调服务。
+- 当前 Manifest helper 只负责 v1 归一化；Spatial Runtime 只消费 box movement colliders。没有既有通用推断/覆盖解析器。
+- 目标分支精确 HEAD SHA 未能通过当前连接器可靠读取；本轮不以文件 SHA 冒充分支 HEAD。
+
+### 实际代码变更
+
+- 新增 `src/three/sandbox/capabilityControl.js`：
+  - `normalizeCapabilityControlDocument` 归一化独立推断、覆盖、诊断集合，并保留未知扩展字段。
+  - `resolveCapabilityRecords` 按稳定 capabilityId + scope 合并 fallback、AI proposals、模型定义和用户覆盖。
+  - 解析优先级为 fallback < AI proposal < model definition < user override。
+  - pending AI proposal 不会激活；accepted 才能成为已接受推断；rejected/disable 在对应 scope 抑制能力。
+  - 不设能力名称白名单，不修改输入记录，不执行能力 payload。
+- 新增 `src/three/sandbox/capabilityControl.test.js`，覆盖空文档归一化、未知字段保留、用户覆盖优先级、模型定义优先于 AI 推断、pending 不激活、拒绝/禁用、部件 scope 隔离、未知能力 ID 和无副作用。
+
+### 本轮文档变更
+
+- 更新 `PROJECT_PLAN.md`，增加 Capability Control 数据协议第一阶段约定，明确纯数据解析边界和当前未接入的部分。
+- 更新本进度记录。
+
+### 当前边界与风险
+
+- 当前 helper 仅在数据层可调用；尚未接入 AI 输出、模型 Manifest 生命周期、UI 用户控制、World Document/localStorage 存档或任何 Runtime。
+- 解析器输出的 resolved 仅表示数据优先级解析完成，不表示能力已编译或运行。后续必须引入明确的 compile/runtime 状态和 diagnostics。
+- scope key 当前按 targetType/targetId/regionId/partId 组合；后续正式协议需补稳定 ID 校验、scope 冲突/继承规则和局部依赖更新。
+- 该阶段不验证几何真实性、物理冲突或行为可执行性。
+
+### 提交记录
+
+- `e9574ccdf41b5a7223c71859c990b83ec3b30811` — 新增 Capability Control resolver。
+- `0096075adb2009e316470b2b9a9bfb9a5c9bade6` — 新增 resolver 单元测试。
+- `9998ccfe8e9ff754398b4ba1aab1a9e7a2d25177` — 修正 pending AI proposal 必须保持未激活。
+- `67a6751d9d061690ba775b851861a6989cd8b95d` — 更新 pending 状态测试。
+- `6a233cbeb51e90c06df4f7819fc761522d485179` — 更新 `PROJECT_PLAN.md`。
+
+### 验证状态
+
+- 文件创建/更新 API 已返回提交 SHA。
+- 关键源码和测试尚未在本轮最终回读。
+- Vitest、前端 build、后端测试/typecheck 未执行。
+- CI 和浏览器验收未执行。
+- 未向 main 写入，未创建 PR。
+
+### 下一步
+
+1. 回读新增 helper、测试和两份文档，做静态一致性检查。
+2. 在可执行环境运行 `npm test -- --run src/three/sandbox/capabilityControl.test.js` 与 `npm run build`。
+3. 为模型定义/推断/覆盖建立持久化容器和版本迁移，不把推断元数据塞进旧 Manifest 的 capabilities 执行声明。
+4. 修改 AI 生成/微调 Prompt，使 AI 输出可审阅的推断建议与证据；用户确认后才进入模型定义/覆盖。
+5. 接入首个 Runtime 编译器前，先定义 diagnostics 的状态机与“resolved/compiled/applied”区别。

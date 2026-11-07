@@ -2211,3 +2211,30 @@ export const environmentBindings = [
 - 自动化测试、前端构建、浏览器真实 AI 编辑与入场验收：本轮未执行。测试源码存在不等于测试通过。
 - CI 状态为 pending，状态检查数量为 0，不能视为通过。
 - `main` 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`；未修改 main，未创建或合并 PR。
+
+
+---
+
+## 2026-11-08 — P2.3 空间 Runtime 注册链路补强
+
+### 本轮目标
+
+验证模型替换后，碰撞体与支撑面注册表是否使用新 Object3D / 新 Manifest，而不是只更新模型 userData。
+
+### 实际改动
+
+- `src/three/engine/modelSpatialRuntime.js`
+  - 新增 `refreshModelSpatialRegistration`，集中执行世界矩阵更新、旧 owner 注册清理、当前碰撞体和 Mesh 支撑面重新采集/注册。
+- `src/three/engine/createCampusEngine.js`
+  - 引擎空间刷新入口委托给上述函数；模型替换、Transform 和状态变更沿用同一注册路径。
+- `src/three/engine/modelSpatialRuntime.test.js`
+  - 增加基于真实 Three.js Group/Mesh 与 CollisionWorld 的测试源码，覆盖旧墙/旧地面替换、新墙/新地面注册、清空空间声明后的旧注册清理，以及 Transform 后世界坐标边界更新。
+- `PROJECT_PLAN.md`
+  - 记录 P2.3 空间注册验收边界。
+
+### 验证状态
+
+- 本轮开始 HEAD：`2811549ec902c700b4dec7f58d5c86f06ff179b3`。
+- GitHub 源码写入与回读完成后再记录最终 HEAD。
+- 自动化测试、前端构建、浏览器人物通行/站立验收：本轮未执行；测试源码不等于测试通过。
+- CI 状态待检查；`main` 不修改，不创建或合并 PR。

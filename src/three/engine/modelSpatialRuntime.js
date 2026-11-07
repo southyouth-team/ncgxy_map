@@ -102,3 +102,45 @@ export function collectModelMovementObstacles(THREE, root, ownerId) {
   }
   return obstacles
 }
+
+
+/**
+ * Collects declared standing/traversal surfaces from real model geometry.
+ * Returned mesh references are transient Runtime handles, never manifest data.
+ */
+export function collectModelSupportSurfaces(root, ownerId) {
+  if (!root?.traverse || !ownerId) return []
+  const declarations = root.userData?.proceduralModelCapabilityManifest?.capabilities?.spatial?.surfaces
+  if (!Array.isArray(declarations) || !declarations.length) return []
+
+  root.updateWorldMatrix(true, true)
+  const parts = new Map()
+  root.traverse(object => {
+    const id = object.userData?.componentId
+    if (id != null) parts.set(String(id), object)
+  })
+
+  const result = []
+  for (const declaration of declarations) {
+    if (!declaration || declaration.enabled === false || declaration.shape !== 'mesh'
+      || typeof declaration.targetPartId !== 'string') continue
+    if (declaration.supportsStanding !== true && declaration.walkable !== true) continue
+    const target = parts.get(declaration.targetPartId)
+    if (!target?.traverse) continue
+    const meshes = []
+    target.traverse(object => {
+      const position = object.geometry?.getAttribute?.('position')
+      if (object.isMesh && position && position.count >= 3) meshes.push(object)
+    })
+    if (!meshes.length) continue
+    result.push({
+      ownerId: String(ownerId),
+      surfaceId: String(declaration.id || declaration.targetPartId),
+      targetPartId: declaration.targetPartId,
+      supportsStanding: declaration.supportsStanding === true,
+      walkable: declaration.walkable === true,
+      meshes,
+    })
+  }
+  return result
+}

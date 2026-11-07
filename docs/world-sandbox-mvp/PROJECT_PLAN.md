@@ -397,10 +397,12 @@ Manifest 继续作为模型固有定义的入口，但不把所有职责塞进�
 
 - `capabilityControlDocument` 暂采用独立文档结构：`version`、`inference.proposals[]`、`overrides[]`、`diagnostics[])。未知顶层字段和记录字段必须原样保留。
 - 每条记录以 `capabilityId` 和 scope 定位；scope 可指向 model、part、region 或未来的其他稳定目标。能力 ID 不经过白名单校验。
-- 推断记录至少携带 status（proposed/accepted/rejected）、可选 confidence/evidence/source 和 value。未经接受的 proposed 记录保持 pending 且不激活；置信度不自动改变这一点。
-- 用户覆盖支持 set、disable、reject 等控制语义，独立于 AI 推断和模型定义持久化。
-- 解析器当前优先级：Runtime fallback < AI proposal < model definition < user override。只有 accepted 的 AI proposal 可作为已接受结果；pending 仅供审阅，rejected/disable 在对应 scope 抑制能力。
-- 解析器只产出解析记录，不调用 Three.js、不执行代码、不宣称 Runtime 已生效。后续需增加编译状态和诊断来源，只有 Runtime adapter 确认执行后才能标记 applied。
+- AI 推断记录携带 source、confidence、evidence、scope 和 value 等可追溯信息；不要求用户逐项确认。AI 推断默认自动进入解析结果，旧版 status=proposed 仅作为兼容输入，不再代表等待人工审批。
+- 用户明确指令与已保存用户覆盖独立记录，支持 set、disable、reject 等控制语义；AI 后续推断/编辑不得静默覆盖用户明确设置。
+- 解析优先级：Runtime fallback < AI inference < model definition < saved user override < current-turn explicit user instruction。当前纯数据 resolver 支持前四层；当前轮指令应在调用 resolver 前转成最高优先级的临时 override。
+- AI 未提及某项能力时，由 AI 根据模型结构和上下文自主推断；若明确无法判断，应采用保守默认值并保留推断依据/不确定性，而不是要求用户确认。
+- 解析器只产出解析记录，不调用 Three.js、不执行代码、不宣称 Runtime 已生效。后续需区分 resolved、compiled、applied，并由 Runtime adapter 确认执行后才能标记 applied。
+- 显式 enabled=false、disable 或 reject 可关闭对应能力；AI 推断默认 enabled=true，但记录自身明确声明 enabled=false 时必须保留该值。
 - 该 helper 是协议第一阶段，当前尚未接入页面状态、模型 Worker、AI Prompt 或存档；不得将“有 resolver 单测”表述为端到端能力已交付。
 
 #### 当前 Spatial Runtime 的定位

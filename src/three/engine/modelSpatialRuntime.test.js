@@ -136,6 +136,64 @@ describe('collectModelMovementObstacles', () => {
     expect(collectModelMovementObstacles(THREE, root, 'door-override')).toHaveLength(1)
   })
 
+  it('lets a dynamic model parameter control a bound spatial collider', () => {
+    const root = new THREE.Group()
+    const wall = new THREE.Group()
+    wall.userData.componentId = 'wall-panel'
+    root.add(wall)
+    const capabilityId = 'spatial.collider.wall-panel-collider.blocksMovement'
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      parameters: [{
+        id: 'wallBlocksPlayer',
+        label: '墙体阻挡玩家',
+        type: 'boolean',
+        default: true,
+        bindings: [{ capabilityId, property: 'blocksMovement' }],
+      }],
+      capabilities: { spatial: { colliders: [{
+        id: 'wall-panel-collider', targetPartId: 'wall-panel', shape: 'box',
+        size: { x: 2, y: 2, z: 0.25 }, blocksMovement: true,
+      }] } },
+    }
+    root.userData.proceduralModelParameterValues = { wallBlocksPlayer: true }
+
+    expect(collectModelMovementObstacles(THREE, root, 'parameter-bound')).toHaveLength(1)
+    root.userData.proceduralModelParameterValues.wallBlocksPlayer = false
+    expect(collectModelMovementObstacles(THREE, root, 'parameter-bound')).toEqual([])
+  })
+
+  it('keeps explicit user capability overrides above parameter bindings', () => {
+    const root = new THREE.Group()
+    const wall = new THREE.Group()
+    wall.userData.componentId = 'wall-panel'
+    root.add(wall)
+    const capabilityId = 'spatial.collider.wall-panel-collider.blocksMovement'
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      parameters: [{
+        id: 'wallBlocksPlayer', type: 'boolean', default: false,
+        bindings: [{ capabilityId, property: 'blocksMovement' }],
+      }],
+      capabilities: { spatial: { colliders: [{
+        id: 'wall-panel-collider', targetPartId: 'wall-panel', shape: 'box',
+        size: { x: 2, y: 2, z: 0.25 }, blocksMovement: false,
+      }] } },
+    }
+    root.userData.proceduralModelParameterValues = { wallBlocksPlayer: false }
+    root.userData.proceduralModelCapabilityControlDocument = {
+      version: 1, inference: { proposals: [] }, diagnostics: [],
+      overrides: [{
+        capabilityId,
+        scope: { targetType: 'part', targetId: 'wall-panel' },
+        action: 'set',
+        value: { blocksMovement: true },
+      }],
+    }
+
+    expect(collectModelMovementObstacles(THREE, root, 'parameter-priority')).toHaveLength(1)
+  })
+
   it('keeps models without spatial declarations non-blocking', () => {
     const root = new THREE.Group()
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_3')).toEqual([])

@@ -843,10 +843,10 @@ export class ImageGenerationService {
         role: 'user',
         content: imageDataUrl
           ? [
-              { type: 'text', text: 'Create the complete editable procedural Three.js model from this reference image. Reproduce visible silhouette, proportions, part relationships and material regions. The image is the primary evidence; do not invent hidden details. Return only the complete JavaScript module exporting createModel(THREE, params = {}), modelParameters and modelParts.' },
+              { type: 'text', text: 'Create the complete editable procedural Three.js model from this reference image. Reproduce visible silhouette, proportions, part relationships and material regions. The image is the primary evidence; do not invent hidden details. Return only the complete JavaScript module exporting createModel(THREE, params = {}), modelCapabilityManifest, modelParameters, modelParts and environmentBindings.' },
               { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
             ]
-          : 'Generate the complete editable procedural model. Return only the createModel(THREE) JavaScript factory.',
+          : 'Generate the complete editable procedural model. Return only the JavaScript module exporting createModel(THREE, params = {}), modelCapabilityManifest and compatibility metadata exports.',
       },
     ];
 
@@ -968,14 +968,29 @@ export class ImageGenerationService {
       || !/export\s+function\s+createModel\s*\(\s*THREE(?:\s*,[^)]*)?\)/.test(result.generatedCode)) {
       throw new ServiceUnavailableException('AI 返回的模型源码无效或超过 120 KB');
     }
+    const returnedManifest = result.modelCapabilityManifest && typeof result.modelCapabilityManifest === 'object' && !Array.isArray(result.modelCapabilityManifest)
+      ? result.modelCapabilityManifest
+      : (modelCapabilityManifest || { version: 1, parameters: parameterDefinitions, capabilities: environmentBindings.length ? { environmentBindings } : {} });
+    const returnedCapabilities = returnedManifest.capabilities && typeof returnedManifest.capabilities === 'object'
+      ? returnedManifest.capabilities : {};
+    const returnedEnvironmentBindings = Array.isArray(returnedCapabilities.environmentBindings)
+      ? returnedCapabilities.environmentBindings
+      : (Array.isArray(result.environmentBindings) ? result.environmentBindings : environmentBindings);
     return {
       generatedCode: result.generatedCode,
-      parameters: Array.isArray(result.parameters) ? result.parameters : [],
+      parameters: Array.isArray(result.parameters) ? result.parameters : (Array.isArray(returnedManifest.parameters) ? returnedManifest.parameters : []),
       parts: Array.isArray(result.parts) ? result.parts : [],
-      modelCapabilityManifest: result.modelCapabilityManifest && typeof result.modelCapabilityManifest === 'object' && !Array.isArray(result.modelCapabilityManifest)
-        ? result.modelCapabilityManifest
-        : (modelCapabilityManifest || { version: 1, parameters: parameterDefinitions, capabilities: environmentBindings.length ? { environmentBindings } : {} }),
-      environmentBindings: Array.isArray(result.environmentBindings) ? result.environmentBindings : environmentBindings,
+      modelCapabilityManifest: {
+        ...returnedManifest,
+        version: Number.isInteger(returnedManifest.version) ? returnedManifest.version : 1,
+        parameters: Array.isArray(returnedManifest.parameters) ? returnedManifest.parameters : parameterDefinitions,
+        capabilities: {
+          ...returnedCapabilities,
+          ...(returnedEnvironmentBindings.length || Object.prototype.hasOwnProperty.call(returnedCapabilities, 'environmentBindings')
+            ? { environmentBindings: returnedEnvironmentBindings } : {}),
+        },
+      },
+      environmentBindings: returnedEnvironmentBindings,
       changeSummary: typeof result.changeSummary === 'string' ? result.changeSummary : '模型已更新',
       generatedAt: new Date().toISOString(),
     };

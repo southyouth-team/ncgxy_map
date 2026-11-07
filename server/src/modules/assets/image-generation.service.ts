@@ -861,7 +861,10 @@ export class ImageGenerationService {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({ model, temperature: 0.25, messages }),
+        body: JSON.stringify({
+            model, temperature: 0.25, messages,
+            ...(requireJsonObject ? { response_format: { type: 'json_object' } } : {}),
+          }),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -935,7 +938,7 @@ export class ImageGenerationService {
     const timeoutMs = Number.isFinite(configuredTimeout)
       ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
     const buildDeadline = Date.now() + Math.min(900000, timeoutMs);
-    const requestText = async (messages: any[]): Promise<string> => {
+    const requestText = async (messages: any[], requireJsonObject = false): Promise<string> => {
       const remainingMs = buildDeadline - Date.now();
       if (remainingMs <= 0) throw new ServiceUnavailableException('增量模型构建超过 15 分钟总时限');
       let response: Response;
@@ -969,7 +972,13 @@ export class ImageGenerationService {
       const end = cleaned.lastIndexOf('}');
       if (start < 0 || end <= start) throw new ServiceUnavailableException('视觉模型未返回有效的构建规划 JSON');
       try { return JSON.parse(cleaned.slice(start, end + 1)); }
-      catch { throw new ServiceUnavailableException('视觉模型构建规划 JSON 格式无效'); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn('视觉模型构建规划 JSON 解析失败：' + message
+          + '；响应开头：' + cleaned.slice(0, 400)
+          + '；响应结尾：' + cleaned.slice(-200));
+        throw new ServiceUnavailableException('视觉模型构建规划 JSON 格式无效：' + message.slice(0, 160));
+      }
     };
 
     emit({ type: 'stage', stage: 'planning', label: '分析模型结构并选择构建策略', detail: '正在等待 AI 完成整体结构分析；此阶段尚未开始模型预览' });
@@ -1000,7 +1009,7 @@ export class ImageGenerationService {
           : 'Choose the strategy and return the complete JSON planning result.',
       },
     ];
-    const planning = parseJson(await requestText(planningMessages));
+    const planning = parseJson(await requestText(planningMessages, true));
 
     if (planning?.strategy === 'single') {
       const generatedCode = typeof planning.generatedCode === 'string' ? planning.generatedCode.trim() : '';

@@ -218,6 +218,55 @@ Three.js Object3D 是渲染/运行时载体，不是唯一权威世界数据。�
 - Runtime 只执行已实现的受控能力协议，不执行 AI 任意 JavaScript。未知能力声明可保存在模型定义中，但未有对应 Runtime 时不得伪称已生效；应记录为待支持能力，而不是因模型类别未知就拒绝整个模型。
 - 老模型若保留可编辑程序化源码，可由 AI 增量补充能力声明；只有静态图像或不可编辑网格时，无法保证无损补齐隐藏内部结构。
 
+### 3.13 Model Capability Manifest v1（第一阶段数据协议）
+
+程序化模型以 `modelCapabilityManifest` 作为模型固有能力的主声明。Manifest 是模型定义的一部分，不包含世界环境当前值，也不包含某个实例此刻的开关/门状态。
+
+#### 协议结构
+
+```js
+export const modelCapabilityManifest = {
+  version: 1,
+  parameters: [
+    // 模型固有的可编辑参数定义；与当前参数值分离
+  ],
+  capabilities: {
+    // 按实际模型选择性声明；不存在的能力段直接省略
+    spatial: {
+      // 部件/区域级 colliders、traversalZones、enterable 等声明
+    },
+    interior: {
+      // floors、spaces、connections 等室内结构声明
+    },
+    environmentBindings: [
+      // 模型/部件对世界环境变量的订阅与响应声明
+    ],
+    interactions: [
+      // 交互入口、动作、稳定目标关系等数据声明
+    ]
+  }
+};
+```
+
+以上是结构约定。除 `version`、`parameters`、`capabilities` 外，Manifest 和 capability section 可扩展；未实现的能力声明可以保存和往返传递，但 Runtime 不得假装已经执行。
+
+#### 与现有字段的兼容规则
+
+- `modelCapabilityManifest.parameters` 是模型参数定义；现有命名导出 `modelParameters` 暂作为兼容别名。当前参数值仍由现有 `proceduralModelParameterValues` 保存，不把实例当前值塞进能力定义。
+- `modelCapabilityManifest.capabilities.environmentBindings` 是主声明；现有命名导出 `environmentBindings` 和根节点 `userData.proceduralModelEnvironmentBindings` 暂作为 Runtime 兼容别名。第一阶段 Runtime 仍从兼容字段读取人工灯光绑定。
+- `modelParts` 仍是部件选择/编辑 UI 的兼容元数据，不等同于空间、碰撞或交互能力。
+- Worker 读取 AI 模块的 Manifest；旧模型没有 Manifest 时，根据旧 `modelParameters` / `environmentBindings` 合成 v1 兼容 Manifest。
+- Worker 将 Manifest 保存到根节点 `userData.proceduralModelCapabilityManifest`。现有 Object3D JSON 存档会随模型 userData 保存该声明。
+- AI 微调请求携带当前 Manifest；AI 返回完整更新 Manifest。服务端兼容旧模型：若 AI 未返回 Manifest，则沿用旧 Manifest/旧绑定并构造兼容结果。
+- 模型替换和撤销历史保留 Manifest；Manifest 中的环境绑定与旧字段必须同步，避免 Runtime 读取到过期绑定。
+
+#### 安全与演进边界
+
+- Manifest 是纯数据，不允许函数、可执行源码、eval 字符串或任意运行时代码。
+- 第一阶段不对未知 capability key 做业务白名单校验；Worker/页面保留未知声明字段，供后续 Runtime 版本解释。
+- 当前没有 Spatial/Interior/通用 Interaction Manifest Runtime；这些字段即使已保存，也只代表模型声明，不代表碰撞、室内导航或交互已生效。
+- 后续版本通过 `version` 演进，并以显式迁移处理旧字段；不要在这一阶段一次性迁移全部 World Document。
+
 ### 3.11 AI 模型能力与环境绑定协议
 
 模型生成和模型能力不是同一件事。模型定义负责描述几何、材质和部件；能力声明负责描述模型/部件能响应哪些环境变量、提供哪些控制入口；Runtime 负责把环境值映射为实际运行效果。

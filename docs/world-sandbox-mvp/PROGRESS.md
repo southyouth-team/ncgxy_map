@@ -2160,3 +2160,26 @@ export const environmentBindings = [
 - 新增 `sandboxModelLifecycle.test.js`，覆盖纹理引用隔离、重复纹理槽保留、纹理释放去重；**测试源码已添加，但未执行**。
 - Vitest、前端构建、CI 和浏览器验收：未执行/无可用成功状态，不得标记通过。
 - `main` 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`；未修改 main，未创建或合并 PR。
+
+
+---
+
+## 2026-11-08 — P2.3 AI 模型生成/编辑到沙盒入场链路（源码修改）
+
+### 审查发现
+
+- 新建模型源码在独立 Worker 中执行；Worker 负责归一化 Manifest、构建 Capability Control Document、采集几何诊断，并通过 Object3D JSON 返回页面。
+- 新建草稿只有用户保存时才调用 `registerModel` / `engine.addSandboxModel`；引擎随后注册空间阻挡体、支撑面，应用世界状态与全局环境绑定。
+- AI 编辑通过独立接口返回源码与 Manifest；前端再次在 Worker 执行新源码，再调用 `replaceSandboxModel` 保留实例 ID/Transform，并重建空间/环境运行时。
+- 发现风险：服务端编辑响应在模型未返回 Manifest 时，会把旧 Manifest 作为兼容回退返回；页面原先无条件优先使用接口响应 Manifest，可能使 Worker 实际执行的新源码 Manifest 被旧定义覆盖。
+
+### 实际改动
+
+- `src/three/sandbox/modelCapabilityManifest.js`
+  - 新增显式 Manifest 来源判断函数。
+- `src/three/sandbox/modelCapabilityManifest.test.js`
+  - 增加显式对象 Manifest、null 和数组输入测试源码。
+- `src/three/sandbox/proceduralModel.worker.js`
+  - 记录 Manifest 来源为 `module` 或 `legacy`，并随模型 userData 返回。
+- `src/components/WorldSandboxMvp.vue`
+  - AI 编辑替换时，若刚执行的源码显式导出 Manifest，则优先采用该定义；接口响应仅作为兼容回退。

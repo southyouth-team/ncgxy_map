@@ -21,8 +21,16 @@ export class CollisionWorld {
     this.obstacles.push({
       minX: bounds.minX, maxX: bounds.maxX,
       minZ: bounds.minZ, maxZ: bounds.maxZ,
+      ...(ownerId ? { ownerId: String(ownerId) } : {}),
     })
     return true
+  }
+
+  removeObstaclesByOwner(ownerId) {
+    if (!ownerId) return 0
+    const before = this.obstacles.length
+    this.obstacles = this.obstacles.filter(obstacle => obstacle.ownerId !== String(ownerId))
+    return before - this.obstacles.length
   }
 
   addCircleObstacle({ x, z, radius } = {}) {

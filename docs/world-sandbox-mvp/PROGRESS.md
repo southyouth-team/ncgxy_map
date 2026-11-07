@@ -2331,9 +2331,9 @@ export const environmentBindings = [
 - `sandboxActionRuntime.js` 增加 `enter` 与 `exit` 动作协议；enter 必须引用模型已声明的入口 ID。
 - `createCampusEngine.js` 增加同模型内部空间过渡：
   - 进入前保存玩家世界坐标与相机模式。
-  - 进入时将玩家放到声明的内部地面点，角色眼高按当前 1.7 世界单位偏移。
+  - 进入时通过 InputController 传送入口将玩家放到声明的内部地面点，角色眼高按当前 1.7 世界单位偏移，同时清理残留垂直速度、导航路径和按键状态。
   - 保留进入时第一/第三人称模式。
-  - exit 恢复进入前位置和模式。
+  - exit 恢复进入前位置、第一/第三人称模式及相机 yaw/pitch/距离参数。
   - 不创建独立室内副本，不隐藏外部场景或模型外壳。
 - AI 新建/编辑 Prompt 增加统一 entryPoints、enter/exit 和内部 walkable surface 声明格式。
 - 新增坐标解析、Action 协议测试源码。

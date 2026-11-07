@@ -8,7 +8,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
-import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
+import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'\nimport { collectModelMovementObstacles } from './modelSpatialRuntime.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -825,7 +825,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
     sandboxTransform.setMode('translate')
     sandboxTransform.addEventListener('dragging-changed', event => input?.setMovementEnabled(!event.value))
-    sandboxTransform.addEventListener('change', requestFrame)
+    sandboxTransform.addEventListener('change', () => {\n      if (sandboxSelectedModel) refreshSandboxModelSpatial(sandboxSelectedModel)\n      requestFrame()\n    })
     scene.add(sandboxTransform.getHelper())
     renderer.domElement.addEventListener('pointerdown', onSandboxPointerDown)
     renderer.domElement.addEventListener('dblclick', onSandboxDoubleClick)

@@ -1664,3 +1664,38 @@ export const environmentBindings = [
 3. 右侧应先显示结构分析等待状态，再逐项显示组件名称、序号、等待 AI 返回、源码接收完成。
 4. 所有组件完成后显示一次性 Worker 构建阶段；只有 Worker 成功后才出现完整模型预览。
 5. 分别验证 single 和 components 两条路径；任一路径失败都应显示明确失败阶段，不能展示半成品。
+
+
+---
+
+## 2026-11-07 — 修复增量模型规划 JSON 输出不稳定
+
+### 问题与定位
+
+- 用户运行时收到 `视觉模型构建规划 JSON 格式无效`，失败发生在 planning 阶段的 `parseJson(await requestText(planningMessages))`，尚未进入 single/component 分支、组件生成或 Worker。
+- 原请求仅通过 Prompt 要求 JSON，没有启用上游结构化 JSON 输出；解析器捕获异常后丢弃具体解析错误和响应内容，导致无法判断模型输出格式问题。
+
+### 本轮改动
+
+- `server/src/modules/assets/image-generation.service.ts`
+  - 规划请求启用 OpenAI-compatible `response_format: { type: 'json_object' }`。
+  - 仅规划请求启用 JSON Object 模式；后续组件请求仍返回 JavaScript ES module，不强制 JSON。
+  - JSON 解析失败时记录解析器错误及受限长度的响应首尾片段，避免完整响应或密钥进入日志。
+  - 对客户端返回带解析器错误摘要的规划 JSON 错误，便于快速定位。
+- `server/src/modules/assets/image-generation.procedural.spec.ts`
+  - one-shot 规划路径测试断言请求包含 JSON Object response format。
+- `PROJECT_PLAN.md`
+  - 新增 3.18 节，记录结构化输出与诊断边界。
+
+### 验证边界
+
+- GitHub 文件写入后需回读确认；本会话无本地仓库执行环境，未运行 Jest、Nest build/typecheck 或真实模型 API 验收。
+- 上游服务是否完整支持 `response_format: { type: 'json_object' }` 仍需本地实际请求确认；若服务返回“不支持 response_format”的 HTTP 400，需要基于真实错误增加兼容回退，不能假设所有 OpenAI-compatible 服务都实现该参数。
+- 未修改 `main`，未创建或合并 PR。
+
+### 本地验收
+
+1. 拉取当前功能分支，重启 Nest 服务。
+2. 生成一个简单模型，确认 planning 请求成功返回 JSON 并进入 single 路径。
+3. 生成一个复杂模型，确认 planning 返回合法 plan 并进入组件请求。
+4. 若仍失败，提供新的 HTTP 状态及后端日志；现在日志会包含 JSON 解析原因和有限响应片段。

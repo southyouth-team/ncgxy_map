@@ -848,7 +848,7 @@ P1 分为两个可独立验收的子阶段，避免将射线检测等同于完�
 - `toggle/set` 更新所属模型实例的 `worldState`；`rotate/translate` 修改稳定 `componentId` 指向的部件局部 Transform，默认目标为交互入口部件，也可指定同一模型内其他部件。
 - Transform 动作完成后更新世界矩阵、碰撞体、支撑面和阴影；状态动作沿用 `setSandboxModelState`，保留门状态条件和空间注册刷新。
 - 动作协议不接受任意属性路径、回调、脚本或动态执行代码；未知动作安全失败。
-- `enter/pickup/drop` 不属于本阶段已实现能力。
+- `enter` 已在 P2.5 接入同模型内部空间单层入场/退出；`pickup/drop` 仍未实现。
 
 ### 验收标准
 

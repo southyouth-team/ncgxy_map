@@ -668,26 +668,36 @@ Persistence & Infrastructure
 - 依赖排序只处理 ID 和依赖关系，不解释组件名称、类别或几何语义。
 - 当前协议仅定义数据结构与排序；后端仍是一次性 `/chat/completions` JSON 响应，尚未接入 plan/chunk 多轮请求、SSE/NDJSON 事件传输、Worker 分块执行或逐块预览。不得将协议存在描述为实时构建已完成。
 
-### 3.17 增量模型生成与 NDJSON 预览（第一阶段：链路接通）
+### 3.17 增量模型生成与 NDJSON 预览（历史实现，当前新建流程已停用）
 
-- 新增独立 `generate-procedural-object-stream` POST 接口，使用 NDJSON 事件流，不要求 EventSource 支持 POST 请求体。
-- AI 首次响应按实际结构复杂度选择：
-  - `single`：同一次规划响应直接携带完整 `generatedCode`，沿用原 Worker 完整模型构建路径。
-  - `components`：返回共享 `ModelBuildPlan`，后端按依赖拓扑顺序逐个请求 `ComponentChunk`。
-- 每个组件请求携带完整 ModelPlan、当前组件定义和已完成组件摘要；组件 ID/父级/依赖关系保持开放，不设置模型类别白名单。
-- 后端只传输生成源码，不执行源码；NDJSON 发送 `stage`、`plan`、`component-start`、`component-complete`、`assembly`、`complete` 和 `error`。
-- 前端使用 Fetch ReadableStream 消费 NDJSON。组件完成事件只更新生成进度并暂存源码，不触发 Worker、不更新预览；收到 complete 事件后才组合全部组件源码，在独立 Worker 中一次性构建完整模型。生成期间左侧保持空预览，避免反复重建和不完整模型闪现。
-- 组件以稳定 ID 注册到同一根 Group；`parentId` 用于恢复父子 Object3D 层级，组件工厂通过共享 plan 和已完成组件摘要获得上下文。
-- 组合源码保留 Manifest、参数、部件、环境绑定导出，使最终模型仍能复用现有编辑、保存和二次微调路径。
-- 为控制资源消耗，单个模型最多 40 个计划组件、单个组件源码最多 30 KB、累计组合源码最多 120 KB，整个后端构建最多 15 分钟。
-- 原 `generate-procedural-object` JSON 接口保留，作为兼容入口；工作台新建流程改用增量接口。
-- 本阶段没有使用模型服务的 token SSE；NDJSON 是应用层按完整计划/组件事件推送。部署代理是否正确透传长连接仍需实际环境验收。
-- 本阶段没有实现失败组件的 UI 单独重试按钮、截图视觉复核或自动修复；生成或最终 Worker 构建失败时不展示半成品，右侧进度列表标记失败阶段并显示错误。
+- 曾实现按模型复杂度选择 `single/components` 的增量构建流程，并通过 NDJSON 推送组件级进度。
+- 该方案在组件高度耦合的整体模型上会引入规划请求和多次串行模型请求；组件数量增加会线性增加网络往返，任一组件超时可能导致整次生成失败。
+- 当前新建模型流程已不再调用 ModelBuildPlan / ComponentChunk，不再逐组件生成；相关协议文件暂时保留为历史/后续实验能力，不属于当前默认生成路径。
+- 前端不再展示组件序号、组件名称或组件源码接收进度；只展示完整生成、有限重试、Worker 构建和完成/失败等真实阶段。
 
+### 3.18 规划响应结构化输出（历史实现，当前新建流程不再需要）
 
-### 3.18 规划响应结构化输出
+- 原增量流程曾对规划请求启用 OpenAI-compatible JSON Object response format。
+- 当前新建模型流程不再发起独立规划请求，因此不再依赖规划 JSON、ModelBuildPlan 解析或 `response_format: { type: 'json_object' }`。
+- 完整模型请求直接返回 JavaScript ES module 源码；源码仍需检查工厂导出并在隔离 Worker 中执行。
 
-- 增量模型构建的首轮规划请求显式启用 OpenAI-compatible JSON Object response format，降低规划内容混入 Markdown、解释文本或非法 JSON 的概率。
-- 服务端仍对返回内容执行 JSON 解析和 ModelBuildPlan 结构检查；结构化输出模式不替代业务数据校验。
-- 解析失败时记录受限长度的响应首尾片段与解析器错误，便于区分模型输出问题和解析边界问题；不记录 API Key。
-- 组件源码请求不启用 JSON Object 模式，因为组件响应是 JavaScript ES module 源码。
+### 3.19 整体模型一次性生成与请求级重试（当前默认策略）
+
+- 新建模型以完整对象为生成单位。AI 在一次模型请求中理解整体结构、部件层级、空间关系和能力声明，并输出一个完整 `createModel(THREE, params = {})` 工厂。
+- 不再先请求 AI 做策略规划，不再根据复杂度切换 `single/components`，不再发起逐组件 ComponentChunk 请求。部件之间的引用关系由同一次生成上下文内部处理。
+- 服务端复用既有完整模型 Prompt 和 `generateProceduralObjectFromPrompt`，通过 NDJSON 仅推送阶段事件；NDJSON 是进度传输，不代表模型服务 token 级流式输出。
+- Worker 仍然只在源码完整返回后执行一次，创建完整 Object3D 并执行现有几何诊断；模型能力 Manifest、参数、部件元数据和环境绑定仍沿用既有导出协议。
+- 对网络连接异常、请求超时、响应 JSON 不完整，以及 HTTP 408/425/429/5xx 实施最多 3 次总尝试（最多 2 次重试）；HTTP 400/402 等非暂时性错误不重试。429 优先遵守 Retry-After，等待时间设有上限。
+- 每次重试必须通过 NDJSON 阶段事件显示真实原因和尝试次数；不模拟百分比，不显示组件级进度。
+- 记录生成请求总耗时、尝试次数和源码字节数，便于后续判断模型服务响应时间是否仍是瓶颈。
+- AI 后续微调仍沿用独立的局部/整体编辑接口；本决策不意味着首次生成失败后自动执行视觉修复。视觉审核和局部修复仍作为后续独立能力。
+- 不改变 Worker 隔离边界，不执行 AI 源码于 NestJS 或主线程，不修改 `main`。
+
+#### 验收标准
+
+1. 新建一个复杂模型，后端只发起一次成功的完整模型生成请求；正常情况下不再出现 planning 或 component-start/component-complete 事件。
+2. 一次模型请求超时或遇到暂时性服务错误时，最多自动重试 2 次；402 不重试。
+3. 前端只显示整体生成、重试、Worker 构建和预览完成等阶段，不出现“生成组件 x/y”。
+4. 收到完整源码后只调用一次隔离 Worker 构建；Worker 成功前不显示半成品。
+5. 记录并可从日志/结果元数据读取请求耗时与尝试次数。
+6. 自动化测试覆盖单次请求、超时重试和非暂时性错误不重试；本地 Nest build、Jest 和浏览器真实模型生成仍需单独验收。

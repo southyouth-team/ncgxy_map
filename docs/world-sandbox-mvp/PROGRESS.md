@@ -2350,3 +2350,45 @@ export const environmentBindings = [
 - GitHub 源码写入与回读后记录最终 HEAD。
 - 本会话无本地执行器/浏览器；Vitest、前端构建、真实模型生成、穿门、室内移动和退出均未执行。
 - 不修改 `main`，不创建或合并 PR。
+
+
+---
+
+## 2026-11-08 — P2.6 AI 模型视觉质量检测与有限自动修正
+
+### 本轮目标
+
+在不重构现有生成/编辑链路的前提下，为新建模型补上“真实渲染截图 → AI 视觉检测 → 定向修正 → 重新渲染复检”的闭环。
+
+### 实际改动
+
+- `server/src/modules/assets/image-generation.service.ts`
+  - 新增 `inspectProceduralModelVisualQuality`，复用现有 `VISION_API_KEY`、`VISION_MODEL` 和兼容 Chat Completions 接口。
+  - 同时输入原始描述、可选参考图、最多五张 Three.js 实际渲染截图和几何诊断证据。
+  - 输出归一化质检报告：评分、通过状态、摘要、严重程度、稳定部件 ID、可观察问题和修复指令。
+  - 校验截图格式/大小；参考图上限与原生成接口保持一致。
+- `server/src/modules/assets/image-generation.controller.ts`
+  - 新增 `POST /assets/ai-image/inspect-procedural-object`。
+- `src/components/ProceduralModelEditor.vue`
+  - 新增四视角截图能力（正面、侧面、顶部、等轴）；通过独立 WebGL RenderTarget 读取像素，生成压缩 JPEG 数据 URL。
+  - 在编辑面板显示最近一次视觉质检评分、状态、摘要和问题清单。
+- `src/components/WorldSandboxMvp.vue`
+  - 新模型 Worker 构建完成后，自动触发视觉检测。
+  - 对有明确修复指令的 critical/major 问题，复用现有 AI 微调接口做局部优先修正；最多两轮，修正后重新截图复检。
+  - 保留最新质检报告；质检失败不丢弃模型，明确显示未完成/未通过状态。
+- `server/src/modules/assets/image-generation.service.spec.ts`
+  - 新增视觉检查输入实际多视角图片、归一化通过报告，以及缺少截图时拒绝请求的测试源码。
+
+### 当前边界
+
+- 本轮自动质检接入新建模型生成流程；用户后续手动 AI 编辑/参数调整后的自动复检尚未接入。
+- 质检依赖配置的视觉模型实际支持图像输入；服务不可用时模型仍保留，但质检状态为未完成。
+- 自动修正只处理明确的 critical/major 问题，最多两轮；轻微问题仅报告，不自动改动。
+- 视觉检测不证明碰撞、站立、可穿越、门状态、室内导航或交互功能正确。
+
+### 验证状态
+
+- GitHub 源码写入与回读：待本轮最终静态核对后记录。
+- 已新增服务测试源码；**尚未运行 Jest、服务端构建、前端构建或浏览器真实渲染验收**。
+- 目前不能声称视觉质检端到端通过；需要本地启动前后端，使用支持图像输入的 `VISION_MODEL` 实际生成模型，确认四视角截图非空、视觉接口可识别图片、修正后复检结果及失败回退。
+- 未修改 `main`，未创建或合并 PR。

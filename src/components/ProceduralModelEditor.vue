@@ -44,6 +44,7 @@ const spatialColliders = computed(() => {
         blocksMovement: override?.value?.blocksMovement ?? item.blocksMovement !== false,
         source: override ? '用户覆盖' : '模型定义',
         runtimeSupported: item.shape === 'box' && item.enabled !== false && partIds.has(item.targetPartId),
+        runtimeReason: item.shape !== 'box' ? 'Runtime 未支持该形状' : (item.enabled === false ? '模型定义已禁用' : (!partIds.has(item.targetPartId) ? '目标部件不存在' : 'Runtime 已接入')),
       }
     })
 })
@@ -215,7 +216,7 @@ onBeforeUnmount(() => {
             <h4>{{ selectedPartId ? '当前部件的空间控制' : '模型空间控制' }}</h4>
             <p v-if="!spatialColliders.length" class="model-editor__empty">当前范围没有可控制的 box 碰撞体。选择模型部件可查看其能力。</p>
             <label v-for="collider in spatialColliders" :key="collider.capabilityId" class="model-editor__capability-control">
-              <span><strong>{{ previewParts.find(part => part.id === collider.targetPartId)?.name || collider.targetPartId }}</strong><small>{{ collider.id || '空间碰撞体' }} · {{ collider.source }} · {{ collider.runtimeSupported ? 'Runtime 已接入' : 'Runtime 未支持该形状' }}</small></span>
+              <span><strong>{{ previewParts.find(part => part.id === collider.targetPartId)?.name || collider.targetPartId }}</strong><small>{{ collider.id || '空间碰撞体' }} · {{ collider.source }} · {{ collider.runtimeReason }}</small></span>
               <span class="model-editor__toggle">
                 <input type="checkbox" :checked="collider.blocksMovement" :disabled="!collider.runtimeSupported || busy" @change="updateColliderBlocking(collider, $event.target.checked)">
                 <span>阻挡玩家移动</span>

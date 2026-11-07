@@ -9,7 +9,7 @@ import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
-import { collectModelMovementObstacles, collectModelSupportSurfaces } from './modelSpatialRuntime.js'
+import { refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
 import { cloneSandboxMaterial, disposeSandboxMaterial } from './sandboxModelLifecycle.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
@@ -373,18 +373,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function refreshSandboxModelSpatial(model) {
-    const ownerId = model?.userData?.sandboxModelId
-    if (!ownerId || !collisionWorld) return 0
-    model.updateWorldMatrix?.(true, true)
-    removeSandboxModelSpatialRegistration(ownerId)
-    const obstacles = collectModelMovementObstacles(THREE, model, ownerId)
-    const surfaces = collectModelSupportSurfaces(model, ownerId)
-    let added = 0
-    for (const obstacle of obstacles) {
-      if (collisionWorld.addObstacle(obstacle, ownerId)) added += 1
-    }
-    for (const surface of surfaces) collisionWorld.addSupportSurface(surface)
-    return added
+    return refreshModelSpatialRegistration(THREE, model, collisionWorld)
   }
 
   function addSandboxModel(model, options = {}) {

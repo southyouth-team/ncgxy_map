@@ -69,9 +69,10 @@ export class ImageGenerationController {
     @Body('selectedPartId') selectedPartId: string,
     @Body('instruction') instruction: string,
     @Body('objectType') objectType: string,
+    @Body('environmentBindings') environmentBindings: unknown,
   ) {
     return this.service.modifyProceduralObjectFromInstruction(
-      source, parameters, parameterValues, parts, selectedPartId, instruction, objectType,
+      source, parameters, parameterValues, parts, selectedPartId, instruction, objectType, environmentBindings,
     );
   }
 

@@ -822,8 +822,10 @@ export class ImageGenerationService {
           'You are an expert procedural Three.js asset artist using the img2threejs editable procedural-draft approach.',
           'Return JavaScript ES module source code only. Do not return JSON, Markdown fences, explanations, TypeScript annotations, imports, or external dependencies.',
           'Legacy factory contract: export function createModel(THREE) remains callable. New factory signature: export function createModel(THREE, params = {}) { ... }.',
-          'Export modelParameters and modelParts arrays as named constants. modelParameters describes dynamic controls using id, label, type, default, optional min/max/step/options/group/description. Supported UI types are number, color, boolean, select and text; declare only useful controls for this model. modelParts describes stable part ids, names and parentId values. These arrays are metadata, not a geometry whitelist.',
-          'Every adjustable feature must actually read its value from params inside createModel. Use parameter defaults when a value is absent. Keep stable userData.componentId on part groups so parts can be selected.',
+          'Export modelParameters, modelParts and environmentBindings arrays as named constants. modelParameters describes dynamic controls using id, label, type, default, optional min/max/step/options/group/description. Supported UI types are number, color, boolean, select and text; declare only useful controls for this model. modelParts describes stable part ids, names and parentId values. These arrays are metadata, not a geometry whitelist.',
+          'environmentBindings declares how this model responds to sandbox environment values. Each entry uses { id, targetPartId, variable, property, defaultValue, enabledValue, disabledValue }. targetPartId must match a stable userData.componentId on an actual target Object3D. Use variable "lighting.artificial.enabled" for controllable artificial light sources; bind actual THREE.Light objects with property "visible" or "intensity", and emissive bulb meshes with property "emissiveIntensity". Export an empty array when the model has no environment-responsive parts. Do not invent bindings for components that do not exist.',
+          'When a model contains multiple independent lamps or controllable devices, declare separate bindings for their actual target parts. Do not use display names or mesh names as identifiers. The sandbox applies global values by default and may apply per-model overrides.',
+          'Every adjustable feature must actually read its value from params inside createModel. Use parameter defaults when a value is absent. Keep stable userData.componentId on part groups and on every environment binding target so parts can be selected and bound.',
           'The factory must synchronously return one THREE.Group. Build real geometry and materials with Three.js APIs.',
           'Use arbitrary combinations of BufferGeometry, ExtrudeGeometry, LatheGeometry, Shape, curves, custom vertices, meshes, groups and materials as appropriate. Do not restrict yourself to a predefined primitive catalogue.',
           'Keep meaningful parts in nested THREE.Group objects. Set stable descriptive object.name values and userData.componentId on editable part groups. Give the root group userData.assetName.',
@@ -897,7 +899,7 @@ export class ImageGenerationService {
 
   async modifyProceduralObjectFromInstruction(
     sourceInput: unknown, parametersInput: unknown, parameterValuesInput: unknown, partsInput: unknown,
-    selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown,
+    selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown, environmentBindingsInput?: unknown,
   ): Promise<any> {
     const source = typeof sourceInput === 'string' ? sourceInput.trim() : '';
     const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 12000) : '';
@@ -906,6 +908,7 @@ export class ImageGenerationService {
     const parameterDefinitions = Array.isArray(parametersInput) ? parametersInput.slice(0, 100) : [];
     const parameterValues = parameterValuesInput && typeof parameterValuesInput === 'object' && !Array.isArray(parameterValuesInput) ? parameterValuesInput : {};
     const parts = Array.isArray(partsInput) ? partsInput.slice(0, 300) : [];
+    const environmentBindings = Array.isArray(environmentBindingsInput) ? environmentBindingsInput.slice(0, 100) : [];
     const selectedPartId = typeof selectedPartIdInput === 'string' ? selectedPartIdInput.slice(0, 160) : '';
     const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';
     const apiKey = this.config.get<string>('VISION_API_KEY');
@@ -916,18 +919,21 @@ export class ImageGenerationService {
     const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(900000, Math.max(30000, Math.floor(configuredTimeout))) : 600000;
     const system = [
       'You are editing an existing procedural Three.js model for a real-time 3D sandbox.',
-      'Return one valid JSON object only, with keys generatedCode, parameters, parts, changeSummary. Do not use Markdown fences.',
-      'generatedCode must be a complete self-contained JavaScript ES module exporting createModel(THREE, params = {}), modelParameters and modelParts.',
+      'Return one valid JSON object only, with keys generatedCode, parameters, parts, environmentBindings, changeSummary. Do not use Markdown fences.',
+      'generatedCode must be a complete self-contained JavaScript ES module exporting createModel(THREE, params = {}), modelParameters, modelParts and environmentBindings.',
+      'environmentBindings must describe actual environment-responsive target components in the model. Preserve existing bindings unless the user explicitly changes them. If the user asks to connect an existing lamp/device to the sandbox environment, inspect the current source and component IDs, add missing bindings without rebuilding unrelated geometry, and return the same bindings in both the JSON environmentBindings field and the named export in generatedCode.',
+      'For artificial lighting, use variable "lighting.artificial.enabled" and bind existing THREE.Light objects to visible/intensity and emissive bulb meshes to emissiveIntensity. Each binding must reference a real stable userData.componentId in the generated model. If no suitable light exists, add the minimum required light component while preserving the rest of the model.',
       'Preserve the existing model identity and visual structure unless the instruction explicitly requests a structural change. Do not replace the whole model unnecessarily.',
       'For part-scoped edits, change only the selected part and the minimum dependent geometry/material required. Keep all unrelated parts and their stable component IDs.',
       'For parameter requests, add or update dynamic controls in modelParameters and make createModel read those values from params. Do not invent a fixed global parameter catalogue; declare model-specific controls.',
       'modelParameters entries should use id, label, type, default, and optional min, max, step, options, group, description. UI types: number, color, boolean, select, text.',
       'modelParts entries should use stable id, name, and optional parentId. Give editable THREE.Group objects matching userData.componentId values.',
+      'environmentBindings is a data-only array of { id, targetPartId, variable, property, defaultValue, enabledValue, disabledValue }. targetPartId must match a real userData.componentId in generatedCode. Use "lighting.artificial.enabled" for artificial light components; use only visible, intensity or emissiveIntensity properties. Preserve existing bindings unless the instruction changes them. For a natural-language request to connect an existing model to the environment, add bindings without unnecessarily rebuilding unrelated geometry.',
       'Do not use external dependencies, imports, network, DOM, browser globals, Node APIs, eval, Function, dynamic imports, animation loops or renderers.',
       'The factory must synchronously return one THREE.Group, use only THREE and params, and keep the model centered near X/Z origin, Y-up, standing on Y=0.',
       'Avoid unbounded loops and pathological geometry. Do not claim that geometry intersections have been automatically detected.',
     ].join('\n');
-    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameterDefinitions: parameterDefinitions, currentParameterValues: parameterValues, currentParts: parts, currentSource: source, instruction });
+    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameterDefinitions: parameterDefinitions, currentParameterValues: parameterValues, currentParts: parts, currentEnvironmentBindings: environmentBindings, currentSource: source, instruction });
     let response: Response;
     try {
       response = await fetch(baseUrl + '/chat/completions', {
@@ -964,6 +970,7 @@ export class ImageGenerationService {
       generatedCode: result.generatedCode,
       parameters: Array.isArray(result.parameters) ? result.parameters : [],
       parts: Array.isArray(result.parts) ? result.parts : [],
+      environmentBindings: Array.isArray(result.environmentBindings) ? result.environmentBindings : environmentBindings,
       changeSummary: typeof result.changeSummary === 'string' ? result.changeSummary : '模型已更新',
       generatedAt: new Date().toISOString(),
     };

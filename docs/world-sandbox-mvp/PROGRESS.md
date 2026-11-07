@@ -850,3 +850,56 @@ export const environmentBindings = [
 3. 把用户当前轮明确指令转换为临时最高优先级 override，并持久化用户长期明确设置。
 4. 建立世界/模型存档往返与迁移测试。
 5. 接入第一个自动编译并真实运行的能力闭环，输出 resolved/compiled/applied 和 diagnostics。
+
+
+---
+
+## 2026-11-07 — Capability Control 接入模型生命周期
+
+### 本轮目标
+
+将能力控制文档从孤立 helper 接入真实模型生命周期，覆盖 AI 生成、隔离 Worker、模型替换、撤销、复制及现有 Object3D JSON 存档恢复。
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor)，分支搜索确认存在；仓库默认分支为 `main`。
+- 重新读取计划、进度、Capability Control helper/test、Manifest helper、Worker、Worker executor、沙盒页面、AI 生成/微调服务和引擎模型注册逻辑。
+- 已确认 Manifest 通过 Worker 写入模型根节点 userData；页面存档将模型 Object3D JSON 写入 localStorage；模型替换和撤销会重新执行程序化源码。
+- 已确认上一阶段 Capability Control helper 未被 Worker、页面或存档消费。
+
+### 实际改动
+
+- `src/three/sandbox/capabilityControl.js`
+  - 新增 `createCapabilityControlDocument`，从 Manifest 的每个顶层 capability namespace 派生通用 AI inference proposal；不设能力名称白名单。
+  - 重建 inference 时保留已有用户 overrides、diagnostics 和未知扩展字段。
+- `src/three/sandbox/proceduralModel.worker.js`
+  - Worker 解析 Manifest 后生成 Capability Control 文档，并写入 `userData.proceduralModelCapabilityControlDocument)。
+  - 支持接收上一次模型的 Capability Control 文档，供微调替换时保留用户覆盖。
+- `src/three/sandbox/executeProceduralModel.js`
+  - 增加可序列化的 capabilityControlDocument Worker 参数。
+- `src/components/WorldSandboxMvp.vue`
+  - 模型微调/替换时将原文档传入 Worker。
+  - 替换历史记录和撤销快照保留该文档。
+  - 模型根节点继续通过 Object3D JSON 保存该文档；旧存档恢复时自动补齐兼容文档。
+- `PROJECT_PLAN.md`
+  - 更新协议与生命周期接入状态，明确目前未完成用户覆盖 UI 和 Runtime resolver 接入。
+
+### 重要边界
+
+- 本轮 AI 推断记录由模型 Manifest 的顶层 capability namespaces 派生，证据字段说明其 Manifest 来源；没有声称模型已经输出独立置信度或几何证据。
+- 用户覆盖目前可在数据结构中保留，但尚未提供自然语言指令到结构化 override 的完整解析/写入链路。
+- 解析器尚未将 overrides 编译回 Manifest 或接入碰撞/环境/交互 Runtime；本轮不宣称用户覆盖已改变实际运行行为。
+- 模型复制由 Three.js Object3D JSON 克隆 userData，因此会复制能力控制文档；没有新增共享引用或外部存储。
+
+### 验证状态
+
+- GitHub 文件写入后需回读全部变更文件并静态检查调用链和锚点。
+- Vitest、前端 build、后端测试/typecheck、CI 和浏览器验收未执行；当前会话没有本地仓库执行环境。
+- 未修改 main，未创建 PR。
+
+### 下一步
+
+1. 增加从当前轮用户自然语言指令到结构化 user override 的 AI 输出契约，并保证微调结果不会覆盖历史 override。
+2. 在 Resolver 中解析模型 inference + Manifest definitions + overrides，并将 resolved 结果提供给第一个 Runtime adapter。
+3. 先验证空间 box collider 的 override 是否改变玩家阻挡行为，再扩展其他能力执行器。

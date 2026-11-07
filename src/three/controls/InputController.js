@@ -173,6 +173,26 @@ export class InputController {
     return null
   }
 
+  resolveHorizontalPosition(player, movement) {
+    const previous = { x: player.x, z: player.z }
+    const currentSupport = this.getPlayerSupportHit(player, { walking: false })
+    const nextPlayer = { ...player, x: movement.x, z: movement.z }
+    const nextWalkable = this.getPlayerSupportHit(nextPlayer, { walking: true })
+    const nextStanding = this.getPlayerSupportHit(nextPlayer, { walking: false })
+
+    if (this.grounded && currentSupport) {
+      // 有站立支撑的平台边缘：不允许跨到不可行走区域或超过台阶上限的高差。
+      if (!nextWalkable) return previous
+      const currentY = currentSupport.point.y
+      const nextY = nextWalkable.point.y
+      if (nextY - currentY > this.maxStepHeight) return previous
+    } else if (this.grounded && nextStanding && !nextWalkable) {
+      return previous
+    }
+
+    return { x: movement.x, z: movement.z, support: nextWalkable || nextStanding }
+  }
+
   updateVerticalMotion(player, delta, { walking = false } = {}) {
     const dt = Math.max(0, Math.min(Number(delta) || 0, 0.05))
     if (!dt) return
@@ -227,16 +247,10 @@ export class InputController {
       const movement = this.collisionWorld.move(player, dx / distance * travel, dz / distance * travel)
       const moved = Math.hypot(movement.x - player.x, movement.z - player.z)
       if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
-      const previousX = player.x, previousZ = player.z
-      player.x = movement.x
-      player.z = movement.z
-      const support = this.getPlayerSupportHit(player, { walking: true })
-      const standing = this.getPlayerSupportHit(player, { walking: false })
-      if (this.grounded && !support && standing) {
-        player.x = previousX
-        player.z = previousZ
-      }
-      this.updateVerticalMotion(player, delta, { walking: Boolean(support) })
+      const resolved = this.resolveHorizontalPosition(player, movement)
+      player.x = resolved.x
+      player.z = resolved.z
+      this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
       if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
       else this.cameraRig.updateFirstPersonDesired()
       return
@@ -256,16 +270,10 @@ export class InputController {
     const dz = Math.cos(yaw) * f + Math.sin(yaw) * s
     const player = this.cameraRig.player
     const movement = this.collisionWorld.move(player, dx * speed, dz * speed)
-    const previousX = player.x, previousZ = player.z
-    player.x = movement.x
-    player.z = movement.z
-    const support = this.getPlayerSupportHit(player, { walking: true })
-    const standing = this.getPlayerSupportHit(player, { walking: false })
-    if (this.grounded && !support && standing) {
-      player.x = previousX
-      player.z = previousZ
-    }
-    this.updateVerticalMotion(player, delta, { walking: Boolean(support) })
+    const resolved = this.resolveHorizontalPosition(player, movement)
+    player.x = resolved.x
+    player.z = resolved.z
+    this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
     if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
     else this.cameraRig.updateFirstPersonDesired()
   }

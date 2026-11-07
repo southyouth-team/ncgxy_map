@@ -838,3 +838,22 @@ P1 分为两个可独立验收的子阶段，避免将射线检测等同于完�
 - 回归测试必须验证：替换 Manifest 更新后，用户对具体部件碰撞能力的 override 仍然优先于新模型声明。
 - 存档沿用 Object3D JSON，模型 userData 中的 Manifest 与 Capability Control Document 应一同持久化；恢复后必须重新从恢复对象注册碰撞体和支撑 Mesh，不能复用旧场景 Mesh 引用。
 - 验收需区分声明持久化、Runtime 注册重建与人物实际物理行为；本阶段单测只覆盖前两项。
+
+
+## P2.4 通用交互 Action Runtime（本轮增量）
+
+- Interaction Detection 负责定位最近交互入口；Action Runtime 负责解释入口上的声明式动作。
+- 首批受控动作：`toggle`（兼容旧 `toggle-state`）、`set`、`rotate`、`translate`。
+- `toggle/set` 更新所属模型实例的 `worldState`；`rotate/translate` 修改稳定 `componentId` 指向的部件局部 Transform，默认目标为交互入口部件，也可指定同一模型内其他部件。
+- Transform 动作完成后更新世界矩阵、碰撞体、支撑面和阴影；状态动作沿用 `setSandboxModelState`，保留门状态条件和空间注册刷新。
+- 动作协议不接受任意属性路径、回调、脚本或动态执行代码；未知动作安全失败。
+- `enter/pickup/drop` 不属于本阶段已实现能力。
+
+### 验收标准
+
+1. 旧 `toggle-state` 门/灯声明保持兼容。
+2. `toggle` 与 `set` 更新实例状态，并由现有 stateBinding 更新视觉/碰撞表现。
+3. `rotate` 与 `translate` 只修改目标部件局部 Transform，并刷新空间注册。
+4. 未知动作、缺失目标部件、无效数值不产生场景副作用。
+5. Object3D 存档恢复后，交互配置随部件 userData 保留。
+6. 自动化测试源码覆盖动作协议；真实 AI 生成和玩家按 E 端到端仍需浏览器验收。

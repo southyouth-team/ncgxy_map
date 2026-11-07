@@ -533,7 +533,7 @@ export const environmentBindings = [
 
 ### 最终核验状态（本轮）
 
-- 目标分支 HEAD：`058fba2b6dd3df4050f6f37a1ea88d04f22de024`，通过 Git ref API 实际读取。
+- 最后一笔源码实现提交：`058fba2b6dd3df4050f6f37a1ea88d04f22de024`；其后只追加了 `PROJECT_PLAN.md` / `PROGRESS.md` 文档记录。最终功能分支 ref 在本轮结束前再次核验。
 - `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`，与本轮开始时基线一致。
 - 目标分支文件回读：Manifest helper、测试、Worker、Service、Controller、页面、PROJECT_PLAN 和 PROGRESS 均可从目标分支读取。
 - GitHub Actions：该 HEAD 对应的 PR workflow runs 返回空数组；没有可判定成功的 CI 记录。

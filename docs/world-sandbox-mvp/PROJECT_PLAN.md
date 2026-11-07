@@ -391,6 +391,18 @@ Manifest 继续作为模型固有定义的入口，但不把所有职责塞进�
 
 例如，“这个玻璃隔断允许玩家穿过，但仍然显示玻璃材质”应被解释为对空间阻挡能力的局部覆盖，而不是删除玻璃模型；“树冠随风摆动”应分别涉及环境订阅、运动行为和部件范围；“按下按钮后电梯到三楼”涉及交互入口、状态转换、空间连接和运行时反馈。系统不应要求用户理解这些底层结构才可提出要求。
 
+#### Capability Control 数据协议第一阶段实现约定
+
+第一阶段先建立不依赖 Three.js 的纯数据解析层，避免将推断、覆盖和执行耦合进当前碰撞代码：
+
+- `capabilityControlDocument` 暂采用独立文档结构：`version`、`inference.proposals[]`、`overrides[]`、`diagnostics[])。未知顶层字段和记录字段必须原样保留。
+- 每条记录以 `capabilityId` 和 scope 定位；scope 可指向 model、part、region 或未来的其他稳定目标。能力 ID 不经过白名单校验。
+- 推断记录至少携带 status（proposed/accepted/rejected）、可选 confidence/evidence/source 和 value。未经接受的 proposed 记录保持 pending 且不激活；置信度不自动改变这一点。
+- 用户覆盖支持 set、disable、reject 等控制语义，独立于 AI 推断和模型定义持久化。
+- 解析器当前优先级：Runtime fallback < AI proposal < model definition < user override。只有 accepted 的 AI proposal 可作为已接受结果；pending 仅供审阅，rejected/disable 在对应 scope 抑制能力。
+- 解析器只产出解析记录，不调用 Three.js、不执行代码、不宣称 Runtime 已生效。后续需增加编译状态和诊断来源，只有 Runtime adapter 确认执行后才能标记 applied。
+- 该 helper 是协议第一阶段，当前尚未接入页面状态、模型 Worker、AI Prompt 或存档；不得将“有 resolver 单测”表述为端到端能力已交付。
+
 #### 当前 Spatial Runtime 的定位
 
 当前 `modelCapabilityManifest.capabilities.spatial.colliders` 和 `collectModelMovementObstacles` 只是第一个底层执行切片：把明确声明的 box blocker 转换为 XZ 移动障碍。它不等于通用能力推理，也没有自动理解所有模型的穿越、承载、进入或连接能力。

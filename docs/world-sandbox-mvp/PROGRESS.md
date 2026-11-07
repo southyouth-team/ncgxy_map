@@ -623,3 +623,63 @@ export const environmentBindings = [
 3. 用 AI 生成一个由独立墙段构成、带门洞的房间；检查墙体阻挡、门洞可通行。
 4. 验证移动/旋转/缩放/替换/删除模型时碰撞体同步。
 5. 通过后再接 traversalZones 与室内空间，不提前扩展完整物理系统。
+
+
+---
+
+## 2026-11-07 — 通用对象能力推理与用户控制协议定型
+
+### 本轮目标
+
+根据产品决策，将“AI 自主判断 + 用户可控 + Runtime 真实执行”定义为所有世界对象的通用机制，而不是墙体/碰撞专用功能。覆盖模型、部件、区域、空间实体和运行设备；不按对象类别建立固定能力白名单。
+
+### 本轮源码核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`；分支搜索确认该分支存在。
+- 本轮重新读取了 `PROJECT_PLAN.md`、`PROGRESS.md`、`modelSpatialRuntime.js`、`createCampusEngine.js`、`CollisionWorld.js` 和 AI 生成/微调服务。
+- 当前 `modelSpatialRuntime.js` 只读取 `modelCapabilityManifest.capabilities.spatial.colliders`，只将 box blocker 转为 XZ 平面障碍；没有通用 AI 空间推理、用户覆盖解析、几何冲突诊断或自动修复链路。
+- 当前 AI Prompt 要求模型直接声明当前 Runtime 可用的 box colliders，并明确 traversal/interior 尚未执行。这是一个底层执行切片，不代表 AI 已具备通用对象能力自主判断。
+- GitHub 连接器可确认目标分支存在并可按该分支读取文件，但本轮没有可靠取得分支 ref 的精确 HEAD SHA；本记录不伪造 HEAD。仓库默认分支最近提交查询仍返回 main 历史提交，不能用它替代功能分支 HEAD。
+
+### 本轮架构决策
+
+1. 能力推理适用于所有对象/部件/区域，不限于墙体、碰撞或空间属性。
+2. 分离五个职责：AI Capability Reasoning、User Capability Control、Capability Resolver/Compiler、Capability Runtime、Diagnostics/Repair Loop。
+3. AI 推断记录独立携带来源、置信度、依据、目标范围和推断状态；置信度不等于自动授权。
+4. 用户覆盖独立保存，支持对象/部件/区域/属性级控制；清除覆盖后恢复基础定义/推断结果。AI 后续编辑不得静默覆盖用户明确控制。
+5. Runtime 执行结果和诊断是派生数据；不能反向污染模型定义或实例状态。
+6. 解析优先级确定为：用户本轮明确指令 > 已保存用户覆盖 > 已确认模型定义 > AI 最新推断 > Runtime 安全默认值。
+7. 能力数据保持开放和可扩展；未知字段允许保存/往返。Runtime 只执行已实现的受控执行器，未支持能力明确标记 unsupported/uncompiled。
+8. 当前 box collider Runtime 作为兼容的底层执行切片保留；未来由 Spatial Compiler 将更高层空间意图编译为执行数据，不把 collider 字段当作完整能力模型。
+9. 自然语言是主要控制入口；用户不需要先理解 collider、材质属性、状态绑定等底层字段。AI 负责把意图映射为局部能力修改，并提供可审阅的变化摘要。
+
+### 本轮文档变更
+
+- 更新 `docs/world-sandbox-mvp/PROJECT_PLAN.md`，新增第 3.14 节“通用对象能力：AI 推理、用户控制与 Runtime 执行”。
+- 明确能力覆盖空间/物理、结构拓扑、环境响应、交互状态、运动行为、视觉音频和生命周期等领域；示例清单不是封闭枚举或 Runtime 支持承诺。
+- 明确 Inference、User Overrides、Runtime Execution 三类数据的独立职责。
+- 增加从 AI 推理、用户确认、解析编译、Runtime 执行到诊断修复的标准链路。
+- 明确本轮不改业务代码，不将当前 Spatial Runtime v1 误称为自动推理系统。
+
+### 本轮范围与非目标
+
+- 本轮只定型通用能力协议和路线，不新增碰撞形状、不实现通用能力注册表、不修改 AI 生成代码、不改存档结构。
+- 不允许 AI 任意 JavaScript 进入主线程或 Runtime。
+- 不承诺当前已支持所有能力类型；没有执行器的能力只保留声明并报告未支持。
+
+### 验证状态
+
+- 文档已通过 GitHub API 写入目标功能分支，并在写入前重新读取两份项目文档。
+- 本轮仅文档变更；未执行自动化测试、前端构建、后端测试或浏览器验收。
+- 未取得可用 CI 成功证据。
+- 未修改 main，未创建 PR。
+- 文档写入提交 SHA：`bba58b2284b1f4b3662b31eb6528b2384a906273`（PROJECT_PLAN.md）。PROGRESS.md 更新提交待回填。
+
+### 下一步
+
+1. 回读本轮更新的两份文档，确认协议与现有 Manifest v1、旧字段兼容说明无冲突。
+2. 设计独立的 Capability Inference / User Override / Compile Diagnostics 数据契约与局部增量编辑语义；优先做纯数据协议和单元测试，不扩展碰撞形状。
+3. 让 AI 生成/微调 Prompt 输出“推断建议”而非把推断直接伪装成已生效能力；保留当前 box collider 输出作为兼容编译结果。
+4. 建立用户覆盖的保存/恢复和优先级测试，再接第一个非空间能力用例，证明机制确实通用。
+5. 只有在编译器/诊断链路明确后，才逐项扩展 Runtime 执行器。

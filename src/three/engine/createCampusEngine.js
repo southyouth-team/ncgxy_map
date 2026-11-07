@@ -9,7 +9,7 @@ import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
-import { collectModelMovementObstacles } from './modelSpatialRuntime.js'
+import { collectModelMovementObstacles, collectModelSupportSurfaces } from './modelSpatialRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
@@ -369,11 +369,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const ownerId = model?.userData?.sandboxModelId
     if (!ownerId || !collisionWorld) return 0
     collisionWorld.removeObstaclesByOwner(ownerId)
+    collisionWorld.removeSupportSurfacesByOwner(ownerId)
     const obstacles = collectModelMovementObstacles(THREE, model, ownerId)
+    const surfaces = collectModelSupportSurfaces(model, ownerId)
     let added = 0
     for (const obstacle of obstacles) {
       if (collisionWorld.addObstacle(obstacle, ownerId)) added += 1
     }
+    for (const surface of surfaces) collisionWorld.addSupportSurface(surface)
     return added
   }
 
@@ -431,6 +434,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const parent = current.parent || scene
     parent.add(replacement)
     collisionWorld?.removeObstaclesByOwner(String(id))
+    collisionWorld?.removeSupportSurfacesByOwner(String(id))
     sandboxModels.set(String(id), replacement)
     refreshSandboxModelSpatial(replacement)
     applyWorldStateBindings(replacement, replacement.userData.worldState || {})
@@ -479,6 +483,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (sandboxSelectedModel === model) selectSandboxModel(null)
     sandboxModels.delete(String(id))
     collisionWorld?.removeObstaclesByOwner(String(id))
+    collisionWorld?.removeSupportSurfacesByOwner(String(id))
     model.parent?.remove(model)
     disposeObjectGroup(model)
     invalidateShadowMap()

@@ -29,6 +29,7 @@ export async function executeProceduralModel(source, options = {}) {
   // Model source generation happens on the backend before this function runs.
   // This timeout only covers browser Worker startup, execution and serialization.
   const timeoutMs = Math.min(120000, Math.max(5000, Number(options.timeoutMs) || 60000))
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null
 
   // Vue refs/proxies are not structured-cloneable. Model parameters are a JSON data contract,
   // so normalize them into plain data before crossing the Worker boundary.
@@ -73,6 +74,10 @@ export async function executeProceduralModel(source, options = {}) {
     const onMessage = (event) => {
       if (settled) return
       const data = event.data || {}
+      if (data.type === 'progress') {
+        try { onProgress?.(data) } catch { /* progress observers must not break model execution */ }
+        return
+      }
       if (!data.ok) {
         const detail = data.stack ? `\\n${data.stack}` : ''
         fail(new Error((data.error || '程序化模型执行失败') + detail))

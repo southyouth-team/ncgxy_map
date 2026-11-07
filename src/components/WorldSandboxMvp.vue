@@ -347,11 +347,13 @@ async function runModelVisualQualityControl(originalPrompt) {
         result.environmentBindings,
         result.modelCapabilityManifest,
       )
+      if (editingModel.value) editingModel.value.userData.proceduralModelVisualQuality = latestReport
       await nextTick()
       const refreshed = await proceduralModelEditorRef.value?.captureVisualViews?.()
       if (!Array.isArray(refreshed) || refreshed.length < 3) throw new Error('自动修正后无法重新采集视觉截图')
       screenshots.splice(0, screenshots.length, ...refreshed)
     }
+    if (editingModel.value && latestReport) editingModel.value.userData.proceduralModelVisualQuality = latestReport
     return latestReport
   } catch (error) {
     updateGenerationProgress({

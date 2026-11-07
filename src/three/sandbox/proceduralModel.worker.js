@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
+import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
 import { createCapabilityControlDocument } from './capabilityControl.js'
 import { collectProceduralModelGeometryDiagnostics } from './geometryDiagnostics.js'
 
@@ -83,6 +83,7 @@ self.addEventListener('message', async (event) => {
     }
 
     await reportProgress(port, 'metadata', '整理模型参数与能力声明')
+    const hasModuleManifest = hasExplicitModelCapabilityManifest(modelModule.modelCapabilityManifest)
     const modelCapabilityManifest = normalizeModelCapabilityManifest(
       modelModule.modelCapabilityManifest,
       modelModule.modelParameters,
@@ -102,6 +103,7 @@ self.addEventListener('message', async (event) => {
       proceduralModelParts: Array.isArray(modelModule.modelParts) ? modelModule.modelParts : [],
       proceduralModelEnvironmentBindings: manifestEnvironmentBindings,
       proceduralModelCapabilityManifest: modelCapabilityManifest,
+      proceduralModelCapabilityManifestSource: hasModuleManifest ? 'module' : 'legacy',
       proceduralModelCapabilityControlDocument: capabilityControlDocument,
       proceduralModelParameterValues: parameters,
     }

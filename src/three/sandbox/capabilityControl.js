@@ -21,8 +21,9 @@ export function normalizeCapabilityControlDocument(input) {
   }
 }
 /**
- * Priority: user override > confirmed model definition > accepted AI inference
- * > pending AI inference > Runtime fallback. Rejections suppress one exact scope.
+ * Priority: user override > model definition > automatic AI inference > Runtime fallback.
+ * AI inference is applied by default; explicit user instructions/overrides remain authoritative.
+ * This resolver only resolves data and never claims that a Runtime has compiled or applied it.
  */
 export function resolveCapabilityRecords({ definitions = [], proposals = [], overrides = [], fallback = [] } = {}) {
   const resolved = new Map()
@@ -42,13 +43,12 @@ export function resolveCapabilityRecords({ definitions = [], proposals = [], ove
         })
         continue
       }
-      if (mode === 'proposal' && status !== 'accepted' && status !== 'proposed') continue
       if (action && action !== 'set' && action !== 'accept') continue
       resolved.set(key, {
         ...record, scope: isRecord(record.scope) ? record.scope : {},
-        enabled: mode === 'proposal' && status !== 'accepted' ? false : record.enabled !== false,
+        enabled: record.enabled !== false,
         value: record.value, source,
-        status: mode === 'proposal' && status !== 'accepted' ? 'pending' : 'resolved', priority,
+        status: mode === 'proposal' ? 'inferred' : 'resolved', priority,
       })
     }
   }

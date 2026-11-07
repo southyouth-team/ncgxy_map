@@ -667,3 +667,19 @@ Persistence & Infrastructure
 - 组件 `parentId` 和 `dependsOn` 均为有向依赖边；直接自依赖与多节点循环都属于无效构建计划，必须在生成组件源码前失败。
 - 依赖排序只处理 ID 和依赖关系，不解释组件名称、类别或几何语义。
 - 当前协议仅定义数据结构与排序；后端仍是一次性 `/chat/completions` JSON 响应，尚未接入 plan/chunk 多轮请求、SSE/NDJSON 事件传输、Worker 分块执行或逐块预览。不得将协议存在描述为实时构建已完成。
+
+### 3.17 增量模型生成与 NDJSON 预览（第一阶段：链路接通）
+
+- 新增独立 `generate-procedural-object-stream` POST 接口，使用 NDJSON 事件流，不要求 EventSource 支持 POST 请求体。
+- AI 首次响应按实际结构复杂度选择：
+  - `single`：同一次规划响应直接携带完整 `generatedCode`，沿用原 Worker 完整模型构建路径。
+  - `components`：返回共享 `ModelBuildPlan`，后端按依赖拓扑顺序逐个请求 `ComponentChunk`。
+- 每个组件请求携带完整 ModelPlan、当前组件定义和已完成组件摘要；组件 ID/父级/依赖关系保持开放，不设置模型类别白名单。
+- 后端只传输生成源码，不执行源码；NDJSON 发送 `stage`、`plan`、`component-start`、`component-complete`、`assembly`、`complete` 和 `error`。
+- 前端使用 Fetch ReadableStream 消费 NDJSON。每收到完整组件源码，就组合当前已完成组件，在独立 Worker 中重建当前有效模型并更新工作台预览；下一块失败时保留最近一次成功预览。
+- 组件以稳定 ID 注册到同一根 Group；`parentId` 用于恢复父子 Object3D 层级，组件工厂通过共享 plan 和已完成组件摘要获得上下文。
+- 组合源码保留 Manifest、参数、部件、环境绑定导出，使最终模型仍能复用现有编辑、保存和二次微调路径。
+- 为控制资源消耗，单个模型最多 40 个计划组件、单个组件源码最多 30 KB、累计组合源码最多 120 KB，整个后端构建最多 15 分钟。
+- 原 `generate-procedural-object` JSON 接口保留，作为兼容入口；工作台新建流程改用增量接口。
+- 本阶段没有使用模型服务的 token SSE；NDJSON 是应用层按完整计划/组件事件推送。部署代理是否正确透传长连接仍需实际环境验收。
+- 本阶段没有实现失败组件的 UI 单独重试按钮、截图视觉复核或自动修复；失败会保留最近有效预览并显示错误。

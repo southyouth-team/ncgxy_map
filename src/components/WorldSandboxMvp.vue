@@ -261,8 +261,8 @@ function buildCompositeComponentSource(plan, chunks) {
       componentId: item.componentId,
       purpose: String(parts.find(part => part.id === item.componentId)?.purpose || item.componentId),
     }))
-    const source = String(entry.source || '').replace(/^\\s*export\\s+function\\s+createComponent/, 'function createComponent')
-    if (!/^\\s*function\\s+createComponent\\s*\\(\\s*THREE\\s*,/.test(source)) {
+    const source = String(entry.source || '').replace(/^\s*export\s+function\s+createComponent/, 'function createComponent')
+    if (!/^\s*function\s+createComponent\s*\\(\s*THREE\s*,/.test(source)) {
       throw new Error('组件 ' + entry.componentId + ' 的源码工厂格式无效')
     }
     if (source.length > 30000) throw new Error('组件 ' + entry.componentId + ' 源码超过 30 KB')
@@ -279,7 +279,7 @@ function buildCompositeComponentSource(plan, chunks) {
       '__parent.add(__part);',
       '__componentRefs[' + JSON.stringify(entry.componentId) + '] = __part;',
       '}',
-    ].join('\\n')
+    ].join('\n')
   })
   const source = [
     ...declarations,
@@ -291,7 +291,7 @@ function buildCompositeComponentSource(plan, chunks) {
     'root.userData = { ...(root.userData || {}), assetName: root.name };',
     'return root;',
     '}',
-  ].join('\\n')
+  ].join('\n')
   if (source.length > 120000) throw new Error('累计模型源码超过 120 KB，请减少组件细节或拆分为更精简的部件')
   return source
 }

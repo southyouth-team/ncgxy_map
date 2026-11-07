@@ -153,6 +153,7 @@ async function captureVisualViews() {
   if (!renderer || !previewRoot || !camera || !controls) throw new Error('模型预览尚未完成渲染，无法采集视觉质检截图')
   const originalPosition = camera.position.clone()
   const originalUp = camera.up.clone()
+  const originalAspect = camera.aspect
   const originalTarget = controls.target.clone()
   const distance = Math.max(2, camera.position.distanceTo(controls.target))
   const directions = [
@@ -167,6 +168,7 @@ async function captureVisualViews() {
       controls.target.copy(originalTarget)
       camera.up.copy(view.up)
       camera.position.copy(originalTarget).add(view.direction.normalize().multiplyScalar(distance))
+      camera.aspect = 4 / 3
       camera.lookAt(originalTarget)
       camera.updateProjectionMatrix()
       const width = 512
@@ -206,6 +208,7 @@ async function captureVisualViews() {
     }
   } finally {
     camera.up.copy(originalUp)
+    camera.aspect = originalAspect
     camera.position.copy(originalPosition)
     controls.target.copy(originalTarget)
     camera.lookAt(originalTarget)

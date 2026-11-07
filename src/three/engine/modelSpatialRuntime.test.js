@@ -341,3 +341,70 @@ describe('refreshModelSpatialRegistration', () => {
     expect(collisionWorld.obstacles[0]).toMatchObject({ minX: 9, maxX: 11, minZ: 4.85, maxZ: 5.15 })
   })
 })
+
+
+describe('spatial registration persistence', () => {
+  it('restores the same collider, support surface and user override from Object3D JSON', () => {
+    const collisionWorld = new CollisionWorld({ minX: -20, maxX: 20, minZ: -20, maxZ: 20 })
+    const root = new THREE.Group()
+    root.userData.sandboxModelId = 'persisted-instance'
+    const door = new THREE.Group()
+    door.userData.componentId = 'door-leaf'
+    root.add(door)
+    const wall = new THREE.Group()
+    wall.userData.componentId = 'wall-main'
+    root.add(wall)
+    const floor = new THREE.Group()
+    floor.userData.componentId = 'floor-main'
+    const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(8, 0.2, 8), new THREE.MeshBasicMaterial())
+    floor.add(floorMesh)
+    root.add(floor)
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: {
+        colliders: [
+          { id: 'door-leaf', targetPartId: 'door-leaf', shape: 'box', center: { x: 0, y: 1, z: 0 }, size: { x: 1, y: 2, z: 0.2 } },
+          { id: 'wall-main', targetPartId: 'wall-main', shape: 'box', center: { x: 2, y: 1, z: 0 }, size: { x: 1, y: 2, z: 0.2 } },
+        ],
+        surfaces: [{ id: 'floor-main-surface', targetPartId: 'floor-main', shape: 'mesh', supportsStanding: true, walkable: true }],
+      } },
+    }
+    root.userData.proceduralModelCapabilityControlDocument = {
+      version: 1,
+      inference: { proposals: [] },
+      overrides: [{
+        capabilityId: 'spatial.collider.door-leaf.blocksMovement',
+        scope: { targetType: 'part', targetId: 'door-leaf' },
+        action: 'set',
+        value: { blocksMovement: false },
+      }],
+      diagnostics: [],
+    }
+
+    refreshModelSpatialRegistration(THREE, root, collisionWorld)
+    expect(collisionWorld.obstacles).toHaveLength(1)
+    expect(collisionWorld.obstacles[0]).toMatchObject({ minX: 1.5, maxX: 2.5 })
+    expect(collisionWorld.supportSurfaces).toHaveLength(1)
+
+    const restored = new THREE.ObjectLoader().parse(root.toJSON())
+    const restoredFloor = restored.getObjectByProperty('userData.componentId', 'floor-main')
+    const restoredFloorMesh = restoredFloor.children[0]
+    const restoredWorld = new CollisionWorld({ minX: -20, maxX: 20, minZ: -20, maxZ: 20 })
+    expect(refreshModelSpatialRegistration(THREE, restored, restoredWorld)).toBe(1)
+    expect(restoredWorld.obstacles).toHaveLength(1)
+    expect(restoredWorld.obstacles[0]).toMatchObject({ minX: 1.5, maxX: 2.5 })
+    expect(restoredWorld.supportSurfaces).toHaveLength(1)
+    expect(restoredWorld.supportSurfaces[0]).toMatchObject({
+      ownerId: 'persisted-instance',
+      surfaceId: 'floor-main-surface',
+      targetPartId: 'floor-main',
+      supportsStanding: true,
+      walkable: true,
+    })
+    expect(restoredWorld.supportSurfaces[0].meshes).toEqual([restoredFloorMesh])
+    expect(restoredWorld.supportSurfaces[0].meshes).not.toContain(floorMesh)
+    expect(restored.userData.proceduralModelCapabilityControlDocument.overrides).toEqual(
+      root.userData.proceduralModelCapabilityControlDocument.overrides,
+    )
+  })
+})

@@ -34,3 +34,11 @@ describe('normalizeModelCapabilityManifest', () => {
     expect(normalized.capabilities.environmentBindings).toEqual([{ id: 'light' }])
   })
 })
+
+  
+  it('identifies an explicit module manifest without treating arrays as manifests', async () => {
+    const { hasExplicitModelCapabilityManifest } = await import('./modelCapabilityManifest.js')
+    expect(hasExplicitModelCapabilityManifest({ version: 1, capabilities: {} })).toBe(true)
+    expect(hasExplicitModelCapabilityManifest(null)).toBe(false)
+    expect(hasExplicitModelCapabilityManifest([])).toBe(false)
+  })

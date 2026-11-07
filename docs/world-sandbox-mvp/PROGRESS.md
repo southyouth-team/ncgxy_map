@@ -800,3 +800,53 @@ export const environmentBindings = [
 2. 将当前轮自然语言指令转成临时最高优先级 override，持久化用户明确设置。
 3. 建立 capabilityControlDocument 的存档往返与迁移。
 4. 实现 resolved → compiled → applied 状态与 Runtime diagnostics；先接通一个真实能力闭环。
+
+
+---
+
+## 2026-11-07 — AI 能力推断接入生成/微调 Prompt
+
+### 本轮目标
+
+将最新产品决策落实到模型生成和模型微调的 AI 指令：用户明确提出的要求直接执行；用户未提及的能力由 AI 根据真实几何、部件结构和上下文自主推断，不再逐项询问用户是否接受。
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 目标分支：`feat/world-sandbox-conversational-model-editor`；仓库默认分支为 `main)，目标功能分支已通过分支搜索确认存在。
+- 已重新读取 `PROJECT_PLAN.md`、`PROGRESS.md`、`capabilityControl.js` 和 `server/src/modules/assets/image-generation.service.ts)。
+- 生成接口当前通过 system prompt 生成 `modelCapabilityManifest`；微调接口把当前 Manifest 和用户指令传入模型并返回更新后的 Manifest。
+- 现有 Worker/页面/存档是否消费独立 inference/override 文档仍未确认，本轮不假设已经接通。
+
+### 实际改动
+
+- `server/src/modules/assets/image-generation.service.ts`
+  - 新增生成阶段自主能力推断指令：基于实际几何、稳定部件 ID、对象语义和用户要求推断相关空间、室内、环境响应、交互、行为、视觉/音频及生命周期能力。
+  - 明确用户本轮指令优先；未明确的能力由 AI 保守推断，不要求逐项审批。
+  - 明确不凭参考图片臆造不可见结构；不默认所有对象都可进入、移动、破坏或交互。
+  - 微调阶段同样要求自动推断缺失能力，保留既有声明，仅在用户指令或必要依赖要求时做局部修改。
+  - 明确声明式能力不等于 Runtime 已执行，不能把未实现能力描述为已运行。
+- `docs/world-sandbox-mvp/PROJECT_PLAN.md`
+  - 修订五职责中 AI Reasoning / User Control 的定义。
+  - 移除人工 Review/逐项接受作为默认链路，改为自动推断→解析→编译→执行。
+  - 明确置信度用于追溯，不作为审批门槛。
+
+### 非目标与边界
+
+- 本轮只调整 AI 生成/微调指令和架构文档；没有新增 inference JSON 字段，也没有把 Capability Control 文档接入 Worker、页面状态或存档。
+- 当前生成结果仍以现有 `modelCapabilityManifest` 为输出契约；独立推断记录、用户覆盖持久化及 Runtime diagnostics 的端到端集成仍待后续实现。
+- 不代表空间碰撞以外的能力已有 Runtime 支持。
+
+### 验证状态
+
+- 本轮提交后需回读三个文件并做静态检查，确认生成/微调 prompt 均包含自动推断指令、文档不再要求逐项人工确认。
+- Vitest、后端测试/typecheck、前端 build、CI 和浏览器验收均未执行；当前会话无本地仓库执行环境。
+- 未修改 main，未创建 PR。
+
+### 下一步
+
+1. 核对 Worker 对生成模块导出项的解析方式，确定 inference 与 model definition 的兼容传递边界。
+2. 将 capabilityControlDocument 接入模型对象生命周期，避免仅存在于孤立 helper。
+3. 把用户当前轮明确指令转换为临时最高优先级 override，并持久化用户长期明确设置。
+4. 建立世界/模型存档往返与迁移测试。
+5. 接入第一个自动编译并真实运行的能力闭环，输出 resolved/compiled/applied 和 diagnostics。

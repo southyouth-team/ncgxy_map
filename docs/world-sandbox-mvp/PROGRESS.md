@@ -2066,3 +2066,39 @@ export const environmentBindings = [
 - 若楼梯 Mesh 缺少可命中的顶面、表面法线错误或未声明 walkable，角色无法可靠爬楼梯，需要修正模型几何/能力声明。
 - 最大台阶高度当前为 0.45 世界单位；尚未提供逐模型/世界级配置。
 - 已新增测试源码，未在本会话执行 Vitest、构建或浏览器实际爬楼梯验收。
+
+
+---
+
+## 2026-11-08 — P1c 人物移动回归审查与相机跟随修复
+
+### 回归审查发现
+
+- 检查 InputController.update() 后发现：无水平输入且无自动寻路时，控制器会继续执行垂直重力积分，但直接返回，没有调用当前相机模式的跟随更新。
+- 该路径会造成角色在平台边缘离台后继续下降，而第三人称/第一人称相机停留在旧高度，属于人物与镜头状态不同步问题。
+
+### 实际改动
+
+- 修改 src/three/controls/InputController.js：静止状态下记录垂直更新前的 Y；若本帧人物高度发生变化，则调用当前模式对应的 updateThirdPersonDesired() 或 updateFirstPersonDesired()。
+- 修改 src/three/controls/InputController.test.js：增加静止下落时更新第三人称相机，以及地面静止时不重复更新相机的测试用例。
+- 未改变碰撞协议、支撑面 Manifest、台阶阈值和自动寻路路径。
+
+### 提交记录
+
+- cf66d51d1ae072fd3c736007b139cb9c1a0e61dd — 静止下落时同步相机。
+- 4f1d7bb59ffcfface1a10158be6004c8547871d7 — 增加相机同步回归测试。
+- 1fcf2df720a42916b9074063addaf304feddc926 — 修正空中测试夹具。
+- 后续计划与进度文档提交见本节所在提交链。
+
+### 验证状态与限制
+
+- 已通过 GitHub 回读核对修改前后的控制器逻辑、测试源码及文档。
+- 本会话没有本地仓库执行环境，未运行 Vitest、前端构建或浏览器操作；新增测试仅为已编写，不能标记为通过。
+- 最新代码提交未返回可用 CI status checks（状态列表为空）。
+- main 当前仍为 608a9f2c1f739cd581acb833b1e70410672e258b；本轮写入目标为功能分支，没有修改 main，没有创建或合并 PR。
+
+### 下一步
+
+- 在本地运行 npx vitest run src/three/controls/InputController.test.js src/three/physics/CollisionWorld.test.js。
+- 运行前端构建。
+- 浏览器实测平地、坡面、连续踏步、平台边缘静止下落、模型碰撞、门洞通行和自动寻路；重点观察人物与相机是否同步、是否出现悬浮/穿透/卡台阶。

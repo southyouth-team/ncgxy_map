@@ -955,6 +955,7 @@ export const environmentBindings = [
 - `1b7355964d4e4e9104b669c1fb581f33676afdde` — 增加覆盖启用与 scope 隔离测试
 - `508cc2e4f6892371309fc8819d6187997807c5c0` — 更新能力面板和 Runtime 架构文档
 - `9b8ea927a1f46943cbdd9d36e11e39113af356de` — 修正 UI Runtime 可执行状态判断
+- `1c8b38a42f402c30431accc6bccbc79570ac5bc3` — 区分不支持形状、定义禁用和目标部件缺失的 UI 状态
 
 ### 验证状态
 

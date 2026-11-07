@@ -8,8 +8,10 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   error: { type: String, default: '' },
   canUndo: { type: Boolean, default: false },
+  mode: { type: String, default: 'edit' },
+  progress: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['close', 'edit', 'parameter-change', 'part-select', 'capability-change', 'undo'])
+const emit = defineEmits(['close', 'edit', 'parameter-change', 'part-select', 'capability-change', 'undo', 'save'])
 const canvasHost = ref(null)
 const instruction = ref('')
 const selectedPartId = ref('')
@@ -184,16 +186,17 @@ onBeforeUnmount(() => {
 <template>
   <div class="model-editor" role="dialog" aria-modal="true" aria-label="AI 模型编辑器">
     <header class="model-editor__header">
-      <div><strong>模型微调</strong><span>{{ model?.name || '程序化模型' }} · AI 对话编辑</span></div>
+      <div><strong>{{ mode === 'create' ? (model ? '模型生成与编辑工作台' : '正在创建模型') : '模型编辑工作台' }}</strong><span>{{ model?.name || (mode === 'create' ? '生成完成后可继续调整参数与结构' : '程序化模型') }}</span></div>
       <div class="model-editor__header-actions"><button :disabled="busy || !canUndo" @click="emit('undo')">撤销上一步</button><button @click="emit('close')">关闭</button></div>
     </header>
     <div class="model-editor__body">
       <section class="model-editor__preview">
         <div ref="canvasHost" class="model-editor__canvas"></div>
-        <div class="model-editor__preview-hint">单击模型部件进行选择 · 拖动旋转 · 滚轮缩放</div>
+        <div v-if="!model" class="model-editor__preview-empty"><strong>模型预览</strong><span>模型生成完成后将在这里显示</span></div>
+        <div v-else class="model-editor__preview-hint">单击模型部件进行选择 · 拖动旋转 · 滚轮缩放</div>
         <div class="model-editor__part-chip">当前范围：{{ selectedPartName }}</div>
       </section>
-      <section class="model-editor__controls">
+      <section v-if="model" class="model-editor__controls">
         <div class="model-editor__scope">
           <button :class="{ active: !selectedPartId }" @click="selectedPartId = ''; selectedPartName = '整体模型'; emit('part-select', '')">整体模型</button>
           <span v-if="selectedPartId">{{ selectedPartName }} · {{ selectedPartId }}</span>
@@ -244,7 +247,23 @@ onBeforeUnmount(() => {
           <button v-for="part in previewParts" :key="part.id" :class="{ active: selectedPartId === part.id }" @click="selectedPartId = part.id; selectedPartName = part.name || part.id; emit('part-select', part.id)">{{ part.name || part.id }}</button>
         </div>
       </section>
+      <section v-else class="model-editor__generation">
+        <h3>模型生成进程</h3>
+        <p>以下状态来自实际 AI 请求与 Worker 执行阶段，不使用虚构百分比。</p>
+        <ol class="model-editor__progress">
+          <li v-for="(item, index) in progress" :key="item.stage || index" :class="item.status">
+            <span class="model-editor__progress-mark">{{ item.status === 'done' ? '✓' : item.status === 'failed' ? '!' : '•' }}</span>
+            <span><strong>{{ item.label }}</strong><small>{{ item.detail || (item.status === 'active' ? '正在处理…' : item.status === 'done' ? '已完成' : item.status === 'failed' ? '执行失败' : '等待执行') }}</small></span>
+          </li>
+        </ol>
+        <p v-if="error" class="model-editor__error">{{ error }}</p>
+        <p v-else-if="busy" class="model-editor__generation-hint">生成完成后，右侧将自动切换为参数、部件和 AI 对话编辑面板。</p>
+      </section>
     </div>
+    <footer v-if="model" class="model-editor__footer">
+      <span>{{ mode === 'create' ? '确认后将模型实例加入当前沙盒' : '保存后将当前模型修改写入沙盒存档' }}</span>
+      <button class="primary" :disabled="busy" @click="emit('save')">{{ mode === 'create' ? '保存并加入沙盒' : '保存修改' }}</button>
+    </footer>
   </div>
 </template>
 
@@ -260,7 +279,23 @@ onBeforeUnmount(() => {
 .model-editor__canvas { position:absolute; inset:0; }.model-editor__canvas :deep(canvas) { width:100%; height:100%; display:block; }
 .model-editor__preview-hint,.model-editor__part-chip { position:absolute; left:14px; padding:8px 10px; border:1px solid rgba(255,255,255,.1); border-radius:7px; background:rgba(9,17,22,.72); font-size:10px; color:#c5d2ce; }
 .model-editor__preview-hint { bottom:14px; }.model-editor__part-chip { top:14px; }
-.model-editor__controls { min-height:0; overflow:auto; padding:16px; }
+ .model-editor__controls { min-height:0; overflow:auto; padding:16px; }
+.model-editor__generation { min-height:0; overflow:auto; padding:24px; }
+.model-editor__generation > p { color:#92a4a5; font-size:11px; line-height:1.6; }
+.model-editor__progress { display:grid; gap:0; margin:22px 0; padding:0; list-style:none; }
+.model-editor__progress li { display:flex; gap:12px; padding:13px 0; border-bottom:1px solid rgba(255,255,255,.08); color:#91a2a4; }
+.model-editor__progress li.active { color:#d7e8dc; }
+.model-editor__progress li.done { color:#a5c9b1; }
+.model-editor__progress li.failed { color:#ffaaa1; }
+.model-editor__progress-mark { display:grid; place-items:center; width:22px; height:22px; flex:none; border:1px solid currentColor; border-radius:50%; font-size:11px; }
+.model-editor__progress strong,.model-editor__progress small { display:block; }
+.model-editor__progress strong { font-size:12px; }
+.model-editor__progress small { margin-top:5px; color:#85999a; font-size:10px; }
+.model-editor__preview-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#a7b7b4; background:radial-gradient(ellipse at center,rgba(60,86,83,.22),transparent 65%); pointer-events:none; }
+.model-editor__preview-empty strong { font-size:15px; }
+.model-editor__preview-empty span { font-size:10px; }
+.model-editor__footer { display:flex; flex:none; align-items:center; justify-content:space-between; gap:12px; padding:12px 18px; border-top:1px solid rgba(255,255,255,.1); color:#92a4a5; font-size:10px; }
+.model-editor__footer .primary { border-color:#a5c9b1; color:#14251c; background:#a5c9b1; font-weight:700; }
 .model-editor__scope { display:flex; align-items:center; gap:10px; margin-bottom:14px; }.model-editor__scope span,.model-editor__section-title span { color:#92a4a5; font-size:10px; }
 .model-editor__chat,.model-editor__parameters,.model-editor__parts,.model-editor__capabilities { padding:13px 0; border-top:1px solid rgba(255,255,255,.1); }
 .model-editor h3 { margin:0 0 10px; font-size:12px; }.model-editor__chat textarea,.model-editor__field input:not([type=checkbox]),.model-editor__field select { width:100%; box-sizing:border-box; padding:9px; border:1px solid rgba(255,255,255,.13); border-radius:7px; outline:none; color:#e8efed; background:#1a2931; font:inherit; font-size:11px; }

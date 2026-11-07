@@ -64,6 +64,32 @@ describe('collectModelMovementObstacles', () => {
     expect(root.userData.proceduralModelCapabilityManifest.capabilities.spatial.colliders[0].blocksMovement).toBeUndefined()
   })
 
+  it('keeps overrides isolated to the targeted part and can explicitly enable blocking', () => {
+    const root = new THREE.Group()
+    for (const id of ['wall-a', 'wall-b']) {
+      const part = new THREE.Group()
+      part.userData.componentId = id
+      root.add(part)
+    }
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1, capabilities: { spatial: { colliders: ['wall-a', 'wall-b'].map(id => ({
+        id: id + '-collider', targetPartId: id, shape: 'box',
+        blocksMovement: false, size: { x: 2, y: 2, z: 0.3 },
+      })) } },
+    }
+    root.userData.proceduralModelCapabilityControlDocument = {
+      version: 1, inference: { proposals: [] }, diagnostics: [],
+      overrides: [{
+        capabilityId: 'spatial.collider.wall-a-collider.blocksMovement',
+        scope: { targetType: 'part', targetId: 'wall-a' },
+        action: 'set', value: { blocksMovement: true },
+      }],
+    }
+    const result = collectModelMovementObstacles(THREE, root, 'sandbox_scope')
+    expect(result).toHaveLength(1)
+    expect(result[0].ownerId).toBe('sandbox_scope')
+  })
+
   it('keeps models without spatial declarations non-blocking', () => {
     const root = new THREE.Group()
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_3')).toEqual([])

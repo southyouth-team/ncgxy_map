@@ -22,6 +22,7 @@ const parameters = ref([])
 
 const activeProgress = computed(() => [...props.progress].reverse().find(item => item?.status === 'active') || null)
 const capabilityManifest = computed(() => props.model?.userData?.proceduralModelCapabilityManifest || {})
+const visualQualityReport = computed(() => props.model?.userData?.proceduralModelVisualQuality || null)
 const capabilityControl = computed(() => props.model?.userData?.proceduralModelCapabilityControlDocument || {})
 const capabilityNamespaces = computed(() => {
   const capabilities = capabilityManifest.value.capabilities || {}
@@ -259,6 +260,16 @@ onBeforeUnmount(() => {
           <button class="primary" :disabled="busy || !instruction.trim()" @click="submitEdit">{{ busy ? 'AI 正在修改模型…' : '发送调整指令' }}</button>
           <p v-if="error" class="model-editor__error">{{ error }}</p>
         </div>
+        <div v-if="visualQualityReport" class="model-editor__visual-quality">
+          <div class="model-editor__section-title"><h3>AI 视觉质检</h3><strong :class="visualQualityReport.passed ? 'is-passed' : 'is-warning'">{{ visualQualityReport.passed ? '检测通过' : '需要关注' }} · {{ visualQualityReport.score }}/100</strong></div>
+          <p>{{ visualQualityReport.summary }}</p>
+          <ul v-if="visualQualityReport.issues?.length">
+            <li v-for="(issue, index) in visualQualityReport.issues" :key="index">
+              <strong>{{ issue.severity === 'critical' ? '严重' : issue.severity === 'major' ? '主要' : '轻微' }}</strong>
+              <span>{{ issue.issue }}</span>
+            </li>
+          </ul>
+        </div>
         <div class="model-editor__capabilities">
           <div class="model-editor__section-title"><h3>模型能力</h3><span>AI 自动推断 · 可随时调整</span></div>
           <p v-if="!capabilityNamespaces.length" class="model-editor__empty">模型尚未声明能力。AI 可在后续建模或对话编辑中补充。</p>
@@ -378,6 +389,7 @@ onBeforeUnmount(() => {
 .model-editor__chat textarea { resize:vertical; line-height:1.5; }.model-editor__chat .primary { width:100%; margin-top:8px; border-color:#a5c9b1; color:#14251c; background:#a5c9b1; font-weight:700; }
 .model-editor__error { color:#ffaaa1; font-size:10px; }.model-editor__empty { color:#91a2a4; font-size:11px; line-height:1.6; }
 .model-editor__section-title { display:flex; align-items:center; justify-content:space-between; }.model-editor__field { display:grid; grid-template-columns:1fr minmax(110px,.8fr); align-items:center; gap:12px; margin:10px 0; color:#cbd7d2; font-size:11px; }.model-editor__field small { display:block; margin-top:4px; color:#85999a; font-size:9px; }.model-editor__field input[type=color] { width:100%; height:34px; border:0; background:transparent; }
+.model-editor__visual-quality { padding:13px 0; border-top:1px solid rgba(255,255,255,.1); }.model-editor__visual-quality p,.model-editor__visual-quality li { color:#aebfba; font-size:10px; line-height:1.6; }.model-editor__visual-quality ul { margin:8px 0 0; padding-left:18px; }.model-editor__visual-quality li { margin:5px 0; }.model-editor__visual-quality .is-passed { color:#a5c9b1; font-size:10px; }.model-editor__visual-quality .is-warning { color:#f0bd7d; font-size:10px; }
 .model-editor__capability-row,.model-editor__capability-control { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.07); color:#cbd7d2; font-size:11px; }
 .model-editor__capability-row strong,.model-editor__capability-control strong { display:block; font-size:11px; }
 .model-editor__capability-row small,.model-editor__capability-control small { display:block; margin-top:4px; color:#85999a; font-size:9px; }

@@ -1350,3 +1350,55 @@ export const environmentBindings = [
 - `saveSandbox()` 现在返回明确成功/失败结果。
 - 工作台只有在存档写入成功后才关闭；写入失败时保留工作台，提示模型/修改当前已应用于运行中的沙盒但尚未持久化，用户可重试保存。
 - 新建草稿在首次保存动作时只注册一次；若本地存储失败，后续重试只重试存档，不重复创建模型实例。
+
+---
+
+## 2026-11-07 — 增量式程序化模型构建协议（第一阶段）
+
+### 开始前核对
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 功能分支：`feat/world-sandbox-conversational-model-editor`
+- 开始 HEAD：`4842ce5ac6fb00ceb35bde911a6871a10072c480`
+- `main` HEAD：`608a9f2c1f739cd581acb833b1e70410672e258b`
+- 已重新读取 `PROJECT_PLAN.md`、`PROGRESS.md`、程序化生成 Service/Controller、Worker、执行器和现有 Service 测试。
+- 现状确认：后端 `generateProceduralObjectFromPrompt` 只发起一次 `/chat/completions` 请求并返回完整 `generatedCode`；Controller 是普通 JSON POST；Worker 一次执行完整 `createModel`，只在执行阶段边界发送进度。当前没有 ModelPlan、ComponentChunk、服务端逐组件事件或前端增量预览。
+- 当前视觉模型调用未设置 `stream: true`，代码也没有 SSE 消费逻辑。不能据此断言部署模型不支持流式，只能确认当前实现未使用流式接口。
+
+### 本轮目标
+
+先建立最小、开放的增量构建协议和依赖顺序基础，为后续服务端分块生成与 Worker 增量预览提供统一契约；不一次性改造整条链路。
+
+### 实际改动
+
+- 新增 `server/src/modules/assets/procedural-model-build.protocol.ts`
+  - 定义 `ModelBuildPlan`、`ModelComponentChunk` 和 `ModelBuildEvent`。
+  - 组件通过稳定 `id`、`parentId`、`dependsOn` 描述依赖。
+  - 保留未知元数据；组件语义不受固定类别清单约束。
+  - 新增确定性拓扑排序，依据显式父级/依赖关系安排生成顺序；同一轮可执行组件保持原始计划顺序。
+  - 对重复 ID、缺失依赖和循环依赖给出明确错误；不做模型类别或几何特例判断。
+- 新增 `server/src/modules/assets/procedural-model-build.protocol.spec.ts`
+  - 覆盖任意组件语义、父子关系、显式依赖、重复 ID、缺失依赖和循环依赖。
+- 更新 `PROJECT_PLAN.md`，记录简单模型 one-shot、复杂模型 plan/chunk、局部编辑按依赖增量更新的混合策略，以及协议 v1。
+- 更新本文，明确现有 API 仍是一次性完整源码响应，当前未实现 SSE/NDJSON 和实时组件预览。
+
+### 提交
+
+- `8007ed419a2302a6f6105fcdfddb50f07f53e1dc` — 定义增量模型构建协议与依赖排序
+- `62c807227fe7de44b6cae1c344804396fcfc6842` — 增加协议依赖排序测试
+
+### 验证状态与边界
+
+- GitHub 文件创建已成功；最终需回读新增文件和两份文档。
+- 本会话没有本地仓库执行环境，未运行 Jest、TypeScript typecheck、后端 build。
+- 未执行 CI 和浏览器验收。
+- 本轮没有改变当前生成 API 的运行行为；不能宣称已实现逐部件实时预览。
+- 未修改 `main`，未创建或合并 PR。
+
+### 下一步
+
+1. 在本地运行 `procedural-model-build.protocol.spec.ts` 和后端 typecheck。
+2. 核实当前 `VISION_API_BASE_URL` 对应模型服务是否支持 OpenAI-compatible SSE，以及网关是否透传流。
+3. 实现复杂模型的两阶段请求：先生成 ModelBuildPlan，再按依赖批次生成 ComponentChunk；简单模型继续走原接口。
+4. 将后端事件通过 POST + NDJSON/SSE 传给统一工作台；只有组件块完整且 Worker 构建成功后才显示为已完成预览。
+5. Worker 支持多个 chunk 在同一隔离上下文中构建并装配；失败保留上一个有效预览，不丢弃已完成块。

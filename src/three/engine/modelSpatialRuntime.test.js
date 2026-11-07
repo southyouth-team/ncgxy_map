@@ -199,3 +199,67 @@ describe('collectModelMovementObstacles', () => {
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_3')).toEqual([])
   })
 })
+
+
+describe('collectModelSupportSurfaces', () => {
+  it('registers real mesh geometry as a standing and walkable surface', async () => {
+    const { collectModelSupportSurfaces } = await import('./modelSpatialRuntime.js')
+    const root = new THREE.Group()
+    const platform = new THREE.Group()
+    platform.userData.componentId = 'platform-top'
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 4), new THREE.MeshBasicMaterial())
+    platform.add(mesh)
+    root.add(platform)
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: { surfaces: [{
+        id: 'platform-surface', targetPartId: 'platform-top', shape: 'mesh',
+        supportsStanding: true, walkable: true,
+      }] } },
+    }
+    const result = collectModelSupportSurfaces(root, 'sandbox_platform')
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      ownerId: 'sandbox_platform', surfaceId: 'platform-surface',
+      targetPartId: 'platform-top', supportsStanding: true, walkable: true,
+    })
+    expect(result[0].meshes).toEqual([mesh])
+  })
+
+  it('ignores disabled, unresolved, empty and unsupported declarations', async () => {
+    const { collectModelSupportSurfaces } = await import('./modelSpatialRuntime.js')
+    const root = new THREE.Group()
+    const group = new THREE.Group()
+    group.userData.componentId = 'empty-part'
+    root.add(group)
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: { surfaces: [
+        { id: 'disabled', targetPartId: 'empty-part', shape: 'mesh', enabled: false, walkable: true },
+        { id: 'unresolved', targetPartId: 'missing', shape: 'mesh', walkable: true },
+        { id: 'no-geometry', targetPartId: 'empty-part', shape: 'mesh', walkable: true },
+        { id: 'not-surface', targetPartId: 'empty-part', shape: 'mesh' },
+        { id: 'unsupported-shape', targetPartId: 'empty-part', shape: 'box', walkable: true },
+      ] } },
+    }
+    expect(collectModelSupportSurfaces(root, 'sandbox_invalid')).toEqual([])
+  })
+
+  it('resolves descendant meshes through a stable component group ID', async () => {
+    const { collectModelSupportSurfaces } = await import('./modelSpatialRuntime.js')
+    const root = new THREE.Group()
+    const stairs = new THREE.Group()
+    stairs.userData.componentId = 'traversal-part'
+    const steps = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshBasicMaterial())
+    stairs.add(steps)
+    root.add(stairs)
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: { surfaces: [{
+        id: 'stair-traversal', targetPartId: 'traversal-part', shape: 'mesh',
+        supportsStanding: true, walkable: true,
+      }] } },
+    }
+    expect(collectModelSupportSurfaces(root, 'sandbox_stairs')[0].meshes).toEqual([steps])
+  })
+})

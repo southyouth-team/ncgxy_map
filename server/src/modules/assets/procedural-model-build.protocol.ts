@@ -77,7 +77,9 @@ export function resolveModelBuildOrder(plan: ModelBuildPlan): ModelBuildComponen
       ...(component.parentId ? [component.parentId] : []),
       ...(Array.isArray(component.dependsOn) ? component.dependsOn : []),
     ]);
-    edges.delete(component.id);
+    if (edges.has(component.id)) {
+      throw new Error('Model component cannot depend on itself: ' + component.id);
+    }
     for (const dependencyId of edges) {
       if (!byId.has(dependencyId)) {
         throw new Error('Unknown component dependency: ' + component.id + ' -> ' + dependencyId);

@@ -332,12 +332,22 @@ export const modelCapabilityManifest = {
 - `setSandboxModelState` 更新实例状态后同步刷新该模型的空间碰撞。用户明确的部件级 capability override 优先于 stateCondition。
 - 门状态属于 Model Instance State，不能写回 Manifest；碰撞定义仍属于 Model Definition。
 
+
+#### Spatial Runtime v2 — 玩家近距离门扇交互增量
+
+- `findNearestSandboxInteraction` 遍历沙盒模型的部件级交互声明，按部件世界坐标、交互点和半径选出最近目标。
+- 部件通过数据声明 `userData.interactionConfig = { action: "toggle-state", stateKey: "doorOpen", radius, prompt }` 提供交互入口；Runtime 不执行模型提供的函数或脚本。
+- 玩家靠近目标后显示声明的 prompt，按 E 向页面发出模型 ID、部件 ID 和受控配置；页面只执行当前支持的 `toggle-state`，默认写回所属模型实例的 `worldState`。
+- 状态更新继续经过 `setSandboxModelState`，驱动门扇 `rotationY` 绑定和碰撞障碍刷新；实例状态由现有 Object3D 存档路径保存。
+- 模型部件未声明交互时保留原有模型根级交互回退，避免破坏灯具演示等旧交互。
+- 当前只在 RPG 沙盒玩家循环启用；尚未建设通用 Interaction Registry、条件表达式、权限系统、动作队列或复杂交互类型。
+
 #### 当前执行边界
 
 - 已支持：Box 地面移动碰撞、门扇 boolean 状态条件、`rotationY` 状态绑定、状态变化后的碰撞刷新。
 - 仍未支持：自动几何切割/自动检测门洞、非 Box 碰撞、Portal/Traversal Zone、室内可行走区域、楼层/楼梯/电梯导航。
 - AI Prompt 负责生成分段几何和声明；Runtime 不会从一个完整墙体 Mesh 中自动挖洞。模型若未拆分墙体或碰撞体跨越门洞，仍会挡住玩家。
-- 当前 state API 已可驱动门状态，但完整玩家近距离交互入口（按键开门）仍需 Interaction Runtime 后续接入。
+- 已接入最小玩家近距离交互：沙盒在玩家半径内查找模型部件的 `userData.interactionConfig`，按 E 触发受控 `toggle-state`；部件动作默认更新所属模型实例状态，无需把同模型门扇的 targetId 硬编码进 AI 资产。无部件级声明时保留旧的模型根级交互回退。当前只在 RPG 沙盒场景启用，尚不是通用 Interaction Registry。
 
 
 ### 3.14 通用对象能力：AI 推理、用户控制与 Runtime 执行

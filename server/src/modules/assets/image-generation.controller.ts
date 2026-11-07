@@ -70,9 +70,10 @@ export class ImageGenerationController {
     @Body('instruction') instruction: string,
     @Body('objectType') objectType: string,
     @Body('environmentBindings') environmentBindings: unknown,
+    @Body('modelCapabilityManifest') modelCapabilityManifest: unknown,
   ) {
     return this.service.modifyProceduralObjectFromInstruction(
-      source, parameters, parameterValues, parts, selectedPartId, instruction, objectType, environmentBindings,
+      source, parameters, parameterValues, parts, selectedPartId, instruction, objectType, environmentBindings, modelCapabilityManifest,
     );
   }
 

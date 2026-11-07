@@ -902,7 +902,7 @@ export class ImageGenerationService {
 
   async modifyProceduralObjectFromInstruction(
     sourceInput: unknown, parametersInput: unknown, parameterValuesInput: unknown, partsInput: unknown,
-    selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown, environmentBindingsInput?: unknown, modelCapabilityManifestInput?: unknown,
+    selectedPartIdInput: unknown, instructionInput: unknown, objectTypeInput?: unknown, environmentBindingsInput?: unknown, modelCapabilityManifestInput?: unknown, geometryDiagnosticsInput?: unknown,
   ): Promise<any> {
     const source = typeof sourceInput === 'string' ? sourceInput.trim() : '';
     const instruction = typeof instructionInput === 'string' ? instructionInput.trim().slice(0, 12000) : '';
@@ -914,6 +914,20 @@ export class ImageGenerationService {
     const environmentBindings = Array.isArray(environmentBindingsInput) ? environmentBindingsInput : [];
     const modelCapabilityManifest = modelCapabilityManifestInput && typeof modelCapabilityManifestInput === 'object' && !Array.isArray(modelCapabilityManifestInput)
       ? modelCapabilityManifestInput : null;
+    const rawGeometryDiagnostics = geometryDiagnosticsInput && typeof geometryDiagnosticsInput === 'object' && !Array.isArray(geometryDiagnosticsInput)
+      ? geometryDiagnosticsInput as Record<string, any> : null;
+    const geometryDiagnostics = rawGeometryDiagnostics ? {
+      version: rawGeometryDiagnostics.version,
+      summary: rawGeometryDiagnostics.summary && typeof rawGeometryDiagnostics.summary === 'object' ? rawGeometryDiagnostics.summary : {},
+      meshes: Array.isArray(rawGeometryDiagnostics.meshes) ? rawGeometryDiagnostics.meshes.slice(0, 120) : [],
+      diagnostics: Array.isArray(rawGeometryDiagnostics.diagnostics) ? rawGeometryDiagnostics.diagnostics.slice(0, 120) : [],
+      truncated: (Array.isArray(rawGeometryDiagnostics.meshes) && rawGeometryDiagnostics.meshes.length > 120)
+        || (Array.isArray(rawGeometryDiagnostics.diagnostics) && rawGeometryDiagnostics.diagnostics.length > 120),
+    } : null;
+    const geometryDiagnosticsJson = geometryDiagnostics ? JSON.stringify(geometryDiagnostics) : '';
+    const boundedGeometryDiagnostics = geometryDiagnosticsJson.length <= 24000
+      ? geometryDiagnostics
+      : { version: geometryDiagnostics.version, summary: geometryDiagnostics.summary, meshes: [], diagnostics: geometryDiagnostics.diagnostics.slice(0, 40), truncated: true };
     const selectedPartId = typeof selectedPartIdInput === 'string' ? selectedPartIdInput.slice(0, 160) : '';
     const objectType = typeof objectTypeInput === 'string' ? objectTypeInput.slice(0, 100) : '独立 3D 模型';
     const apiKey = this.config.get<string>('VISION_API_KEY');
@@ -929,7 +943,7 @@ export class ImageGenerationService {
       'Autonomous capability reasoning is mandatory during every edit. Read the current model structure, stable part IDs, existing manifest and user instruction; infer relevant missing capabilities and dependencies without asking for per-capability approval. Explicit user instructions in the current request take precedence. When the user does not mention a capability, infer a conservative behavior from the actual geometry and context; do not assume every object is enterable, movable, destructible or interactive. Preserve prior declarations and settings unless the user instruction or a necessary dependency requires a targeted change. Keep inferred capability data declarative and extensible; never claim a capability is running unless the corresponding Runtime is implemented. Do not invent hidden details from a reference image.',
       'modelCapabilityManifest must describe the model intrinsic definition and only the capabilities actually present. Preserve unknown declarative capability sections from the existing manifest unless the user explicitly changes them. Add or update spatial, interior, environmentBindings and interactions declarations as needed; do not infer that every model is enterable or has interior spaces. Return the complete updated manifest in the JSON modelCapabilityManifest field and as the named export in generatedCode. The legacy environmentBindings JSON field/export must mirror modelCapabilityManifest.capabilities.environmentBindings when present.',
       'For artificial lighting, use variable "lighting.artificial.enabled" and bind existing THREE.Light objects to visible/intensity and emissive bulb meshes to emissiveIntensity. Each binding must reference a real stable userData.componentId in the generated model. If no suitable light exists, add the minimum required light component while preserving the rest of the model.',
-      'Preserve the existing model identity and visual structure unless the instruction explicitly requests a structural change. Do not replace the whole model unnecessarily.',
+      'Geometry diagnostics are runtime-collected evidence, not definitive design judgments. Use stable componentId references and actual local/world bounds to inspect suspicious geometry. Non-finite vertices/transforms and empty or degenerate geometry deserve attention; a planar surface may be valid. Bounds overlap is only a spatial clue, never proof of a defect. Do not infer defects from mesh names or object categories, and do not alter unrelated parts merely to silence a diagnostic.',\n      'Preserve the existing model identity and visual structure unless the instruction explicitly requests a structural change. Do not replace the whole model unnecessarily.',
       'For part-scoped edits, change only the selected part and the minimum dependent geometry/material required. Keep all unrelated parts and their stable component IDs.',
       'For parameter requests, add or update dynamic controls in modelParameters and make createModel read those values from params. Do not invent a fixed global parameter catalogue; declare model-specific controls.',
       'When a user asks for a parameter to control an implemented spatial capability, add a dynamic parameter definition and bind it declaratively to the exact capability. The currently executable parameter binding is { capabilityId: "spatial.collider.<stable-collider-id>.blocksMovement", property: "blocksMovement" } inside that parameter definition bindings array; use a real collider id and keep the binding stable. The parameter default must match the intended initial behavior. A parameter-bound value controls only the targeted collider, never every collider or the whole model. Explicit saved user capability overrides remain higher priority. Other capability parameter bindings may be preserved as data, but do not claim they execute until a matching Runtime adapter exists. In particular, enterable/interior declarations are not yet an active indoor-view Runtime.',
@@ -941,7 +955,7 @@ export class ImageGenerationService {
       'The factory must synchronously return one THREE.Group, use only THREE and params, and keep the model centered near X/Z origin, Y-up, standing on Y=0.',
       'Avoid unbounded loops and pathological geometry. Do not claim that geometry intersections have been automatically detected.',
     ].join('\n');
-    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameterDefinitions: parameterDefinitions, currentParameterValues: parameterValues, currentParts: parts, currentEnvironmentBindings: environmentBindings, currentModelCapabilityManifest: modelCapabilityManifest, currentSource: source, instruction });
+    const user = JSON.stringify({ objectType, selectedPartId: selectedPartId || null, currentParameterDefinitions: parameterDefinitions, currentParameterValues: parameterValues, currentParts: parts, currentEnvironmentBindings: environmentBindings, currentModelCapabilityManifest: modelCapabilityManifest, currentGeometryDiagnostics: boundedGeometryDiagnostics, currentSource: source, instruction });
     let response: Response;
     try {
       response = await fetch(baseUrl + '/chat/completions', {

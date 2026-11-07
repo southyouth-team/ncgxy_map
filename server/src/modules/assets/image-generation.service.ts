@@ -968,28 +968,34 @@ export class ImageGenerationService {
       || !/export\s+function\s+createModel\s*\(\s*THREE(?:\s*,[^)]*)?\)/.test(result.generatedCode)) {
       throw new ServiceUnavailableException('AI 返回的模型源码无效或超过 120 KB');
     }
-    const returnedManifest = result.modelCapabilityManifest && typeof result.modelCapabilityManifest === 'object' && !Array.isArray(result.modelCapabilityManifest)
+    const hasReturnedManifest = result.modelCapabilityManifest && typeof result.modelCapabilityManifest === 'object'
+      && !Array.isArray(result.modelCapabilityManifest);
+    const returnedManifest = hasReturnedManifest
       ? result.modelCapabilityManifest
-      : (modelCapabilityManifest || { version: 1, parameters: parameterDefinitions, capabilities: environmentBindings.length ? { environmentBindings } : {} });
+      : (modelCapabilityManifest || {});
     const returnedCapabilities = returnedManifest.capabilities && typeof returnedManifest.capabilities === 'object'
-      ? returnedManifest.capabilities : {};
+      && !Array.isArray(returnedManifest.capabilities) ? returnedManifest.capabilities : {};
+    const returnedParameters = Array.isArray(returnedManifest.parameters)
+      ? returnedManifest.parameters
+      : (Array.isArray(result.parameters) ? result.parameters : parameterDefinitions);
     const returnedEnvironmentBindings = Array.isArray(returnedCapabilities.environmentBindings)
       ? returnedCapabilities.environmentBindings
       : (Array.isArray(result.environmentBindings) ? result.environmentBindings : environmentBindings);
+    const normalizedReturnedManifest = {
+      ...returnedManifest,
+      version: Number.isInteger(returnedManifest.version) ? returnedManifest.version : 1,
+      parameters: returnedParameters,
+      capabilities: {
+        ...returnedCapabilities,
+        ...(returnedEnvironmentBindings.length || Object.prototype.hasOwnProperty.call(returnedCapabilities, 'environmentBindings')
+          ? { environmentBindings: returnedEnvironmentBindings } : {}),
+      },
+    };
     return {
       generatedCode: result.generatedCode,
-      parameters: Array.isArray(result.parameters) ? result.parameters : (Array.isArray(returnedManifest.parameters) ? returnedManifest.parameters : []),
+      parameters: returnedParameters,
       parts: Array.isArray(result.parts) ? result.parts : [],
-      modelCapabilityManifest: {
-        ...returnedManifest,
-        version: Number.isInteger(returnedManifest.version) ? returnedManifest.version : 1,
-        parameters: Array.isArray(returnedManifest.parameters) ? returnedManifest.parameters : parameterDefinitions,
-        capabilities: {
-          ...returnedCapabilities,
-          ...(returnedEnvironmentBindings.length || Object.prototype.hasOwnProperty.call(returnedCapabilities, 'environmentBindings')
-            ? { environmentBindings: returnedEnvironmentBindings } : {}),
-        },
-      },
+      modelCapabilityManifest: normalizedReturnedManifest,
       environmentBindings: returnedEnvironmentBindings,
       changeSummary: typeof result.changeSummary === 'string' ? result.changeSummary : '模型已更新',
       generatedAt: new Date().toISOString(),

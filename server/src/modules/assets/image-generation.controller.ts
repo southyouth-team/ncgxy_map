@@ -1,4 +1,5 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DevIdentityGuard } from '../../common/dev-identity.guard';
 import { ImageGenerationService } from './image-generation.service';
@@ -57,6 +58,43 @@ export class ImageGenerationController {
     @Body('imageDataUrl') imageDataUrl: string,
   ) {
     return this.service.generateProceduralObjectFromPrompt(prompt, objectType, visualStyle, imageDataUrl);
+  }
+
+
+  @Post('generate-procedural-object-stream')
+  @ApiOperation({ summary: '按模型复杂度选择一次生成或增量组件构建，并通过 NDJSON 推送进度' })
+  async streamProceduralObject(
+    @Body('prompt') prompt: string,
+    @Body('objectType') objectType: string,
+    @Body('visualStyle') visualStyle: string,
+    @Body('imageDataUrl') imageDataUrl: string,
+    @Res() response: Response,
+  ) {
+    response.status(200);
+    response.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    response.setHeader('Cache-Control', 'no-cache, no-transform');
+    response.setHeader('X-Accel-Buffering', 'no');
+    response.flushHeaders?.();
+    try {
+      await this.service.streamProceduralObjectBuild(
+        prompt, objectType, visualStyle, imageDataUrl,
+        event => {
+          if (!response.writableEnded && !response.destroyed) {
+            response.write(JSON.stringify(event) + '\\n');
+          }
+        },
+      );
+    } catch (error) {
+      if (!response.writableEnded && !response.destroyed) {
+        response.write(JSON.stringify({
+          type: 'error',
+          stage: 'server',
+          message: error instanceof Error ? error.message : '增量模型构建失败',
+        }) + '\\n');
+      }
+    } finally {
+      if (!response.writableEnded) response.end();
+    }
   }
 
   @Post('modify-procedural-object')

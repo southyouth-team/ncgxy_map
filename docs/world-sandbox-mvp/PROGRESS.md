@@ -1892,3 +1892,27 @@ export const environmentBindings = [
 
 - 已通过源码静态检查确认文字选择器不再匹配内部涟漪 span，圆环恢复 block/absolute 布局，中心光晕动画已定义。
 - 本会话未运行浏览器或前端构建，真实渲染效果仍需本地刷新确认。
+
+
+---
+
+## 2026-11-08 — 修复对话式模型编辑 JSON 响应约束
+
+### 问题定位
+
+- 用户调用 `POST /api/v1/assets/ai-image/modify-procedural-object` 时收到 HTTP 503，Nest 错误体为 `Service Unavailable`，业务消息为“AI 模型编辑结果不是有效 JSON”。
+- 代码路径表明：上游 HTTP 非 2xx 会被单独记录为“模型 AI 编辑失败（HTTP n）”；当前这条业务消息只会在上游 HTTP 成功、但 `choices[0].message.content` 无法解析为 JSON 时触发。
+- 因此当前证据更支持“上游返回成功状态，但模型内容未遵守 JSON 协议”，不能直接将其认定为上游 HTTP 503。前端的 503 是本服务对解析失败抛出的 ServiceUnavailableException。
+
+### 本轮改动
+
+- 文件：`server/src/modules/assets/image-generation.service.ts`
+- 对模型编辑请求显式增加 OpenAI 兼容的 `response_format: { type: 'json_object' }`，不再只依赖 Prompt 约束。
+- JSON 解析失败时记录上游模型原始内容前 500 字符，便于识别 Markdown 包裹、截断或错误文本；客户端仍只收到稳定的业务错误，不暴露完整上游响应。
+- 文件：`server/src/modules/assets/image-generation.procedural.spec.ts`
+- 增加测试断言，确保对话式编辑请求启用 JSON 输出模式。
+
+### 验证边界
+
+- 源码静态修改与 GitHub 回读核验；尚未运行 Jest、TypeScript 构建或真实模型 API 请求。
+- 如果上游模型服务不支持 OpenAI JSON mode，可能返回 HTTP 400；需结合实际服务商兼容性和运行日志进一步确认。

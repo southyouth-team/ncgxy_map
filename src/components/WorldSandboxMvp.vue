@@ -265,6 +265,7 @@ function buildCompositeComponentSource(plan, chunks) {
     if (!/^\s*function\s+createComponent\s*\\(\s*THREE\s*,/.test(source)) {
       throw new Error('组件 ' + entry.componentId + ' 的源码工厂格式无效')
     }
+    if (/^\s*(?:import|export)\s/m.test(source)) throw new Error('组件 ' + entry.componentId + ' 包含不允许的模块声明')
     if (source.length > 30000) throw new Error('组件 ' + entry.componentId + ' 源码超过 30 KB')
     const parentId = typeof component.parentId === 'string' ? component.parentId : ''
     return [

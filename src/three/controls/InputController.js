@@ -258,7 +258,14 @@ export class InputController {
       return
     }
     if (!forward && !strafe) {
-      this.updateVerticalMotion(this.cameraRig.player, delta)
+      const player = this.cameraRig.player
+      const previousY = player.y
+      this.updateVerticalMotion(player, delta)
+      // 空中无输入时仍需同步相机，否则角色会下落而镜头停留在原高度。
+      if (Math.abs(player.y - previousY) > 0.0001) {
+        if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
+        else this.cameraRig.updateFirstPersonDesired()
+      }
       return
     }
     const speed = (this.keys.has('shift') ? 18 : 9) * delta

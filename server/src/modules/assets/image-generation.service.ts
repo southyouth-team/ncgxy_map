@@ -1055,9 +1055,9 @@ export class ImageGenerationService {
       const rawChunk = (await requestText(chunkMessages))
         .replace(/^\`\`\`(?:javascript|js)?\s*/i, '')
         .replace(/\s*\`\`\`$/, '').trim();
-      if (!rawChunk || rawChunk.length > 120000
+      if (!rawChunk || rawChunk.length > 30000
         || !/export\s+function\s+createComponent\s*\(\s*THREE\s*,/.test(rawChunk)) {
-        emit({ type: 'error', stage: 'component', componentId: component.id, message: '组件源码缺少 createComponent(THREE, context) 工厂' });
+        emit({ type: 'error', stage: 'component', componentId: component.id, message: '组件源码缺少 createComponent(THREE, context) 工厂或超过 30 KB' });
         throw new ServiceUnavailableException('组件 ' + component.id + ' 未返回有效的 createComponent 工厂');
       }
       emit({

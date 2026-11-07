@@ -76,6 +76,7 @@ self.addEventListener('message', async (event) => {
       modelModule.modelParameters,
       modelModule.environmentBindings,
     )
+    const manifestParameters = modelCapabilityManifest.parameters
     const manifestEnvironmentBindings = Array.isArray(modelCapabilityManifest.capabilities.environmentBindings)
       ? modelCapabilityManifest.capabilities.environmentBindings : []
 

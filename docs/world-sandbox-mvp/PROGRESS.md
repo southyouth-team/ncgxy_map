@@ -2311,3 +2311,42 @@ export const environmentBindings = [
 - 本会话没有本地仓库执行器/浏览器；Vitest、前端构建、AI 实际生成、玩家按 E、浏览器存档恢复均未执行。
 - CI 以最终 HEAD 查询为准；无成功状态检查不得标记通过。
 - 不修改 `main`，不创建或合并 PR。
+
+
+---
+
+## 2026-11-08 — P2.5 同模型内部空间入场与退出（源码修改）
+
+### 本轮目标
+
+把模型 Manifest 的 interior 声明接入玩家交互 Runtime。进入模型自身生成的内部空间，不复用校园建筑专用室内模板，不为模型类别编写专用规则。
+
+### 实际改动
+
+- 新增 `src/three/engine/sandboxInteriorRuntime.js`：
+  - 按 `entryPointId` 查找 `capabilities.interior.entryPoints`。
+  - 使用稳定 `targetPartId` 定位真实 Object3D。
+  - 将部件局部地面坐标经完整世界矩阵变换为世界坐标。
+  - 缺少声明、目标部件或非有限坐标时失败关闭。
+- `sandboxActionRuntime.js` 增加 `enter` 与 `exit` 动作协议；enter 必须引用模型已声明的入口 ID。
+- `createCampusEngine.js` 增加同模型内部空间过渡：
+  - 进入前保存玩家世界坐标与相机模式。
+  - 进入时将玩家放到声明的内部地面点，角色眼高按当前 1.7 世界单位偏移。
+  - 保留进入时第一/第三人称模式。
+  - exit 恢复进入前位置和模式。
+  - 不创建独立室内副本，不隐藏外部场景或模型外壳。
+- AI 新建/编辑 Prompt 增加统一 entryPoints、enter/exit 和内部 walkable surface 声明格式。
+- 新增坐标解析、Action 协议测试源码。
+
+### 能力边界
+
+- 当前只实现单层内部空间的入场/退出；多楼层、楼梯、电梯、房间导航和门锁条件尚未接入。
+- 入口动作是定位过渡，不会自动生成内部几何；AI 必须实际生成内部结构、出口标记、楼板表面与墙体碰撞声明。
+- 是否能顺利走进门洞取决于门扇状态和碰撞声明；入口传送不等于物理穿墙。
+- 角色内部移动继续使用现有 grounded movement / collision / walkable surface Runtime。
+
+### 验证状态
+
+- GitHub 源码写入与回读后记录最终 HEAD。
+- 本会话无本地执行器/浏览器；Vitest、前端构建、真实模型生成、穿门、室内移动和退出均未执行。
+- 不修改 `main`，不创建或合并 PR。

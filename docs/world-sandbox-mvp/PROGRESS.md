@@ -2435,10 +2435,12 @@ export const environmentBindings = [
 - 新增 Lighting Runtime 测试，覆盖真实 PointLight 亮灭、通用状态 Runtime 不抢写 Light，以及缺失状态/非法强度失败关闭。
 - 扩展 Interaction Detection 测试，覆盖近距离目标解析、稳定实例/部件 ID、远距离不触发，以及跨对象 targetId 的 Object3D 序列化保留。
 - 扩展 Action Runtime 测试，覆盖当前 toggle 协议；旧 toggle-state 兼容测试保留。
+- 更新模型生成/编辑 Prompt：同模型玩家开关使用 toggle + worldState；实际 THREE.Light 使用 intensity stateBinding，灯泡使用 emissiveIntensity；跨实例 targetId 只能使用沙盒放置后提供的真实 sandboxModelId，不允许 AI 根据名称猜测。
+- Lighting Runtime 测试增加“近邻检测 → 目标实例 → toggle Action → worldState → PointLight/灯泡视觉”双向切换用例。
 
 ### 静态核验与验证边界
 
 - 开始功能分支 HEAD：a98bdef1f35372a3eb128530b085080771271f41；所有写入均显式指定 feat/world-sandbox-conversational-model-editor，每次写入后核验分支 HEAD 与该次提交一致。
-- GitHub 源码写入后回读：待本轮最终核验记录。
-- Vitest、前端构建、CI 和浏览器真实按 E/灯光变化/存档恢复：本轮执行环境没有仓库工作区、Node 依赖和浏览器；尚未执行，不标记通过。
+- GitHub 源码写入与回读：已完成；每次提交均核验分支 HEAD 与写入提交一致。
+- Vitest、前端构建和浏览器真实按 E/灯光变化/存档恢复：本轮执行环境没有仓库工作区、Node 依赖和浏览器，尚未执行，不标记通过。GitHub Combined Status 返回 0 项检查；当前可用的 workflow-run 查询仅返回 PR 触发运行且结果为空，因此 push 触发 CI 是否完成无法确认，不标记通过。
 - main 保持 608a9f2c1f739cd581acb833b1e70410672e258b；未修改或合并 main，未创建 PR。

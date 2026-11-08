@@ -2412,3 +2412,33 @@ export const environmentBindings = [
 - GitHub 源码写入后已回读确认：序号正则可匹配数字，编辑模型状态使用 shallowRef。
 - 本轮未运行前端构建、Vitest 或浏览器保存回归；不能据此宣称页面卡死问题已端到端验证通过。
 - 需要本地验证：刷新恢复已有模型后再新建并保存；编辑已有模型并保存；连续渲染期间确认不再出现 modelViewMatrix Proxy 错误。
+
+---
+
+## 2026-11-08 — P2.7 玩家开关灯最小交互闭环（源码修改）
+
+### 实施前验收场景
+
+1. 在 /world-sandbox-mvp 创建“开关灯交互演示”，初始灯泡发光，实际 THREE.PointLight.intensity 为 2.2。
+2. 玩家进入墙壁开关 4.8 世界单位的 XZ 交互半径后，页面显示声明的交互提示；离开范围后提示消失。
+3. 玩家按 E 后，Interaction 将声明式 toggle 动作发送给引擎；通过开关配置中的稳定 targetId 定位灯具实例，将该实例 worldState.enabled 在 true/false 间切换。
+4. State 更新后，Lighting Runtime 将真实 PointLight 的 intensity 在 2.2/0 之间切换；World State Runtime 同步切换灯泡 emissiveIntensity。再次按 E 可恢复。
+5. 开关部件 componentId、灯具实例 ID、跨对象 targetId 和灯具 worldState 随 Object3D 存档恢复；不依赖 Mesh.name。
+6. 未知目标、缺失状态键或非法光照强度不得产生无效光照更新。
+
+### 实际修改
+
+- 新增 src/three/engine/sandboxLightingRuntime.js：只处理实际 THREE.Light 对象的声明式 intensity 绑定；缺失状态、非法强度和非 Light 对象安全忽略。
+- worldStateRuntime.js 不再接管真实 Light 的 intensity；普通对象原有 intensity 绑定保持兼容，避免通用状态 Runtime 与 Lighting Runtime 双重写入。
+- createCampusEngine.js 在模型注册、模型替换和状态更新三个入口调用 Lighting Runtime；状态仍由模型实例 worldState 持有。
+- WorldSandboxMvp.vue 演示灯具增加稳定部件 ID；PointLight 使用 intensity 状态绑定；墙壁开关按钮部件声明 toggle、稳定灯具实例 targetId、交互半径与提示/结果文案。
+- 新增 Lighting Runtime 测试，覆盖真实 PointLight 亮灭、通用状态 Runtime 不抢写 Light，以及缺失状态/非法强度失败关闭。
+- 扩展 Interaction Detection 测试，覆盖近距离目标解析、稳定实例/部件 ID、远距离不触发，以及跨对象 targetId 的 Object3D 序列化保留。
+- 扩展 Action Runtime 测试，覆盖当前 toggle 协议；旧 toggle-state 兼容测试保留。
+
+### 静态核验与验证边界
+
+- 开始功能分支 HEAD：a98bdef1f35372a3eb128530b085080771271f41；所有写入均显式指定 feat/world-sandbox-conversational-model-editor，每次写入后核验分支 HEAD 与该次提交一致。
+- GitHub 源码写入后回读：待本轮最终核验记录。
+- Vitest、前端构建、CI 和浏览器真实按 E/灯光变化/存档恢复：本轮执行环境没有仓库工作区、Node 依赖和浏览器；尚未执行，不标记通过。
+- main 保持 608a9f2c1f739cd581acb833b1e70410672e258b；未修改或合并 main，未创建 PR。

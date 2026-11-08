@@ -109,12 +109,14 @@ function addLightSwitchDemo() {
     }),
   )
   bulb.position.y = 1.9
-  bulb.userData.stateBinding = { key: 'enabled', property: 'emissiveIntensity', enabledValue: 1.4 }
+  bulb.userData.componentId = 'demo-light-bulb'
+  bulb.userData.stateBinding = { key: 'enabled', property: 'emissiveIntensity', enabledValue: 1.4, disabledValue: 0 }
   lamp.add(bulb)
   const pointLight = new THREE.PointLight('#ffd98a', 2.2, 11, 1.8)
   pointLight.position.set(0, 1.9, 0)
   pointLight.castShadow = true
-  pointLight.userData.stateBinding = { key: 'enabled', property: 'visible' }
+  pointLight.userData.componentId = 'demo-point-light'
+  pointLight.userData.stateBinding = { key: 'enabled', property: 'intensity', enabledValue: 2.2, disabledValue: 0 }
   lamp.add(pointLight)
   lamp.userData.worldState = { enabled: true }
   const lampPosition = { x: player.x + 5, y: 0, z: player.z + 2 }
@@ -127,20 +129,25 @@ function addLightSwitchDemo() {
     new THREE.MeshStandardMaterial({ color: '#e7e5dc', roughness: 0.55 }),
   )
   plate.position.y = 1.2
+  plate.userData.componentId = 'wall-switch-plate'
   switchRoot.add(plate)
   const button = new THREE.Mesh(
     new THREE.BoxGeometry(0.28, 0.38, 0.1),
     new THREE.MeshStandardMaterial({ color: '#b7c6c0', roughness: 0.35 }),
   )
   button.position.set(0, 1.2, 0.11)
-  switchRoot.add(button)
-  switchRoot.userData.interactionRadius = 4.8
-  switchRoot.userData.interactionConfig = {
-    action: 'toggle-state',
+  button.userData.componentId = 'wall-switch-button'
+  button.userData.displayName = '墙壁开关'
+  button.userData.interactionConfig = {
+    action: 'toggle',
     targetId: lampRoot.userData.sandboxModelId,
     stateKey: 'enabled',
+    radius: 4.8,
     prompt: '靠近墙壁开关，按 E 切换演示灯具',
+    openMessage: '演示灯具已开启',
+    closeMessage: '演示灯具已关闭',
   }
+  switchRoot.add(button)
   switchRoot.userData.interactionMessage = '你按下了墙壁开关'
   const switchPosition = { x: player.x + 2, y: 0, z: player.z + 2 }
   registerModel(switchRoot, '墙壁开关', switchPosition)

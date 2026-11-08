@@ -12,7 +12,7 @@ export function applyWorldStateBindings(root, state = {}) {
     if (binding.property === 'visible') {
       object.visible = enabled
       applied += 1
-    } else if (binding.property === 'intensity' && 'intensity' in object) {
+    } else if (binding.property === 'intensity' && 'intensity' in object && !object.isLight) {
       object.intensity = enabled ? Number(binding.enabledValue ?? 1) : 0
       applied += 1
     } else if (binding.property === 'emissiveIntensity' && object.material) {

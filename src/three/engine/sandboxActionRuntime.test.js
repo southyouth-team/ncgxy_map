@@ -9,6 +9,12 @@ describe('executeSandboxInteractionAction', () => {
     expect(executeSandboxInteractionAction({ model, config: { action: 'toggle-state', stateKey: 'doorOpen' } }))
       .toMatchObject({ ok: true, action: 'toggle', stateKey: 'doorOpen', statePatch: { doorOpen: true } })
   })
+  it('toggles an explicit instance state with the current action name', () => {
+    const model = new THREE.Group()
+    model.userData.worldState = { enabled: true }
+    expect(executeSandboxInteractionAction({ model, config: { action: 'toggle', stateKey: 'enabled' } }))
+      .toMatchObject({ ok: true, action: 'toggle', stateKey: 'enabled', statePatch: { enabled: false } })
+  })
   it('sets an explicit instance state value', () => {
     const model = new THREE.Group()
     expect(executeSandboxInteractionAction({ model, config: { action: 'set', stateKey: 'powered', value: true } }).statePatch)

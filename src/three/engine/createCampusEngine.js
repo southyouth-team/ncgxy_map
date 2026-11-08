@@ -9,6 +9,7 @@ import { InputController } from '../controls/InputController.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
+import { applySandboxLightingState } from './sandboxLightingRuntime.js'
 import { refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
 import { executeSandboxInteractionAction } from './sandboxActionRuntime.js'
@@ -395,6 +396,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     refreshSandboxModelSpatial(model)
     // ObjectLoader 恢复后以持久化世界状态重建灯光/材质等运行时属性。
     applyWorldStateBindings(model, model.userData.worldState || {})
+    applySandboxLightingState(model, model.userData.worldState || {})
     applySandboxEnvironmentBindings(model)
     selectSandboxModel(id)
     invalidateShadowMap()
@@ -442,6 +444,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxModels.set(String(id), replacement)
     refreshSandboxModelSpatial(replacement)
     applyWorldStateBindings(replacement, replacement.userData.worldState || {})
+    applySandboxLightingState(replacement, replacement.userData.worldState || {})
     applySandboxEnvironmentBindings(replacement)
     if (sandboxSelectedModel === current) {
       sandboxSelectedModel = replacement
@@ -622,6 +625,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const next = { ...previous, ...patch }
     model.userData.worldState = next
     applyWorldStateBindings(model, next)
+    applySandboxLightingState(model, next)
     // Door/hinge state can change movement collision without rebuilding the model.
     refreshSandboxModelSpatial(model)
     callbacks.onSandboxModelStateChange?.({ id: String(id), previous, state: next, patch: { ...patch } })

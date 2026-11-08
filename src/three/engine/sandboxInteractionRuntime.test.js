@@ -51,4 +51,45 @@ describe('findNearestSandboxInteraction', () => {
 
     expect(findNearestSandboxInteraction(THREE, new Map([['sandbox_3', model]]), { x: 2, z: 0 })).toBeNull()
   })
+  it('uses stable instance and component IDs instead of display or Mesh names', () => {
+    const model = new THREE.Group()
+    model.name = 'display-name-is-not-an-id'
+    model.position.set(3, 0, 4)
+    const button = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.1), new THREE.MeshBasicMaterial())
+    button.name = 'Mesh_001'
+    button.userData.componentId = 'wall-switch-button'
+    button.userData.interactionConfig = {
+      action: 'toggle',
+      targetId: 'lamp-instance-9',
+      stateKey: 'enabled',
+      radius: 4.8,
+    }
+    model.add(button)
+
+    const models = new Map([['switch-instance-1', model]])
+    const nearest = findNearestSandboxInteraction(THREE, models, { x: 3, z: 4 })
+    expect(nearest).toMatchObject({
+      id: 'switch-instance-1',
+      targetPartId: 'wall-switch-button',
+      config: { targetId: 'lamp-instance-9', stateKey: 'enabled' },
+    })
+    expect(findNearestSandboxInteraction(THREE, models, { x: 30, z: 40 })).toBeNull()
+  })
+
+  it('preserves a stable cross-object target relation in Object3D saves', () => {
+    const model = new THREE.Group()
+    const button = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.1), new THREE.MeshBasicMaterial())
+    button.userData.componentId = 'wall-switch-button'
+    button.userData.interactionConfig = { action: 'toggle', targetId: 'lamp-instance-9', stateKey: 'enabled' }
+    model.add(button)
+
+    const restored = new THREE.ObjectLoader().parse(model.toJSON())
+    let restoredButton = null
+    restored.traverse(object => {
+      if (object.userData?.componentId === 'wall-switch-button') restoredButton = object
+    })
+    expect(restoredButton?.userData?.interactionConfig?.targetId).toBe('lamp-instance-9')
+    expect(restoredButton?.userData?.interactionConfig?.stateKey).toBe('enabled')
+  })
+
 })

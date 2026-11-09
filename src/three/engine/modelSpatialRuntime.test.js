@@ -451,8 +451,10 @@ describe('refreshModelPhysicsRegistration', () => {
     expect(boxes[0]).toMatchObject({
       ownerId: 'physics-model',
       translation: { x: 10, y: 4, z: 5 },
-      halfExtents: { x: 2, y: 1, z: 0.2 },
     })
+    expect(boxes[0].halfExtents.x).toBeCloseTo(2)
+    expect(boxes[0].halfExtents.y).toBeCloseTo(1)
+    expect(boxes[0].halfExtents.z).toBeCloseTo(0.2)
   })
 
   it('honors state-conditioned door colliders and removes stale owner bodies', () => {

@@ -2664,3 +2664,42 @@ export const environmentBindings = [
 - 前端恢复世界失败时明确报错，避免继续恢复模型并造成错误的空间状态。
 - 新增 createBlankSandboxScene.test.js，覆盖四方向扩建、连续多层扩建、边界计算、世界状态往返恢复、非法存档拒绝和扩建上限原子性。
 - 测试代码已写入远程分支，但尚未执行 vitest；当前没有测试通过证据。
+
+---
+
+## 2026-11-09 — 管理模式拆分与外围地块回收
+
+### 本轮目标
+
+将沙盒全局管理与模型实例管理分离，并提供安全回收闲置外围区块的能力；不引入内部空洞或新的世界数据结构。
+
+### 实际修改
+
+- src/components/WorldSandboxMvp.vue：新增“沙盒管理 / 模型管理”一级切换。沙盒管理展示世界空间、扩建/回收、场景信息和现有环境控制；模型管理展示模型列表、选择与变换操作、AI 创建/编辑和快捷操作。保留页头保存入口。
+- src/three/world/campus/createBlankSandboxScene.js：新增 removeWorldEdge(direction)，仅移除指定方向最外侧完整区块行/列；释放地面几何和材质，重算世界边界与区块索引；拒绝移除包含 (0, 0) 的边缘，并阻止世界缩减为零区块。
+- src/three/engine/createCampusEngine.js：新增 removeSandboxWorldEdge(direction)。回收前检查玩家位置、模型世界包围盒和 CollisionWorld 已登记碰撞区域；存在占用时返回阻塞原因。回收成功后同步 CollisionWorld、InputController、相机范围和世界状态回调。
+- src/three/world/campus/createBlankSandboxScene.test.js：新增外围区块回收、锚点/最小尺寸限制、回收后存档往返恢复测试。
+- docs/world-sandbox-mvp/PROJECT_PLAN.md：记录管理模式职责、回收边界和验收标准。
+- 沙盒存档结构保持 version 4；区块状态继续使用既有 world.chunks，不需要迁移。
+
+### 远程提交
+
+- 260fe6f18d7200ec92346b937f5ad00fc7ab2102 — 场景层外围区块回收。
+- a355e7bf8337a1ee1867726c66e906b3cd993d4e — 引擎占用检测与回收 API。
+- 033ff5f27780ff5dec3289a32aa0068314478cbe — 前端管理模式与回收入口。
+- a7febfeb1ce96743963b85bfb8affa8e19a15b4b — 区块回收单元测试。
+- 3af2e4347540be0ddfe4c7b7150097f6e094348f — 项目计划更新。
+
+### 验证状态
+
+- 已完成目标分支文件写入和回读；远程源码中可确认新增 API、管理入口和测试用例存在。
+- 本轮没有本地仓库执行环境；Vitest、前端构建和浏览器交互均未执行，**待验证**。
+- 尚需重点验证：玩家/模型占用拦截、跨区块模型包围盒、四方向连续回收、回收后保存刷新、管理模式切换时 Gizmo/选中状态保持。
+- 远程提交按功能分支写入；未执行 PR 合并。
+
+### 本地验证建议
+
+1. npm test -- --run src/three/world/campus/createBlankSandboxScene.test.js（按项目实际 test script 调整参数）。
+2. npm run build。
+3. 在 /world-sandbox-mvp 中分别扩建四个方向，移动人物/模型到边缘后尝试回收，确认被拦截；移走后回收并保存刷新。
+4. 在模型选中和精细调整状态下切换“沙盒管理 / 模型管理”，确认选择与 Transform Gizmo 不丢失。

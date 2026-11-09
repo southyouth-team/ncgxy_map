@@ -103,17 +103,38 @@ export function createCampusPlayer(THREE, options = {}) {
 
   // 独立的柔边接触阴影始终锚定角色脚底，避免静态 shadowMap 缓存后人物移动、阴影仍留在出生点。
   // 该阴影不参与投影计算，不增加动态 shadow pass；角色的真实体块仍正常接受场景光照。
-  const shadowCanvas = document.createElement('canvas')
-  shadowCanvas.width = 128
-  shadowCanvas.height = 128
-  const shadowContext = shadowCanvas.getContext('2d')
-  const shadowGradient = shadowContext.createRadialGradient(64, 64, 5, 64, 64, 62)
-  shadowGradient.addColorStop(0, 'rgba(18, 22, 17, 0.30)')
-  shadowGradient.addColorStop(0.42, 'rgba(18, 22, 17, 0.17)')
-  shadowGradient.addColorStop(1, 'rgba(18, 22, 17, 0)')
-  shadowContext.fillStyle = shadowGradient
-  shadowContext.fillRect(0, 0, 128, 128)
-  const shadowTexture = new THREE.CanvasTexture(shadowCanvas)
+  let shadowTexture
+  if (typeof document !== 'undefined' && document.createElement) {
+    const shadowCanvas = document.createElement('canvas')
+    shadowCanvas.width = 128
+    shadowCanvas.height = 128
+    const shadowContext = shadowCanvas.getContext('2d')
+    if (shadowContext) {
+      const shadowGradient = shadowContext.createRadialGradient(64, 64, 5, 64, 64, 62)
+      shadowGradient.addColorStop(0, 'rgba(18, 22, 17, 0.30)')
+      shadowGradient.addColorStop(0.42, 'rgba(18, 22, 17, 0.17)')
+      shadowGradient.addColorStop(1, 'rgba(18, 22, 17, 0)')
+      shadowContext.fillStyle = shadowGradient
+      shadowContext.fillRect(0, 0, 128, 128)
+      shadowTexture = new THREE.CanvasTexture(shadowCanvas)
+    }
+  }
+  if (!shadowTexture) {
+    const data = new Uint8Array(128 * 128 * 4)
+    for (let y = 0; y < 128; y += 1) {
+      for (let x = 0; x < 128; x += 1) {
+        const distance = Math.hypot(x - 63.5, y - 63.5) / 62
+        const alpha = distance >= 1 ? 0 : distance < 0.42 ? 0.17 : 0.17 * (1 - (distance - 0.42) / 0.58)
+        const index = (y * 128 + x) * 4
+        data[index] = 18
+        data[index + 1] = 22
+        data[index + 2] = 17
+        data[index + 3] = Math.round(alpha * 255)
+      }
+    }
+    shadowTexture = new THREE.DataTexture(data, 128, 128, THREE.RGBAFormat)
+    shadowTexture.needsUpdate = true
+  }
   shadowTexture.colorSpace = THREE.SRGBColorSpace
   const contactShadow = new THREE.Mesh(
     new THREE.CircleGeometry(0.5, 28),

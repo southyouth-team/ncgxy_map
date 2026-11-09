@@ -124,7 +124,7 @@ export class InputController {
     }
     this.physicsRuntime = runtime || null
     this.physicsCharacterId = runtime ? String(id) : null
-    if (runtime && this.cameraRig?.player) {
+    if (runtime && this.cameraRig?.player && !this.spawnPosition) {
       const player = this.cameraRig.player
       this.spawnPosition = { x: player.x, y: player.y, z: player.z }
     }
@@ -308,6 +308,8 @@ export class InputController {
     this.movementEnabled = Boolean(enabled)
     if (!this.movementEnabled) {
       this.keys.clear()
+      this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+      this.verticalVelocity = 0
       this.stopPhysicsCharacterMovement()
     }
   }

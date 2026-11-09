@@ -73,3 +73,48 @@ describe('resolveProceduralModelParts', () => {
     })).toEqual([{ id: 'old-part' }])
   })
 })
+
+
+describe('model spatial traversability contract', () => {
+  it('normalizes stairs, ramps, passages and connections without discarding extensions', () => {
+    const normalized = normalizeSpatialTraversability({
+      stairs: [{ id: 'stair-main', targetPartId: 'stair-mesh', riserHeight: 0.18 }],
+      ramps: [{ id: 'ramp-east', targetPartId: 'ramp-mesh', slopeDegrees: 8 }],
+      passages: [{ id: 'doorway', targetPartId: 'door-frame', width: 1.2 }],
+      connections: [{ id: 'floor-link', from: 'floor-1', to: 'floor-2', type: 'stairs' }],
+      customTraversalData: { vendor: 'ai' },
+    })
+    expect(normalized.stairs).toHaveLength(1)
+    expect(normalized.ramps).toHaveLength(1)
+    expect(normalized.passages).toHaveLength(1)
+    expect(normalized.connections).toHaveLength(1)
+    expect(normalized.customTraversalData).toEqual({ vendor: 'ai' })
+  })
+
+  it('reports missing stable ids, part bindings and connection endpoints', () => {
+    const result = validateSpatialTraversability({
+      stairs: [{ targetPartId: 'steps' }],
+      ramps: [{ id: 'ramp' }],
+      passages: [{ id: 'doorway', targetPartId: 'door' }],
+      connections: [{ id: 'link', from: 'floor-a' }],
+    })
+    expect(result.valid).toBe(false)
+    expect(result.issues.map(issue => issue.code)).toEqual(expect.arrayContaining([
+      'traversability.id.required',
+      'traversability.targetPartId.required',
+      'traversability.connection.endpoints.required',
+    ]))
+  })
+
+  it('normalizes traversal collections when a spatial traversal section exists', () => {
+    const normalized = normalizeModelCapabilityManifest({
+      capabilities: { spatial: { traversability: { stairs: [{ id: 's', targetPartId: 'p' }] } },
+    })
+    expect(normalized.capabilities.spatial.traversability).toMatchObject({
+      stairs: [{ id: 's', targetPartId: 'p' }],
+      ramps: [],
+      passages: [],
+      connections: [],
+    })
+  })
+})

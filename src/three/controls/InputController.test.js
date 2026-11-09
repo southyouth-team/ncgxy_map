@@ -288,3 +288,24 @@ describe('InputController vertical camera synchronization', () => {
     expect(cameraRig.updateThirdPersonDesired).not.toHaveBeenCalled()
   })
 })
+
+
+describe('InputController player dimensions', () => {
+  it('updates eye height and collider radius while preserving the grounded floor position', () => {
+    const { controller, cameraRig, collisionWorld } = createController()
+    collisionWorld.setRadius = vi.fn()
+    const result = controller.setPlayerDimensions({ eyeHeight: 1.9, colliderRadius: 0.32 })
+    expect(result).toEqual({ eyeHeight: 1.9, colliderRadius: 0.32 })
+    expect(cameraRig.player.y).toBeCloseTo(1.9)
+    expect(collisionWorld.setRadius).toHaveBeenCalledWith(0.32)
+    expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
+  })
+
+  it('applies the configured collider radius when the active collision world changes', () => {
+    const { controller } = createController()
+    controller.setPlayerDimensions({ colliderRadius: 0.28 })
+    const nextWorld = { setRadius: vi.fn() }
+    controller.collisionWorld = nextWorld
+    expect(nextWorld.setRadius).toHaveBeenCalledWith(0.28)
+  })
+})

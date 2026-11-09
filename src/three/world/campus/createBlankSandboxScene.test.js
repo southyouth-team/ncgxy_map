@@ -11,9 +11,9 @@ describe('createBlankSandboxScene expandable world', () => {
     expect(player.visible).toBe(true)
     expect(player.position.x).toBe(world.userData.playerSpawn.x)
     expect(player.position.z).toBe(world.userData.playerSpawn.z)
-    expect(player.getObjectByName('avatar-body')).toBeTruthy()
-    expect(player.getObjectByName('avatar-head')).toBeTruthy()
-    expect(player.getObjectByName('avatar-ground-marker')).toBeTruthy()
+    expect(player.getObjectByName('player-torso')).toBeTruthy()
+    expect(player.getObjectByName('player-face')).toBeTruthy()
+    expect(player.getObjectByName('player-contact-shadow')).toBeTruthy()
     expect(typeof player.userData.updateAnimation).toBe('function')
   })
 

@@ -1113,7 +1113,7 @@ export class ImageGenerationService {
       throw new BadRequestException('缺少有效的模型碰撞诊断问题，拒绝执行空修复');
     }
     const allowedCodes = new Set([
-      'collision.declarations.missing', 'collision.declaration.invalid', 'collision.component-id.duplicate', 'collision.id.required',
+      'collision.declarations.missing', 'collision.components.missing', 'collision.declaration.invalid', 'collision.component-id.duplicate', 'collision.id.required',
       'collision.id.duplicate', 'collision.target.required', 'collision.target.ambiguous',
       'collision.target.missing', 'collision.shape.unsupported', 'collision.box.size.invalid', 'collision.box.center.invalid',
       'collision.mesh.geometry.missing', 'collision.state-condition.invalid',

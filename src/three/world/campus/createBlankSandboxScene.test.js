@@ -3,6 +3,37 @@ import * as THREE from 'three'
 import { createBlankSandboxScene } from './createBlankSandboxScene.js'
 
 describe('createBlankSandboxScene expandable world', () => {
+  it('shows real ground chunk boundaries and selected fills only in management mode', () => {
+    const world = createBlankSandboxScene(THREE)
+    const fill = world.getObjectByName('sandbox-chunk-selection-fill-0:0')
+    const outline = world.getObjectByName('sandbox-chunk-selection-outline-0:0')
+
+    expect(fill).toBeTruthy()
+    expect(outline).toBeTruthy()
+    expect(fill.visible).toBe(false)
+    expect(outline.visible).toBe(false)
+
+    world.userData.setChunkManagementState(true, [{ x: 0, z: 0 }])
+    expect(outline.visible).toBe(true)
+    expect(fill.visible).toBe(true)
+
+    world.userData.setChunkManagementState(false, [])
+    expect(outline.visible).toBe(false)
+    expect(fill.visible).toBe(false)
+  })
+
+  it('updates in-scene selection overlays when chunks are added and reclaimed', () => {
+    const world = createBlankSandboxScene(THREE)
+    world.userData.expandWorld('east')
+    world.userData.setChunkManagementState(true, [{ x: 1, z: 0 }])
+
+    const addedFill = world.getObjectByName('sandbox-chunk-selection-fill-1:0')
+    expect(addedFill?.visible).toBe(true)
+
+    expect(world.userData.removeWorldChunk(1, 0)).toBe(true)
+    expect(world.getObjectByName('sandbox-chunk-selection-fill-1:0')).toBeUndefined()
+  })
+
   it('expands complete adjacent rows and columns in all four directions', () => {
     const world = createBlankSandboxScene(THREE)
     const expand = world.userData.expandWorld

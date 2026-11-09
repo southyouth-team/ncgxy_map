@@ -34,6 +34,13 @@ describe('InputController movement intent', () => {
     controller.setMovementEnabled(false)
     expect(controller.hasMovementInput()).toBe(false)
   })
+
+  it('does not report character movement intent in overview mode', () => {
+    const { controller } = createController()
+    controller.mode = 'overview'
+    controller.keys.add('w')
+    expect(controller.hasMovementInput()).toBe(false)
+  })
 })
 
 describe('InputController navigation path', () => {

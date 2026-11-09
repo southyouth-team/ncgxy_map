@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest } from './modelCapabilityManifest.js'
+import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest, validateSpatialTraversability } from './modelCapabilityManifest.js'
 import { createCapabilityControlDocument } from './capabilityControl.js'
 import { collectProceduralModelGeometryDiagnostics } from './geometryDiagnostics.js'
 
@@ -88,6 +88,9 @@ self.addEventListener('message', async (event) => {
       modelModule.modelCapabilityManifest,
       modelModule.modelParameters,
       modelModule.environmentBindings,
+    )
+    const traversalValidation = validateSpatialTraversability(
+      modelCapabilityManifest.capabilities.spatial?.traversability,
     )
     const capabilityControlDocument = createCapabilityControlDocument({
       manifest: modelCapabilityManifest,

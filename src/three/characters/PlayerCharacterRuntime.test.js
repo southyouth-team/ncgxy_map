@@ -36,6 +36,21 @@ describe('PlayerCharacterRuntime', () => {
     expect(anchor.getObjectByName('avatar-body')).toBeFalsy()
   })
 
+  it('reports normalized visual dimensions and derives a stable movement footprint', () => {
+    const anchor = createAnchor()
+    const runtime = new PlayerCharacterRuntime(THREE, anchor)
+    const model = new THREE.Group()
+    model.add(new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.8), new THREE.MeshStandardMaterial()))
+
+    const info = runtime.setModel(model, [], { assetId: 'dimensioned-character', targetHeight: 2.4 })
+
+    expect(info.dimensions.height).toBeCloseTo(2.4)
+    expect(info.dimensions.width).toBeCloseTo(1.2)
+    expect(info.dimensions.depth).toBeCloseTo(0.96)
+    expect(info.dimensions.eyeHeight).toBeCloseTo(1.824)
+    expect(info.dimensions.colliderRadius).toBeCloseTo(0.336)
+  })
+
   it('maps named clips to idle, walk and run states', () => {
     const anchor = createAnchor()
     const runtime = new PlayerCharacterRuntime(THREE, anchor)

@@ -3206,3 +3206,29 @@ export const environmentBindings = [
 2. 若单测通过，执行前端 build；随后在浏览器中验收人物胶囊与沙盒地面/模型 Box 的实际碰撞。
 3. 重点验证墙体阻挡与滑动、台阶、坡面、平台边缘下落、落地、寻路、传送和尺寸更新。
 4. 验收通过后，再进入 Manifest 的 OBB/复合 Box、Mesh Collider 与楼梯/室内多层空间。
+
+
+### 固定步长运动修正（2026-11-09）
+
+代码复核时发现：若每个渲染帧都直接调用 CharacterController，而物理世界按 1/60 固定步长推进，在 120Hz/144Hz 显示器上可能在物理步之间重复覆盖运动学目标，造成帧率相关的速度误差。已将人物运动改为速度采样：
+
+- `InputController` 每帧只调用 `setKinematicCharacterVelocity()` 更新期望速度，并读取当前物理步后的角色位置。
+- `PhysicsRuntime.step()` 在每个固定子步内统一执行 CharacterController 计算、`setNextKinematicTranslation()` 和 `world.step()`。
+- 增加 `stepCount`，自动寻路只在物理步确实前进后才根据实际位移判断阻塞，避免首帧误判。
+- 删除直接逐帧位移的 `moveKinematicCharacter()` API，避免绕开固定步长契约。
+- 控制器禁用时显式清零待执行速度，防止 Transform/Gizmo 操作期间人物继续滑动。
+- 新增固定步长消费测试，并覆盖禁用控制器清零速度。
+
+新增/修正提交：
+- `f56eb4cf907b7618e21a75a0ad65f9dd136ad0a0` — 物理子步统一消费角色速度。
+- `8efdc73a3e245c88a445de6b05af457aa4a71347` — InputController 改为速度采样和物理步同步。
+- `c4a31d2ad297dcac77a4858aebbcbb0d9dd30d26` — 更新人物控制测试。
+- `93e3382babedf4a4694c70947ed3a33d9b824f61` — 固定步长角色运动测试。
+- `6a187e93bdfaa87d7aaae962b071d2fbc79edd90` — 控制器禁用时停止待执行移动。
+- `255d4cca2462f7da1a8fb6ecec9037c31f22a00b` — 禁用状态测试。
+- `ec8381edcfcf727278c952898a09fbfee406f85f` — 角色脚底坐标浮点断言修正。
+- `616c0e20639d4e246ee7934df57f7b4d932329d2` — 移除绕过固定步长的直接移动 API。
+- `c0f9aa3ee3277a81ae4cdba0c9c114492d9cbfdc` — 删除旧的直接位移测试。
+- `22767bf980d2b4fd206def6ec2e92b2c7c890b36` — 固定步长架构约束补充。
+
+验证情况：前一轮 CI（提交 `93e3382...`）中 PhysicsRuntime 全部 10 项测试通过；InputController 新增测试中除一个脚底坐标浮点精度断言外均通过，该断言已修正。当前最新提交 `c0f9aa3...` 的前端/后端 CI 正在运行；最终结果以本条记录之后的最新 Actions 结果为准。

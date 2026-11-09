@@ -48,6 +48,7 @@ export class InputController {
     this.jumpActive = false
     this.jumpRequested = false
     this.jumpLaunched = false
+    this.jumpWasAirborne = false
     this.jumpBufferDuration = 0.14
     this.coyoteTimeDuration = 0.1
     this.jumpBufferRemaining = 0
@@ -195,9 +196,11 @@ export class InputController {
     if (!currentState) return null
     this.updateJumpInputWindow(dt, currentState.grounded)
     const launchPending = this.jumpRequested
-    if (this.jumpActive && this.jumpLaunched && currentState.grounded && currentState.stepCount > previousStepCount) {
+    if (this.jumpActive && this.jumpLaunched && currentState.grounded && this.jumpWasAirborne
+      && currentState.stepCount > previousStepCount) {
       this.jumpActive = false
       this.jumpLaunched = false
+      this.jumpWasAirborne = false
       this.verticalVelocity = 0
     }
     if (!currentState.grounded && Number.isFinite(currentState.velocity?.y)) {
@@ -231,10 +234,12 @@ export class InputController {
     player.y = state.translation.y + this.playerEyeHeight
     player.z = state.translation.z
     this.grounded = state.grounded === true
+    if (this.jumpActive && this.jumpLaunched && !this.grounded) this.jumpWasAirborne = true
     this.lastPhysicsStepCount = state.stepCount
-    if (this.jumpActive && this.jumpLaunched && this.grounded && state.stepCount > previousStepCount) {
+    if (this.jumpActive && this.jumpLaunched && this.grounded && this.jumpWasAirborne && state.stepCount > previousStepCount) {
       this.jumpActive = false
       this.jumpLaunched = false
+      this.jumpWasAirborne = false
       this.verticalVelocity = 0
     } else if (this.grounded && !this.jumpActive && this.verticalVelocity < 0) {
       this.verticalVelocity = 0
@@ -249,6 +254,7 @@ export class InputController {
     this.jumpActive = true
     this.jumpRequested = Boolean(this.physicsRuntime)
     this.jumpLaunched = !this.physicsRuntime
+    this.jumpWasAirborne = false
     this.jumpBufferRemaining = 0
     this.coyoteTimeRemaining = 0
     this.grounded = false
@@ -324,6 +330,7 @@ export class InputController {
     this.keys.clear()
     this.setNavigationPath(null)
     this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+    this.jumpWasAirborne = false
     this.jumpBufferRemaining = 0
     this.coyoteTimeRemaining = this.coyoteTimeDuration
     this.verticalVelocity = 0; this.grounded = true
@@ -460,6 +467,7 @@ export class InputController {
         this.verticalVelocity = 0
         this.grounded = true
         this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+        this.jumpWasAirborne = false
         return
       }
     }
@@ -472,6 +480,7 @@ export class InputController {
       this.verticalVelocity = 0
       this.grounded = true
       this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+      this.jumpWasAirborne = false
     }
   }
 

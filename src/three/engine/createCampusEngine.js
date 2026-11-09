@@ -2681,7 +2681,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const moving = dx * dx + dz * dz > 0.000001
       const verticalChanged = Math.abs(dy) > 0.0001
       const visibilityChanged = lastPlayerVisibility !== playerSprite.visible
-      if (((moving || verticalChanged) && playerSprite.visible) || visibilityChanged) invalidateDynamicShadowMap()
       lastPlayerVisibility = playerSprite.visible
       lastPlayerY = playerSprite.position.y
       if (typeof playerSprite.userData.updateAnimation === 'function') {
@@ -2689,6 +2688,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       } else {
         campus?.userData.updatePlayerAnimation?.(moving, time / 1000, dx, dz)
       }
+      // 动画姿态也可能改变投影；在动画更新后失效，确保本帧 ShadowMap 使用最新姿态。
+      if (((moving || verticalChanged) && playerSprite.visible) || visibilityChanged) invalidateDynamicShadowMap()
       lastPlayerX = cameraRig.player.x
       lastPlayerZ = cameraRig.player.z
     }

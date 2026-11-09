@@ -435,7 +435,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       hasTarget: false,
       target: null,
     }
-    sandboxTransform?.detach()
+    if (!existing) selectSandboxModel(null)
+    else sandboxTransform?.detach()
     if (!existing) scene.add(model)
     model.visible = false
     const footprintMaterial = new THREE.MeshBasicMaterial({
@@ -713,6 +714,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function selectSandboxModel(id) {
+    if (sandboxPlacementState) return false
     const model = id ? sandboxModels.get(String(id)) : null
     sandboxSelectedModel = model || null
     if (sandboxSelectedModel) {
@@ -749,7 +751,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function removeSandboxModel(id) {
     const model = sandboxModels.get(String(id))
-    if (!model || activeSandboxInterior?.modelId === String(id)) return false
+    if (!model || sandboxPlacementState?.model === model || activeSandboxInterior?.modelId === String(id)) return false
     if (sandboxSelectedModel === model) selectSandboxModel(null)
     sandboxModels.delete(String(id))
     removeSandboxModelSpatialRegistration(id)
@@ -922,7 +924,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function duplicateSandboxModel(id) {
     const source = sandboxModels.get(String(id))
-    if (!source) return null
+    if (!source || sandboxPlacementState) return null
     const copy = source.clone(true)
     copy.traverse(object => {
       if (object.geometry) object.geometry = object.geometry.clone()

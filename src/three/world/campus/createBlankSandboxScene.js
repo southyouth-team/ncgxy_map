@@ -12,6 +12,9 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
   chunkGroup.name = 'SandboxWorldChunks'
   root.add(chunkGroup)
   const chunks = new Map()
+  const chunkVisuals = new Map()
+  let chunkManagementEnabled = false
+  let selectedChunkKeys = new Set()
   let boundary = null
   const bounds = {
     minX: -chunkWidth / 2, maxX: chunkWidth / 2,
@@ -31,8 +34,49 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     ground.receiveShadow = true
     ground.userData.worldChunk = { x: chunkX, z: chunkZ, width: chunkWidth, depth: chunkDepth }
     chunkGroup.add(ground)
+    const selectionFill = new THREE.Mesh(
+      new THREE.PlaneGeometry(chunkWidth - 0.16, chunkDepth - 0.16),
+      new THREE.MeshBasicMaterial({ color: '#9bd8a6', transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }),
+    )
+    selectionFill.name = 'sandbox-chunk-selection-fill-' + key
+    selectionFill.rotation.x = -Math.PI / 2
+    selectionFill.position.set(chunkX * chunkWidth, 0.035, chunkZ * chunkDepth)
+    selectionFill.visible = false
+    selectionFill.raycast = () => {}
+    root.add(selectionFill)
+    const selectionOutline = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.PlaneGeometry(chunkWidth, chunkDepth)),
+      new THREE.LineBasicMaterial({ color: '#d4e7d8', transparent: true, opacity: 0.72 }),
+    )
+    selectionOutline.name = 'sandbox-chunk-selection-outline-' + key
+    selectionOutline.rotation.x = -Math.PI / 2
+    selectionOutline.position.set(chunkX * chunkWidth, 0.045, chunkZ * chunkDepth)
+    selectionOutline.visible = false
+    selectionOutline.raycast = () => {}
+    root.add(selectionOutline)
+    chunkVisuals.set(key, { fill: selectionFill, outline: selectionOutline })
     chunks.set(key, ground)
+    updateChunkVisual(key)
     return true
+  }
+
+  function updateChunkVisual(key) {
+    const visual = chunkVisuals.get(key)
+    if (!visual) return
+    const selected = selectedChunkKeys.has(key)
+    visual.outline.visible = chunkManagementEnabled
+    visual.outline.material.color.set(selected ? '#f4e6a3' : '#d4e7d8')
+    visual.outline.material.opacity = selected ? 1 : 0.72
+    visual.fill.visible = chunkManagementEnabled && selected
+  }
+
+  function setChunkManagementState(enabled, selection = []) {
+    chunkManagementEnabled = Boolean(enabled)
+    selectedChunkKeys = new Set((Array.isArray(selection) ? selection : []).map(item => {
+      if (typeof item === 'string') return item
+      return Number.isInteger(Number(item?.x)) && Number.isInteger(Number(item?.z)) ? Number(item.x) + ':' + Number(item.z) : ''
+    }).filter(Boolean))
+    for (const key of chunkVisuals.keys()) updateChunkVisual(key)
   }
 
   function rebuildBoundary() {
@@ -122,6 +166,15 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     const ground = chunks.get(key)
     if (!ground || chunks.size <= 1) return false
     chunkGroup.remove(ground)
+    const visual = chunkVisuals.get(key)
+    if (visual) {
+      root.remove(visual.fill, visual.outline)
+      visual.fill.geometry?.dispose?.()
+      visual.fill.material?.dispose?.()
+      visual.outline.geometry?.dispose?.()
+      visual.outline.material?.dispose?.()
+      chunkVisuals.delete(key)
+    }
     ground.geometry?.dispose?.()
     if (Array.isArray(ground.material)) ground.material.forEach(material => material?.dispose?.())
     else ground.material?.dispose?.()
@@ -137,6 +190,7 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
   root.userData.worldChunkSize = { width: chunkWidth, depth: chunkDepth }
   root.userData.expandWorld = expandWorld
   root.userData.removeWorldChunk = removeWorldChunk
+  root.userData.setChunkManagementState = setChunkManagementState
   root.userData.getWorldState = () => ({
     version: 1,
     chunkSize: { width: chunkWidth, depth: chunkDepth },

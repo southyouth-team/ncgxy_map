@@ -100,7 +100,7 @@ describe('testModelTraversalRoutes', () => {
     model.add(shoreline)
     const bridge = new THREE.Group()
     bridge.userData.componentId = 'water-bridge'
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 1), new THREE.MeshBasicMaterial())
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 4), new THREE.MeshBasicMaterial())
     deck.position.y = 2.2
     bridge.add(deck)
     model.add(bridge)

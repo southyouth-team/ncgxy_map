@@ -25,7 +25,6 @@ export class PlayerCharacterRuntime {
     this.dimensions = { width: 0.5, height: 1.7, depth: 0.3, eyeHeight: 1.7, colliderRadius: 0.35 }
     this.animationState = 'idle'
     this.animationOverride = null
-    this.dimensions = { width: 0.5, height: 1.7, depth: 0.3, eyeHeight: 1.7, colliderRadius: 0.35 }
     this.disposed = false
     anchor.userData.updateAnimation = (moving, seconds, dx, dz, running) => this.updateAnimation(moving, seconds, dx, dz, running)
   }
@@ -186,6 +185,7 @@ export class PlayerCharacterRuntime {
       this.fallbackVisual.visible = true
     }
     this.assetId = 'builtin-placeholder'
+    this.dimensions = { width: 0.5, height: 1.7, depth: 0.3, eyeHeight: 1.7, colliderRadius: 0.35 }
     this.animationState = 'idle'
     this.animationOverride = null
     return true

@@ -7,6 +7,8 @@ export class InputController {
     this.cameraRig = cameraRig
     this.bounds = bounds || { minX: -75, maxX: 75, minZ: -75, maxZ: 75 }
     this._collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
+    this.physicsRuntime = null
+    this.physicsCharacterId = null
     this.playerColliderRadius = Number(this._collisionWorld.radius) || 0.55
     this.groundRaycaster = THREE?.Raycaster ? new THREE.Raycaster() : null
     this.groundRayOrigin = THREE?.Vector3 ? new THREE.Vector3() : null
@@ -97,6 +99,68 @@ export class InputController {
     world?.setRadius?.(this.playerColliderRadius)
   }
 
+  setPhysicsRuntime(runtime, { id = 'sandbox:player' } = {}) {
+    if (this.physicsRuntime && this.physicsCharacterId) {
+      this.physicsRuntime.removeBody?.(this.physicsCharacterId)
+    }
+    this.physicsRuntime = runtime || null
+    this.physicsCharacterId = runtime ? String(id) : null
+    if (!runtime) return false
+    this.createPhysicsCharacter()
+    return true
+  }
+
+  createPhysicsCharacter() {
+    if (!this.physicsRuntime || !this.physicsCharacterId || !this.cameraRig?.player) return false
+    const player = this.cameraRig.player
+    const radius = this.playerColliderRadius
+    const totalHeight = Math.max(this.playerEyeHeight, radius * 2 + 0.02)
+    const halfHeight = Math.max(0.01, (totalHeight - radius * 2) / 2)
+    this.physicsRuntime.removeBody?.(this.physicsCharacterId)
+    this.physicsRuntime.createKinematicCharacter({
+      id: this.physicsCharacterId,
+      ownerId: this.physicsCharacterId,
+      translation: { x: player.x, y: player.y - this.playerEyeHeight, z: player.z },
+      radius,
+      halfHeight,
+      maxStepHeight: this.maxStepHeight,
+      minStepWidth: Math.max(0.15, radius * 0.5),
+      maxSlopeClimbAngle: this.maxWalkableSlopeDegrees * Math.PI / 180,
+    })
+    this.verticalVelocity = 0
+    this.grounded = true
+    return true
+  }
+
+  syncPhysicsCharacterPosition() {
+    if (!this.physicsRuntime || !this.physicsCharacterId || !this.cameraRig?.player) return false
+    const player = this.cameraRig.player
+    return this.physicsRuntime.setKinematicCharacterPosition(this.physicsCharacterId, {
+      x: player.x,
+      y: player.y - this.playerEyeHeight,
+      z: player.z,
+    })
+  }
+
+  moveWithPhysics(player, dx, dz, delta) {
+    if (!this.physicsRuntime || !this.physicsCharacterId) return null
+    const dt = Math.max(0, Math.min(Number(delta) || 0, 0.05))
+    if (!dt) return null
+    this.verticalVelocity -= this.gravity * dt
+    const result = this.physicsRuntime.moveKinematicCharacter(this.physicsCharacterId, {
+      x: Number(dx) || 0,
+      y: this.verticalVelocity * dt,
+      z: Number(dz) || 0,
+    })
+    if (!result) return null
+    player.x = result.translation.x
+    player.y = result.translation.y + this.playerEyeHeight
+    player.z = result.translation.z
+    this.grounded = result.grounded === true
+    if (this.grounded && this.verticalVelocity < 0) this.verticalVelocity = 0
+    return result
+  }
+
   setPlayerDimensions({ eyeHeight, colliderRadius } = {}) {
     const previousEyeHeight = this.playerEyeHeight
     const nextEyeHeight = Number(eyeHeight)
@@ -114,6 +178,7 @@ export class InputController {
       if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
       else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
     }
+    if (this.physicsRuntime) this.createPhysicsCharacter()
     return { eyeHeight: this.playerEyeHeight, colliderRadius: this.playerColliderRadius }
   }
 
@@ -154,9 +219,10 @@ export class InputController {
 
   resetPosition(position = { x: 0, z: 24 }) {
     this.keys.clear()
-    this.cameraRig.player.set(Number(position.x) || 0, 1.7, Number(position.z) || 0)
+    this.cameraRig.player.set(Number(position.x) || 0, this.playerEyeHeight, Number(position.z) || 0)
     this.verticalVelocity = 0
     this.grounded = true
+    this.syncPhysicsCharacterPosition()
   }
 
   teleportPlayer(position) {
@@ -168,6 +234,7 @@ export class InputController {
     this.verticalVelocity = 0
     this.grounded = true
     this.cameraRig.player.set(values[0], values[1], values[2])
+    this.syncPhysicsCharacterPosition()
     return true
   }
 
@@ -300,13 +367,20 @@ export class InputController {
         return
       }
       const travel = Math.min(distance, 5.5 * delta)
-      const movement = this.collisionWorld.move(player, dx / distance * travel, dz / distance * travel)
-      const moved = Math.hypot(movement.x - player.x, movement.z - player.z)
-      if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
-      const resolved = this.resolveHorizontalPosition(player, movement)
-      player.x = resolved.x
-      player.z = resolved.z
-      this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
+      if (this.physicsRuntime) {
+        const previous = { x: player.x, y: player.y, z: player.z }
+        const result = this.moveWithPhysics(player, dx / distance * travel, dz / distance * travel, delta)
+        const moved = result ? Math.hypot(player.x - previous.x, player.z - previous.z) : 0
+        if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
+      } else {
+        const movement = this.collisionWorld.move(player, dx / distance * travel, dz / distance * travel)
+        const moved = Math.hypot(movement.x - player.x, movement.z - player.z)
+        if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
+        const resolved = this.resolveHorizontalPosition(player, movement)
+        player.x = resolved.x
+        player.z = resolved.z
+        this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
+      }
       if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
       else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
       return
@@ -314,7 +388,8 @@ export class InputController {
     if (!forward && !strafe) {
       const player = this.cameraRig.player
       const previousY = player.y
-      this.updateVerticalMotion(player, delta)
+      if (this.physicsRuntime) this.moveWithPhysics(player, 0, 0, delta)
+      else this.updateVerticalMotion(player, delta)
       // 空中无输入时仍需同步相机，否则角色会下落而镜头停留在原高度。
       if (Math.abs(player.y - previousY) > 0.0001) {
         if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
@@ -339,11 +414,15 @@ export class InputController {
     const dx = Math.sin(yaw) * f - Math.cos(yaw) * s
     const dz = Math.cos(yaw) * f + Math.sin(yaw) * s
     const player = this.cameraRig.player
-    const movement = this.collisionWorld.move(player, dx * speed, dz * speed)
-    const resolved = this.resolveHorizontalPosition(player, movement)
-    player.x = resolved.x
-    player.z = resolved.z
-    this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
+    if (this.physicsRuntime) {
+      this.moveWithPhysics(player, dx * speed, dz * speed, delta)
+    } else {
+      const movement = this.collisionWorld.move(player, dx * speed, dz * speed)
+      const resolved = this.resolveHorizontalPosition(player, movement)
+      player.x = resolved.x
+      player.z = resolved.z
+      this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
+    }
     if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
     else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
   }

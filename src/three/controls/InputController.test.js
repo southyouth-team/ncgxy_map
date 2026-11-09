@@ -347,8 +347,10 @@ describe('InputController fixed player dimensions', () => {
 
 describe('InputController Rapier character movement', () => {
   function attachPhysics(controller, player) {
-    const calls = { created: [], velocities: [], teleported: [], removed: [] }
+    const calls = { created: [], velocities: [], accelerations: [], teleported: [], removed: [] }
     let feet = { x: player.x, y: player.y - controller.playerEyeHeight, z: player.z }
+    let grounded = true
+    let verticalVelocity = 0
     const runtime = {
       removeBody: id => calls.removed.push(id),
       createKinematicCharacter: options => {
@@ -357,9 +359,11 @@ describe('InputController Rapier character movement', () => {
         return { id: options.id }
       },
       setKinematicCharacterVelocity: (id, velocity) => calls.velocities.push({ id, velocity }),
+      setKinematicCharacterAcceleration: (id, acceleration) => calls.accelerations.push({ id, acceleration }),
       getKinematicCharacterState: () => ({
         translation: { ...feet },
-        grounded: true,
+        velocity: { x: 0, y: verticalVelocity, z: 0 },
+        grounded,
         stepCount: 0,
       }),
       setKinematicCharacterPosition: (id, position) => {
@@ -369,7 +373,14 @@ describe('InputController Rapier character movement', () => {
       },
     }
     controller.setPhysicsRuntime(runtime)
-    return { runtime, calls }
+    return {
+      runtime,
+      calls,
+      setState(nextState = {}) {
+        if (nextState.grounded !== undefined) grounded = nextState.grounded
+        if (nextState.verticalVelocity !== undefined) verticalVelocity = nextState.verticalVelocity
+      },
+    }
   }
 
   it('creates a capsule character at the player feet using the configured dimensions', () => {
@@ -398,6 +409,18 @@ describe('InputController Rapier character movement', () => {
     expect(cameraRig.player).toMatchObject({ x: 0, y: 1.7, z: 0 })
     expect(collisionWorld.move).not.toHaveBeenCalled()
     expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
+  })
+
+  it('uses fixed-step acceleration for airborne gravity instead of render-frame integration', () => {
+    const { controller, cameraRig } = createController()
+    const { calls, setState } = attachPhysics(controller, cameraRig.player)
+    setState({ grounded: false, verticalVelocity: -1 })
+
+    controller.update(0.05)
+
+    expect(controller.verticalVelocity).toBe(-1)
+    expect(calls.accelerations.at(-1).acceleration).toEqual({ x: 0, y: -24, z: 0 })
+    expect(calls.velocities.at(-1).velocity.y).toBe(-1)
   })
 
   it('moves navigation paths through Rapier instead of the legacy XZ solver', () => {

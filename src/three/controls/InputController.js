@@ -205,14 +205,20 @@ export class InputController {
       .flatMap(surface => surface.meshes || [])
     if (!meshes.length) return null
 
-    this.groundRayOrigin.set(player.x, player.y + 0.2, player.z)
+    // 从角色上方的探测高度向下扫描，不能从角色眼睛附近起射：
+    // 高于当前人物位置的地形/坡面否则会被直接漏检。
+    this.groundRayOrigin.set(player.x, player.y + this.groundProbeDistance, player.z)
     this.groundRayDirection.set(0, -1, 0)
     this.groundRaycaster.set(this.groundRayOrigin, this.groundRayDirection)
-    this.groundRaycaster.far = this.groundProbeDistance
+    this.groundRaycaster.far = this.groundProbeDistance * 2
     const hits = this.groundRaycaster.intersectObjects(meshes, false)
     const maxSlopeCos = Math.cos(this.maxWalkableSlopeDegrees * Math.PI / 180)
+    const feetY = player.y - this.playerEyeHeight
+    const highestReachableY = feetY + this.maxStepHeight + 0.08
     for (const hit of hits) {
       if (!hit.face || !hit.object || !Number.isFinite(hit.point?.y)) continue
+      // 不能把人物脚底上方过高的楼层/平台当作当前支撑面，否则会隔空吸附。
+      if (hit.point.y > highestReachableY) continue
       const normalMatrix = new this.THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)
       const normal = hit.face.normal.clone().applyMatrix3(normalMatrix).normalize()
       if (normal.y < maxSlopeCos) continue

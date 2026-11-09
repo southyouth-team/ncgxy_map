@@ -107,7 +107,9 @@ export async function testModelTraversalRoutes(THREE, RAPIER, model, options = {
   const maxDuration = Number(options.maxDuration) > 0 ? Number(options.maxDuration) : 18
   const tolerance = Number(options.tolerance) > 0 ? Number(options.tolerance) : 0.3
   const gravity = Number(options.gravity) > 0 ? Number(options.gravity) : 9.81
-  const profile = normalizeCharacterTraversalProfile(options.traversalProfile)
+  // Traversal certification always uses the one global player profile.
+  // Callers may tune probe timing, but cannot shrink or enlarge the test character.
+  const profile = normalizeCharacterTraversalProfile()
   const runtime = await PhysicsRuntime.create({
     RAPIER,
     fixedTimeStep,

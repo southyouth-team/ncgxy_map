@@ -158,6 +158,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function beginGeneratedAssetPlacement(model, options = {}) {
+    if (sandboxPlacementState) throw new Error('请先完成或取消当前 AI 模型选址')
     if (!isRpgSample || !campus || !generatedAssetsGroup) throw new Error('资产放置仅在沙盒场景中可用')
     if (indoorGroup) throw new Error('请先退出室内空间，再放置资产')
     const existing = options.instanceId ? generatedAssets.get(options.instanceId) : null
@@ -396,7 +397,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function beginSandboxModelPlacement(modelOrId) {
-    if (!scene || sandboxPlacementState || indoorGroup) return false
+    if (!scene || sandboxPlacementState || placementState || indoorGroup) return false
     const existingEntry = typeof modelOrId === 'string'
       ? [String(modelOrId), sandboxModels.get(String(modelOrId))]
       : Array.from(sandboxModels.entries()).find(([, item]) => item === modelOrId) || null
@@ -488,7 +489,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function onSandboxPlacementPointerMove(event) {
     const state = sandboxPlacementState
-    if (!state || state.stage !== 'point') return
+    if (!state) return
+    event.stopImmediatePropagation()
+    if (state.stage !== 'point') return
     const point = getSandboxGroundPoint(event)
     if (point) updateSandboxPlacementPreview(point)
   }

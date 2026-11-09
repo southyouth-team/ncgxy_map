@@ -44,6 +44,33 @@ describe('analyzeModelTraversability', () => {
     expect(result.issues.map(issue => issue.code)).toContain('traversability.passage.clearance-unverified')
   })
 
+  it('extracts approximate stair levels, riser height and tread depth from stepped Mesh geometry', () => {
+    const root = new THREE.Group()
+    const stairs = new THREE.Group()
+    stairs.userData.componentId = 'stair-part'
+    for (let index = 0; index < 4; index += 1) {
+      const tread = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4, 0.18, 1),
+        new THREE.MeshBasicMaterial(),
+      )
+      tread.position.set(index * 0.45, index * 0.18, 0)
+      stairs.add(tread)
+    }
+    root.add(stairs)
+    root.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: { traversability: {
+        stairs: [{ id: 'stair-run', targetPartId: 'stair-part', riserHeight: 0.18, treadDepth: 0.4 }],
+      } } },
+    }
+
+    const result = analyzeModelTraversability(THREE, root)
+    const record = result.records[0]
+    expect(record.stairProfile.detectedLevelCount).toBe(4)
+    expect(record.stairProfile.averageRiserHeight).toBeCloseTo(0.18, 2)
+    expect(record.stairProfile.averageTreadDepth).toBeCloseTo(0.4, 2)
+    expect(result.issues.map(issue => issue.code)).toContain('traversability.stairs.step-continuity-unverified')
+  })
+
   it('rejects missing and duplicate component ids rather than guessing a target', () => {
     const root = createRoot()
     const duplicateA = new THREE.Group()

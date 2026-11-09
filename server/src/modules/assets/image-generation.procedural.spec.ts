@@ -37,14 +37,18 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('export function createModel(THREE)');
     expect(request.messages[0].content).toContain('Physical execution contract v1');
     expect(request.messages[0].content).toContain('A visible Mesh is NOT automatically a collider');
-    expect(request.messages[0].content).toContain('spatial.colliders currently executes only shape:"box"');
+    expect(request.messages[0].content).toContain('shape:"mesh" blockers as static Rapier triangle meshes');
+    expect(request.messages[0].content).toContain('exact authored geometry, including real holes/openings, is preserved');
+    expect(request.messages[0].content).toContain('userData.collisionMode = "none"');
+    expect(request.messages[0].content).toContain('perimeter-only collision geometry');
+    expect(request.messages[0].content).toContain('automatic water-boundary extraction is not implemented');
     expect(request.messages[0].content).toContain('stairs and ramps');
     expect(request.messages[0].content).toContain('isolated Rapier character-route test passes');
     expect(request.messages[0].content).toContain('Passages and spatial connections remain descriptive only');
     expect(request.messages[0].content).toContain('closed perimeter');
     expect(request.messages[0].content).toContain('For water bodies in this Runtime version');
     expect(request.messages[0].content).toContain('static Rapier triangle meshes');
-    expect(request.messages[0].content).toContain('general-purpose mesh-cooking pipeline is not implemented yet');
+    expect(request.messages[0].content).toContain('do not use dynamic/deforming geometry as a static mesh collider');
     expect(result).toMatchObject({
       model: 'vision-test',
       objectType: '教学楼',

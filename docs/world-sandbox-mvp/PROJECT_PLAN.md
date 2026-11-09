@@ -118,6 +118,16 @@ Three.js Object3D 是渲染/运行时载体，不是唯一权威世界数据。�
 
 ### 3.8 物理、空间、导航
 
+#### 3.8.1 人物通行能力统一配置与模型声明协议
+
+- 沙盒人物的胶囊尺寸、最大跨阶高度、最大可爬坡角、最小滑落角、自动跨阶最小宽度、贴地吸附距离和碰撞偏移统一由 `CharacterTraversalProfile` 提供；InputController 不再独立维护一套数值，PhysicsRuntime 创建 Rapier CharacterController 时消费同一份 profile。
+- profile 默认值第一阶段沿用当前沙盒已存在的移动参数，避免架构收敛时无意改变玩家手感：高度 1.7、半径 0.55、最大跨阶高度 0.45、最大爬坡角 50°、最小滑落角 30°、自动跨阶最小宽度 0.275、贴地吸附距离 0.25、碰撞偏移 0.01（世界单位约按米解释）。这些是当前运行参数，不代表最终产品人体工学验收值。
+- 玩家角色尺寸变化必须通过同一 profile 重新计算胶囊体高度/半高；角色尺寸、坡度和跨阶参数不能由 InputController 与 Rapier 分别设置。
+- 模型 Manifest 在 `capabilities.spatial.traversability` 下增加开放的数据声明集合：`stairs`、`ramps`、`passages`、`connections`。楼梯/坡面/通道记录使用稳定 `id` 和真实 `targetPartId`；空间连接记录稳定 `id` 与 `from/to` 端点。未知字段必须保留，不建立模型类别白名单。
+- Manifest 规范化只负责数据结构；基础校验负责记录 ID、部件引用字段和连接端点完整性。几何真实性、坡度/踏步测量、碰撞生成、人物可达性测试仍由后续 Analyzer/Physics Runtime 阶段负责。
+- AI 生成和编辑 Prompt 可以输出/维护上述声明，但必须明确声明不等于运行时可通行。未通过真实几何绑定和 Rapier 人物测试，不得把楼梯、坡道或多楼层连接标记为已验收可通行。
+
+
 - 视觉网格与碰撞表示分离；优先使用简单碰撞体。
 - 明确可行走地面、阻挡体、门/楼梯/电梯等空间连接。
 - 空间层级预留 World → Zone → Building → Floor → Room。

@@ -5,7 +5,7 @@
  */
 import { resolveCapabilityRecords } from '../sandbox/capabilityControl.js'
 
-export function collectModelMovementObstacles(THREE, root, ownerId) {
+export function collectModelMovementObstacles(THREE, root, ownerId, { includeAllHeights = false } = {}) {
   if (!THREE?.Box3 || !root?.traverse || !ownerId) return []
   const manifest = root.userData?.proceduralModelCapabilityManifest
   const colliders = manifest?.capabilities?.spatial?.colliders
@@ -91,9 +91,12 @@ export function collectModelMovementObstacles(THREE, root, ownerId) {
     const worldBounds = localBounds.applyMatrix4(part.matrixWorld)
     // The current player controller is a grounded XZ mover. Ignore elevated
     // colliders that do not intersect the player's standing-height interval.
-    if (worldBounds.min.y > 1.7 || worldBounds.max.y < 0) continue
+    if (!includeAllHeights && (worldBounds.min.y > 1.7 || worldBounds.max.y < 0)) continue
     obstacles.push({
       ownerId: String(ownerId),
+      colliderId: String(collider.id || collider.targetPartId),
+      minY: worldBounds.min.y,
+      maxY: worldBounds.max.y,
       minX: worldBounds.min.x,
       maxX: worldBounds.max.x,
       minZ: worldBounds.min.z,
@@ -165,5 +168,47 @@ export function refreshModelSpatialRegistration(THREE, model, collisionWorld) {
     if (collisionWorld.addObstacle(obstacle, ownerId)) added += 1
   }
   for (const surface of surfaces) collisionWorld.addSupportSurface(surface)
+  return added
+}
+
+
+/**
+ * Rebuild a model instance's Rapier box colliders from the same validated,
+ * state-aware manifest declarations used by the legacy grounded mover.
+ * World-space AABBs are intentionally conservative for this first integration;
+ * oriented/compound collider fidelity is a later physics-adapter milestone.
+ */
+export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
+  const ownerId = model?.userData?.sandboxModelId
+  if (!ownerId || !physicsRuntime) return 0
+  const key = String(ownerId)
+  physicsRuntime.removeOwner(key)
+  const boxes = collectModelMovementObstacles(THREE, model, key, { includeAllHeights: true })
+  let added = 0
+  try {
+    boxes.forEach((box, index) => {
+      const halfExtents = {
+        x: (box.maxX - box.minX) / 2,
+        y: (box.maxY - box.minY) / 2,
+        z: (box.maxZ - box.minZ) / 2,
+      }
+      if (![halfExtents.x, halfExtents.y, halfExtents.z].every(value => Number.isFinite(value) && value > 0.001)) return
+      physicsRuntime.createStaticBox({
+        id: key + ':manifest-box:' + box.colliderId + ':' + index,
+        ownerId: key,
+        translation: {
+          x: (box.minX + box.maxX) / 2,
+          y: (box.minY + box.maxY) / 2,
+          z: (box.minZ + box.maxZ) / 2,
+        },
+        halfExtents,
+        friction: 0.85,
+      })
+      added += 1
+    })
+  } catch (error) {
+    physicsRuntime.removeOwner(key)
+    throw error
+  }
   return added
 }

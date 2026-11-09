@@ -3067,3 +3067,32 @@ export const environmentBindings = [
 - `WorldSandboxMvp.vue` 的存档版本 v4 仍由页面负责；快照包含世界区块、模型 Object3D JSON、环境配置和选中对象，不包含玩家 Transform、角色资产持久化引用。当前角色导入/生成没有写入该快照。
 - Engine 目前以按需 requestAnimationFrame 驱动渲染，输入/自研运动使用截断后的帧 delta；Rapier 应在独立固定时间步累积器中推进，不能把物理更新简单绑在可变渲染帧上。
 - TransformControls 的 objectChange 已调用 setSandboxModelTransform，因此当前 Gizmo 变换会刷新模型空间注册；迁移时需保留该同步入口，并在拖拽过程中避免重复创建/销毁物理资源，可采用更新现有刚体/碰撞体 Transform 的策略。
+
+
+## 2026-11-09 — Physics Runtime 基础设施第一阶段
+
+### 已提交到功能分支
+
+- `package.json` 增加固定版本 `@dimforge/rapier3d-compat@0.21.0`。选择 compat 构建是为了降低 Vite 对独立 WASM 资源解析/部署的集成风险；初始化仍为异步。
+- 新增 `src/three/physics/PhysicsRuntime.js`：
+  - 创建 Rapier 3D World，默认重力 `(0, -9.81, 0))。
+  - 固定物理时间步（默认 1/60 秒），渲染 delta 累积推进。
+  - 限制最大帧 delta 和最大子步，避免后台标签页恢复后出现无限追帧。
+  - 支持静态 Box 刚体/碰撞体、稳定 ID、owner 分组、Transform 更新、单体/owner 批量移除。
+  - 统一 dispose，避免 World 生命周期泄漏。
+  - 允许注入 Rapier 模块，便于单元测试和隔离 WASM 初始化。
+- 新增 `src/three/physics/PhysicsRuntime.test.js`，覆盖固定步长、追帧限制、静态 Box 注册、Transform 更新、owner 清理、重复 ID/非法尺寸和 dispose。
+
+### 当前边界
+
+- PhysicsRuntime 尚未接入 `createCampusEngine.js` 的沙盒初始化和 render loop。
+- 人物仍使用原 InputController + CollisionWorld；本次没有切换控制器，也没有改变当前沙盒行为。
+- Manifest collider/surface 目前尚未转换为 Rapier 碰撞体。
+- 角色胶囊体、运动学 Character Controller、三角网格静态碰撞、楼梯/坡面和室内多层空间尚未实现。
+- 仓库当前未发现 npm/yarn/pnpm 锁文件；本次没有生成锁文件。
+
+### 验证状态
+
+- 已通过 GitHub 远程回读确认 package.json、PhysicsRuntime.js、PhysicsRuntime.test.js 写入。
+- 未在本地执行 `npm install`、`npm test`、`npm run build`，未进行浏览器验收。新增测试当前仅是已写入源码，不能标记为通过。
+- 当前分支 HEAD：`5d7dab63cab30cafa65e6ddacaaada891954e144`。

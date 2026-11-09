@@ -36,8 +36,8 @@ function createWaterModel(depth = 0.6) {
 describe('waterVolumeRuntime', () => {
   it('samples immersion from the volume bottom and adjustable water depth', () => {
     const model = createWaterModel(0.6)
-    model.userData.proceduralModelParameterValues = { waterDepth: 1.2 }
     const volumes = collectModelWaterVolumes(THREE, model, 'sandbox_water')
+    model.userData.proceduralModelParameterValues = { waterDepth: 1.2 }
     const state = samplePlayerWaterState(THREE, volumes, { x: 0, y: 1.7, z: 0 }, 1.7)
 
     expect(state).toMatchObject({

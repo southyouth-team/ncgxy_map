@@ -617,7 +617,7 @@ async function generateAiPlayerCharacter() {
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       let newline
-      while ((newline = buffer.indexOf('\\n')) >= 0) {
+      while ((newline = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, newline).trim()
         buffer = buffer.slice(newline + 1)
         if (line) processEvent(JSON.parse(line))
@@ -647,7 +647,7 @@ async function generateAiPlayerCharacter() {
 async function importPlayerCharacter(event) {
   const file = event?.target?.files?.[0]
   if (!file || characterBusy.value) return
-  if (!/\\.glb$/i.test(file.name)) {
+  if (!/\.glb$/i.test(file.name)) {
     message.value = '当前仅支持单文件 GLB 导入；含外部依赖的 glTF 暂不支持'
     event.target.value = ''
     return

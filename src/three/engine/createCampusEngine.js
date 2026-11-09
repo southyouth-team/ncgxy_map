@@ -574,7 +574,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function onSandboxPointerDown(event) {
-    if (!renderer || !cameraRig || sandboxTransform?.dragging) return
+    if (event.button !== 0 || sandboxPlacementState || !renderer || !cameraRig || sandboxTransform?.dragging) return
     const rect = renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return
     pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
@@ -596,22 +596,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       id: String(part.userData.componentId),
       name: part.name || String(part.userData.componentId),
     } : null)
-  }
-
-  function onSandboxDoubleClick(event) {
-    if (!renderer || !cameraRig || sandboxTransform?.dragging) return
-    const rect = renderer.domElement.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-    pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
-    raycaster.setFromCamera(pointerNdc, cameraRig.camera)
-    const hit = raycaster.intersectObjects(Array.from(sandboxModels.values()), true).find(item => item.object.visible)
-    if (!hit) return
-    let root = hit.object
-    while (root && !root.userData?.sandboxModelId) root = root.parent
-    const id = root?.userData?.sandboxModelId
-    if (!id) return
-    selectSandboxModel(id)
-    callbacks.onSandboxModelDoubleClick?.({ id, name: root.name })
   }
 
   function applySandboxEnvironmentBindings(model) {
@@ -717,14 +701,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (sandboxPlacementState && id) return false
     const model = id ? sandboxModels.get(String(id)) : null
     sandboxSelectedModel = model || null
-    if (sandboxSelectedModel) {
-      sandboxTransform?.attach(sandboxSelectedModel)
-      // 精调阶段由 Gizmo 独占模型手势；需要移动镜头时切换到“浏览镜头”。
-      cameraRig?.setOrbitInteractionEnabled?.(false)
-    } else {
-      sandboxTransform?.detach()
-      cameraRig?.setOrbitInteractionEnabled?.(true)
-    }
+    // 选中与精细调整分离：单击只更新选择，不自动挂载 Gizmo，也不接管相机。
+    sandboxTransform?.detach()
+    cameraRig?.setOrbitInteractionEnabled?.(true)
     callbacks.onSandboxModelSelected?.(sandboxSelectedModel ? {
       id: sandboxSelectedModel.userData.sandboxModelId,
       name: sandboxSelectedModel.name,
@@ -1257,7 +1236,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.domElement.addEventListener('pointerdown', onSandboxPlacementPointerDown, true)
     renderer.domElement.addEventListener('pointermove', onSandboxPlacementPointerMove, true)
     renderer.domElement.addEventListener('pointerdown', onSandboxPointerDown)
-    renderer.domElement.addEventListener('dblclick', onSandboxDoubleClick)
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
     renderer.domElement.addEventListener('pointerup', onScenePointerUp)
     renderer.domElement.addEventListener('pointerup', requestFrame)
@@ -2929,7 +2907,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer?.domElement?.removeEventListener('pointerdown', onSandboxPlacementPointerDown, true)
     renderer?.domElement?.removeEventListener('pointermove', onSandboxPlacementPointerMove, true)
     renderer?.domElement?.removeEventListener('pointerdown', onSandboxPointerDown)
-    renderer?.domElement?.removeEventListener('dblclick', onSandboxDoubleClick)
     sandboxTransform?.detach()
     sandboxTransform?.dispose()
     sandboxTransform = null

@@ -12,6 +12,8 @@ const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID || 'map-editor-local'
 const viewport = ref(null)
 const proceduralModelEditorRef = ref(null)
 const selectedName = ref('')
+const selectedEditable = ref(false)
+const precisionModeActive = ref(false)
 const objects = ref([])
 const command = ref('')
 const aiPrompt = ref('')
@@ -55,8 +57,10 @@ function syncObjects() {
   selectedName.value = selected?.name || ''
 }
 function handleModelSelected(payload) {
-  selected = payload?.id ? objectsById.get(payload.id) || null : null
+  selected = payload?.id ? engine?.getSandboxModel?.(payload.id) || null : null
   selectedName.value = selected?.name || ''
+  selectedEditable.value = Boolean(selected?.userData?.proceduralModelSource)
+  precisionModeActive.value = false
 }
 function registerModel(root, name, position = null) {
   root.name = name || root.name || '模型'
@@ -195,10 +199,13 @@ function selectModel(object) {
 }
 function setMode(mode) {
   transformMode.value = mode
+  precisionModeActive.value = mode !== 'browse'
   engine?.setSandboxTransformMode(mode)
 }
 function beginMoveSelected() {
   if (!selected) return
+  precisionModeActive.value = false
+  engine?.setSandboxTransformMode('browse')
   const started = engine?.beginSandboxModelPlacement(selected.userData.sandboxModelId)
   if (started) message.value = '已进入分层选址：先选区域，再逐级放大到具体落点。'
 }
@@ -219,6 +226,7 @@ function handlePlacementChange(payload) {
       selected = model
     }
     syncObjects()
+    setMode('translate')
     const saved = saveSandbox()
     message.value = saved ? '模型已完成落位并保存；可继续旋转、高度和缩放微调。' : '模型已完成落位，但存档失败，请检查存储空间后重试。'
     saveStatus.value = saved ? '已保存' : '存档失败'
@@ -236,6 +244,8 @@ function deleteSelected() {
   if (!removed) return
   objectsById.delete(id)
   selected = null
+  selectedEditable.value = false
+  precisionModeActive.value = false
   syncObjects()
   message.value = '已删除模型组'
 }
@@ -973,7 +983,6 @@ onMounted(async () => {
       onSandboxModelsChange: list => { objects.value = list },
       onSandboxPlacementChange: handlePlacementChange,
       onSandboxModelSelected: handleModelSelected,
-      onSandboxModelDoubleClick: openModelEditor,
       onSandboxInteractionPromptChange: payload => {
         if (payload?.visible) message.value = payload.text
         else if (message.value.startsWith('靠近 ')) message.value = '使用 WASD 或方向键移动人物，靠近模型按 E 交互。'
@@ -1034,17 +1043,29 @@ onBeforeUnmount(() => {
           <button v-for="item in objectTypes" :key="item.id" @click="addModel(item.id)">＋ {{ item.label }}</button>
         </div>
         <button class="world-mvp__demo-button" @click="addLightSwitchDemo">创建开关灯交互演示</button>
-        <div class="world-mvp__selected">
-          <span>当前对象</span><strong>{{ selectedName || '未选择' }}</strong>
-          <button :disabled="!selectedName || placement.active" @click="duplicateSelected">复制</button><button :disabled="!selectedName || placement.active" @click="deleteSelected">删除</button>
+        <div v-if="selectedName" class="world-mvp__selected-context">
+          <div class="world-mvp__selected-heading">
+            <span>当前选中对象</span>
+            <strong>{{ selectedName }}</strong>
+          </div>
+          <p class="world-mvp__message">单击模型只会选中对象。需要执行操作时，请使用下方明确入口。</p>
+          <div class="world-mvp__tools world-mvp__primary-actions">
+            <button :disabled="placement.active" @click="beginMoveSelected">重新选址</button>
+            <button :disabled="placement.active" @click="setMode('translate')">精细调整</button>
+            <button :disabled="placement.active || !selectedEditable" @click="openModelEditor()">编辑模型</button>
+          </div>
+          <div v-if="precisionModeActive && !placement.active" class="world-mvp__tools world-mvp__transform-actions">
+            <button :class="{ active: transformMode === 'translate' }" @click="setMode('translate')">位置</button>
+            <button :class="{ active: transformMode === 'rotate' }" @click="setMode('rotate')">旋转</button>
+            <button :class="{ active: transformMode === 'scale' }" @click="setMode('scale')">缩放</button>
+            <button @click="setMode('browse')">完成调整</button>
+          </div>
+          <div class="world-mvp__tools world-mvp__secondary-actions">
+            <button :disabled="placement.active" @click="duplicateSelected">复制</button>
+            <button :disabled="placement.active" @click="deleteSelected">删除</button>
+          </div>
         </div>
-        <div class="world-mvp__tools">
-          <button :disabled="!selectedName || placement.active" @click="beginMoveSelected">重新选址</button>
-          <button :class="{ active: transformMode === 'translate' }" :disabled="!selectedName || placement.active" @click="setMode('translate')">精调位置</button>
-          <button :class="{ active: transformMode === 'rotate' }" :disabled="!selectedName || placement.active" @click="setMode('rotate')">旋转</button>
-          <button :class="{ active: transformMode === 'scale' }" :disabled="!selectedName || placement.active" @click="setMode('scale')">缩放</button>
-          <button :disabled="!selectedName || placement.active" @click="setMode('browse')">浏览镜头</button>
-        </div>
+        <p v-else class="world-mvp__empty-selection">尚未选中对象。单击场景中的模型，或从下方对象列表选择。</p>
         <div v-if="placement.active" class="world-mvp__placement">
           <strong>{{ placement.stage === 'area' ? '分层选址 · 区域选择' : '分层选址 · 精确落位' }}</strong>
           <p>{{ placement.instruction }}</p>
@@ -1138,10 +1159,16 @@ onBeforeUnmount(() => {
 .world-mvp__panel h2 { margin:0 0 12px; font-size:12px; }
 .world-mvp__model-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
 .world-mvp .world-mvp__demo-button { width:100%; margin-top:7px; border-color:rgba(165,201,177,.45); color:#c6e4ce; }
-.world-mvp__selected { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:6px; margin-top:10px; padding:9px; border:1px solid rgba(255,255,255,.1); border-radius:7px; }
-.world-mvp__selected span { color:#8e9fa3; font-size:10px; }
-.world-mvp__selected strong { grid-column:1; font-size:11px; }
-.world-mvp__selected button:nth-of-type(1) { grid-column:2; grid-row:1 / span 2; }.world-mvp__selected button:nth-of-type(2) { grid-column:3; grid-row:1 / span 2; }
+.world-mvp__selected-context { margin-top:10px; padding:10px; border:1px solid rgba(165,201,177,.32); border-radius:8px; background:rgba(165,201,177,.055); }
+.world-mvp__selected-heading span,.world-mvp__selected-heading strong { display:block; }
+.world-mvp__selected-heading span { color:#8e9fa3; font-size:10px; }
+.world-mvp__selected-heading strong { margin-top:5px; color:#e5efe8; font-size:12px; overflow-wrap:anywhere; }
+.world-mvp__selected-context .world-mvp__message { min-height:0; margin:7px 0; }
+.world-mvp__primary-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.world-mvp__primary-actions button:last-child { grid-column:1 / -1; }
+.world-mvp__transform-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.world-mvp__secondary-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.world-mvp__empty-selection { margin:10px 0 0; padding:10px; border:1px dashed rgba(255,255,255,.14); border-radius:7px; color:#9eafad; font-size:10px; line-height:1.6; }
 .world-mvp__tools { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:8px; }
 .world-mvp__placement { margin-top:9px; padding:10px; border:1px solid rgba(165,201,177,.35); border-radius:8px; background:rgba(165,201,177,.08); }
 .world-mvp__placement strong { display:block; color:#c6e4ce; font-size:11px; }

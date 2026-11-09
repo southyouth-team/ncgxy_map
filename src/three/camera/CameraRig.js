@@ -360,6 +360,11 @@ export class CameraRig {
     }
   }
 
+  setOrbitInteractionEnabled(enabled) {
+    // TransformControls 拖动期间暂停总览相机输入，避免同一指针手势同时驱动模型和 OrbitControls。
+    this.orbit.enabled = Boolean(enabled) && this.mode === 'overview' && !this.transitioningToOverview
+  }
+
   update(delta) {
     if (this.mode === 'overview' && !this.transitioningToOverview) {
       // OrbitControls.update() 返回相机是否仍在变化；供引擎判断是否需要下一帧。

@@ -354,6 +354,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     chunkManagementActive = Boolean(enabled)
     if (!chunkManagementActive) selectedSandboxChunkKeys.clear()
     input?.setMovementEnabled(!chunkManagementActive)
+    if (chunkManagementActive) {
+      sandboxTransform?.detach()
+      cameraRig?.setOrbitInteractionEnabled?.(true)
+    }
     campus?.userData?.setChunkManagementState?.(chunkManagementActive, Array.from(selectedSandboxChunkKeys))
     callbacks.onSandboxChunkSelectionChange?.({
       chunks: Array.from(selectedSandboxChunkKeys, key => {

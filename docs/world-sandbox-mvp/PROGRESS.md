@@ -3153,3 +3153,56 @@ export const environmentBindings = [
 
 
 - 后端 CI 最终结果已返回：依赖安装成功、NestJS build 成功；后端单测 96 passed / 1 failed，失败仍为 `image-generation.procedural.spec.ts` 中既有的几何诊断上下文断言，与本轮未修改的后端代码相关。与开始基线相同；PostGIS migrations / API integration / schema checks 因单测失败而跳过。
+
+
+## 2026-11-09 — Rapier 人物控制器接入（第一阶段）
+
+### 实际实现
+
+1. `PhysicsRuntime.js`
+   - 新增 `createKinematicCharacter()`：创建 position-based kinematic rigid body + capsule collider + Rapier CharacterController。
+   - 支持最大爬坡角、自动跨台阶、snap-to-ground 配置。
+   - 新增 `moveKinematicCharacter()`：计算期望位移的碰撞修正结果，并通过 `setNextKinematicTranslation()` 应用。
+   - 新增 `setKinematicCharacterPosition()`：支持传送/重置。
+   - CharacterController 在 owner 清理和 Runtime dispose 时先于刚体释放。
+2. `InputController.js`
+   - 新增可选 PhysicsRuntime 接口；只有 blank-sandbox 由 Engine 显式启用。
+   - 键盘/虚拟按键/自动寻路继续复用原输入和相机方向计算，水平移动与重力位移交给 Rapier CharacterController。
+   - Rapier 返回的脚底位置加 eyeHeight 后回写 `cameraRig.player`，保留原相机/动画调用约定。
+   - 角色重置、传送、尺寸变化同步物理胶囊体；非 blank-sandbox 保持原 CollisionWorld 移动路径。
+3. `createCampusEngine.js`
+   - blank-sandbox 初始化 InputController 后，将同一个 PhysicsRuntime 注入人物控制器。
+4. 测试
+   - `PhysicsRuntime.test.js` 新增 capsule 创建、控制器参数、碰撞修正位移、传送及资源销毁测试。
+   - `InputController.test.js` 新增沙盒人物初始化、Rapier 移动/重力、自动寻路及尺寸/传送同步测试。
+5. `PROJECT_PLAN.md` 新增人物控制器接入契约和验收范围。
+
+### 关键边界
+
+- 仅 blank-sandbox 的玩家移动改用 Rapier；其他非沙盒运行模式不受影响。
+- 人物是运动学胶囊体，不是动态刚体；重力向量由 InputController 提供，碰撞/滑动/坡度/台阶由 Rapier CharacterController 求解。
+- 这一阶段尚未完成浏览器实测，不能宣称墙体、楼梯、坡面等真实场景行为已验收。
+- 现有模型 Collider 仍是世界 AABB Box；三角网格/旋转 OBB/复合门洞碰撞未完成。
+
+### 提交记录
+
+- `28ed7a3b7651eec4755834bd110679a0aefb633a` — PhysicsRuntime 增加运动学胶囊角色能力。
+- `611f6df00d4ce7ef29879552e8ee73d353ad199d` — PhysicsRuntime 角色生命周期测试。
+- `46fbb5ac74a81b18164815d447ce8bf5713c94fa` — InputController 沙盒人物移动切换到 Rapier。
+- `d991aeddb8a6ac5d0641d2186b796e9581bc5656` — Engine 将 Rapier Runtime 注入沙盒人物控制。
+- `2b6fd92f2d12d3b9c38e0ed81e5f56310cb1a0d8` — InputController Rapier 移动测试。
+- `fd66f27cb63bb6cf3bff0ba04df8f8fc9c1effac` — 人物控制器架构契约文档。
+
+### 验证状态
+
+- 上述代码和测试文件已写入功能分支；需要重新触发 CI 后确认结果。
+- 本轮没有本地仓库执行环境，未运行本地 Vitest、前端构建或浏览器验收。
+- CI 需重点检查 Rapier API 兼容、运动学角色测试、InputController 旧行为回归；既有基线失败需与本轮结果区分。
+- 未修改 `main`，未创建/合并 PR。
+
+### 下一步
+
+1. 获取本轮前端/后端 CI 结果；若有失败，先定位并修复本轮新增问题。
+2. 若单测通过，执行前端 build；随后在浏览器中验收人物胶囊与沙盒地面/模型 Box 的实际碰撞。
+3. 重点验证墙体阻挡与滑动、台阶、坡面、平台边缘下落、落地、寻路、传送和尺寸更新。
+4. 验收通过后，再进入 Manifest 的 OBB/复合 Box、Mesh Collider 与楼梯/室内多层空间。

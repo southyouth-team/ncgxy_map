@@ -410,6 +410,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const size = initialBounds.getSize(new THREE.Vector3())
     const footprintWidth = Math.max(0.25, size.x)
     const footprintDepth = Math.max(0.25, size.z)
+    const worldBounds = getSandboxPlacementWorldBounds()
+    if (footprintWidth > worldBounds.width || footprintDepth > worldBounds.depth) return false
     sandboxPlacementState = {
       model,
       existing,
@@ -501,9 +503,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function onSandboxPlacementPointerMove(event) {
     const state = sandboxPlacementState
-    if (!state) return
-    event.stopImmediatePropagation()
-    if (state.stage !== 'point') return
+    if (!state || state.stage !== 'point') return
     const point = getSandboxGroundPoint(event)
     if (point) updateSandboxPlacementPreview(point)
   }

@@ -2734,3 +2734,9 @@ export const environmentBindings = [
 - 必须本地验证：模型跨区块占用拦截、人物占用拦截、可站立面/碰撞区域拦截、内部洞口边缘移动阻挡、保存刷新、扩建不覆盖内部洞。
 - 视觉远景地面目前仍是独立 horizon 平面；需重点确认回收区块后洞口视觉层次符合预期。
 - 未修改 main，未创建或合并 PR。
+
+
+### 后续修正
+
+- createBlankSandboxScene.js 已移除无限延伸的 horizon fallback 地面，避免回收区块后仍被下层大平面视觉填满；实际洞口边缘和远景效果仍待浏览器验收。
+- CollisionWorld.test.js 增加从有效地块向缺失地块移动时的边缘阻挡测试。

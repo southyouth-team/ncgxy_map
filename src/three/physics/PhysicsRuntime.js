@@ -16,6 +16,7 @@ export class PhysicsRuntime {
     this.maxFrameDelta = this.#positiveNumber(options.maxFrameDelta, 0.1)
     this.accumulator = 0
     this.droppedTime = 0
+    this.stepCount = 0
     this.disposed = false
     this.bodies = new Map()
     this.world = new RAPIER.World(options.gravity || { x: 0, y: -9.81, z: 0 })
@@ -53,7 +54,30 @@ export class PhysicsRuntime {
     let steps = 0
 
     while (this.accumulator + Number.EPSILON >= this.fixedTimeStep && steps < this.maxSubSteps) {
+      for (const entry of this.bodies.values()) {
+        if (entry.kind !== 'kinematic-character') continue
+        const current = entry.body.translation()
+        const desired = entry.desiredVelocity
+        entry.controller.computeColliderMovement(entry.collider, {
+          x: desired.x * this.fixedTimeStep,
+          y: desired.y * this.fixedTimeStep,
+          z: desired.z * this.fixedTimeStep,
+        })
+        const corrected = entry.controller.computedMovement()
+        entry.body.setNextKinematicTranslation({
+          x: current.x + corrected.x,
+          y: current.y + corrected.y,
+          z: current.z + corrected.z,
+        })
+        entry.pendingGrounded = entry.controller.computedGrounded()
+      }
       this.world.step()
+      this.stepCount += 1
+      for (const entry of this.bodies.values()) {
+        if (entry.kind !== 'kinematic-character') continue
+        entry.grounded = entry.pendingGrounded === true
+        entry.position = entry.body.translation()
+      }
       this.accumulator -= this.fixedTimeStep
       steps += 1
     }
@@ -165,6 +189,10 @@ export class PhysicsRuntime {
         controller,
         kind: 'kinematic-character',
         dimensions: { radius, halfHeight },
+        desiredVelocity: { x: 0, y: 0, z: 0 },
+        grounded: true,
+        pendingGrounded: true,
+        position: { x: position[0], y: position[1], z: position[2] },
       }
       this.bodies.set(id, entry)
       return entry
@@ -172,6 +200,27 @@ export class PhysicsRuntime {
       if (controller) this.world.removeCharacterController?.(controller)
       if (body) this.world.removeRigidBody(body)
       throw error
+    }
+  }
+
+  setKinematicCharacterVelocity(id, velocity = {}) {
+    this.#assertActive()
+    const entry = this.bodies.get(String(id))
+    if (!entry || entry.kind !== 'kinematic-character') return false
+    const values = [velocity.x, velocity.y, velocity.z].map(Number)
+    if (!values.every(Number.isFinite)) throw new TypeError('Character velocity must be finite')
+    entry.desiredVelocity = { x: values[0], y: values[1], z: values[2] }
+    return true
+  }
+
+  getKinematicCharacterState(id) {
+    const entry = this.bodies.get(String(id))
+    if (!entry || entry.kind !== 'kinematic-character') return null
+    const translation = entry.position || entry.body.translation()
+    return {
+      translation: { x: translation.x, y: translation.y, z: translation.z },
+      grounded: entry.grounded === true,
+      stepCount: this.stepCount,
     }
   }
 
@@ -209,6 +258,10 @@ export class PhysicsRuntime {
     if (!values.every(Number.isFinite)) throw new TypeError('Character position must be finite')
     entry.body.setTranslation({ x: values[0], y: values[1], z: values[2] }, true)
     entry.body.setNextKinematicTranslation?.({ x: values[0], y: values[1], z: values[2] })
+    entry.position = { x: values[0], y: values[1], z: values[2] }
+    entry.desiredVelocity = { x: 0, y: 0, z: 0 }
+    entry.grounded = true
+    entry.pendingGrounded = true
     return true
   }
 
@@ -267,6 +320,7 @@ export class PhysicsRuntime {
     this.world?.free?.()
     this.world = null
     this.accumulator = 0
+    this.stepCount = 0
     this.disposed = true
   }
 }

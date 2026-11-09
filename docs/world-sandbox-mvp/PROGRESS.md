@@ -2613,3 +2613,14 @@ export const environmentBindings = [
 - 已完成远程源码回读与静态条件核对：不存在地面点击逐级聚焦分支；确认逻辑要求 `candidateLocked`；选址/选中/精调三种面板分支互斥；选址期间保存按钮禁用。
 - 尚未运行前端构建、Vitest 或浏览器交互测试；Ghost 透明度、占地轮廓可见性、overview 构图和相机恢复仍需本地实际验收。
 - 未修改 `main`，未创建或合并 PR。
+
+
+## 2026-11-09 — MVP 改为空白世界并增加落地冲突检测
+
+- `WorldSandboxMvp.vue` 默认场景切换为 `blank-sandbox`，移除 MVP 对早期 RPG 校园样板的默认依赖。
+- 新增 `createBlankSandboxScene.js`：只创建空白地面、远景地面、世界边界和人物出生/世界尺寸元数据；不包含建筑、道路、树木、水体、桥梁、设施或装饰。
+- 保留原 `createRpgSampleScene.js` 和正式校园地图代码，不对 MVP 之外的地图页面做删除或迁移。
+- 模型选址加入现有沙盒模型 AABB 重叠检测和 CollisionWorld 已登记障碍 broad-phase 检测；冲突时占地预览变红、左侧面板显示冲突名称并禁用确认。
+- 确认落地入口再次检测冲突，防止候选锁定后场景变化导致无效落地；移动已有模型时排除自身。
+- 精度限制：当前仍以世界 AABB 为主，CollisionWorld 多边形按包围范围保守检测；不等于精确网格相交或完整地形适配。
+- 验证边界：仅完成 GitHub 远程代码写入；未运行用户本地构建、Vitest/Jest 或浏览器端穿模回归，不宣称通过。

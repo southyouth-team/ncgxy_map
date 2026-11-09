@@ -88,7 +88,7 @@ describe('ImageGenerationService procedural generation', () => {
     }) as never;
 
     await expect(service.generateProceduralObjectFromPrompt('一个测试模型', '模型', 'stylized'))
-      .rejects.toThrow('contentType=object，finish_reason=length');
+      .rejects.toThrow('contentType=null，finish_reason=length');
   });
 
   it('passes the reference image to the multimodal model', async () => {

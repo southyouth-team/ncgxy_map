@@ -714,7 +714,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function selectSandboxModel(id) {
-    if (sandboxPlacementState) return false
+    if (sandboxPlacementState && id) return false
     const model = id ? sandboxModels.get(String(id)) : null
     sandboxSelectedModel = model || null
     if (sandboxSelectedModel) {

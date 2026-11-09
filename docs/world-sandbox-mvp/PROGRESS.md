@@ -3722,3 +3722,27 @@ export const environmentBindings = [
 - 水体深度：当前 MVP 没有水体体积/水面高度/水底高度到人物涉水状态的完整 Runtime。现有生成约束只描述水面和可选岸线碰撞，不存在可执行的深度参数契约。因此本轮没有伪造一个只改变外观的深度滑块。后续需先定义 water volume 数据契约，再接入参数、场景空间和角色涉水计算。
 - 自动化测试、前端构建和浏览器实测：当前会话没有本地仓库执行环境，尚未执行；不得标记为通过。
 - 本轮没有向 `main` 写入，也没有合并 PR。
+
+## 2026-11-10 — 移动意图与水体深度运行时（增量）
+
+### 已落地
+
+1. InputController.hasMovementInput() 统一暴露键盘/虚拟方向键和自动寻路的持续移动意图。
+2. createCampusEngine 的角色动画状态不再只依赖单个渲染帧的 XZ 位移差；Rapier 固定步长与渲染帧未对齐时，不会因某一帧位移为零而立即切回 idle。
+3. getPhysicsDiagnostics() 增加 accumulator、stepCount、按键集合、移动意图、grounded、期望速度和角色位置，用于区分输入丢失、物理步进和实际位移问题。
+4. 新增 waterVolumeRuntime.js：
+   - 从 modelCapabilityManifest.capabilities.spatial.waterVolumes 收集声明式水体感知区。
+   - 使用局部 XZ 范围、固定 bottomY 和 depth 计算水底/水面高度。
+   - 支持参数绑定 spatial.waterVolume.<id>.depth，并在每次采样时读取 proceduralModelParameterValues 的最新值。
+   - 计算 immersionDepth、depthRatio 和 characterImmersionRatio；沙盒引擎通过 onPlayerWaterStateChange 回调状态变化，并暴露 getPlayerWaterState()。
+5. 生成规范补充水体数据契约：水深表示固定水底到水面的垂直距离；水体感知区不是实体 Collider，不自动改变通行、浮力或站立规则。
+6. 新增水体 Runtime 单元测试，覆盖动态参数、边界外采样和无效声明过滤。
+
+### 当前边界 / 尚未验收
+
+- 行走/加速的实际物理位移间歇尚未定位根因。当前修改先消除渲染帧与固定物理步长不同步导致的动画 idle 闪断，并补充诊断字段；不能标记为角色移动问题已彻底修复。
+- 水体 Runtime 当前输出浸水数据，不负责自动改变水面 Mesh 几何，也不负责浮力、游泳控制或水域阻挡。生成模型需要让可见水面与 bottomY + depth 保持一致。
+- 参数实时生效依赖模型参数绑定和 proceduralModelParameterValues 被正确写入；若模型未声明绑定，Runtime 使用 waterVolume 自身的 depth 默认值。
+- 当前只支持水平水面（允许绕 Y 轴旋转的水体区域）；倾斜水面会被跳过，不会伪造垂直水深结果。
+- 本轮尚未执行 Vitest、Vite build、CI 或浏览器实测。新增测试只代表已写入测试代码，不代表测试通过。
+- 没有修改或合并 main。

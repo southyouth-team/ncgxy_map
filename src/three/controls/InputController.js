@@ -268,13 +268,23 @@ export class InputController {
     return completed
   }
 
+  stopPhysicsCharacterMovement() {
+    if (this.physicsRuntime && this.physicsCharacterId) {
+      this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, { x: 0, y: 0, z: 0 })
+    }
+  }
+
   setMovementEnabled(enabled) {
     this.movementEnabled = Boolean(enabled)
-    if (!this.movementEnabled) this.keys.clear()
+    if (!this.movementEnabled) {
+      this.keys.clear()
+      this.stopPhysicsCharacterMovement()
+    }
   }
 
   setFreeCameraMovementEnabled(enabled) {
     this.freeCameraMovementEnabled = Boolean(enabled)
+    if (!this.freeCameraMovementEnabled) this.stopPhysicsCharacterMovement()
   }
 
   getPlayerSupportHit(player, { walking = false } = {}) {

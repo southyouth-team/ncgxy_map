@@ -1238,8 +1238,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
     sandboxTransform.setMode('translate')
     sandboxTransform.addEventListener('dragging-changed', event => {
-      // 拖拽 Gizmo 时只允许 TransformControls 接收指针输入，暂停相机旋转/平移/缩放。
-      cameraRig?.setOrbitInteractionEnabled?.(!event.value)
+      // 只要 Gizmo 仍挂载在对象上，精调模式就继续独占相机输入；完成调整并 detach 后才恢复镜头。
+      cameraRig?.setOrbitInteractionEnabled?.(!event.value && !sandboxTransform?.object)
       input?.setMovementEnabled(!event.value)
     })
     sandboxTransform.addEventListener('objectChange', () => {

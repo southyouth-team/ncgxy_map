@@ -3331,3 +3331,27 @@ export const environmentBindings = [
 - Backend CI：NestJS build 通过；单测 96 passed / 1 failed，仍为既有 `image-generation.procedural.spec.ts` 的配置/URL 解析失败。
 - 本轮新增楼梯几何统计测试通过；没有引入新的 CI 失败项。
 - 真实浏览器、Rapier 运行时的楼梯/坡面行走验收仍未执行。
+
+
+## 2026-11-10 — 楼梯/坡面 Rapier 三角网格注册（第三阶段）
+
+### 已落地
+
+1. `PhysicsRuntime.createStaticTrimesh()` 新增静态三角网格 Collider API，校验 XYZ 顶点、三角索引、范围和有限数值，再交给 Rapier `ColliderDesc.trimesh`。
+2. `collectModelTraversalTrimeshes()` 根据当前模型 Manifest 和实时几何分析结果，定位楼梯/坡面真实部件，提取其 Mesh 顶点，应用完整世界变换并合并三角索引。
+3. `refreshModelPhysicsRegistration()` 为通过几何绑定的楼梯/坡面创建 Rapier 静态 trimesh；当同一目标部件另有 Box Collider 声明时，trimesh 替代该部件 Box，避免重叠碰撞体。
+4. 每次物理注册刷新都会重新运行 `analyzeModelTraversability`，不使用模型编辑前的旧几何分析结果。
+5. 新增/扩展测试覆盖 Rapier trimesh 数据校验、楼梯 Mesh 世界坐标变换、楼梯 Box Collider 替代和碰撞注册。
+
+### CI 状态（提交 867bd4a7）
+
+- Frontend：`modelSpatialRuntime.test.js` 20/20、`PhysicsRuntime.test.js` 12/12、`modelTraversabilityAnalyzer.test.js` 4/4 通过；全量 40 个测试文件通过、5 个既有失败文件仍失败；Vite build 通过。
+- Backend：NestJS build 通过；96 passed / 1 failed，失败仍是既有 `image-generation.procedural.spec.ts` 的测试环境 URL 配置问题。
+- 以上是 GitHub Actions 测试结果，不是浏览器或真实 Rapier 场景验收。
+
+### 当前能力边界
+
+- 静态 trimesh 已进入物理注册链路，但尚未通过真实角色胶囊体从楼梯底部走到顶部的运行时验收。
+- 楼梯级高/踏深统计是几何证据，不证明每级踏步连通、没有缝隙或符合角色碰撞尺寸。
+- 坡面三角网格已注册，但坡度阈值、坡面连续性、边缘跌落和滑动行为尚未通过人物测试。
+- 门洞净空仍未实现自动几何提取；当前不能仅凭门框 Mesh 判断胶囊体能否穿过。

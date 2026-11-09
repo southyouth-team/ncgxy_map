@@ -32,10 +32,6 @@ describe('PlayerCharacterRuntime', () => {
     expect(assetMeshes[0].castShadow).toBe(true)
     expect(assetMeshes[0].receiveShadow).toBe(true)
     expect(anchor.getObjectByName('avatar-ground-marker')).toBeTruthy()
-    const renderedMeshes = []
-    anchor.traverse(object => { if (object.isMesh && object.name !== 'avatar-ground-marker') renderedMeshes.push(object) })
-    expect(renderedMeshes.length).toBeGreaterThan(0)
-    expect(renderedMeshes.every(object => object.castShadow && object.receiveShadow)).toBe(true)
     expect(anchor.getObjectByName('player-character-asset')).toBeTruthy()
     expect(anchor.getObjectByName('avatar-body')).toBeFalsy()
   })

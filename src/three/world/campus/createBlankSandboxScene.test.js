@@ -56,6 +56,51 @@ describe('createBlankSandboxScene expandable world', () => {
     expect(world.userData.getWorldState()).toEqual(initial)
   })
 
+
+  it('reclaims complete outer rows and columns without creating holes', () => {
+    const world = createBlankSandboxScene(THREE)
+    for (const direction of ['north', 'east', 'south', 'west']) {
+      expect(world.userData.expandWorld(direction)).toBe(true)
+    }
+
+    expect(world.userData.removeWorldEdge('north')).toBe(true)
+    expect(world.userData.removeWorldEdge('west')).toBe(true)
+    expect(world.userData.removeWorldEdge('south')).toBe(true)
+    expect(world.userData.removeWorldEdge('east')).toBe(true)
+
+    const state = world.userData.getWorldState()
+    expect(state.chunks).toHaveLength(1)
+    expect(state.chunks).toContainEqual({ x: 0, z: 0 })
+    expect(state.bounds).toEqual({ minX: -27, maxX: 27, minZ: -21, maxZ: 21 })
+    expect(world.userData.sampleBounds).toMatchObject({ width: 54, depth: 42, centerX: 0, centerZ: 0 })
+  })
+
+  it('rejects reclaiming the origin anchor or reducing either dimension below one chunk', () => {
+    const world = createBlankSandboxScene(THREE)
+    expect(world.userData.removeWorldEdge('north')).toBe(false)
+    expect(world.userData.removeWorldEdge('west')).toBe(false)
+
+    world.userData.expandWorld('north')
+    world.userData.expandWorld('south')
+    expect(world.userData.removeWorldEdge('north')).toBe(true)
+    expect(world.userData.removeWorldEdge('south')).toBe(true)
+    expect(world.userData.removeWorldEdge('north')).toBe(false)
+    expect(world.userData.getWorldState().chunks).toHaveLength(1)
+  })
+
+  it('persists a reclaimed world and restores the same compacted bounds', () => {
+    const source = createBlankSandboxScene(THREE)
+    source.userData.expandWorld('east', 2)
+    source.userData.expandWorld('south', 2)
+    source.userData.removeWorldEdge('east')
+    source.userData.removeWorldEdge('south')
+    const snapshot = source.userData.getWorldState()
+
+    const restored = createBlankSandboxScene(THREE)
+    expect(restored.userData.restoreWorldState(snapshot)).toBe(true)
+    expect(restored.userData.getWorldState()).toEqual(snapshot)
+  })
+
   it('rejects an expansion beyond the chunk budget atomically', () => {
     const world = createBlankSandboxScene(THREE)
     world.userData.expandWorld('east', 20)

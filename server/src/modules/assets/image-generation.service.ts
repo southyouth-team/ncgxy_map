@@ -541,7 +541,7 @@ export class ImageGenerationService {
                   'aspectRatio 为主体可见宽高比估计；verticalSections 从下到上描述各段高度占比和宽度变化；components 描述可见部件及其相对位置/尺寸；spatialRelations 明确悬空、环绕、穿插、间隔、接触和连接关系；supports 说明可见支撑路径；groundContact 只描述图片中实际接地的部位。',
                   '允许且必须如实记录图片中的悬空、架空、镂空、环绕、观景舱等设计，不得把悬空直接判为错误。区分“视觉上分离”与“结构上无支撑”，无法确认时写入 uncertainties。',
                   '所有比例均为基于单张图的估计值，标记 confidence；不得伪造精确尺寸。只返回 JSON。',
-                ].join('\\n'),
+                ].join('\n'),
               },
               {
                 role: 'user',

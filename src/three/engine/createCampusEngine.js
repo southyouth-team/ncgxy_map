@@ -398,8 +398,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const maxWorldZ = z * depth + depth / 2
     const blockers = []
     const player = getPlayerPosition()
-    if (player && player.x >= minWorldX && player.x <= maxWorldX
-      && player.z >= minWorldZ && player.z <= maxWorldZ) blockers.push('玩家当前位置')
+    const playerRadius = Number(collisionWorld?.radius) || 0.62
+    if (player && player.x + playerRadius > minWorldX && player.x - playerRadius < maxWorldX
+      && player.z + playerRadius > minWorldZ && player.z - playerRadius < maxWorldZ) blockers.push('玩家当前位置')
     for (const [id, model] of sandboxModels) {
       if (!model.visible) continue
       model.updateWorldMatrix(true, true)

@@ -1113,7 +1113,7 @@ onMounted(async () => {
     })
     await engine.init()
     if (disposed) return
-    engine.setMode('thirdPerson')
+    engine.setMode('overview')
     engine.setSandboxTransformMode(transformMode.value)
     const restored = await restoreSandbox()
     if (!restored) {

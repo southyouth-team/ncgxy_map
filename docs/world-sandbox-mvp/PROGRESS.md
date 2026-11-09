@@ -3436,3 +3436,9 @@ export const environmentBindings = [
 - 后端 NestJS build 通过；单测 96 passed / 1 failed，仍为既有 image-generation.procedural.spec.ts 中 shared-secret/chat/completions URL 配置错误。数据库迁移/API 集成/Schema 校验因此跳过。
 - 以上为 GitHub Actions 结果，不代表浏览器实测。没有在用户本地环境运行测试；Space 跳跃、R 复位、真实场景落地仍需浏览器验收。
 - 代码提交：cb34ad094941642ea97ab19e8e3c3fd6423ad96d；随后仅有计划/进度文档提交。main 未修改，未合并 PR。
+
+
+### 跳跃水平距离边界修正
+
+- 将空中水平速度上限从起跳第一帧开始执行，避免起跳帧使用普通移动速度造成总跳跃距离略微超出 Profile 上限。
+- 对应代码提交：ee3eff8bbb36230b4fb2697c375b89f28fedee75。该提交后的 GitHub Actions 正在执行；上一代码提交 cb34ad09 的跳跃/复位相关测试已通过。

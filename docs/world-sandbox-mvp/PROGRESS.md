@@ -3649,3 +3649,13 @@ export const environmentBindings = [
 2. 核对跳跃重力积分是否严格随 Rapier 固定步长推进，避免渲染帧率影响跳跃高度/时长。
 3. 明确水深参数语义后，设计并实现通用空间体/涉水 Runtime，不按模型类别硬编码。
 4. 浏览器回归后再决定是否继续相机插值或动画层优化。
+
+
+### 本轮 CI 与最终核验补充
+
+- 最新代码提交：`e7b74f844f032cb5b9f12044c02641b163287efa`；其后本记录文档提交会推进分支 HEAD。
+- Frontend CI（run `42688364917`）：**失败**。单测汇总为 532 passed / 7 failed（539 total）；前端 Build 步骤成功。失败项分别为 PlayerCharacterRuntime 视觉模型替换断言、InputController 陡坡支撑测试、modelCapabilityManifest 未知字段断言、modelTraversalTester 水域/桥梁路线测试、solarPosition 夜间方向断言、createBlankSandboxScene 玩家可见性断言和地块扩建边界断言。新增的键盘归一化/跳跃窗口用例未出现在失败列表；modelSpatialRuntime 新增门扇 OBB 用例也未出现在失败列表。由于整套单测未通过，本轮不能标记 Frontend CI 通过。
+- Backend CI（run `42688364801`）：查询时仍为 in_progress，尚无结论。
+- 最终核验时 main HEAD 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`，未修改 main。
+- 浏览器验收：本轮没有实际运行本地页面；用户此前的综合场景测试不能替代本轮键盘/门扇代码变更后的浏览器回归。
+- 当前水体深度仍未接入运行时。需要明确“深度”参数应驱动水面相对地面的高度（影响人物浸入高度），还是只改变固定水面下方的水体厚度；两者对应不同的空间模型，不能用一个参数混用。

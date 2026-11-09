@@ -322,7 +322,7 @@ describe('InputController player dimensions', () => {
 
 describe('InputController Rapier character movement', () => {
   function attachPhysics(controller, player) {
-    const calls = { created: [], moved: [], teleported: [], removed: [] }
+    const calls = { created: [], velocities: [], teleported: [], removed: [] }
     let feet = { x: player.x, y: player.y - controller.playerEyeHeight, z: player.z }
     const runtime = {
       removeBody: id => calls.removed.push(id),
@@ -331,16 +331,12 @@ describe('InputController Rapier character movement', () => {
         feet = { ...options.translation }
         return { id: options.id }
       },
-      moveKinematicCharacter: (id, desired) => {
-        calls.moved.push({ id, desired })
-        feet = { x: feet.x + desired.x, y: feet.y + desired.y, z: feet.z + desired.z }
-        return {
-          translation: { ...feet },
-          movement: { ...desired },
-          grounded: true,
-          collisions: 0,
-        }
-      },
+      setKinematicCharacterVelocity: (id, velocity) => calls.velocities.push({ id, velocity }),
+      getKinematicCharacterState: () => ({
+        translation: { ...feet },
+        grounded: true,
+        stepCount: 0,
+      }),
       setKinematicCharacterPosition: (id, position) => {
         calls.teleported.push({ id, position })
         feet = { ...position }
@@ -369,13 +365,13 @@ describe('InputController Rapier character movement', () => {
     const { calls } = attachPhysics(controller, cameraRig.player)
     controller.keys.add('w')
 
-    controller.update(0.1)
+    controller.update(0.05)
 
-    expect(calls.moved).toHaveLength(1)
-    expect(calls.moved[0].desired.x).toBeCloseTo(0)
-    expect(calls.moved[0].desired.y).toBeLessThan(0)
-    expect(calls.moved[0].desired.z).toBeCloseTo(0.9)
-    expect(cameraRig.player).toMatchObject({ x: 0, y: 1.64, z: 0.9 })
+    expect(calls.velocities).toHaveLength(1)
+    expect(calls.velocities[0].velocity.x).toBeCloseTo(0)
+    expect(calls.velocities[0].velocity.y).toBeCloseTo(-2)
+    expect(calls.velocities[0].velocity.z).toBeCloseTo(9)
+    expect(cameraRig.player).toMatchObject({ x: 0, y: 1.7, z: 0 })
     expect(collisionWorld.move).not.toHaveBeenCalled()
     expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
   })
@@ -385,12 +381,12 @@ describe('InputController Rapier character movement', () => {
     const { calls } = attachPhysics(controller, cameraRig.player)
     controller.setNavigationPath([{ x: 0, z: 0 }, { x: 0, z: 2 }])
 
-    controller.update(0.1)
+    controller.update(0.05)
 
-    expect(calls.moved).toHaveLength(1)
-    expect(calls.moved[0].desired.z).toBeCloseTo(0.55)
+    expect(calls.velocities).toHaveLength(1)
+    expect(calls.velocities[0].velocity.z).toBeCloseTo(5.5)
     expect(collisionWorld.move).not.toHaveBeenCalled()
-    expect(cameraRig.player.z).toBeCloseTo(0.55)
+    expect(cameraRig.player.z).toBeCloseTo(0)
   })
 
   it('synchronizes teleports and dimension changes with the Rapier capsule', () => {

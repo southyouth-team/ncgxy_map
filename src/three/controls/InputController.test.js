@@ -318,3 +318,93 @@ describe('InputController player dimensions', () => {
     expect(nextWorld.setRadius).toHaveBeenCalledWith(0.28)
   })
 })
+
+
+describe('InputController Rapier character movement', () => {
+  function attachPhysics(controller, player) {
+    const calls = { created: [], moved: [], teleported: [], removed: [] }
+    let feet = { x: player.x, y: player.y - controller.playerEyeHeight, z: player.z }
+    const runtime = {
+      removeBody: id => calls.removed.push(id),
+      createKinematicCharacter: options => {
+        calls.created.push(options)
+        feet = { ...options.translation }
+        return { id: options.id }
+      },
+      moveKinematicCharacter: (id, desired) => {
+        calls.moved.push({ id, desired })
+        feet = { x: feet.x + desired.x, y: feet.y + desired.y, z: feet.z + desired.z }
+        return {
+          translation: { ...feet },
+          movement: { ...desired },
+          grounded: true,
+          collisions: 0,
+        }
+      },
+      setKinematicCharacterPosition: (id, position) => {
+        calls.teleported.push({ id, position })
+        feet = { ...position }
+        return true
+      },
+    }
+    controller.setPhysicsRuntime(runtime)
+    return { runtime, calls }
+  }
+
+  it('creates a capsule character at the player feet using the configured dimensions', () => {
+    const { controller, cameraRig } = createController()
+    const { calls } = attachPhysics(controller, cameraRig.player)
+    expect(calls.created).toHaveLength(1)
+    expect(calls.created[0]).toMatchObject({
+      id: 'sandbox:player',
+      ownerId: 'sandbox:player',
+      translation: { x: 0, y: 0, z: 0 },
+      radius: 0.55,
+      halfHeight: 0.3,
+    })
+  })
+
+  it('routes manual movement and gravity through the Rapier character controller', () => {
+    const { controller, cameraRig, collisionWorld } = createController()
+    const { calls } = attachPhysics(controller, cameraRig.player)
+    controller.keys.add('w')
+
+    controller.update(0.1)
+
+    expect(calls.moved).toHaveLength(1)
+    expect(calls.moved[0].desired.x).toBeCloseTo(0)
+    expect(calls.moved[0].desired.y).toBeLessThan(0)
+    expect(calls.moved[0].desired.z).toBeCloseTo(0.9)
+    expect(cameraRig.player).toMatchObject({ x: 0, y: 1.7, z: 0.9 })
+    expect(collisionWorld.move).not.toHaveBeenCalled()
+    expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
+  })
+
+  it('moves navigation paths through Rapier instead of the legacy XZ solver', () => {
+    const { controller, cameraRig, collisionWorld } = createController()
+    const { calls } = attachPhysics(controller, cameraRig.player)
+    controller.setNavigationPath([{ x: 0, z: 0 }, { x: 0, z: 2 }])
+
+    controller.update(0.1)
+
+    expect(calls.moved).toHaveLength(1)
+    expect(calls.moved[0].desired.z).toBeCloseTo(0.55)
+    expect(collisionWorld.move).not.toHaveBeenCalled()
+    expect(cameraRig.player.z).toBeCloseTo(0.55)
+  })
+
+  it('synchronizes teleports and dimension changes with the Rapier capsule', () => {
+    const { controller, cameraRig } = createController()
+    const { calls } = attachPhysics(controller, cameraRig.player)
+    controller.teleportPlayer({ x: 4, y: 3.2, z: 6 })
+    expect(calls.teleported.at(-1)).toEqual({
+      id: 'sandbox:player',
+      position: { x: 4, y: 1.5, z: 6 },
+    })
+
+    controller.setPlayerDimensions({ eyeHeight: 1.9, colliderRadius: 0.32 })
+    expect(calls.created).toHaveLength(2)
+    expect(calls.created.at(-1)).toMatchObject({ radius: 0.32, halfHeight: 0.63 })
+    expect(cameraRig.player.y).toBeCloseTo(3.4)
+  })
+})

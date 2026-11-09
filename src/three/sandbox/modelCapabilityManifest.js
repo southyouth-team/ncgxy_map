@@ -2,6 +2,55 @@
  * Normalize the versioned, data-only model capability contract while retaining
  * unknown capability sections for forward compatibility.
  */
+const TRAVERSABILITY_COLLECTIONS = ['stairs', 'ramps', 'passages', 'connections']
+
+/**
+ * Normalize the extensible, data-only traversal declarations. This does not
+ * infer geometry or claim that a declaration is already executable physics.
+ */
+export function normalizeSpatialTraversability(input) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  return {
+    ...source,
+    ...Object.fromEntries(TRAVERSABILITY_COLLECTIONS.map(key => [
+      key,
+      Array.isArray(source[key]) ? source[key] : [],
+    ])),
+  }
+}
+
+/**
+ * Validate the minimum identity/relationship contract before geometry binding.
+ * Unknown fields remain untouched for forward-compatible model capabilities.
+ */
+export function validateSpatialTraversability(input) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const issues = []
+  for (const key of TRAVERSABILITY_COLLECTIONS) {
+    if (source[key] != null && !Array.isArray(source[key])) {
+      issues.push({ code: 'traversability.collection.invalid', path: key })
+      continue
+    }
+    for (const [index, item] of (Array.isArray(source[key]) ? source[key] : []).entries()) {
+      const path = `${key}[${index}]`
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        issues.push({ code: 'traversability.record.invalid', path })
+        continue
+      }
+      if (typeof item.id !== 'string' || !item.id.trim()) {
+        issues.push({ code: 'traversability.id.required', path: `${path}.id` })
+      }
+      if (key !== 'connections' && (typeof item.targetPartId !== 'string' || !item.targetPartId.trim())) {
+        issues.push({ code: 'traversability.targetPartId.required', path: `${path}.targetPartId` })
+      }
+      if (key === 'connections' && (!item.from || !item.to)) {
+        issues.push({ code: 'traversability.connection.endpoints.required', path })
+      }
+    }
+  }
+  return { valid: issues.length === 0, issues }
+}
+
 export function normalizeModelCapabilityManifest(input, legacyParameters = [], legacyEnvironmentBindings = []) {
   const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
   const sourceCapabilities = source.capabilities && typeof source.capabilities === 'object' && !Array.isArray(source.capabilities)

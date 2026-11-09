@@ -522,6 +522,25 @@ describe('refreshModelPhysicsRegistration', () => {
     return root
   }
 
+  it('attaches a collision completeness report before registering model physics', () => {
+    const model = createPhysicsModel()
+    const calls = []
+    const runtime = {
+      removeOwner: id => calls.push({ type: 'remove', id }),
+      createStaticBox: options => calls.push({ type: 'box', options }),
+    }
+    refreshModelPhysicsRegistration(THREE, model, runtime)
+    expect(model.userData.proceduralModelCollisionAnalysis).toMatchObject({
+      status: 'needs-review',
+      canRegisterDeclaredColliders: true,
+      summary: { blockingIssueCount: 0 },
+    })
+    expect(model.userData.proceduralModelCollisionAnalysis.issues)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'collision.policy.unclassified', severity: 'warning' }),
+      ]))
+  })
+
   it('registers full-height Rapier boxes, including elevated colliders', () => {
     const model = createPhysicsModel()
     model.position.set(10, 0, 5)

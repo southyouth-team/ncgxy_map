@@ -91,12 +91,12 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
       }
     }
     const coordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
-    const xs = coordinates.map(item => item.x)
-    const zs = coordinates.map(item => item.z)
-    bounds.minX = Math.min(...xs) * chunkWidth - chunkWidth / 2
-    bounds.maxX = Math.max(...xs) * chunkWidth + chunkWidth / 2
-    bounds.minZ = Math.min(...zs) * chunkDepth - chunkDepth / 2
-    bounds.maxZ = Math.max(...zs) * chunkDepth + chunkDepth / 2
+    const restoredXs = coordinates.map(item => item.x)
+    const restoredZs = coordinates.map(item => item.z)
+    bounds.minX = Math.min(...restoredXs) * chunkWidth - chunkWidth / 2
+    bounds.maxX = Math.max(...restoredXs) * chunkWidth + chunkWidth / 2
+    bounds.minZ = Math.min(...restoredZs) * chunkDepth - chunkDepth / 2
+    bounds.maxZ = Math.max(...restoredZs) * chunkDepth + chunkDepth / 2
     root.userData.sampleBounds.width = bounds.maxX - bounds.minX
     root.userData.sampleBounds.depth = bounds.maxZ - bounds.minZ
     root.userData.sampleBounds.centerX = (bounds.minX + bounds.maxX) / 2

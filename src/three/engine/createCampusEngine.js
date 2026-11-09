@@ -470,6 +470,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       originalRotation: model.rotation.clone(),
       originalScale: model.scale.clone(),
       originalVisible: model.visible,
+      originalCameraMode: cameraRig?.mode || 'thirdPerson',
+      originalInputMode: input?.mode || cameraRig?.mode || 'thirdPerson',
       footprintWidth,
       footprintDepth,
       stage: 'point',
@@ -517,7 +519,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const world = getSandboxPlacementWorldBounds()
     cameraRig?.focusBounds(world.width, world.depth, world.centerX, world.centerZ)
     configureSandboxPlacementOrbit(cameraRig?.overviewSpan || Math.max(world.width, world.depth), world)
-    emitSandboxPlacementState({ instruction: '先从沙盒全貌选择目标区域' })
+    emitSandboxPlacementState({ instruction: '移动鼠标预览模型和最大水平占地范围，点击地面锁定候选位置' })
     requestFrame()
     return true
   }
@@ -570,6 +572,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
   }
 
+  function restoreSandboxPlacementCamera(state) {
+    const cameraMode = state?.originalCameraMode || 'thirdPerson'
+    const inputMode = state?.originalInputMode || cameraMode
+    if (cameraRig?.mode !== cameraMode) cameraRig?.setMode(cameraMode)
+    input?.setMode(inputMode)
+  }
+
   function unlockSandboxPlacementCandidate() {
     const state = sandboxPlacementState
     if (!state || !state.candidateLocked) return false
@@ -595,6 +604,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       addSandboxModel(model, { name: model.name, position: target })
     }
     input?.setMovementEnabled(true)
+    restoreSandboxPlacementCamera(state)
     invalidateShadowMap()
     requestFrame()
     callbacks.onSandboxPlacementChange?.({ active: false, confirmed: true, id: existing ? id : model.userData.sandboxModelId })
@@ -621,6 +631,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       disposeObjectGroup(model)
     }
     input?.setMovementEnabled(true)
+    restoreSandboxPlacementCamera(state)
     invalidateShadowMap()
     requestFrame()
     callbacks.onSandboxPlacementChange?.({ active: false, cancelled: true, existing })

@@ -111,6 +111,22 @@ export class ImageGenerationController {
     );
   }
 
+  @Post('repair-procedural-collisions')
+  @ApiOperation({ summary: '根据运行时碰撞诊断定向补齐模型碰撞声明' })
+  repairProceduralCollisions(
+    @Body('source') source: string,
+    @Body('parameters') parameters: unknown,
+    @Body('parameterValues') parameterValues: unknown,
+    @Body('parts') parts: unknown,
+    @Body('modelCapabilityManifest') modelCapabilityManifest: unknown,
+    @Body('collisionReport') collisionReport: unknown,
+    @Body('objectType') objectType: string,
+  ) {
+    return this.service.repairProceduralModelCollisions(
+      source, parameters, parameterValues, parts, modelCapabilityManifest, collisionReport, objectType,
+    );
+  }
+
   @Post('modify-procedural-object')
   @ApiOperation({ summary: '通过对话修改 Three.js 程序化模型、动态参数和部件结构' })
   modifyProceduralObject(

@@ -150,6 +150,59 @@ export class PhysicsRuntime {
     }
   }
 
+  createStaticTrimesh(options = {}) {
+    this.#assertActive()
+    const id = String(options.id || '')
+    if (!id) throw new TypeError('Static trimesh collider requires a stable id')
+    if (this.bodies.has(id)) throw new Error('Physics body id already exists: ' + id)
+
+    const vertices = options.vertices instanceof Float32Array
+      ? options.vertices
+      : new Float32Array(options.vertices || [])
+    const indices = options.indices instanceof Uint32Array
+      ? options.indices
+      : new Uint32Array(options.indices || [])
+    if (vertices.length < 9 || vertices.length % 3 !== 0
+      || indices.length < 3 || indices.length % 3 !== 0
+      || !Array.from(vertices).every(Number.isFinite)
+      || !Array.from(indices).every(index => Number.isInteger(index) && index >= 0 && index < vertices.length / 3)) {
+      throw new TypeError('Static trimesh requires finite xyz vertices and valid triangle indices')
+    }
+    if (typeof this.RAPIER.ColliderDesc.trimesh !== 'function') {
+      throw new TypeError('Rapier runtime does not support static trimesh colliders')
+    }
+
+    const translation = options.translation || { x: 0, y: 0, z: 0 }
+    const position = [translation.x, translation.y, translation.z].map(Number)
+    if (!position.every(Number.isFinite)) throw new TypeError('Static trimesh translation must be finite')
+    const bodyDesc = this.RAPIER.RigidBodyDesc.fixed()
+      .setTranslation(position[0], position[1], position[2])
+    const colliderDesc = this.RAPIER.ColliderDesc.trimesh(vertices, indices)
+    if (Number.isFinite(Number(options.friction))) colliderDesc.setFriction?.(Number(options.friction))
+    if (Number.isFinite(Number(options.restitution))) colliderDesc.setRestitution?.(Number(options.restitution))
+    if (options.sensor === true) colliderDesc.setSensor?.(true)
+    if (options.collisionGroups != null) colliderDesc.setCollisionGroups?.(options.collisionGroups)
+
+    const body = this.world.createRigidBody(bodyDesc)
+    try {
+      const collider = this.world.createCollider(colliderDesc, body)
+      const entry = {
+        id,
+        ownerId: options.ownerId == null ? null : String(options.ownerId),
+        body,
+        collider,
+        kind: 'static-trimesh',
+        vertexCount: vertices.length / 3,
+        triangleCount: indices.length / 3,
+      }
+      this.bodies.set(id, entry)
+      return entry
+    } catch (error) {
+      this.world.removeRigidBody(body)
+      throw error
+    }
+  }
+
   createKinematicCharacter(options = {}) {
     this.#assertActive()
     const id = String(options.id || '')

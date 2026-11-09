@@ -127,9 +127,9 @@ Three.js Object3D 是渲染/运行时载体，不是唯一权威世界数据。�
 #### 3.8.1 人物通行能力统一配置与模型声明协议
 
 - 沙盒人物的胶囊尺寸、最大跨阶高度、最大可爬坡角、最小滑落角、自动跨阶最小宽度、贴地吸附距离和碰撞偏移统一由 `CharacterTraversalProfile` 提供；InputController 不再独立维护一套数值，PhysicsRuntime 创建 Rapier CharacterController 时消费同一份 profile。
-- profile 默认值第一阶段沿用当前沙盒已存在的移动参数，避免架构收敛时无意改变玩家手感：高度 1.7、半径 0.55、最大跨阶高度 0.45、最大爬坡角 50°、最小滑落角 30°、自动跨阶最小宽度 0.275、贴地吸附距离 0.25、碰撞偏移 0.01（世界单位约按米解释）。这些是当前运行参数，不代表最终产品人体工学验收值。
+- profile 默认值第一阶段沿用当前沙盒已存在的移动参数，避免架构收敛时无意改变玩家手感：高度 1.7、半径 0.55、最大跨阶高度 0.45、跳跃高度 1.1、最大跳跃水平距离 3.0、最大爬坡角 50°、最小滑落角 30°、自动跨阶最小宽度 0.275、贴地吸附距离 0.25、碰撞偏移 0.01（世界单位约按米解释）。这些是当前运行参数，不代表最终产品人体工学验收值。
 - 玩家角色尺寸变化必须通过同一 profile 重新计算胶囊体高度/半高；角色尺寸、坡度和跨阶参数不能由 InputController 与 Rapier 分别设置。
-- 模型 Manifest 在 `capabilities.spatial.traversability` 下增加开放的数据声明集合：`stairs`、`ramps`、`passages`、`connections`。楼梯/坡面/通道记录使用稳定 `id` 和真实 `targetPartId`；空间连接记录稳定 `id` 与 `from/to` 端点。未知字段必须保留，不建立模型类别白名单。
+- 模型 Manifest 在 `capabilities.spatial.traversability` 下增加开放的数据声明集合：`stairs`、`ramps`、`jumps`、`passages`、`connections`。楼梯/坡面/跳跃/通道记录使用稳定 `id` 和真实 `targetPartId`；空间连接记录稳定 `id` 与 `from/to` 端点。未知字段必须保留，不建立模型类别白名单。
 - Manifest 规范化只负责数据结构；基础校验负责记录 ID、部件引用字段和连接端点完整性。几何真实性、坡度/踏步测量、碰撞生成、人物可达性测试仍由后续 Analyzer/Physics Runtime 阶段负责。
 - 第一阶段几何分析器 `analyzeModelTraversability` 在 Worker 中执行：将楼梯/坡面/通道声明绑定到真实 `componentId`，拒绝缺失或重复 ID，统计实际 Mesh 数量、世界包围范围、朝上三角面数量和坡面三角面坡度证据。
 - 楼梯分析进一步按世界空间高度聚类朝上三角面，提取可观察的踏步高度层数量、平均级高和沿楼梯主运行方向的平均踏面深度；可与 Manifest 声明做偏差诊断。该结果仍是几何统计，不代表踏步连通或人物可走。

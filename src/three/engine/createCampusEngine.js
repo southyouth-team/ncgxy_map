@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
+import { ShadowSystem } from './ShadowSystem.js'
 import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { createBlankSandboxScene } from '../world/campus/createBlankSandboxScene.js'
@@ -61,6 +62,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let campus
   let lastPlayerX = 0
   let lastPlayerZ = 24
+  let lastPlayerY = 0
+  let lastPlayerVisibility = null
+  let shadowSystem = null
   let cameraRig
   let input
   let collisionWorld
@@ -1282,8 +1286,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   // 静态校园保留阴影贴图；只有场景几何变化时才重算，不随相机交互重复执行 shadow pass。
   function invalidateShadowMap() {
-    if (!renderer || !renderer.shadowMap.enabled) return
+    if (shadowSystem) return shadowSystem.invalidateStatic()
+    if (!renderer || !renderer.shadowMap.enabled) return false
     renderer.shadowMap.needsUpdate = true
+    return true
+  }
+
+  function invalidateDynamicShadowMap() {
+    if (shadowSystem) return shadowSystem.invalidateDynamic()
+    if (!renderer || !renderer.shadowMap.enabled) return false
+    renderer.shadowMap.needsUpdate = true
+    return true
   }
 
   function ensureRainEffect() {
@@ -1386,6 +1399,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.shadowMap.enabled = true
     renderer.shadowMap.autoUpdate = false
     if (directionalLight) directionalLight.castShadow = true
+    shadowSystem?.configure({ enabled: true, type: THREE.PCFSoftShadowMap })
     invalidateShadowMap()
   }
 
@@ -1406,6 +1420,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.shadowMap.enabled = true
     renderer.shadowMap.autoUpdate = false
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    shadowSystem = new ShadowSystem(renderer)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     // 保留像素美术标准色板，避免电影色调映射改变颜色。
     renderer.toneMapping = THREE.NoToneMapping
@@ -1602,7 +1617,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         })
       }
     })
-    sandboxTransform.addEventListener('change', requestFrame)
+    sandboxTransform.addEventListener('change', () => {
+      invalidateDynamicShadowMap()
+      requestFrame()
+    })
     scene.add(sandboxTransform.getHelper())
     renderer.domElement.addEventListener('pointerdown', onSandboxPlacementPointerDown, true)
     renderer.domElement.addEventListener('pointermove', onSandboxPlacementPointerMove, true)
@@ -2659,7 +2677,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       playerSprite.position.set(cameraRig.player.x, Math.max(0, cameraRig.player.y - 1.7), cameraRig.player.z)
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
+      const dy = playerSprite.position.y - lastPlayerY
       const moving = dx * dx + dz * dz > 0.000001
+      const verticalChanged = Math.abs(dy) > 0.0001
+      const visibilityChanged = lastPlayerVisibility !== playerSprite.visible
+      if (((moving || verticalChanged) && playerSprite.visible) || visibilityChanged) invalidateDynamicShadowMap()
+      lastPlayerVisibility = playerSprite.visible
+      lastPlayerY = playerSprite.position.y
       if (typeof playerSprite.userData.updateAnimation === 'function') {
         playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, dx, dz)
       } else {
@@ -2678,6 +2702,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         target.object.rotation.x = target.baseX + sway
         target.object.rotation.z = target.baseZ + sway * 0.62
       }
+      if (wind > 0) invalidateDynamicShadowMap()
     }
     // 远景地面跟随相机的 X/Z 坐标，避免相机平移或低角度观察时看到有限平面的边缘。
     if (activeHorizonGround && cameraRig?.camera) {
@@ -3315,6 +3340,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()
     cameraRig?.dispose()
+    shadowSystem?.dispose()
+    shadowSystem = null
     scene?.traverse((object) => {
       object.geometry?.dispose?.()
       if (Array.isArray(object.material)) object.material.forEach(disposeMaterial)

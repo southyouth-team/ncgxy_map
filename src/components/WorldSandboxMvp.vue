@@ -5,6 +5,7 @@ import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
 import { createCapabilityControlDocument } from '../three/sandbox/capabilityControl.js'
 import { resolveProceduralModelParts } from '../three/sandbox/modelCapabilityManifest.js'
+import { analyzeModelCollisionCompleteness } from '../three/sandbox/modelCollisionAnalyzer.js'
 import ProceduralModelEditor from './ProceduralModelEditor.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
@@ -437,6 +438,67 @@ async function runModelVisualQualityControl(originalPrompt) {
   }
 }
 
+async function runModelCollisionQualityControl() {
+  for (let round = 0; round <= 1; round += 1) {
+    const current = editingModel.value
+    if (!current) throw new Error('碰撞检查时模型实例已丢失')
+    const report = analyzeModelCollisionCompleteness(current)
+    current.userData.proceduralModelCollisionAnalysis = report
+    if (report.status === 'complete') {
+      updateGenerationProgress({
+        stage: 'collision-inspection',
+        label: '模型碰撞完整性检查通过',
+        detail: `检查 ${report.summary.componentCount} 个部件，绑定 ${report.summary.boundColliderCount} 个有效碰撞声明`,
+        status: 'done',
+      })
+      return true
+    }
+    updateGenerationProgress({
+      stage: round === 0 ? 'collision-inspection' : 'collision-reinspection',
+      label: round === 0 ? '检查模型碰撞完整性' : '复检模型碰撞声明',
+      detail: `发现 ${report.summary.blockingIssueCount} 项阻断问题、${report.summary.reviewIssueCount} 项待复核问题`,
+      status: 'active',
+    })
+    if (round === 1) {
+      updateGenerationProgress({
+        stage: 'collision-inspection',
+        label: '碰撞完整性未通过',
+        detail: '自动修复后仍存在未解决的碰撞声明问题；模型暂不允许加入沙盒',
+        status: 'failed',
+      })
+      return false
+    }
+    const response = await fetch(API_BASE + '/assets/ai-image/repair-procedural-collisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({
+        source: current.userData.proceduralModelSource,
+        parameters: current.userData.proceduralModelParameters || [],
+        parameterValues: current.userData.proceduralModelParameterValues || {},
+        parts: current.userData.proceduralModelParts || [],
+        modelCapabilityManifest: current.userData.proceduralModelCapabilityManifest || null,
+        collisionReport: report,
+        objectType: current.userData.proceduralModelConfig?.objectType || '独立 3D 模型',
+      }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || 'AI 碰撞声明自动补齐失败：HTTP ' + response.status)
+    const result = payload.data || payload.result || payload
+    if (!result?.generatedCode) throw new Error('AI 碰撞修复没有返回完整模型源码')
+    await replaceEditedModel(
+      result.generatedCode,
+      current.userData.proceduralModelParameterValues || {},
+      result.parameters || result.modelParameters || current.userData.proceduralModelParameters || [],
+      result.parts || result.modelParts || current.userData.proceduralModelParts || [],
+      'AI 已根据碰撞诊断补齐模型声明',
+      false,
+      result.environmentBindings,
+      result.modelCapabilityManifest,
+    )
+  }
+  return false
+}
+
 async function generateAiModel() {
   const prompt = aiPrompt.value.trim()
   if ((!prompt && !referenceImageDataUrl.value) || aiBusy.value) return
@@ -553,6 +615,8 @@ async function generateAiModel() {
       ? model.userData.proceduralModelCapabilityManifest
       : { version: 1, parameters: model.userData.proceduralModelParameters, capabilities: {} }
     model.name = model.userData.assetName || result.objectType || 'AI 程序化模型'
+    const collisionReady = await runModelCollisionQualityControl()
+    if (!collisionReady) throw new Error('模型碰撞完整性检查未通过，已阻止模型进入沙盒；请继续修复未解决部件。')
     await runModelVisualQualityControl(prompt)
     generationProgress.value = generationProgress.value.map(item => item.stage === 'visual-inspection' || item.stage === 'visual-repair'
       ? item
@@ -725,6 +789,14 @@ function closeModelEditor() {
 function saveEditorModel() {
   const model = editingModel.value
   if (!model) return
+  if (isDraftModel.value) {
+    const collisionReport = analyzeModelCollisionCompleteness(model)
+    model.userData.proceduralModelCollisionAnalysis = collisionReport
+    if (collisionReport.status !== 'complete') {
+      message.value = '碰撞完整性检查未通过，模型不能加入沙盒。请先补齐 required 部件的 Collider，并明确所有部件的 collisionPolicy。'
+      return
+    }
+  }
   const wasDraft = isDraftModel.value
   if (wasDraft) {
     const name = model.userData?.assetName || model.name || 'AI 程序化模型'

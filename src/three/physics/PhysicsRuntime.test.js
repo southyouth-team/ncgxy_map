@@ -189,6 +189,30 @@ describe('PhysicsRuntime', () => {
     expect(calls.removed).toEqual([entry.body])
   })
 
+
+
+  it('consumes character velocity only on fixed physics steps', () => {
+    const { RAPIER } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    runtime.createKinematicCharacter({
+      id: 'sandbox:player',
+      translation: { x: 0, y: 0, z: 0 },
+    })
+    runtime.setKinematicCharacterVelocity('sandbox:player', { x: 6, y: -2, z: 3 })
+    expect(runtime.getKinematicCharacterState('sandbox:player')).toMatchObject({
+      translation: { x: 0, y: 0, z: 0 },
+      stepCount: 0,
+    })
+    runtime.step(1 / 120)
+    expect(runtime.getKinematicCharacterState('sandbox:player').stepCount).toBe(0)
+    runtime.step(1 / 120)
+    expect(runtime.getKinematicCharacterState('sandbox:player')).toMatchObject({
+      translation: { x: 0.1, y: -1 / 30, z: 0.05 },
+      grounded: true,
+      stepCount: 1,
+    })
+  })
+
   it('disposes the world once and rejects subsequent simulation', () => {
     const { RAPIER, calls } = createRapierMock()
     const runtime = new PhysicsRuntime(RAPIER)

@@ -129,30 +129,39 @@ describe('InputController model support surface grounding', () => {
     }),
   })
 
-  function groundedController(hits) {
+  function groundedController(hits, playerY = 1.7) {
     const THREE = { Vector3, Raycaster, Matrix3 }
-    const rig = { player: { x: 2, y: 1.7, z: 3 } }
+    const rig = { player: { x: 2, y: playerY, z: 3 } }
     const collision = { supportSurfaces: [{ supportsStanding: true, meshes: [{ matrixWorld: {} }] }] }
     const controller = new InputController(THREE, {}, rig, null, collision)
     controller.groundRaycaster.hits = hits
     return { controller, rig }
   }
 
-  it('sets player eye height from the nearest declared mesh top', () => {
+  it('probes from above the player so elevated support meshes are detectable', () => {
     const { controller, rig } = groundedController([{
       face: { normal: normal(1) }, object: { matrixWorld: {} },
       point: { x: 2, y: 2.4, z: 3 },
-    }])
+    }], 4.1)
     expect(controller.resolvePlayerGroundHeight(rig.player)).toBeCloseTo(4.1)
-    expect(controller.groundRaycaster.far).toBe(60)
+    expect(controller.groundRayOrigin.y).toBeCloseTo(64.1)
+    expect(controller.groundRaycaster.far).toBe(120)
+  })
+
+  it('ignores an unreachable upper floor and selects the lower reachable ground', () => {
+    const { controller, rig } = groundedController([
+      { face: { normal: normal(1) }, object: { matrixWorld: {} }, point: { x: 2, y: 3, z: 3 } },
+      { face: { normal: normal(1) }, object: { matrixWorld: {} }, point: { x: 2, y: 0.3, z: 3 } },
+    ])
+    expect(controller.getPlayerSupportHit(rig.player)?.point.y).toBeCloseTo(0.3)
   })
 
   it('ignores surfaces steeper than the configured walkable slope', () => {
     const { controller, rig } = groundedController([{
       face: { normal: normal(0.2) }, object: { matrixWorld: {} },
       point: { x: 2, y: 2.4, z: 3 },
-    }])
-    expect(controller.resolvePlayerGroundHeight(rig.player)).toBe(1.7)
+    }], 4.1)
+    expect(controller.resolvePlayerGroundHeight(rig.player)).toBe(4.1)
   })
 
   it('keeps the default ground height when no declared mesh is under the player', () => {

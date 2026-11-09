@@ -186,6 +186,50 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
   root.userData.sampleBounds = { width: chunkWidth, depth: chunkDepth, centerX: 0, centerZ: 0 }
   root.userData.walkableBounds = bounds
   root.userData.playerSpawn = { x: 0, z: Math.min(chunkDepth / 2 - 3, 14) }
+
+  // Blank sandbox still needs a visible controllable avatar; the camera rig alone is not a rendered character.
+  const playerAvatar = new THREE.Group()
+  playerAvatar.name = 'PixelExplorerSprite'
+  const avatarMaterials = {
+    body: new THREE.MeshStandardMaterial({ color: '#2878c7', roughness: 0.78 }),
+    trim: new THREE.MeshStandardMaterial({ color: '#f0c45a', roughness: 0.72 }),
+    skin: new THREE.MeshStandardMaterial({ color: '#e7b58e', roughness: 0.86 }),
+    dark: new THREE.MeshStandardMaterial({ color: '#263442', roughness: 0.9 }),
+    marker: new THREE.MeshBasicMaterial({ color: '#f5d76e', transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
+  }
+  const addAvatarPart = (name, geometry, material, position) => {
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.name = name
+    mesh.position.set(...position)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    playerAvatar.add(mesh)
+    return mesh
+  }
+  addAvatarPart('avatar-body', new THREE.CylinderGeometry(0.27, 0.32, 0.92, 10), avatarMaterials.body, [0, 1.28, 0])
+  addAvatarPart('avatar-head', new THREE.SphereGeometry(0.29, 12, 10), avatarMaterials.skin, [0, 2.02, 0])
+  addAvatarPart('avatar-hair', new THREE.SphereGeometry(0.3, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.48), avatarMaterials.dark, [0, 2.13, -0.015])
+  addAvatarPart('avatar-belt', new THREE.CylinderGeometry(0.31, 0.31, 0.12, 10), avatarMaterials.trim, [0, 0.88, 0])
+  const leftLeg = addAvatarPart('avatar-left-leg', new THREE.CylinderGeometry(0.105, 0.12, 0.62, 8), avatarMaterials.dark, [-0.14, 0.39, 0])
+  const rightLeg = addAvatarPart('avatar-right-leg', new THREE.CylinderGeometry(0.105, 0.12, 0.62, 8), avatarMaterials.dark, [0.14, 0.39, 0])
+  const leftArm = addAvatarPart('avatar-left-arm', new THREE.CylinderGeometry(0.085, 0.1, 0.68, 8), avatarMaterials.trim, [-0.34, 1.35, 0])
+  const rightArm = addAvatarPart('avatar-right-arm', new THREE.CylinderGeometry(0.085, 0.1, 0.68, 8), avatarMaterials.trim, [0.34, 1.35, 0])
+  const playerMarker = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.58, 32), avatarMaterials.marker)
+  playerMarker.name = 'avatar-ground-marker'
+  playerMarker.rotation.x = -Math.PI / 2
+  playerMarker.position.y = 0.035
+  playerMarker.receiveShadow = true
+  playerAvatar.add(playerMarker)
+  playerAvatar.userData.updateAnimation = (moving, time) => {
+    const stride = moving ? Math.sin(time * 10) * 0.48 : 0
+    leftLeg.rotation.x = stride
+    rightLeg.rotation.x = -stride
+    leftArm.rotation.x = -stride * 0.7
+    rightArm.rotation.x = stride * 0.7
+    playerAvatar.position.y = moving ? Math.abs(Math.sin(time * 10)) * 0.045 : 0
+  }
+  playerAvatar.position.set(root.userData.playerSpawn.x, 0, root.userData.playerSpawn.z)
+  root.add(playerAvatar)
   root.userData.worldChunks = [{ x: 0, z: 0 }]
   root.userData.worldChunkSize = { width: chunkWidth, depth: chunkDepth }
   root.userData.expandWorld = expandWorld

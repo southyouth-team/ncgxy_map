@@ -17,6 +17,25 @@ function createController() {
   return { controller, cameraRig, collisionWorld }
 }
 
+describe('InputController movement intent', () => {
+  it('keeps movement intent active while a directional key is held', () => {
+    const { controller } = createController()
+    expect(controller.hasMovementInput()).toBe(false)
+    controller.keys.add('w')
+    expect(controller.hasMovementInput()).toBe(true)
+    controller.keys.delete('w')
+    expect(controller.hasMovementInput()).toBe(false)
+  })
+
+  it('treats active navigation as movement intent and respects disabled movement', () => {
+    const { controller } = createController()
+    controller.setNavigationPath([{ x: 0, z: 0 }, { x: 0, z: 2 }])
+    expect(controller.hasMovementInput()).toBe(true)
+    controller.setMovementEnabled(false)
+    expect(controller.hasMovementInput()).toBe(false)
+  })
+})
+
 describe('InputController navigation path', () => {
   it('moves along a supplied path using the collision world', () => {
     const { controller, cameraRig, collisionWorld } = createController()

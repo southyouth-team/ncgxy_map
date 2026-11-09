@@ -48,6 +48,7 @@ describe('analyzeModelCollisionCompleteness', () => {
     root.add(makePart('duplicate'), makePart('duplicate'), makePart('bad-box'))
     root.userData.proceduralModelCapabilityManifest = {
       capabilities: { spatial: { colliders: [
+        { id: 'duplicate-target', targetPartId: 'duplicate', shape: 'mesh' },
         { id: 'missing', targetPartId: 'absent', shape: 'mesh' },
         { id: 'unknown', targetPartId: 'bad-box', shape: 'convex' },
         { id: 'bad-size', targetPartId: 'bad-box', shape: 'box', size: { x: 1, y: 0, z: 1 } },

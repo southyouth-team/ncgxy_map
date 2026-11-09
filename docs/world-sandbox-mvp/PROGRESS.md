@@ -3096,3 +3096,47 @@ export const environmentBindings = [
 - 已通过 GitHub 远程回读确认 package.json、PhysicsRuntime.js、PhysicsRuntime.test.js 写入。
 - 未在本地执行 `npm install`、`npm test`、`npm run build`，未进行浏览器验收。新增测试当前仅是已写入源码，不能标记为通过。
 - 运行时代码与测试文件写入节点：`5d7dab63cab30cafa65e6ddacaaada891954e144`；随后更新了本进度记录。
+
+
+## 2026-11-09 — Physics Runtime 接入沙盒 Engine（第一阶段）
+
+### 仓库与提交基线
+
+- 本轮开始功能分支 HEAD：`573cdd53c389960a0e75820f3dcc33a7526c9e11`。
+- 本轮运行时代码提交：
+  - `6203ee08916b9d2ef77f92bb056c63eba6c0351e` — 从模型 Manifest 导出 Rapier Box Collider 注册。
+  - `b5fac7d9964805cd515133585cd2d0fdcc316a87` — 增加模型物理注册适配测试。
+  - `147b81d2fd0cfb3264c831fe7d0023e726a7655f` — 将 Rapier PhysicsRuntime 接入 blank sandbox Engine。
+- 文档计划更新：`b6448ab79e1cb56148452cd43ef35dbdd3be08b0`。
+- 所有写入均显式指定 `feat/world-sandbox-conversational-model-editor`；本轮核对 `main` 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`。
+
+### 实际实现
+
+1. `createCampusEngine.js` 仅在 blank-sandbox 初始化异步 Rapier PhysicsRuntime；旧校园/RPG 场景不创建该运行时。
+2. 沙盒每个有效世界区块注册一个静态地面 Box，世界外围注册四面边界 Box；区块扩展、删除和存档恢复通过 `syncSandboxWalkableChunks()` 同步重建物理注册。
+3. 渲染循环将帧 delta 交给 PhysicsRuntime，由 PhysicsRuntime 自己按固定时间步推进。
+4. `modelSpatialRuntime.js` 扩展空间 Box 采集，可选择包含完整高度范围；继续复用现有 Manifest 状态条件、参数绑定和用户能力覆盖解析逻辑。
+5. 新增 `refreshModelPhysicsRegistration()`：按模型稳定 owner ID 清理旧刚体，再将当前有效 Box Collider 以世界 AABB 的保守 Box 形式注册到 Rapier；失败时清理该 owner 已创建的部分物理对象。
+6. 沙盒模型新增、TransformControls/程序化 Transform 更新、模型状态变化、AI 替换、删除和 Engine dispose 均接入物理注册刷新/清理。
+7. Engine 暴露 `getPhysicsDiagnostics()`，可读取物理运行时启用状态、刚体数量、固定步长和累计丢弃时间。
+8. 新增模型物理注册测试：覆盖高处 Collider 注册、Door stateCondition、owner 旧刚体清理。
+
+### 当前实现边界（必须明确）
+
+- 当前 Rapier 接入只建立静态地面、边界和模型 Box Collider；模型 Collider 暂时使用世界 AABB，不保留原始 OBB 方向，也不支持 Mesh/三角网格 Collider。
+- 人物仍由原 InputController / CollisionWorld 移动，尚未使用 Rapier Character Controller；因此不能声称人物现在已经受到 Rapier 物理碰撞响应。
+- 楼梯、坡面、室内多层、门洞复合碰撞和动态刚体尚未完成。
+- 这一轮未修改 `main`，未创建或合并 PR。
+
+### 验证状态
+
+- 已通过 GitHub 远程回读确认 `PhysicsRuntime.js`、`modelSpatialRuntime.js`、`modelSpatialRuntime.test.js`、`createCampusEngine.js` 和项目计划文档。
+- 本轮没有可用的本地仓库执行环境；未执行 `npm install`、`npm test`、`npm run build`，也未做浏览器验收。
+- 新增测试已写入但未执行，不能标记为自动化通过。
+- 本轮没有生成 npm/yarn/pnpm 锁文件。
+
+### 下一步
+
+1. 先在真实开发环境执行依赖安装、模型空间测试、PhysicsRuntime 测试和前端构建，修复实际暴露的问题。
+2. 浏览器验收 blank sandbox 的 Rapier 初始化、地面/边界/模型 Box 注册，扩展/删除/恢复区块，以及模型新增/移动/替换/删除后的 bodyCount 和资源清理。
+3. 验证通过后，开始迁移人物到 Rapier KinematicCharacterController；输入与相机控制继续保留，不同时重构交互 UI。

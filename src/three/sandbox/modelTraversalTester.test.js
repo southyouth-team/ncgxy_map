@@ -102,7 +102,7 @@ it('requires a real grounded landing on the destination platform for jump routes
       ],
       traversability: { jumps: [{
         id: 'gap-jump', targetPartId: 'jump-frame',
-        startPoint: { x: -0.8, y: 0.1, z: 0 }, endPoint: { x: 0.8, y: 0.1, z: 0 },
+        startPoint: { x: -1.1, y: 0.1, z: 0 }, endPoint: { x: 1.1, y: 0.1, z: 0 },
       }] },
     } },
   }

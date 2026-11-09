@@ -1036,7 +1036,7 @@ onBeforeUnmount(() => {
         <button class="world-mvp__demo-button" @click="addLightSwitchDemo">创建开关灯交互演示</button>
         <div class="world-mvp__selected">
           <span>当前对象</span><strong>{{ selectedName || '未选择' }}</strong>
-          <button :disabled="!selectedName" @click="duplicateSelected">复制</button><button :disabled="!selectedName" @click="deleteSelected">删除</button>
+          <button :disabled="!selectedName || placement.active" @click="duplicateSelected">复制</button><button :disabled="!selectedName || placement.active" @click="deleteSelected">删除</button>
         </div>
         <div class="world-mvp__tools">
           <button :disabled="!selectedName || placement.active" @click="beginMoveSelected">重新选址</button>
@@ -1056,7 +1056,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="world-mvp__list">
-          <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" @click="selectModel(objectsById.get(item.id))">{{ item.name }}</button>
+          <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" :disabled="placement.active" @click="selectModel(objectsById.get(item.id))">{{ item.name }}</button>
         </div>
       </section>
 

@@ -1299,19 +1299,19 @@ MVP 只覆盖三类基础地形：平地、坡路、楼梯；两种移动行为�
 
 当前实际执行契约（以代码为准）：
 
-- `capabilities.spatial.colliders`：当前执行 `shape: "box"` 阻挡体及布尔 `stateCondition`；部件局部 Box 会转换为保守的世界空间 AABB，尚不保证旋转盒精度，也不支持通用 collider shape。
+- `capabilities.spatial.colliders`：执行 `shape: "box"` 阻挡体（保守世界空间 AABB）和显式声明的 `shape: "mesh"` 静态 Rapier Trimesh。Mesh 必须绑定唯一真实 componentId，提取目标部件下的实际 Mesh 几何并应用完整世界变换；不自动将可见 Mesh 纳入碰撞。
 - `capabilities.spatial.traversability.stairs/ramps`：绑定到真实 Mesh 的楼梯/坡面几何可提取为静态 Rapier Triangle Mesh；几何绑定或注册成功不等于整条人物路线已经通过验收。
 - `capabilities.spatial.surfaces`：表达支撑/可行走意图，不是通用 Mesh 碰撞生成协议。
 - `passages`、`jumps`、`connections` 等声明在其专用运行时和验收完成前仍属于描述性数据，不能宣称已执行。
 - 普通可见 Mesh 默认不会自动进入 Rapier 碰撞世界。模型必须通过当前已支持的声明路径注册碰撞；不能仅凭 Manifest 中存在未知形状声明就认为物理生效。
 
-AI 生成端必须遵守同一契约：普通实体阻挡部件使用真实 componentId 绑定的 Box blocker，并拆分门洞/通道；楼梯和坡面使用真实几何声明；装饰薄片和视觉细节默认不阻挡。水域不得将水平水面声明为可站立面；当前版本只有在可用 Box/AABB 分段可靠构成连续开放顶部的闭合岸线时，才允许声明周边阻挡，不能把水面 Mesh 当作自动碰撞体，也不能声称已具备通用水域自动编译能力。
+AI 生成端必须遵守同一契约：简单结构使用 Box blocker；山体、岩石和复杂静态建筑外壳可使用显式 Mesh blocker，但碰撞目标只能包含实际阻挡几何。真实门洞必须在碰撞几何中保持开口；子部件可用 `userData.collisionMode = "none"` 排除。装饰薄片、叶片、线缆和玻璃默认不阻挡。水域不得将水平水面声明为可站立面或碰撞体；需要阻挡时，使用独立的竖直周边 Mesh 几何，顶部开放，不得覆盖桥梁/入口，也不得将水体做成实心碰撞体。自动水岸线提取尚未实现。
 
 后续按阶段扩展，不在本阶段伪造尚未实现的能力：
 
 1. P0：统一 AI Prompt、Manifest 和 Runtime 的能力契约，并用服务端 Prompt 测试锁定实际支持边界。
-2. P1：通用静态 Mesh 碰撞构建与几何预处理，覆盖山体、岩石、复杂静态建筑外壳；为动态复杂物体另行评估 Convex Hull / Convex Decomposition。
-3. P1：建立明确的碰撞参与策略和排除机制，避免叶片、玻璃、装饰薄片等被无差别纳入。
+2. P1（本轮已落地）：显式静态 Mesh 碰撞构建，覆盖山体、岩石、复杂静态建筑外壳；动态复杂物体的 Convex Hull / Convex Decomposition 另行评估。
+3. P1（本轮已落地基础策略）：碰撞只由明确的 `shape: "mesh"` 声明触发；支持按目标部件排除嵌套子组件，并通过 `userData.collisionMode = "none"` 或 `userData.physicsCollision = false` 排除单个 Mesh。
 4. P2：特殊空间区域（如水域、悬崖、洞口）统一编译为边界/区域语义，并通过真实人物胶囊体验证。
 5. P2：碰撞注册、支撑面、门洞净空和人物路线统一生成可追溯验收报告。
 

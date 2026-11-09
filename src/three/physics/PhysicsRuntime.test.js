@@ -165,7 +165,9 @@ describe('PhysicsRuntime', () => {
       id: 'sandbox:player',
       translation: { x: 2, y: 0, z: 3 },
     })
-    entry.controller.computed = { x: 0.5, y: -0.1, z: 1 }
+    entry.controller.computeColliderMovement.mockImplementation(() => {
+      entry.controller.computed = { x: 0.5, y: -0.1, z: 1 }
+    })
     const result = runtime.moveKinematicCharacter('sandbox:player', { x: 1, y: -0.2, z: 1 })
     expect(entry.controller.computeColliderMovement).toHaveBeenCalledWith(entry.collider, { x: 1, y: -0.2, z: 1 })
     expect(result).toMatchObject({
@@ -179,7 +181,7 @@ describe('PhysicsRuntime', () => {
   it('removes the character controller before its rigid body and supports teleporting', () => {
     const { RAPIER, calls } = createRapierMock()
     const runtime = new PhysicsRuntime(RAPIER)
-    const entry = runtime.createKinematicCharacter({ id: 'sandbox:player' })
+    const entry = runtime.createKinematicCharacter({ id: 'sandbox:player', ownerId: 'sandbox:player' })
     expect(runtime.setKinematicCharacterPosition('sandbox:player', { x: 4, y: 2, z: 6 })).toBe(true)
     expect(entry.body.setTranslation).toHaveBeenCalledWith({ x: 4, y: 2, z: 6 }, true)
     runtime.removeOwner('sandbox:player')

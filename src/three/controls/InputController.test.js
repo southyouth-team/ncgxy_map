@@ -351,6 +351,7 @@ describe('InputController Rapier character movement', () => {
     let feet = { x: player.x, y: player.y - controller.playerEyeHeight, z: player.z }
     let grounded = true
     let verticalVelocity = 0
+    let stepCount = 0
     const runtime = {
       removeBody: id => calls.removed.push(id),
       createKinematicCharacter: options => {
@@ -364,7 +365,7 @@ describe('InputController Rapier character movement', () => {
         translation: { ...feet },
         velocity: { x: 0, y: verticalVelocity, z: 0 },
         grounded,
-        stepCount: 0,
+        stepCount,
       }),
       setKinematicCharacterPosition: (id, position) => {
         calls.teleported.push({ id, position })
@@ -379,6 +380,7 @@ describe('InputController Rapier character movement', () => {
       setState(nextState = {}) {
         if (nextState.grounded !== undefined) grounded = nextState.grounded
         if (nextState.verticalVelocity !== undefined) verticalVelocity = nextState.verticalVelocity
+        if (nextState.stepCount !== undefined) stepCount = nextState.stepCount
       },
     }
   }
@@ -409,6 +411,31 @@ describe('InputController Rapier character movement', () => {
     expect(cameraRig.player).toMatchObject({ x: 0, y: 1.7, z: 0 })
     expect(collisionWorld.move).not.toHaveBeenCalled()
     expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
+  })
+
+  it('does not end a buffered Rapier jump while the first post-launch physics step is still grounded', () => {
+    const { controller, cameraRig } = createController()
+    const { setState } = attachPhysics(controller, cameraRig.player)
+
+    expect(controller.jumpPlayer()).toBe(true)
+    expect(controller.jumpActive).toBe(true)
+
+    // The first physics step can still report grounded while the launch velocity
+    // has only just been queued. This must not be mistaken for a completed jump.
+    setState({ grounded: true, verticalVelocity: 6, stepCount: 1 })
+    controller.moveWithPhysics(cameraRig.player, 0, 0, 1 / 60)
+    expect(controller.jumpActive).toBe(true)
+    expect(controller.jumpWasAirborne).toBe(false)
+
+    setState({ grounded: false, verticalVelocity: 5.5, stepCount: 2 })
+    controller.moveWithPhysics(cameraRig.player, 0, 0, 1 / 60)
+    expect(controller.jumpActive).toBe(true)
+    expect(controller.jumpWasAirborne).toBe(true)
+
+    setState({ grounded: true, verticalVelocity: -1, stepCount: 3 })
+    controller.moveWithPhysics(cameraRig.player, 0, 0, 1 / 60)
+    expect(controller.jumpActive).toBe(false)
+    expect(controller.jumpWasAirborne).toBe(false)
   })
 
   it('uses fixed-step acceleration for airborne gravity instead of render-frame integration', () => {

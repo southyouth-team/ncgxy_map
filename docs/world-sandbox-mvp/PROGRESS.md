@@ -3684,3 +3684,41 @@ export const environmentBindings = [
 - Frontend CI（run `42689392590`）：单测 534 passed / 7 failed（541 total），前端 Build 成功。失败仍为同一组既有失败项；新增的 InputController、PhysicsRuntime 固定步长加速度测试未出现在失败列表，门扇 OBB 测试也未出现在失败列表。
 - Backend CI（run `42689392495`）：查询时仍在执行；此前 `a1192ca772b84c35d30cf970bbcee9ab449bb386` 对应 Backend CI 已成功，包含更新后的 Prompt 测试修正之前的服务端逻辑构建/测试；最新提交仍需以当前 run 为准。
 - 当前全量 Frontend CI 仍不通过，不能将本轮标记为整体 CI 通过。浏览器验收仍未执行。
+
+
+---
+
+## 2026-11-10 — 玩家跳跃状态与铰链门碰撞修复
+
+### 本轮代码变更
+
+- 工作分支：`fix/sandbox-character-physics-continuity`
+- 基于：`feat/world-sandbox-conversational-model-editor`
+- `src/three/controls/InputController.js`
+  - 增加 `jumpWasAirborne` 状态。
+  - Rapier 首个起跳物理步仍报告 grounded 时，不再误判为落地并提前清除跳跃状态。
+  - 只有角色实际离地、随后重新接触支撑面，才结束本次跳跃。
+  - 传送、重置和禁用移动时同步清理跳跃飞行状态。
+- `src/three/controls/InputController.test.js`
+  - 增加首个起跳物理步仍 grounded 的回归用例。
+  - 覆盖离地后重新落地才结束跳跃的状态转换。
+- `src/three/engine/modelSpatialRuntime.js`
+  - 对带有同一状态键旋转绑定的活动部件，不再因 `stateCondition` 而删除其自身碰撞体。
+  - 铰链门扇的碰撞体随门扇世界 Transform 重建；固定门洞阻挡体仍可使用状态条件开关。
+- `src/three/engine/modelSpatialRuntime.test.js`
+  - 将原先“开门即删除门扇碰撞体”的测试改为验证门扇打开后仍有 Rapier Box Collider，且旋转四元数同步。
+
+### 提交记录
+
+- `bf50bdeced8565dd9e5508a9b142638203d8cc85` — 跳跃状态修复
+- `0b1e096431dd3e6ba64e53f2091b4b6ccd8baedb` — 跳跃回归测试
+- `f013fdf8ffdc3919e4982f6116ce86ffdcfa3e95` — 铰链门扇碰撞同步
+- `dc8e97d833fd23ba14ef6ab6a76b8970fd1feb0b` — 门扇碰撞回归测试
+- `349d2d00c88840895a6b379699b564489c7e559d` — 传送/禁用移动时清理跳跃状态
+
+### 尚未完成与验证边界
+
+- 行走/加速间歇：本轮已核对输入状态和主循环顺序，但尚未获得实际浏览器运行环境，不能把间歇问题标记为已修复；需要在真实运行时采集输入状态、帧间隔、Rapier stepCount 和角色位移。
+- 水体深度：当前 MVP 没有水体体积/水面高度/水底高度到人物涉水状态的完整 Runtime。现有生成约束只描述水面和可选岸线碰撞，不存在可执行的深度参数契约。因此本轮没有伪造一个只改变外观的深度滑块。后续需先定义 water volume 数据契约，再接入参数、场景空间和角色涉水计算。
+- 自动化测试、前端构建和浏览器实测：当前会话没有本地仓库执行环境，尚未执行；不得标记为通过。
+- 本轮没有向 `main` 写入，也没有合并 PR。

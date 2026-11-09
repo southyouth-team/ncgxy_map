@@ -2687,7 +2687,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       lastPlayerVisibility = playerSprite.visible
       lastPlayerY = playerSprite.position.y
       if (typeof playerSprite.userData.updateAnimation === 'function') {
-        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, dx, dz)
+        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, dx, dz, input?.keys?.has('shift') === true)
       } else {
         campus?.userData.updatePlayerAnimation?.(moving, time / 1000, dx, dz)
       }

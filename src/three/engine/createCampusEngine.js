@@ -972,7 +972,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     input.attach()
     sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
     sandboxTransform.setMode('translate')
-    sandboxTransform.addEventListener('dragging-changed', event => input?.setMovementEnabled(!event.value))
+    sandboxTransform.addEventListener('dragging-changed', event => {
+      // 拖拽 Gizmo 时只允许 TransformControls 接收指针输入，暂停相机旋转/平移/缩放。
+      cameraRig?.setOrbitInteractionEnabled?.(!event.value)
+      input?.setMovementEnabled(!event.value)
+    })
     sandboxTransform.addEventListener('objectChange', () => {
       if (sandboxSelectedModel) {
         const model = sandboxSelectedModel

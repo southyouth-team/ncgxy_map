@@ -13,6 +13,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm install
-      - run: npm test
-      - run: npm run build
+      - name: Install dependencies
+        id: install
+        run: npm install
+      - name: Run unit tests
+        if: always() && steps.install.outcome == 'success'
+        run: npm test
+      - name: Build frontend
+        if: always() && steps.install.outcome == 'success'
+        run: npm run build

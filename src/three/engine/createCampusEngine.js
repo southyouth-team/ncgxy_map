@@ -386,7 +386,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const restoreMode = chunkManagementPreviousCameraMode || 'thirdPerson'
       if (cameraRig?.mode !== restoreMode) cameraRig?.setMode(restoreMode)
       input?.setMode(restoreMode)
-      input?.setMovementEnabled(restoreMode !== 'overview')
+      input?.setMovementEnabled(restoreMode !== 'overview' || isBlankSandbox)
       chunkManagementPreviousCameraMode = null
     }
     campus?.userData?.setChunkManagementState?.(chunkManagementActive, Array.from(selectedSandboxChunkKeys))
@@ -1581,6 +1581,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig.setObstructionObjects(cameraObstacleRoots)
     // 3D 建筑模型延迟到用户切换 3D/跟随视角时加载，2.5D 总览不承担 GLB 下载与解析成本。
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
+    input.setFreeCameraMovementEnabled(isBlankSandbox)
     input.attach()
     sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
     sandboxTransform.setMode('translate')
@@ -2504,7 +2505,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     if (stairTransition) updateStairTransition(delta)
-    else if (cameraRig?.mode !== 'overview') input?.update(delta)
+    else input?.update(delta)
     if (pendingRoomTransition) {
       const completed = input?.consumeNavigationPathCompletion?.() || false
       if (completed) {
@@ -3225,10 +3226,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function setMode(mode) {
-    cameraRig?.setMode(mode)
+    // 沙盒默认统一使用自由总览相机；人物移动由 InputController 独立驱动，不切回跟随镜头。
+    const nextMode = isBlankSandbox && mode === 'thirdPerson' ? 'overview' : mode
+    cameraRig?.setMode(nextMode)
     if (isBlankSandbox && mode === 'overview') focusSandboxOverview()
     if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
-    input?.setMode(mode)
+    input?.setMode(nextMode)
+    input?.setMovementEnabled(chunkManagementActive ? false : (isBlankSandbox || nextMode !== 'overview'))
     syncRenderQuality()
     requestFrame()
     if (mode !== 'overview' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()

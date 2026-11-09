@@ -235,6 +235,28 @@ describe('PhysicsRuntime', () => {
 
 
 
+  it('integrates character acceleration identically at different render frame rates', () => {
+    const simulate = renderHz => {
+      const { RAPIER } = createRapierMock()
+      const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+      runtime.createKinematicCharacter({ id: 'fixed-step-player' })
+      runtime.setKinematicCharacterVelocity('fixed-step-player', { x: 0, y: 10, z: 0 })
+      runtime.setKinematicCharacterAcceleration('fixed-step-player', { x: 0, y: -24, z: 0 })
+      for (let frame = 0; frame < renderHz; frame += 1) runtime.step(1 / renderHz)
+      return runtime.getKinematicCharacterState('fixed-step-player')
+    }
+
+    const at30Hz = simulate(30)
+    const at60Hz = simulate(60)
+    const at120Hz = simulate(120)
+
+    expect(at30Hz.stepCount).toBe(60)
+    expect(at60Hz.stepCount).toBe(60)
+    expect(at120Hz.stepCount).toBe(60)
+    expect(at30Hz.velocity.y).toBeCloseTo(at60Hz.velocity.y)
+    expect(at60Hz.velocity.y).toBeCloseTo(at120Hz.velocity.y)
+  })
+
   it('consumes character velocity only on fixed physics steps', () => {
     const { RAPIER } = createRapierMock()
     const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })

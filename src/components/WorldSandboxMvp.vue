@@ -921,7 +921,7 @@ function fitChunkMap() {
     const rows = maxZ - minZ + 1
     const fitWidth = (viewportEl.clientWidth - 90) / columns
     const fitHeight = (viewportEl.clientHeight - 90) / (rows * 0.72)
-    mapCellSize.value = Math.max(42, Math.min(150, Math.floor(Math.min(fitWidth, fitHeight))))
+    mapCellSize.value = Math.max(24, Math.min(150, Math.floor(Math.min(fitWidth, fitHeight))))
     nextTick(() => {
       viewportEl.scrollLeft = 0
       viewportEl.scrollTop = 0
@@ -996,7 +996,7 @@ function handleChunkMapPointerUp() {
 }
 
 function zoomChunkMap(delta) {
-  mapCellSize.value = Math.max(42, Math.min(150, mapCellSize.value + delta))
+  mapCellSize.value = Math.max(24, Math.min(150, mapCellSize.value + delta))
 }
 
 function removeSelectedWorldChunks() {
@@ -1267,7 +1267,7 @@ onBeforeUnmount(() => {
       <div class="world-mvp__chunk-manager-head">
         <div><span>WORLD SPACE</span><h1>地块管理</h1><p>全景空间视图 · 拖拽平移 · 滚轮缩放 · Ctrl / Shift 多选</p></div>
         <div class="world-mvp__chunk-manager-actions">
-          <button @click="zoomChunkMap(-10)" :disabled="mapCellSize <= 42">−</button>
+          <button @click="zoomChunkMap(-10)" :disabled="mapCellSize <= 24">−</button>
           <button @click="zoomChunkMap(10)" :disabled="mapCellSize >= 150">＋</button>
           <button @click="fitChunkMap">适应视图</button>
           <button @click="selectAllChunks">全选</button>
@@ -1511,6 +1511,7 @@ onBeforeUnmount(() => {
 .world-mvp__chunk-legend i.missing { background:transparent; border:1px dashed #63736e; }
 .world-mvp__chunk-selection { color:#c8e5d0; font-size:10px; }
 .world-mvp__chunk-manager-footer .world-mvp__reclaim-feedback { max-width:560px; max-height:120px; overflow:auto; margin:0; }
+.world-mvp__chunk-manager-footer .world-mvp__reclaim-feedback.warning { border-color:rgba(224,184,112,.48); background:rgba(126,91,38,.17); color:#f3d9a7; }
 .world-mvp__open-chunk-manager { width:100%; margin-top:12px; padding:13px!important; border-color:rgba(165,201,177,.42)!important; text-align:left; color:#d5eadb!important; background:rgba(165,201,177,.08)!important; }
 .world-mvp__open-chunk-manager span { display:block; margin-top:5px; color:#9eafad; font-size:10px; }
 .world-mvp__map-toolbar { display:flex; align-items:center; justify-content:space-between; margin:9px 0 6px; color:#9eafae; font-size:10px; }

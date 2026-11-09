@@ -3150,3 +3150,6 @@ export const environmentBindings = [
 - 前端 `npm run build` 因 CI 工作流在测试失败后跳过，尚无本轮构建结果。
 - 后端基线 CI 在 `image-generation.procedural.spec.ts` 有 1 项失败（96 passed / 1 failed）；本轮新提交对应的后端 CI 当时仍在执行中，尚未取得最终结论。后端源码本轮没有修改。
 - 本轮没有在本地环境运行测试；上述结果均来自 GitHub Actions。浏览器验收仍未执行。
+
+
+- 后端 CI 最终结果已返回：依赖安装成功、NestJS build 成功；后端单测 96 passed / 1 failed，失败仍为 `image-generation.procedural.spec.ts` 中既有的几何诊断上下文断言，与本轮未修改的后端代码相关。与开始基线相同；PostGIS migrations / API integration / schema checks 因单测失败而跳过。

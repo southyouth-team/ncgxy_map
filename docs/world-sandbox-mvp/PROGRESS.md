@@ -3746,3 +3746,12 @@ export const environmentBindings = [
 - 当前只支持水平水面（允许绕 Y 轴旋转的水体区域）；倾斜水面会被跳过，不会伪造垂直水深结果。
 - 本轮尚未执行 Vitest、Vite build、CI 或浏览器实测。新增测试只代表已写入测试代码，不代表测试通过。
 - 没有修改或合并 main。
+
+### CI 回归（2026-11-10，本轮提交 35d4a023）
+
+- GitHub Actions Frontend CI：Vite production build 通过。
+- Vitest：48 个测试文件中 41 个通过、7 个失败；547 个测试中 539 个通过、8 个失败。
+- 新增 waterVolumeRuntime.test.js 已在 CI 中通过（3/3）。
+- 与本轮开始前分支提交 0d70aed8 的 CI 对比：失败文件仍为相同的 7 个、失败用例仍为 8 个；本轮新增 1 个测试文件且没有增加失败数。
+- 失败仍涉及 PlayerCharacterRuntime、InputController、modelSpatialRuntime、solarPosition、modelCapabilityManifest、modelTraversalTester、createBlankSandboxScene。InputController 当前失败断言位于既有测试第 210 行；尚未归因于本轮新增的移动意图测试。
+- 该结果不是全量 CI 通过；浏览器/Rapier 实际移动、水体浸入效果仍未验收。

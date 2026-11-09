@@ -119,6 +119,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let sandboxPlacementState = null
   let sandboxPlacementFootprint = null
   let sandboxPlacementFootprintOutline = null
+  let chunkManagementActive = false
+  let selectedSandboxChunkKeys = new Set()
   let selectedGeneratedAsset = null
   let generatedAssetSequence = 0
   let navigationVisualGroup = null
@@ -345,6 +347,69 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function getSandboxWorldState() {
     return isBlankSandbox ? campus?.userData?.getWorldState?.() || null : null
+  }
+
+  function setSandboxChunkManagement(enabled) {
+    if (!isBlankSandbox) return false
+    chunkManagementActive = Boolean(enabled)
+    if (!chunkManagementActive) selectedSandboxChunkKeys.clear()
+    input?.setMovementEnabled(!chunkManagementActive)
+    campus?.userData?.setChunkManagementState?.(chunkManagementActive, Array.from(selectedSandboxChunkKeys))
+    callbacks.onSandboxChunkSelectionChange?.({
+      chunks: Array.from(selectedSandboxChunkKeys, key => {
+        const [x, z] = key.split(':').map(Number)
+        return { x, z }
+      }),
+      active: chunkManagementActive,
+    })
+    requestFrame()
+    return true
+  }
+
+  function setSandboxChunkSelection(chunks) {
+    if (!isBlankSandbox) return false
+    selectedSandboxChunkKeys = new Set((Array.isArray(chunks) ? chunks : []).map(item => {
+      if (typeof item === 'string') return item
+      return Number.isInteger(Number(item?.x)) && Number.isInteger(Number(item?.z)) ? Number(item.x) + ':' + Number(item.z) : ''
+    }).filter(Boolean))
+    campus?.userData?.setChunkManagementState?.(chunkManagementActive, Array.from(selectedSandboxChunkKeys))
+    requestFrame()
+    return true
+  }
+
+  function selectSandboxChunkFromPointer(event) {
+    const state = getSandboxWorldState()
+    const width = Number(state?.chunkSize?.width)
+    const depth = Number(state?.chunkSize?.depth)
+    if (!(width > 0) || !(depth > 0) || !renderer || !cameraRig) return false
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return false
+    pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointerNdc, cameraRig.camera)
+    const point = raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3())
+    if (!point) return false
+    const x = Math.round(point.x / width)
+    const z = Math.round(point.z / depth)
+    const key = x + ':' + z
+    if (!(state.chunks || []).some(chunk => chunk.x === x && chunk.z === z)) {
+      if (!event.ctrlKey && !event.metaKey && !event.shiftKey) selectedSandboxChunkKeys.clear()
+    } else if (event.ctrlKey || event.metaKey || event.shiftKey) {
+      if (selectedSandboxChunkKeys.has(key)) selectedSandboxChunkKeys.delete(key)
+      else selectedSandboxChunkKeys.add(key)
+    } else {
+      selectedSandboxChunkKeys = new Set([key])
+    }
+    campus?.userData?.setChunkManagementState?.(true, Array.from(selectedSandboxChunkKeys))
+    callbacks.onSandboxChunkSelectionChange?.({
+      active: true,
+      chunks: Array.from(selectedSandboxChunkKeys, item => {
+        const [chunkX, chunkZ] = item.split(':').map(Number)
+        return { x: chunkX, z: chunkZ }
+      }),
+      primary: { x, z },
+    })
+    requestFrame()
+    return true
   }
 
   function expandSandboxWorld(direction, count = 1) {
@@ -814,7 +879,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function onSandboxPointerDown(event) {
-    if (event.button !== 0 || sandboxPlacementState || !renderer || !cameraRig || sandboxTransform?.dragging) return
+    if (chunkManagementActive || event.button !== 0 || sandboxPlacementState || !renderer || !cameraRig || sandboxTransform?.dragging) return
     const rect = renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return
     pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
@@ -2137,7 +2202,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function onScenePointerDown(event) {
-    if (event.button !== 0 || (!placementState && cameraRig?.mode !== 'overview' && !indoorGroup && generatedAssets.size === 0)) { pointerStart = null; return }
+    if (event.button !== 0 || (!chunkManagementActive && !placementState && cameraRig?.mode !== 'overview' && !indoorGroup && generatedAssets.size === 0)) { pointerStart = null; return }
     pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId }
   }
 
@@ -2152,6 +2217,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (placementState) {
       updatePlacementFromPointer(event)
       confirmGeneratedAssetPlacement()
+      return
+    }
+    if (chunkManagementActive) {
+      if (moved <= 5) selectSandboxChunkFromPointer(event)
       return
     }
     if (moved > 5) return
@@ -3203,5 +3272,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

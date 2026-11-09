@@ -302,7 +302,7 @@ export class InputController {
   }
 
   hasMovementInput() {
-    if (!this.movementEnabled) return false
+    if (!this.movementEnabled || this.mode === 'overview') return false
     const directionalInput = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']
       .some(key => this.keys.has(key))
     return directionalInput || Boolean(this.navigationPath && !this.navigationPathCompleted)

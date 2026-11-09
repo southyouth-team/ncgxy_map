@@ -22,8 +22,10 @@ export class PlayerCharacterRuntime {
     this.actions = new Map()
     this.activeAction = null
     this.assetId = 'builtin-placeholder'
+    this.dimensions = { width: 0.5, height: 1.7, depth: 0.3, eyeHeight: 1.7, colliderRadius: 0.35 }
     this.animationState = 'idle'
     this.animationOverride = null
+    this.dimensions = { width: 0.5, height: 1.7, depth: 0.3, eyeHeight: 1.7, colliderRadius: 0.35 }
     this.disposed = false
     anchor.userData.updateAnimation = (moving, seconds, dx, dz, running) => this.updateAnimation(moving, seconds, dx, dz, running)
   }
@@ -59,6 +61,15 @@ export class PlayerCharacterRuntime {
     })
     wrapper.add(model)
     wrapper.updateMatrixWorld(true)
+    const normalizedWidth = size.x * scale
+    const normalizedDepth = size.z * scale
+    this.dimensions = {
+      width: normalizedWidth,
+      height: size.y * scale,
+      depth: normalizedDepth,
+      eyeHeight: Math.max(0.8, Math.min(2.8, size.y * scale * 0.76)),
+      colliderRadius: Math.max(0.24, Math.min(0.62, Math.max(normalizedWidth, normalizedDepth) * 0.28)),
+    }
 
     this.clearMixer()
     if (this.activeVisual !== this.fallbackVisual) {
@@ -135,6 +146,7 @@ export class PlayerCharacterRuntime {
     return {
       assetId: this.assetId,
       hasExternalModel: this.activeVisual !== this.fallbackVisual,
+      dimensions: { ...this.dimensions },
       animations: [...this.actions.keys()],
       animationState: this.animationState,
     }

@@ -3243,12 +3243,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function setViewMode(mode) {
+    if (isBlankSandbox && !['free', '2.5d', '3d'].includes(mode)) return false
+    if (!isBlankSandbox && !['2.5d', '3d'].includes(mode)) return false
     cameraRig?.setViewMode(mode)
     if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
     syncRenderQuality()
     requestFrame()
     if (mode === '3d' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
+    return true
   }
 
   function resetView() {

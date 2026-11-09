@@ -5,7 +5,8 @@ export class CameraRig {
     this.THREE = THREE
     this.isometricRpg = Boolean(options.isometricRpg)
     // 沙盒构建总览不受 2.5D 固定方位约束；人物探索镜头仍由 player 跟随逻辑独立驱动。
-    this.freeOverview = Boolean(options.freeOverview)
+    this.freeOverviewAvailable = Boolean(options.freeOverview)
+    this.freeOverviewActive = this.freeOverviewAvailable
     // 展示投影与相机操控模式分离：2.5D 使用正交投影，3D 使用透视投影。
     this.viewMode = options.viewMode === '3d' ? '3d' : '2.5d'
     this.domElement = domElement
@@ -117,21 +118,21 @@ export class CameraRig {
     this.orbit.dampingFactor = 0.075
     this.orbit.screenSpacePanning = true
     this.orbit.maxPolarAngle = Math.PI * 0.49
-    this.orbit.minZoom = this.freeOverview ? 0.12 : 0.55
-    this.orbit.maxZoom = this.freeOverview ? 8 : 2.8
-    this.orbit.minDistance = this.freeOverview ? 4 : 24
-    this.orbit.maxDistance = this.freeOverview ? 1200 : 190
+    this.orbit.minZoom = this.freeOverviewActive ? 0.12 : 0.55
+    this.orbit.maxZoom = this.freeOverviewActive ? 8 : 2.8
+    this.orbit.minDistance = this.freeOverviewActive ? 4 : 24
+    this.orbit.maxDistance = this.freeOverviewActive ? 1200 : 190
     this.orbit.target.set(0, 0, 0)
     this.orbit.enabled = this.mode === 'overview'
     // 普通校园 2.5D 总览保持固定方位；沙盒自由总览和 3D 总览允许旋转观察。
-    this.orbit.enableRotate = this.freeOverview || this.viewMode === '3d'
+    this.orbit.enableRotate = this.freeOverviewActive || this.viewMode === '3d'
     // 自由总览/3D 总览遵循三维地图操作：左键旋转、右键平移；普通 2.5D 左右键均平移。
-    this.orbit.mouseButtons.LEFT = this.viewMode === '3d' || this.freeOverview ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
+    this.orbit.mouseButtons.LEFT = this.viewMode === '3d' || this.freeOverviewActive ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
     // 右键和中键均提供平移，避免触控板/鼠标中键习惯差异导致无法操作。
     this.orbit.mouseButtons.RIGHT = this.THREE.MOUSE.PAN
     this.orbit.mouseButtons.MIDDLE = this.THREE.MOUSE.PAN
     if (this.orbit.touches) {
-      this.orbit.touches.ONE = this.viewMode === '3d' || this.freeOverview ? this.THREE.TOUCH.ROTATE : this.THREE.TOUCH.PAN
+      this.orbit.touches.ONE = this.viewMode === '3d' || this.freeOverviewActive ? this.THREE.TOUCH.ROTATE : this.THREE.TOUCH.PAN
       this.orbit.touches.TWO = this.THREE.TOUCH.DOLLY_PAN
     }
   }
@@ -214,8 +215,10 @@ export class CameraRig {
     }
   }
 
-  setViewMode(viewMode) {
-    if (!['2.5d', '3d'].includes(viewMode) || viewMode === this.viewMode) return
+  setViewMode(requestedMode) {
+    const freeOverviewActive = requestedMode === 'free'
+    const viewMode = freeOverviewActive ? '2.5d' : requestedMode
+    if (!['2.5d', '3d'].includes(viewMode) || (viewMode === this.viewMode && freeOverviewActive === this.freeOverviewActive)) return
     const previousCamera = this.camera
     const previousPosition = previousCamera.position.clone()
     const previousQuaternion = previousCamera.quaternion.clone()
@@ -230,6 +233,7 @@ export class CameraRig {
     viewDirection.normalize()
 
     this.viewMode = viewMode
+    this.freeOverviewActive = this.freeOverviewAvailable && freeOverviewActive
     // 第一人称始终保持透视投影；2.5D/3D 切换只影响总览与跟随模式。
     const targetCamera = this.mode === 'firstPerson' || viewMode === '3d'
       ? this.perspectiveCamera

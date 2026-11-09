@@ -35,6 +35,12 @@ describe('ImageGenerationService procedural generation', () => {
     const request = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(request.messages[0].content).toContain('img2threejs editable procedural-draft');
     expect(request.messages[0].content).toContain('export function createModel(THREE)');
+    expect(request.messages[0].content).toContain('Physical execution contract v1');
+    expect(request.messages[0].content).toContain('A visible Mesh is NOT automatically a collider');
+    expect(request.messages[0].content).toContain('spatial.colliders currently executes only shape:"box"');
+    expect(request.messages[0].content).toContain('stairs and ramps');
+    expect(request.messages[0].content).toContain('closed perimeter');
+    expect(request.messages[0].content).toContain('general-purpose mesh-cooking pipeline is not implemented yet');
     expect(result).toMatchObject({
       model: 'vision-test',
       objectType: '教学楼',

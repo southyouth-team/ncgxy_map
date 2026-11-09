@@ -202,6 +202,8 @@ describe('PhysicsRuntime', () => {
       height: 2,
       radius: 0.4,
       maxStepHeight: 0.22,
+      jumpHeight: 1.1,
+      jumpMaxDistance: 3,
       maxSlopeClimbAngleDegrees: 35,
       minSlopeSlideAngleDegrees: 25,
       minStepWidth: 0.3,

@@ -891,7 +891,8 @@ async function restoreSandbox() {
     snapshot = JSON.parse(raw)
     if (![1, 2, 3, 4].includes(snapshot?.version) || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
     if (snapshot.world) {
-      engine.restoreSandboxWorld(snapshot.world)
+      const restoredWorld = engine.restoreSandboxWorld(snapshot.world)
+      if (!restoredWorld) throw new Error('世界区块存档无效或与当前区块规格不兼容')
       worldState.value = engine.getSandboxWorldState()
     } else {
       worldState.value = engine.getSandboxWorldState()

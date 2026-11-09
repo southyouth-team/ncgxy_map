@@ -29,7 +29,7 @@ const generationProgress = ref([])
 const editBusy = ref(false)
 const editError = ref('')
 const editHistory = ref([])
-const message = ref('正在初始化 RPG 校园场景…')
+const message = ref('正在初始化空白沙盒…')
 const saveStatus = ref('尚未保存')
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
@@ -212,7 +212,9 @@ function beginMoveSelected() {
 }
 function confirmPlacement() {
   if (!engine?.confirmSandboxModelPlacement?.()) {
-    message.value = '请先点击沙盒地面锁定一个候选位置，再确认落地。'
+    message.value = placement.value.blocked
+      ? `当前位置与“${placement.value.blockerName || '已有物体'}”重叠，不能落地。请重新选择位置。`
+      : '请先点击沙盒地面锁定一个可用候选位置，再确认落地。'
   }
 }
 function unlockPlacementCandidate() {
@@ -982,8 +984,8 @@ onMounted(async () => {
   disposed = false
   try {
     engine = createCampusEngine(viewport.value, {
-      onReady: () => { message.value = 'RPG 校园场景已就绪，使用 WASD 或方向键移动人物。' },
-      onError: error => { message.value = '校园场景初始化失败：' + (error?.message || '未知错误') },
+      onReady: () => { message.value = '空白沙盒已就绪，可生成模型并放置到场景中。' },
+      onError: error => { message.value = '沙盒初始化失败：' + (error?.message || '未知错误') },
       onSandboxModelsChange: list => { objects.value = list },
       onSandboxPlacementChange: handlePlacementChange,
       onSandboxModelSelected: handleModelSelected,
@@ -993,10 +995,11 @@ onMounted(async () => {
       },
       onSandboxModelInteract: handleSandboxModelInteract,
     }, {
-      // 直接复用仓库已有的小型 RPG 样板场景，不加载完整校园 GIS 主地图。
-      sceneType: 'rpg-sample',
+      // MVP 使用独立空白沙盒：只创建地面与世界边界，不加载任何写死的校园内容。
+      sceneType: 'blank-sandbox',
       isometricRpg: true,
       viewMode: '3d',
+      worldBounds: { width: 54, depth: 42 },
     })
     await engine.init()
     if (disposed) return
@@ -1033,7 +1036,7 @@ onBeforeUnmount(() => {
         <section class="world-mvp__operation-panel">
           <h2>重新选址 · 全局视图</h2>
           <strong class="world-mvp__operation-name">{{ placement.modelName || selectedName || '当前模型' }}</strong>
-          <p class="world-mvp__message">沙盒保持全景视野。移动鼠标查看半透明模型预览和绿色占地轮廓；点击地面只锁定候选位置，不会落地或保存。</p>
+          <p class="world-mvp__message">沙盒保持全景视野。移动鼠标查看模型占地；绿色表示可放置，红色表示与已有模型或碰撞区域重叠。点击地面只锁定候选位置，不会落地或保存。</p>
           <div v-if="placement.footprint" class="world-mvp__footprint-info">
             <span>最大水平占地范围</span>
             <strong>{{ placement.footprint.width.toFixed(2) }} × {{ placement.footprint.depth.toFixed(2) }}</strong>
@@ -1043,9 +1046,9 @@ onBeforeUnmount(() => {
             <span>候选位置</span>
             <strong>X {{ placement.target.x.toFixed(2) }} / Z {{ placement.target.z.toFixed(2) }}</strong>
           </div>
-          <p class="world-mvp__placement-status">{{ placement.candidateLocked ? '候选位置已锁定，模型尚未正式落地。' : '尚未锁定位置，请在沙盒地面点击目标位置。' }}</p>
+          <p class="world-mvp__placement-status" :class="{ 'is-blocked': placement.blocked }">{{ placement.blocked ? `位置冲突：与“${placement.blockerName || '已有物体'}”重叠，禁止落地。` : placement.candidateLocked ? '候选位置已锁定且无冲突，可以确认落地。' : '尚未锁定位置，请在沙盒地面点击目标位置。' }}</p>
           <div class="world-mvp__tools world-mvp__placement-actions">
-            <button :disabled="!placement.candidateLocked" @click="confirmPlacement">确认落地</button>
+            <button :disabled="!placement.candidateLocked || placement.blocked" @click="confirmPlacement">确认落地</button>
             <button :disabled="!placement.candidateLocked" @click="unlockPlacementCandidate">重新选择</button>
             <button @click="cancelPlacement">取消</button>
           </div>
@@ -1174,6 +1177,7 @@ onBeforeUnmount(() => {
 .world-mvp a,.world-mvp button { border:1px solid rgba(255,255,255,.13); border-radius:7px; padding:8px 10px; color:#dce7e3; background:rgba(255,255,255,.06); text-decoration:none; cursor:pointer; font:inherit; font-size:11px; }
 .world-mvp button:hover,.world-mvp a:hover { border-color:#a5c9b1; background:rgba(165,201,177,.13); }
 .world-mvp button:disabled { opacity:.35; cursor:not-allowed; }
+.world-mvp__placement-status.is-blocked { color:#ff918b; }
 .world-mvp__panel { position:absolute; z-index:2; top:78px; left:14px; bottom:48px; width:290px; overflow:auto; padding:0 14px 14px; border:1px solid rgba(255,255,255,.1); border-radius:11px; background:rgba(16,27,34,.91); box-shadow:0 14px 42px rgba(0,0,0,.22); backdrop-filter:blur(16px); }
 .world-mvp__panel section { padding:15px 0; border-bottom:1px solid rgba(255,255,255,.09); }
 .world-mvp__panel h2 { margin:0 0 12px; font-size:12px; }

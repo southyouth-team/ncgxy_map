@@ -26,6 +26,62 @@ describe('testModelTraversalRoutes', () => {
     expect(result.routes[0].reason).toBe('startPoint/endPoint-required')
   })
 
+
+  it('blocks entry into a water volume while keeping an elevated bridge route open', async () => {
+    const model = new THREE.Group()
+    const shoreline = new THREE.Group()
+    shoreline.userData.componentId = 'water-boundary'
+    shoreline.add(new THREE.Mesh(new THREE.BoxGeometry(4, 2, 0.2), new THREE.MeshBasicMaterial()))
+    shoreline.position.y = 1
+    model.add(shoreline)
+    const bridge = new THREE.Group()
+    bridge.userData.componentId = 'water-bridge'
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 1), new THREE.MeshBasicMaterial())
+    deck.position.y = 2.2
+    bridge.add(deck)
+    model.add(bridge)
+    const ground = new THREE.Group()
+    ground.userData.componentId = 'water-bank-ground'
+    ground.add(new THREE.Mesh(new THREE.BoxGeometry(8, 0.2, 4), new THREE.MeshBasicMaterial()))
+    model.add(ground)
+    const waterRoute = new THREE.Group()
+    waterRoute.userData.componentId = 'water-entry-route'
+    model.add(waterRoute)
+    const bridgeRoute = new THREE.Group()
+    bridgeRoute.userData.componentId = 'bridge-crossing-route'
+    model.add(bridgeRoute)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: {
+        colliders: [
+          { id: 'shoreline-wall', targetPartId: 'water-boundary', shape: 'mesh' },
+          { id: 'bridge-deck-collider', targetPartId: 'water-bridge', shape: 'mesh' },
+        ],
+        surfaces: [
+          { id: 'bank-ground-surface', targetPartId: 'water-bank-ground', shape: 'mesh', supportsStanding: true, walkable: true },
+          { id: 'bridge-surface', targetPartId: 'water-bridge', shape: 'mesh', supportsStanding: true, walkable: true },
+        ],
+        traversability: { passages: [
+          {
+            id: 'enter-water', targetPartId: 'water-entry-route',
+            startPoint: { x: 0, y: 0.1, z: 1.5 }, endPoint: { x: 0, y: 0.1, z: -1.5 },
+          },
+          {
+            id: 'cross-over-bridge', targetPartId: 'bridge-crossing-route',
+            startPoint: { x: 0, y: 2.3, z: 1.5 }, endPoint: { x: 0, y: 2.3, z: -1.5 },
+          },
+        ] },
+      } },
+    }
+    const result = await testModelTraversalRoutes(THREE, RAPIER, model, { maxDuration: 5, speed: 2 })
+    expect(result.routes.find(item => item.id === 'enter-water')).toMatchObject({
+      status: 'failed', reason: 'blocked-or-stuck',
+    })
+    expect(result.routes.find(item => item.id === 'cross-over-bridge')).toMatchObject({
+      status: 'passed',
+    })
+    expect(result.certifiedWalkable).toBe(true)
+  })
+
   it('probes an actual stepped mesh using the Rapier character controller', async () => {
     const model = new THREE.Group()
     const stairs = new THREE.Group()

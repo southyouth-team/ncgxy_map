@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import * as THREE from 'three'
 import { createCampusEngine } from '../three/engine/createCampusEngine.js'
 import { executeProceduralModel } from '../three/sandbox/executeProceduralModel.js'
@@ -32,6 +32,21 @@ const editHistory = ref([])
 const message = ref('正在初始化空白沙盒…')
 const saveStatus = ref('尚未保存')
 const worldState = ref(null)
+const selectedChunkKey = ref('')
+const chunkGrid = computed(() => {
+  const chunks = worldState.value?.chunks || []
+  if (!chunks.length) return []
+  const minX = Math.min(...chunks.map(item => item.x))
+  const minZ = Math.min(...chunks.map(item => item.z))
+  return chunks.map(item => ({
+    ...item,
+    key: item.x + ':' + item.z,
+    gridColumn: item.x - minX + 1,
+    gridRow: item.z - minZ + 1,
+    isAnchor: item.x === 0 && item.z === 0,
+  }))
+})
+const selectedChunk = computed(() => chunkGrid.value.find(item => item.key === selectedChunkKey.value) || null)
 const managementMode = ref('sandbox')
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
@@ -847,24 +862,23 @@ function expandWorld(direction) {
   return true
 }
 
-function removeWorldEdge(direction) {
-  if (!engine || placement.value.active) return false
-  const result = engine.removeSandboxWorldEdge(direction)
+function removeSelectedWorldChunk() {
+  const chunk = selectedChunk.value
+  if (!engine || placement.value.active || !chunk) return false
+  const result = engine.removeSandboxWorldChunk(chunk.x, chunk.z)
   if (!result?.ok) {
     const reasons = {
-      'origin-anchor': '不能回收包含初始中心区块的边缘；请从其他方向回收。',
-      'minimum-world-size': '至少保留一个区块，不能继续回收。',
-      occupied: '该边缘地块仍被占用：' + (result.blockers || []).join('、') + '。请先移走相关对象或人物。',
-      'unsupported-world': '当前场景不支持地块回收。',
+      'origin-anchor': '初始中心地块不可回收。',
+      'chunk-not-found': '该地块已不存在，请刷新选择。',
+      'occupied': '该地块仍被占用：' + (result.blockers || []).join('、'),
+      'cannot-remove-chunk': '至少保留一个地块，或地块状态已变化。',
     }
     message.value = reasons[result?.reason] || '地块回收失败，请检查世界状态。'
     return false
   }
   worldState.value = result.world || engine.getSandboxWorldState()
-  const bounds = worldState.value?.bounds
-  message.value = bounds
-    ? `已回收${({ north: '北侧', south: '南侧', east: '东侧', west: '西侧' })[direction]}边缘地块；当前世界尺寸 ${(bounds.maxX - bounds.minX).toFixed(0)} × ${(bounds.maxZ - bounds.minZ).toFixed(0)}。`
-    : '边缘地块已回收。'
+  selectedChunkKey.value = ''
+  message.value = `已回收区块（${chunk.x}, ${chunk.z}）。其他区块坐标保持不变。`
   saveStatus.value = '有未保存的世界变更'
   return true
 }
@@ -1169,12 +1183,14 @@ onBeforeUnmount(() => {
             <button :disabled="placement.active" @click="expandWorld('east')">向东扩建</button>
             <span></span><button :disabled="placement.active" @click="expandWorld('south')">向南扩建</button><span></span>
           </div>
-          <small class="world-mvp__world-note">每次扩建或回收一个完整边缘区块；区块尺寸 54 × 42 世界单位。回收仅允许外围整排/整列，且不能包含中心锚点。</small>
-          <div class="world-mvp__expand-grid world-mvp__reclaim-grid">
-            <span></span><button :disabled="placement.active" @click="removeWorldEdge('north')">回收北侧</button><span></span>
-            <button :disabled="placement.active" @click="removeWorldEdge('west')">回收西侧</button><span class="world-mvp__world-center">回收</span><button :disabled="placement.active" @click="removeWorldEdge('east')">回收东侧</button>
-            <span></span><button :disabled="placement.active" @click="removeWorldEdge('south')">回收南侧</button><span></span>
+          <small class="world-mvp__world-note">选择任意单块地块后独立回收。初始中心地块不可删除；人物、模型、碰撞体或可站立表面占用时会阻止回收。</small>
+          <div class="world-mvp__chunk-grid" :style="{ gridTemplateColumns: `repeat(${Math.max(1, (worldState?.bounds ? Math.round((worldState.bounds.maxX - worldState.bounds.minX) / (worldState.chunkSize?.width || 54)) : 1))}, 1fr)` }">
+            <button v-for="chunk in chunkGrid" :key="chunk.key" :style="{ gridColumn: chunk.gridColumn, gridRow: chunk.gridRow }" :class="{ active: selectedChunkKey === chunk.key, 'is-anchor': chunk.isAnchor }" :disabled="chunk.isAnchor || placement.active" @click="selectedChunkKey = chunk.key">
+              {{ chunk.x }}, {{ chunk.z }}{{ chunk.isAnchor ? ' · 中心' : '' }}
+            </button>
           </div>
+          <p v-if="selectedChunk" class="world-mvp__world-note">已选区块：({{ selectedChunk.x }}, {{ selectedChunk.z }}) · {{ worldState?.chunkSize?.width }} × {{ worldState?.chunkSize?.depth }}</p>
+          <button class="world-mvp__reclaim-button" :disabled="placement.active || !selectedChunk || selectedChunk.isAnchor" @click="removeSelectedWorldChunk">回收选中地块</button>
         </section>
         <section v-if="managementMode === 'model'">
           <h2>AI 建模</h2>
@@ -1266,8 +1282,10 @@ onBeforeUnmount(() => {
 .world-mvp__brand strong { font-size:13px; letter-spacing:1.1px; }
 .world-mvp__brand span { margin-top:4px; color:#8e9fa3; font-size:10px; }
 .world-mvp__header-actions { display:flex; align-items:center; gap:9px; }
-.world-mvp__reclaim-grid { margin-top:8px; }
-.world-mvp__reclaim-grid button { border-color:rgba(230,139,126,.3); color:#efb0a6; }
+.world-mvp__chunk-grid { display:grid; grid-auto-rows:42px; gap:5px; margin-top:10px; overflow:auto; }
+.world-mvp__chunk-grid button { min-width:0; padding:4px 2px; font-size:9px; }
+.world-mvp__chunk-grid button.is-anchor { border-color:rgba(165,201,177,.35); color:#91a99b; }
+.world-mvp .world-mvp__reclaim-button { width:100%; margin-top:8px; border-color:rgba(230,139,126,.4); color:#efb0a6; }
 .world-mvp__save-status { color:#a9bbb3; font-size:10px; }
 .world-mvp .world-mvp__save-button { border-color:#8fbea0; color:#14251c; background:#a5c9b1; font-weight:700; }
 .world-mvp a,.world-mvp button { border:1px solid rgba(255,255,255,.13); border-radius:7px; padding:8px 10px; color:#dce7e3; background:rgba(255,255,255,.06); text-decoration:none; cursor:pointer; font:inherit; font-size:11px; }

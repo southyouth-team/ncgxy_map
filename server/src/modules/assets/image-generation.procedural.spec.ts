@@ -45,7 +45,7 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('stairs and ramps');
     expect(request.messages[0].content).toContain('isolated Rapier character-route test passes');
     expect(request.messages[0].content).toContain('Passages and spatial connections remain descriptive only');
-    expect(request.messages[0].content).toContain('closed perimeter');
+    expect(request.messages[0].content).toContain('continuous closed boundary');
     expect(request.messages[0].content).toContain('For water bodies in this Runtime version');
     expect(request.messages[0].content).toContain('static Rapier triangle meshes');
     expect(request.messages[0].content).toContain('Do not use dynamic/deforming geometry as a static mesh collider');

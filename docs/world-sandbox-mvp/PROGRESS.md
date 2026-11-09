@@ -3232,3 +3232,12 @@ export const environmentBindings = [
 - `22767bf980d2b4fd206def6ec2e92b2c7c890b36` — 固定步长架构约束补充。
 
 验证情况：前一轮 CI（提交 `93e3382...`）中 PhysicsRuntime 全部 10 项测试通过；InputController 新增测试中除一个脚底坐标浮点精度断言外均通过，该断言已修正。当前最新提交 `c0f9aa3...` 的前端/后端 CI 正在运行；最终结果以本条记录之后的最新 Actions 结果为准。
+
+
+### 本轮 CI 最终核验（代码源与 CI 工作流提交）
+
+- 前端 CI 在 `686be5193835ee2de1e13af4e2319f2a9393d002` 执行：`npm install` 成功；`npm test` 为 493 passed / 6 failed（499 total）。与本轮开始基线相比，仍是原有 6 项失败；本轮新增的 PhysicsRuntime / InputController Rapier 测试均通过。
+- 同一前端 CI 的 `npm run build` **通过**。为避免历史测试失败阻断构建验证，本轮调整 `.github/workflows/frontend-ci.yml`：依赖安装成功后，单测失败也会继续执行 build；该变更只作用于功能分支。
+- 后端 CI：NestJS build **通过**；单测为 96 passed / 1 failed，失败仍为 `image-generation.procedural.spec.ts` 的既有失败；PostGIS migration / API integration / schema verification 因后端单测失败而跳过。与本轮开始基线一致，且本轮没有修改后端源码。
+- 浏览器实测未执行，故碰撞行为（墙体阻挡/滑动、台阶、坡面、下落和落地）仍需在真实沙盒页面验收。
+- 最新功能分支 HEAD（本条文档更新前）：`686be5193835ee2de1e13af4e2319f2a9393d002`；`main` 保持 `608a9f2c1f739cd581acb833b1e70410672e258b`。

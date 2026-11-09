@@ -2775,7 +2775,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     const playerWaterState = getPlayerWaterState()
     const playerWaterStateKey = playerWaterState
-      ? playerWaterState.volumeId + ':' + Math.round(playerWaterState.immersionDepth * 50)
+      ? playerWaterState.volumeId + ':' + Math.round(playerWaterState.depth * 50) + ':'
+        + Math.round(playerWaterState.surfaceHeight * 50) + ':' + Math.round(playerWaterState.immersionDepth * 50)
       : ''
     if (playerWaterStateKey !== lastPlayerWaterStateKey) {
       lastPlayerWaterStateKey = playerWaterStateKey

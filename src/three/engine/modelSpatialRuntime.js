@@ -4,6 +4,7 @@
  * into world-space AABBs. CollisionWorld currently resolves movement on XZ.
  */
 import { resolveCapabilityRecords } from '../sandbox/capabilityControl.js'
+import { analyzeModelTraversability } from '../sandbox/modelTraversabilityAnalyzer.js'
 
 export function collectModelMovementObstacles(THREE, root, ownerId, { includeAllHeights = false } = {}) {
   if (!THREE?.Box3 || !root?.traverse || !ownerId) return []
@@ -95,6 +96,7 @@ export function collectModelMovementObstacles(THREE, root, ownerId, { includeAll
     obstacles.push({
       ownerId: String(ownerId),
       colliderId: String(collider.id || collider.targetPartId),
+      targetPartId: collider.targetPartId,
       minY: worldBounds.min.y,
       maxY: worldBounds.max.y,
       minX: worldBounds.min.x,
@@ -150,6 +152,73 @@ export function collectModelSupportSurfaces(root, ownerId) {
 
 
 /**
+ * Compile validated stair/ramp Mesh geometry into world-space triangle buffers.
+ * These are static collision shapes; they do not by themselves certify that a
+ * character can traverse the complete route.
+ */
+export function collectModelTraversalTrimeshes(THREE, model, ownerId) {
+  if (!THREE?.Vector3 || !model?.traverse || !ownerId) return []
+  model.updateWorldMatrix(true, true)
+  const manifest = model.userData?.proceduralModelCapabilityManifest
+  const declarations = manifest?.capabilities?.spatial?.traversability || {}
+  const analysis = model.userData?.proceduralModelTraversabilityAnalysis
+    || analyzeModelTraversability(THREE, model)
+  const parts = new Map()
+  model.traverse(object => {
+    const id = object.userData?.componentId
+    if (typeof id === 'string' && !parts.has(id)) parts.set(id, object)
+  })
+  const output = []
+  const seenParts = new Set()
+  for (const record of analysis.records || []) {
+    if (!record.bound || record.status !== 'geometry-bound'
+      || !['stairs', 'ramps'].includes(record.type)
+      || seenParts.has(record.targetPartId)) continue
+    seenParts.add(record.targetPartId)
+    const target = parts.get(record.targetPartId)
+    if (!target?.traverse) continue
+    const vertices = []
+    const indices = []
+    target.traverse(mesh => {
+      if (!mesh.isMesh || mesh.visible === false) return
+      const position = mesh.geometry?.getAttribute?.('position')
+      if (!position || position.itemSize < 3 || position.count < 3) return
+      const index = mesh.geometry.index
+      const availableCount = index ? index.count : position.count
+      const start = Math.max(0, Number(mesh.geometry.drawRange?.start) || 0)
+      const requestedCount = Number(mesh.geometry.drawRange?.count)
+      const end = Math.min(availableCount, Number.isFinite(requestedCount) ? start + requestedCount : availableCount)
+      const vertexOffset = vertices.length / 3
+      const point = new THREE.Vector3()
+      for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex += 1) {
+        point.fromBufferAttribute(position, vertexIndex).applyMatrix4(mesh.matrixWorld)
+        vertices.push(point.x, point.y, point.z)
+      }
+      for (let cursor = start; cursor + 2 < end; cursor += 3) {
+        const readIndex = index ? item => index.getX(item) : item => item
+        const a = readIndex(cursor)
+        const b = readIndex(cursor + 1)
+        const c = readIndex(cursor + 2)
+        if ([a, b, c].every(value => Number.isInteger(value) && value >= 0 && value < position.count)) {
+          indices.push(vertexOffset + a, vertexOffset + b, vertexOffset + c)
+        }
+      }
+    })
+    if (vertices.length < 9 || indices.length < 3) continue
+    output.push({
+      ownerId: String(ownerId),
+      surfaceId: String(record.id || record.targetPartId),
+      targetPartId: record.targetPartId,
+      type: record.type,
+      vertices: new Float32Array(vertices),
+      indices: new Uint32Array(indices),
+    })
+  }
+  return output
+}
+
+
+/**
  * Replace an instance's live collision/support registrations from its current
  * manifest and Object3D hierarchy. The registry is rebuilt from the same model
  * that the renderer currently owns, so removed declarations cannot leave stale
@@ -183,9 +252,22 @@ export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
   if (!ownerId || !physicsRuntime) return 0
   const key = String(ownerId)
   physicsRuntime.removeOwner(key)
+  const traversalMeshes = collectModelTraversalTrimeshes(THREE, model, key)
+  const traversalPartIds = new Set(traversalMeshes.map(item => item.targetPartId))
   const boxes = collectModelMovementObstacles(THREE, model, key, { includeAllHeights: true })
+    .filter(box => !traversalPartIds.has(box.targetPartId))
   let added = 0
   try {
+    traversalMeshes.forEach(item => {
+      physicsRuntime.createStaticTrimesh({
+        id: key + ':manifest-trimesh:' + item.surfaceId,
+        ownerId: key,
+        vertices: item.vertices,
+        indices: item.indices,
+        friction: 0.85,
+      })
+      added += 1
+    })
     boxes.forEach((box, index) => {
       const halfExtents = {
         x: (box.maxX - box.minX) / 2,

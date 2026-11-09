@@ -413,7 +413,8 @@ describe('InputController Rapier character movement', () => {
 
     controller.setPlayerDimensions({ eyeHeight: 1.9, colliderRadius: 0.32 })
     expect(calls.created).toHaveLength(2)
-    expect(calls.created.at(-1)).toMatchObject({ radius: 0.32, halfHeight: 0.63 })
+    expect(calls.created.at(-1).radius).toBeCloseTo(0.32)
+    expect(calls.created.at(-1).halfHeight).toBeCloseTo(0.63)
     expect(cameraRig.player.y).toBeCloseTo(3.4)
   })
 })

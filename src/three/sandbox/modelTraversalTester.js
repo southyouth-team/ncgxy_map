@@ -66,6 +66,7 @@ export async function testModelTraversalRoutes(THREE, RAPIER, model, options = {
   })
 
   const routes = [
+    ...(Array.isArray(traversal.jumps) ? traversal.jumps.map(item => ({ ...item, routeType: 'jumps' })) : []),
     ...(Array.isArray(traversal.stairs) ? traversal.stairs.map(item => ({ ...item, routeType: 'stairs' })) : []),
     ...(Array.isArray(traversal.ramps) ? traversal.ramps.map(item => ({ ...item, routeType: 'ramps' })) : []),
   ]
@@ -106,7 +107,7 @@ export async function testModelTraversalRoutes(THREE, RAPIER, model, options = {
   const speed = Number(options.speed) > 0 ? Number(options.speed) : 2.5
   const maxDuration = Number(options.maxDuration) > 0 ? Number(options.maxDuration) : 18
   const tolerance = Number(options.tolerance) > 0 ? Number(options.tolerance) : 0.3
-  const gravity = Number(options.gravity) > 0 ? Number(options.gravity) : 9.81
+  const gravity = Number(options.gravity) > 0 ? Number(options.gravity) : 24
   // Traversal certification always uses the one global player profile.
   // Callers may tune probe timing, but cannot shrink or enlarge the test character.
   const profile = normalizeCharacterTraversalProfile()
@@ -181,50 +182,89 @@ export async function testModelTraversalRoutes(THREE, RAPIER, model, options = {
         translation: { x: route.start.x, y: route.start.y, z: route.start.z },
         traversalProfile: profile,
       })
-      let verticalVelocity = 0
-      let blockedFrames = 0
-      let previousDistance = Math.hypot(route.end.x - route.start.x, route.end.z - route.start.z)
       let result = { status: 'timeout', reason: 'route-timeout' }
-      let groundedFrames = 0
-      for (let step = 0; step < maxSteps; step += 1) {
-        const state = runtime.getKinematicCharacterState(characterId)
-        const dx = route.end.x - state.translation.x
-        const dz = route.end.z - state.translation.z
-        const distance = Math.hypot(dx, dz)
-        if (distance <= tolerance && Math.abs(state.translation.y - route.end.y) <= Math.max(0.45, profile.maxStepHeight) && state.grounded) {
-          result = { status: 'passed', reason: null }
-          break
-        }
-        if (state.grounded) {
-          verticalVelocity = 0
-          groundedFrames += 1
+      const maxSteps = Math.ceil(maxDuration / fixedTimeStep)
+      const horizontalDistance = Math.hypot(route.end.x - route.start.x, route.end.z - route.start.z)
+
+      if (route.type === 'jumps') {
+        if (horizontalDistance > profile.jumpMaxDistance) {
+          result = { status: 'failed', reason: 'jump-distance-exceeded' }
         } else {
-          verticalVelocity = Math.max(-12, verticalVelocity - gravity * fixedTimeStep)
+          const launchVelocity = Math.sqrt(2 * gravity * profile.jumpHeight)
+          const flightTime = 2 * launchVelocity / gravity
+          const horizontalSpeed = horizontalDistance / Math.max(flightTime, fixedTimeStep)
+          let verticalVelocity = launchVelocity
+          let landed = false
+          for (let step = 0; step < maxSteps; step += 1) {
+            runtime.setKinematicCharacterVelocity(characterId, {
+              x: horizontalDistance > tolerance ? ((route.end.x - route.start.x) / horizontalDistance) * horizontalSpeed : 0,
+              y: verticalVelocity,
+              z: horizontalDistance > tolerance ? ((route.end.z - route.start.z) / horizontalDistance) * horizontalSpeed : 0,
+            })
+            runtime.step(fixedTimeStep)
+            verticalVelocity -= gravity * fixedTimeStep
+            const state = runtime.getKinematicCharacterState(characterId)
+            const remaining = Math.hypot(route.end.x - state.translation.x, route.end.z - state.translation.z)
+            if (state.translation.y < route.end.y - 1.5) {
+              result = { status: 'failed', reason: 'no-safe-landing' }
+              break
+            }
+            if (state.grounded && step > 0 && verticalVelocity <= 0) {
+              landed = true
+              result = remaining <= tolerance && Math.abs(state.translation.y - route.end.y) <= Math.max(0.25, profile.maxStepHeight)
+                ? { status: 'passed', reason: null }
+                : { status: 'failed', reason: 'unsafe-landing' }
+              break
+            }
+          }
+          if (!landed && result.status === 'timeout') result = { status: 'failed', reason: 'no-safe-landing' }
         }
-        const moving = distance > tolerance
-        runtime.setKinematicCharacterVelocity(characterId, {
-          x: moving ? (dx / distance) * speed : 0,
-          y: verticalVelocity,
-          z: moving ? (dz / distance) * speed : 0,
-        })
-        runtime.step(fixedTimeStep)
-        const next = runtime.getKinematicCharacterState(characterId)
-        const nextDistance = Math.hypot(route.end.x - next.translation.x, route.end.z - next.translation.z)
-        if (nextDistance < previousDistance - 0.002) blockedFrames = 0
-        else if (nextDistance > tolerance) blockedFrames += 1
-        if (next.translation.y < route.start.y - 1.5) {
-          result = { status: 'failed', reason: 'fell-below-start-height' }
-          break
+      } else {
+        let verticalVelocity = 0
+        let blockedFrames = 0
+        let previousDistance = horizontalDistance
+        let groundedFrames = 0
+        for (let step = 0; step < maxSteps; step += 1) {
+          const state = runtime.getKinematicCharacterState(characterId)
+          const dx = route.end.x - state.translation.x
+          const dz = route.end.z - state.translation.z
+          const distance = Math.hypot(dx, dz)
+          if (distance <= tolerance && Math.abs(state.translation.y - route.end.y) <= Math.max(0.45, profile.maxStepHeight) && state.grounded) {
+            result = { status: 'passed', reason: null }
+            break
+          }
+          if (state.grounded) {
+            verticalVelocity = 0
+            groundedFrames += 1
+          } else {
+            verticalVelocity = Math.max(-12, verticalVelocity - gravity * fixedTimeStep)
+          }
+          const moving = distance > tolerance
+          runtime.setKinematicCharacterVelocity(characterId, {
+            x: moving ? (dx / distance) * speed : 0,
+            y: verticalVelocity,
+            z: moving ? (dz / distance) * speed : 0,
+          })
+          runtime.step(fixedTimeStep)
+          const next = runtime.getKinematicCharacterState(characterId)
+          const nextDistance = Math.hypot(route.end.x - next.translation.x, route.end.z - next.translation.z)
+          if (nextDistance < previousDistance - 0.002) blockedFrames = 0
+          else if (nextDistance > tolerance) blockedFrames += 1
+          if (next.translation.y < route.start.y - 1.5) {
+            result = { status: 'failed', reason: 'fell-below-start-height' }
+            break
+          }
+          if (blockedFrames >= 36) {
+            result = { status: 'failed', reason: 'blocked-or-stuck' }
+            break
+          }
+          previousDistance = nextDistance
         }
-        if (blockedFrames >= 36) {
-          result = { status: 'failed', reason: 'blocked-or-stuck' }
-          break
+        if (result.status === 'timeout' && groundedFrames === 0) {
+          result = { status: 'failed', reason: 'no-ground-contact' }
         }
-        previousDistance = nextDistance
       }
-      if (result.status === 'timeout' && groundedFrames === 0) {
-        result = { status: 'failed', reason: 'no-ground-contact' }
-      }
+
       tested.push({
         id: route.id,
         type: route.type,

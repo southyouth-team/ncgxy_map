@@ -70,8 +70,19 @@ export function collectModelMovementObstacles(THREE, root, ownerId, { includeAll
       break
     }
 
+    const part = parts.get(collider.targetPartId)
+    if (!part) continue
     const condition = collider.stateCondition
-    if (!hasUserOverride && !hasParameterBinding && condition && typeof condition.key === 'string') {
+    const partStateBinding = part.userData?.stateBinding
+    // A collider attached to a state-driven moving part (for example a hinged
+    // door leaf) must follow that part's transform and remain solid. Conditions
+    // are for fixed doorway blockers, not for deleting the physical door itself.
+    const followsStateTransform = Boolean(
+      condition && partStateBinding?.key === condition.key
+      && ['rotationY', 'rotationX', 'rotationZ'].includes(partStateBinding.property),
+    )
+    if (!hasUserOverride && !hasParameterBinding && !followsStateTransform
+      && condition && typeof condition.key === 'string') {
       const worldState = root.userData?.worldState || {}
       const stateValue = Object.prototype.hasOwnProperty.call(worldState, condition.key)
         ? worldState[condition.key]
@@ -80,8 +91,6 @@ export function collectModelMovementObstacles(THREE, root, ownerId, { includeAll
     }
 
     if (capability?.enabled === false || !blocksMovement) continue
-    const part = parts.get(collider.targetPartId)
-    if (!part) continue
     const center = collider.center || {}
     const size = collider.size || {}
     const values = [center.x ?? 0, center.y ?? 0, center.z ?? 0, size.x, size.y, size.z].map(Number)

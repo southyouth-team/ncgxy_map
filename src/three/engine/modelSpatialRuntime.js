@@ -242,10 +242,11 @@ export function refreshModelSpatialRegistration(THREE, model, collisionWorld) {
 
 
 /**
- * Rebuild a model instance's Rapier box colliders from the same validated,
- * state-aware manifest declarations used by the legacy grounded mover.
- * World-space AABBs are intentionally conservative for this first integration;
- * oriented/compound collider fidelity is a later physics-adapter milestone.
+ * Rebuild a model instance's Rapier colliders from the currently executable
+ * spatial declarations: state-aware Box blockers plus geometry-bound stair/ramp
+ * static triangle meshes. This is not yet a general Mesh-to-collider compiler.
+ * Box blockers currently use conservative world-space AABBs; oriented/compound
+ * collider fidelity and general static-mesh cooking remain later milestones.
  */
 export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
   const ownerId = model?.userData?.sandboxModelId

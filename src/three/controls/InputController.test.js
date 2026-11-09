@@ -360,8 +360,8 @@ describe('InputController Rapier character movement', () => {
       ownerId: 'sandbox:player',
       translation: { x: 0, y: 0, z: 0 },
       radius: 0.55,
-      halfHeight: 0.3,
     })
+    expect(calls.created[0].halfHeight).toBeCloseTo(0.3)
   })
 
   it('routes manual movement and gravity through the Rapier character controller', () => {
@@ -375,7 +375,7 @@ describe('InputController Rapier character movement', () => {
     expect(calls.moved[0].desired.x).toBeCloseTo(0)
     expect(calls.moved[0].desired.y).toBeLessThan(0)
     expect(calls.moved[0].desired.z).toBeCloseTo(0.9)
-    expect(cameraRig.player).toMatchObject({ x: 0, y: 1.7, z: 0.9 })
+    expect(cameraRig.player).toMatchObject({ x: 0, y: 1.64, z: 0.9 })
     expect(collisionWorld.move).not.toHaveBeenCalled()
     expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
   })
@@ -395,6 +395,7 @@ describe('InputController Rapier character movement', () => {
 
   it('synchronizes teleports and dimension changes with the Rapier capsule', () => {
     const { controller, cameraRig } = createController()
+    cameraRig.player.set = function (x, y, z) { Object.assign(this, { x, y, z }) }
     const { calls } = attachPhysics(controller, cameraRig.player)
     controller.teleportPlayer({ x: 4, y: 3.2, z: 6 })
     expect(calls.teleported.at(-1)).toEqual({

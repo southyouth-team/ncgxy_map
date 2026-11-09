@@ -3057,3 +3057,13 @@ export const environmentBindings = [
 - 模型参数编辑、重建、撤销/重做及失败回滚时的资源和物理注册事务边界。
 - 场景加载失败、重复恢复、重置世界和异常 dispose 的完整性。
 - Rapier 对应版本、WebAssembly 加载方式、Vite Worker/SSR 测试兼容性与锁文件策略。
+
+
+### 第一轮审计补充：模型能力校验与运行时闭环
+
+- `proceduralModel.worker.js` 当前对 AI 输出 Manifest 做结构归一化并写入 Object3D.userData，但没有看到对 collider/surface/entryPoint 的 targetPartId、唯一 ID、尺寸、实际目标 Mesh 等进行系统校验的闭环。
+- `image-generation.service.ts` 的模型编辑返回路径会规范化 Manifest version、parameters 和 environmentBindings；本次检查范围内未看到对空间碰撞/楼层入口引用的语义校验。
+- 程序化模型构建的组件树/参数本身已有独立校验，不能将其误认为 Manifest 空间能力也已校验。
+- `WorldSandboxMvp.vue` 的存档版本 v4 仍由页面负责；快照包含世界区块、模型 Object3D JSON、环境配置和选中对象，不包含玩家 Transform、角色资产持久化引用。当前角色导入/生成没有写入该快照。
+- Engine 目前以按需 requestAnimationFrame 驱动渲染，输入/自研运动使用截断后的帧 delta；Rapier 应在独立固定时间步累积器中推进，不能把物理更新简单绑在可变渲染帧上。
+- TransformControls 的 objectChange 已调用 setSandboxModelTransform，因此当前 Gizmo 变换会刷新模型空间注册；迁移时需保留该同步入口，并在拖拽过程中避免重复创建/销毁物理资源，可采用更新现有刚体/碰撞体 Transform 的策略。

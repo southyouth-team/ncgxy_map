@@ -359,11 +359,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function getPhysicsDiagnostics() {
+    const characterState = physicsRuntime?.getKinematicCharacterState?.(input?.physicsCharacterId)
     return {
       active: Boolean(physicsRuntime && !physicsRuntime.disposed),
       bodyCount: physicsRuntime?.bodies?.size || 0,
       fixedTimeStep: physicsRuntime?.fixedTimeStep || null,
+      accumulator: physicsRuntime?.accumulator || 0,
+      stepCount: physicsRuntime?.stepCount || 0,
       droppedTime: physicsRuntime?.droppedTime || 0,
+      movement: {
+        enabled: input?.movementEnabled === true,
+        mode: input?.mode || null,
+        keys: input ? Array.from(input.keys) : [],
+        requested: input?.hasMovementInput?.() === true,
+        grounded: characterState?.grounded ?? input?.grounded ?? null,
+        desiredVelocity: characterState?.velocity || null,
+        position: cameraRig?.player ? {
+          x: cameraRig.player.x, y: cameraRig.player.y, z: cameraRig.player.z,
+        } : null,
+      },
     }
   }
 
@@ -2753,7 +2767,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
       const dy = playerSprite.position.y - lastPlayerY
-      const moving = dx * dx + dz * dz > 0.000001
+      // Animation must not infer intent from a single render-frame displacement:
+      // Rapier advances on a fixed clock, so some render frames legitimately have zero delta.
+      const moving = dx * dx + dz * dz > 0.000001 || input?.hasMovementInput?.() === true
       const verticalChanged = Math.abs(dy) > 0.0001
       const visibilityChanged = lastPlayerVisibility !== playerSprite.visible
       lastPlayerVisibility = playerSprite.visible

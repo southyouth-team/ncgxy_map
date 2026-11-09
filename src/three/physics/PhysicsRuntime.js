@@ -124,6 +124,94 @@ export class PhysicsRuntime {
     }
   }
 
+  createKinematicCharacter(options = {}) {
+    this.#assertActive()
+    const id = String(options.id || '')
+    if (!id) throw new TypeError('Kinematic character requires a stable id')
+    if (this.bodies.has(id)) throw new Error('Physics body id already exists: ' + id)
+
+    const radius = this.#positiveNumber(options.radius, 0.35)
+    const halfHeight = Math.max(0.01, Number(options.halfHeight) || 0.5)
+    const offset = this.#positiveNumber(options.offset, 0.01)
+    const translation = options.translation || { x: 0, y: 0, z: 0 }
+    const position = [translation.x, translation.y, translation.z].map(Number)
+    if (!position.every(Number.isFinite)) throw new TypeError('Kinematic character translation must be finite')
+
+    const bodyDesc = this.RAPIER.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(position[0], position[1], position[2])
+    const body = this.world.createRigidBody(bodyDesc)
+    let collider = null
+    let controller = null
+    try {
+      const colliderDesc = this.RAPIER.ColliderDesc.capsule(halfHeight, radius)
+        .setTranslation(0, halfHeight + radius, 0)
+      collider = this.world.createCollider(colliderDesc, body)
+      controller = this.world.createCharacterController(offset)
+      controller.setUp?.({ x: 0, y: 1, z: 0 })
+      controller.setSlideEnabled?.(true)
+      controller.setMaxSlopeClimbAngle?.(Number(options.maxSlopeClimbAngle) || (50 * Math.PI / 180))
+      controller.setMinSlopeSlideAngle?.(Number(options.minSlopeSlideAngle) || (30 * Math.PI / 180))
+      controller.enableAutostep?.(
+        this.#positiveNumber(options.maxStepHeight, 0.45),
+        this.#positiveNumber(options.minStepWidth, 0.2),
+        false,
+      )
+      controller.enableSnapToGround?.(this.#positiveNumber(options.snapToGroundDistance, 0.25))
+      const entry = {
+        id,
+        ownerId: options.ownerId == null ? null : String(options.ownerId),
+        body,
+        collider,
+        controller,
+        kind: 'kinematic-character',
+        dimensions: { radius, halfHeight },
+      }
+      this.bodies.set(id, entry)
+      return entry
+    } catch (error) {
+      if (controller) this.world.removeCharacterController?.(controller)
+      if (body) this.world.removeRigidBody(body)
+      throw error
+    }
+  }
+
+  moveKinematicCharacter(id, desiredTranslation = {}) {
+    this.#assertActive()
+    const entry = this.bodies.get(String(id))
+    if (!entry || entry.kind !== 'kinematic-character') return null
+    const desired = [desiredTranslation.x, desiredTranslation.y, desiredTranslation.z].map(Number)
+    if (!desired.every(Number.isFinite)) throw new TypeError('Character movement must be finite')
+
+    const current = entry.body.translation()
+    entry.controller.computeColliderMovement(entry.collider, {
+      x: desired[0], y: desired[1], z: desired[2],
+    })
+    const corrected = entry.controller.computedMovement()
+    const translation = {
+      x: current.x + corrected.x,
+      y: current.y + corrected.y,
+      z: current.z + corrected.z,
+    }
+    entry.body.setNextKinematicTranslation(translation)
+    return {
+      translation,
+      movement: { x: corrected.x, y: corrected.y, z: corrected.z },
+      grounded: entry.controller.computedGrounded(),
+      collisions: entry.controller.numComputedCollisions?.() || 0,
+    }
+  }
+
+  setKinematicCharacterPosition(id, translation = {}) {
+    this.#assertActive()
+    const entry = this.bodies.get(String(id))
+    if (!entry || entry.kind !== 'kinematic-character') return false
+    const values = [translation.x, translation.y, translation.z].map(Number)
+    if (!values.every(Number.isFinite)) throw new TypeError('Character position must be finite')
+    entry.body.setTranslation({ x: values[0], y: values[1], z: values[2] }, true)
+    entry.body.setNextKinematicTranslation?.({ x: values[0], y: values[1], z: values[2] })
+    return true
+  }
+
   setBodyTransform(id, transform = {}) {
     this.#assertActive()
     const entry = this.bodies.get(String(id))
@@ -149,6 +237,7 @@ export class PhysicsRuntime {
     const key = String(id)
     const entry = this.bodies.get(key)
     if (!entry) return false
+    if (entry.controller) this.world.removeCharacterController?.(entry.controller)
     this.world.removeRigidBody(entry.body)
     this.bodies.delete(key)
     return true
@@ -171,6 +260,9 @@ export class PhysicsRuntime {
 
   dispose() {
     if (this.disposed) return
+    for (const entry of this.bodies.values()) {
+      if (entry.controller) this.world?.removeCharacterController?.(entry.controller)
+    }
     this.bodies.clear()
     this.world?.free?.()
     this.world = null

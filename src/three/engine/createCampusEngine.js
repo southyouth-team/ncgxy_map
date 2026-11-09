@@ -502,7 +502,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxPlacementFootprint.visible = false
     sandboxPlacementFootprint.renderOrder = 5
     scene.add(sandboxPlacementFootprint)
-    const outlineGeometry = new THREE.EdgesGeometry(new THREE.PlaneGeometry(footprintWidth, footprintDepth))
+    const outlineSourceGeometry = new THREE.PlaneGeometry(footprintWidth, footprintDepth)
+    const outlineGeometry = new THREE.EdgesGeometry(outlineSourceGeometry)
+    outlineSourceGeometry.dispose()
     sandboxPlacementFootprintOutline = new THREE.LineSegments(outlineGeometry, new THREE.LineBasicMaterial({
       color: '#b8f5c8', transparent: true, opacity: 0.98, depthTest: false,
     }))

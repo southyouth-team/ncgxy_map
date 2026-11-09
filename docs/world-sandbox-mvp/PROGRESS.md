@@ -3755,3 +3755,5 @@ export const environmentBindings = [
 - 与本轮开始前分支提交 0d70aed8 的 CI 对比：失败文件仍为相同的 7 个、失败用例仍为 8 个；本轮新增 1 个测试文件且没有增加失败数。
 - 失败仍涉及 PlayerCharacterRuntime、InputController、modelSpatialRuntime、solarPosition、modelCapabilityManifest、modelTraversalTester、createBlankSandboxScene。InputController 当前失败断言位于既有测试第 210 行；尚未归因于本轮新增的移动意图测试。
 - 该结果不是全量 CI 通过；浏览器/Rapier 实际移动、水体浸入效果仍未验收。
+- 最新分支头 `ca0c03c9` 的 Frontend CI（run 42693619611）：Vite build 通过；548 个测试中 540 通过、8 失败，仍是相同 7 个失败文件/8 个失败断言。新增 waterVolumeRuntime 测试通过；失败总数未增加。
+- 当前分支头 CI 仍为 failure，不能视为验收通过；失败详情见 https://github.com/southyouth-team/ncgxy_map/actions/runs/42693619611。

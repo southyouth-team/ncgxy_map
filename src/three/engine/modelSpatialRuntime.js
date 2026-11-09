@@ -181,6 +181,14 @@ export function collectModelDeclaredMeshColliders(THREE, model, ownerId) {
     if (!declaration || declaration.enabled === false || declaration.shape !== 'mesh'
       || declaration.blocksMovement === false
       || typeof declaration.targetPartId !== 'string') continue
+    const condition = declaration.stateCondition
+    if (condition && typeof condition.key === 'string') {
+      const worldState = model.userData?.worldState || {}
+      const stateValue = Object.prototype.hasOwnProperty.call(worldState, condition.key)
+        ? worldState[condition.key]
+        : condition.defaultValue
+      if (stateValue !== condition.equals) continue
+    }
     const targetPartId = declaration.targetPartId
     if (duplicates.has(targetPartId) || seenTargets.has(targetPartId)) continue
     const target = parts.get(targetPartId)
@@ -222,6 +230,7 @@ export function collectModelDeclaredMeshColliders(THREE, model, ownerId) {
     output.push({
       ownerId: String(ownerId),
       colliderId: String(declaration.id || targetPartId),
+      surfaceId: String(declaration.id || targetPartId),
       targetPartId,
       vertices: new Float32Array(vertices),
       indices: new Uint32Array(indices),
@@ -345,7 +354,7 @@ export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
   try {
     [...traversalMeshes, ...declaredMeshColliders].forEach(item => {
       physicsRuntime.createStaticTrimesh({
-        id: key + ':manifest-trimesh:' + item.surfaceId,
+        id: key + ':manifest-trimesh:' + (item.surfaceId || item.colliderId),
         ownerId: key,
         vertices: item.vertices,
         indices: item.indices,

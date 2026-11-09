@@ -60,10 +60,10 @@ describe('createBlankSandboxScene expandable world', () => {
     const world = createBlankSandboxScene(THREE)
     world.userData.expandWorld('east', 20)
     world.userData.expandWorld('east', 20)
-    world.userData.expandWorld('east', 10)
+    world.userData.expandWorld('east', 9)
     world.userData.expandWorld('north', 20)
     world.userData.expandWorld('north', 20)
-    world.userData.expandWorld('north', 10)
+    world.userData.expandWorld('north', 9)
     const before = world.userData.getWorldState()
 
     expect(world.userData.expandWorld('east', 1)).toBe(false)

@@ -370,7 +370,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     state.model.position.z = z
     state.model.updateWorldMatrix(true, true)
     const bounds = new THREE.Box3().setFromObject(state.model)
-    if (!bounds.isEmpty()) state.model.position.y -= bounds.min.y
+    if (!bounds.isEmpty()) state.model.position.y += 0.012 - bounds.min.y
     state.model.updateWorldMatrix(true, true)
     const placedBounds = new THREE.Box3().setFromObject(state.model)
     if (sandboxPlacementFootprint) {

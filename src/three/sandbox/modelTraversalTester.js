@@ -2,6 +2,7 @@ import { PhysicsRuntime } from '../physics/PhysicsRuntime.js'
 import { normalizeCharacterTraversalProfile } from '../physics/CharacterTraversalProfile.js'
 import {
   collectModelMovementObstacles,
+  collectModelDeclaredMeshColliders,
   collectModelSupportSurfaces,
   collectModelTraversalTrimeshes,
 } from '../engine/modelSpatialRuntime.js'
@@ -69,6 +70,7 @@ export async function testModelTraversalRoutes(THREE, RAPIER, model, options = {
     ...(Array.isArray(traversal.jumps) ? traversal.jumps.map(item => ({ ...item, routeType: 'jumps' })) : []),
     ...(Array.isArray(traversal.stairs) ? traversal.stairs.map(item => ({ ...item, routeType: 'stairs' })) : []),
     ...(Array.isArray(traversal.ramps) ? traversal.ramps.map(item => ({ ...item, routeType: 'ramps' })) : []),
+    ...(Array.isArray(traversal.passages) ? traversal.passages.map(item => ({ ...item, routeType: 'passages' })) : []),
   ]
   const unresolved = []
   const resolvedRoutes = []
@@ -125,6 +127,22 @@ export async function testModelTraversalRoutes(THREE, RAPIER, model, options = {
     for (const item of traversalMeshes) {
       runtime.createStaticTrimesh({
         id: 'probe:traversal:' + item.surfaceId,
+        ownerId: 'probe',
+        vertices: item.vertices,
+        indices: item.indices,
+        friction: 0.9,
+      })
+      meshParts.add(item.targetPartId)
+    }
+
+    // The isolated probe must mirror live model physics registration: declared
+    // static Mesh blockers (building shells, terrain, shore walls) are real
+    // Rapier trimeshes, not omitted visual-only geometry.
+    const declaredMeshColliders = collectModelDeclaredMeshColliders(THREE, model, 'traversal-probe')
+    for (const item of declaredMeshColliders) {
+      if (meshParts.has(item.targetPartId)) continue
+      runtime.createStaticTrimesh({
+        id: 'probe:declared-mesh:' + item.colliderId,
         ownerId: 'probe',
         vertices: item.vertices,
         indices: item.indices,
@@ -279,8 +297,7 @@ export async function testModelTraversalRoutes(THREE, RAPIER, model, options = {
     const passedCount = tested.filter(item => item.status === 'passed').length
     const failedCount = tested.filter(item => item.status === 'failed').length
     const declaredRoutesPassed = tested.length > 0 && passedCount === tested.length && unresolved.length === 0
-    const untestedOtherCapabilities = (Array.isArray(traversal.passages) && traversal.passages.length > 0)
-      || (Array.isArray(traversal.connections) && traversal.connections.length > 0)
+    const untestedOtherCapabilities = Array.isArray(traversal.connections) && traversal.connections.length > 0
     return {
       version: 1,
       status: declaredRoutesPassed ? 'passed' : (failedCount ? 'failed' : 'incomplete'),

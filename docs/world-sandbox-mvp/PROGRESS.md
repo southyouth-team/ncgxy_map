@@ -3514,3 +3514,12 @@ export const environmentBindings = [
 - 纯视觉部件是否应阻挡仍依赖 AI 对几何意图的判断；系统不会按“建筑/树木/水体”等类别硬编码碰撞规则。
 - 自动修复最多一轮；仍未通过时明确阻止模型进入沙盒，保留草稿供进一步人工/对话修复。
 - 本轮未执行本地 Vitest、前后端构建或浏览器操作；需要以最新 GitHub Actions 和后续浏览器验收为准。
+
+
+### 碰撞完整性门禁 CI 结果（提交 f152da26）
+
+- Backend CI：NestJS Build 通过；11 个测试套件 99/99 通过；PostGIS migrations、API integration（10/10）和 schema verify 全部通过。
+- Frontend CI：`modelCollisionAnalyzer.test.js` 7/7、`modelSpatialRuntime.test.js` 25/25、`modelTraversalTester.test.js` 3/3 通过；全量 525 passed / 6 failed（531 total，47 个测试文件中 42 个通过、5 个既有失败文件）。失败仍为 PlayerCharacterRuntime、InputController、solarPosition、modelCapabilityManifest、createBlankSandboxScene，与本轮新增碰撞功能无关；Vite build 通过。
+- 本轮新增的模型碰撞诊断、运行时诊断挂载和前端自动修复/落位门禁均通过对应自动化测试与构建检查。
+- 未执行浏览器实测；尚未在真实生成模型样本上验证 AI 能否稳定判断每个部件的 required/none 策略，也未验证门洞、水域边界和人物胶囊体实际通行。
+- CI 工作流：Frontend `42676443612`（测试步骤因既有基线失败而整体失败，Build 通过）；Backend `42676443600`（success）。

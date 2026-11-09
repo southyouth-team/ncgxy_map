@@ -42,7 +42,7 @@ describe('createBlankSandboxScene expandable world', () => {
     expect(restored.userData.getWorldState()).toEqual(snapshot)
   })
 
-  it('rejects incompatible or incomplete saved grids without changing the world', () => {
+  it('rejects incompatible or duplicate saved chunks without changing the world', () => {
     const world = createBlankSandboxScene(THREE)
     const initial = world.userData.getWorldState()
     expect(world.userData.restoreWorldState({
@@ -51,54 +51,56 @@ describe('createBlankSandboxScene expandable world', () => {
     })).toBe(false)
     expect(world.userData.restoreWorldState({
       ...initial,
-      chunks: [{ x: 0, z: 0 }, { x: 2, z: 0 }],
+      chunks: [{ x: 0, z: 0 }, { x: 0, z: 0 }],
     })).toBe(false)
     expect(world.userData.getWorldState()).toEqual(initial)
   })
 
 
-  it('reclaims complete outer rows and columns without creating holes', () => {
+  it('reclaims one arbitrary interior chunk and keeps all other coordinates unchanged', () => {
     const world = createBlankSandboxScene(THREE)
-    for (const direction of ['north', 'east', 'south', 'west']) {
-      expect(world.userData.expandWorld(direction)).toBe(true)
-    }
+    world.userData.expandWorld('east', 2)
+    world.userData.expandWorld('south', 2)
+    const before = world.userData.getWorldState().chunks
 
-    expect(world.userData.removeWorldEdge('north')).toBe(true)
-    expect(world.userData.removeWorldEdge('west')).toBe(true)
-    expect(world.userData.removeWorldEdge('south')).toBe(true)
-    expect(world.userData.removeWorldEdge('east')).toBe(true)
-
-    const state = world.userData.getWorldState()
-    expect(state.chunks).toHaveLength(1)
-    expect(state.chunks).toContainEqual({ x: 0, z: 0 })
-    expect(state.bounds).toEqual({ minX: -27, maxX: 27, minZ: -21, maxZ: 21 })
-    expect(world.userData.sampleBounds).toMatchObject({ width: 54, depth: 42, centerX: 0, centerZ: 0 })
+    expect(world.userData.removeWorldChunk(1, 1)).toBe(true)
+    const after = world.userData.getWorldState()
+    expect(after.chunks).toHaveLength(before.length - 1)
+    expect(after.chunks).not.toContainEqual({ x: 1, z: 1 })
+    expect(after.chunks).toContainEqual({ x: 0, z: 0 })
+    expect(after.chunks.filter(item => item.x === 2 && item.z === 2)).toHaveLength(1)
+    expect(world.userData.worldChunks).toEqual(after.chunks)
+    expect(world.userData.removeWorldChunk(1, 1)).toBe(false)
   })
 
-  it('rejects reclaiming the origin anchor or reducing either dimension below one chunk', () => {
+  it('protects the origin anchor and the final remaining chunk', () => {
     const world = createBlankSandboxScene(THREE)
-    expect(world.userData.removeWorldEdge('north')).toBe(false)
-    expect(world.userData.removeWorldEdge('west')).toBe(false)
-
-    world.userData.expandWorld('north')
-    world.userData.expandWorld('south')
-    expect(world.userData.removeWorldEdge('north')).toBe(true)
-    expect(world.userData.removeWorldEdge('south')).toBe(true)
-    expect(world.userData.removeWorldEdge('north')).toBe(false)
-    expect(world.userData.getWorldState().chunks).toHaveLength(1)
+    expect(world.userData.removeWorldChunk(0, 0)).toBe(false)
+    expect(world.userData.removeWorldChunk(1, 0)).toBe(false)
+    expect(world.userData.getWorldState().chunks).toEqual([{ x: 0, z: 0 }])
   })
 
-  it('persists a reclaimed world and restores the same compacted bounds', () => {
+  it('persists and restores a world containing an internal hole', () => {
     const source = createBlankSandboxScene(THREE)
     source.userData.expandWorld('east', 2)
     source.userData.expandWorld('south', 2)
-    source.userData.removeWorldEdge('east')
-    source.userData.removeWorldEdge('south')
+    expect(source.userData.removeWorldChunk(1, 1)).toBe(true)
     const snapshot = source.userData.getWorldState()
 
     const restored = createBlankSandboxScene(THREE)
     expect(restored.userData.restoreWorldState(snapshot)).toBe(true)
     expect(restored.userData.getWorldState()).toEqual(snapshot)
+    expect(restored.userData.removeWorldChunk(1, 1)).toBe(false)
+  })
+
+  it('expands around an existing hole without recreating or overwriting it', () => {
+    const world = createBlankSandboxScene(THREE)
+    world.userData.expandWorld('east', 2)
+    world.userData.expandWorld('south', 2)
+    expect(world.userData.removeWorldChunk(1, 1)).toBe(true)
+    expect(world.userData.expandWorld('east')).toBe(true)
+    expect(world.userData.getWorldState().chunks).not.toContainEqual({ x: 1, z: 1 })
+    expect(world.userData.getWorldState().chunks).toContainEqual({ x: 3, z: 1 })
   })
 
   it('rejects an expansion beyond the chunk budget atomically', () => {

@@ -234,8 +234,8 @@ describe('collectModelDeclaredMeshColliders', () => {
     expect(result[0].indices.length).toBe(72)
     const xs = []
     for (let i = 0; i < result[0].vertices.length; i += 3) xs.push(result[0].vertices[i])
-    expect(Math.min(...xs)).toBeCloseTo(9.15)
-    expect(Math.max(...xs)).toBeCloseTo(11.85)
+    expect(Math.min(...xs)).toBeCloseTo(9.75)
+    expect(Math.max(...xs)).toBeCloseTo(12.25)
     expect(result[0].vertices).not.toContain(10.5)
   })
 

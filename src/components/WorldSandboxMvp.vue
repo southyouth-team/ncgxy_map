@@ -831,7 +831,7 @@ async function handleParameterChange(payload) {
 }
 
 function expandWorld(direction) {
-  if (!engine || placement.value.active) return false
+  if (!engine) return false
   const expanded = engine.expandSandboxWorld(direction, 1)
   if (!expanded) {
     message.value = '世界扩建失败，请检查当前沙盒状态'
@@ -1008,7 +1008,7 @@ onMounted(async () => {
   disposed = false
   try {
     engine = createCampusEngine(viewport.value, {
-      onReady: () => { message.value = '空白沙盒已就绪，可生成模型并放置到场景中。' },
+      onReady: () => { worldState.value = engine?.getSandboxWorldState?.() || null; message.value = '空白沙盒已就绪，可生成模型并放置到场景中。' },
       onError: error => { message.value = '沙盒初始化失败：' + (error?.message || '未知错误') },
       onSandboxModelsChange: list => { objects.value = list },
       onSandboxWorldChange: state => { worldState.value = state },
@@ -1076,6 +1076,14 @@ onBeforeUnmount(() => {
             <button :disabled="!placement.candidateLocked || placement.blocked" @click="confirmPlacement">确认落地</button>
             <button :disabled="!placement.candidateLocked" @click="unlockPlacementCandidate">重新选择</button>
             <button @click="cancelPlacement">取消</button>
+          </div>
+          <div class="world-mvp__placement-expand">
+            <span>空间不足？直接扩建世界</span>
+            <div class="world-mvp__expand-grid">
+              <span></span><button @click="expandWorld('north')">北</button><span></span>
+              <button @click="expandWorld('west')">西</button><span class="world-mvp__world-center">扩建</span><button @click="expandWorld('east')">东</button>
+              <span></span><button @click="expandWorld('south')">南</button><span></span>
+            </div>
           </div>
         </section>
       </template>
@@ -1251,6 +1259,9 @@ onBeforeUnmount(() => {
 .world-mvp__footprint-info small { color:#81958d; font-size:9px; }
 .world-mvp__placement-status { margin:12px 0; color:#c6e4ce; font-size:10px; line-height:1.6; }
 .world-mvp__placement-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.world-mvp__placement-expand { margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,.09); }
+.world-mvp__placement-expand > span { display:block; margin-bottom:8px; color:#aabbb4; font-size:10px; }
+.world-mvp__placement-expand .world-mvp__expand-grid button { padding:6px 3px; }
 .world-mvp__placement-actions button:first-child { grid-column:1 / -1; border-color:#8fbea0; color:#14251c; background:#a5c9b1; font-weight:700; }
 .world-mvp__placement-actions button:disabled { color:#dce7e3; background:rgba(255,255,255,.06); }
 .world-mvp__placement { margin-top:9px; padding:10px; border:1px solid rgba(165,201,177,.35); border-radius:8px; background:rgba(165,201,177,.08); }

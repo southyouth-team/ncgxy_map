@@ -1,6 +1,19 @@
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { normalizeCharacterTraversalProfile } from '../physics/CharacterTraversalProfile.js'
 
+function normalizeControlKey(eventOrKey) {
+  const event = typeof eventOrKey === 'object' && eventOrKey !== null ? eventOrKey : null
+  const code = String(event?.code || '')
+  const codeMap = {
+    KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyR: 'r',
+    ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright',
+    ShiftLeft: 'shift', ShiftRight: 'shift', Space: 'space',
+  }
+  if (codeMap[code]) return codeMap[code]
+  const key = String(event ? event.key : eventOrKey || '').toLowerCase()
+  return key === ' ' || key === 'spacebar' ? 'space' : key
+}
+
 export class InputController {
   constructor(THREE, domElement, cameraRig, bounds, collisionWorld = null) {
     this.THREE = THREE
@@ -35,22 +48,34 @@ export class InputController {
     this.jumpActive = false
     this.jumpRequested = false
     this.jumpLaunched = false
+    this.jumpBufferDuration = 0.14
+    this.coyoteTimeDuration = 0.1
+    this.jumpBufferRemaining = 0
+    this.coyoteTimeRemaining = this.coyoteTimeDuration
     this.spawnPosition = null
     this.lastTouchLook = { x: 0, y: 0 }
     this.onKeyDown = (event) => {
-      const key = event.key.toLowerCase()
+      const key = normalizeControlKey(event)
       const target = event.target
       if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return
       if (key === 'r') { this.resetPosition(); event.preventDefault(); return }
-      if (key === ' ' || key === 'space' || event.code === 'Space') { if (!event.repeat) this.jumpPlayer(); event.preventDefault(); return }
+      if (key === 'space') { if (!event.repeat) this.jumpPlayer(); event.preventDefault(); return }
       if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) return
       this.keys.add(key)
       this.onMovementInput?.()
       // 第一人称 WASD 也必须阻止浏览器默认滚动，否则按键会同时滚动页面。
       event.preventDefault()
     }
-    this.onKeyUp = (event) => { this.keys.delete(event.key.toLowerCase()); this.onMovementInput?.() }
-    this.onWindowBlur = () => this.keys.clear()
+    this.onKeyUp = (event) => { this.keys.delete(normalizeControlKey(event)); this.onMovementInput?.() }
+    this.clearHeldInput = () => {
+      this.keys.clear()
+      this.jumpBufferRemaining = 0
+      this.onMovementInput?.()
+    }
+    this.onWindowBlur = this.clearHeldInput
+    this.onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') this.clearHeldInput()
+    }
     this.onMouseDown = (event) => {
       if (event.button !== 0) return
       this.pointerDown = true
@@ -168,6 +193,7 @@ export class InputController {
     const previousStepCount = this.lastPhysicsStepCount
     const currentState = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
     if (!currentState) return null
+    this.updateJumpInputWindow(dt, currentState.grounded)
     const launchPending = this.jumpRequested
     if (currentState.grounded && !this.jumpActive) this.verticalVelocity = 0
     else if (!currentState.grounded && !launchPending) this.verticalVelocity -= this.gravity * dt
@@ -202,13 +228,33 @@ export class InputController {
     return { ...state, physicsStepped: state.stepCount > previousStepCount }
   }
 
-  jumpPlayer() {
-    if (!this.movementEnabled || this.mode === 'overview' || !this.grounded || this.jumpActive) return false
+  tryStartBufferedJump(grounded = this.grounded) {
+    if (this.jumpBufferRemaining <= 0 || this.jumpActive || !this.movementEnabled || this.mode === 'overview') return false
+    if (!grounded && this.coyoteTimeRemaining <= 0) return false
     this.verticalVelocity = Math.sqrt(2 * this.gravity * this.traversalProfile.jumpHeight)
     this.jumpActive = true
     this.jumpRequested = Boolean(this.physicsRuntime)
     this.jumpLaunched = !this.physicsRuntime
+    this.jumpBufferRemaining = 0
+    this.coyoteTimeRemaining = 0
     this.grounded = false
+    return true
+  }
+
+  updateJumpInputWindow(delta, grounded = this.grounded) {
+    const dt = Math.max(0, Math.min(Number(delta) || 0, 0.1))
+    this.jumpBufferRemaining = Math.max(0, this.jumpBufferRemaining - dt)
+    this.coyoteTimeRemaining = grounded
+      ? this.coyoteTimeDuration
+      : Math.max(0, this.coyoteTimeRemaining - dt)
+    return this.tryStartBufferedJump(grounded)
+  }
+
+  jumpPlayer() {
+    if (!this.movementEnabled || this.mode === 'overview' || this.jumpActive) return false
+    this.jumpBufferRemaining = this.jumpBufferDuration
+    // 立即响应地面/离地宽限期内的输入；其他情况保留短暂缓冲，等待可起跳状态。
+    this.tryStartBufferedJump(this.grounded)
     return true
   }
 
@@ -222,6 +268,7 @@ export class InputController {
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
     window.addEventListener('blur', this.onWindowBlur)
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.domElement.addEventListener('mousedown', this.onMouseDown)
     window.addEventListener('mousemove', this.onMouseMove)
     window.addEventListener('mouseup', this.onMouseUp)
@@ -235,8 +282,12 @@ export class InputController {
   }
 
   setVirtualKey(key, pressed) {
-    if (pressed) this.keys.add(key)
-    else this.keys.delete(key)
+    const normalized = normalizeControlKey(key)
+    if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(normalized)) return false
+    if (pressed) this.keys.add(normalized)
+    else this.keys.delete(normalized)
+    this.onMovementInput?.()
+    return true
   }
 
   setMode(mode) {
@@ -376,6 +427,7 @@ export class InputController {
   updateVerticalMotion(player, delta, { walking = false } = {}) {
     const dt = Math.max(0, Math.min(Number(delta) || 0, 0.05))
     if (!dt) return
+    this.updateJumpInputWindow(dt, this.grounded)
     const hit = this.getPlayerSupportHit(player, { walking })
     const groundEyeY = hit ? hit.point.y + this.playerEyeHeight : this.playerEyeHeight
 
@@ -496,6 +548,7 @@ export class InputController {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
     window.removeEventListener('blur', this.onWindowBlur)
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
     this.domElement.removeEventListener('mousedown', this.onMouseDown)
     window.removeEventListener('mousemove', this.onMouseMove)
     window.removeEventListener('mouseup', this.onMouseUp)

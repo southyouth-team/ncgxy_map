@@ -1,4 +1,5 @@
 import { CollisionWorld } from '../physics/CollisionWorld.js'
+import { normalizeCharacterTraversalProfile } from '../physics/CharacterTraversalProfile.js'
 
 export class InputController {
   constructor(THREE, domElement, cameraRig, bounds, collisionWorld = null) {
@@ -9,16 +10,15 @@ export class InputController {
     this._collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
     this.physicsRuntime = null
     this.physicsCharacterId = null
-    this.playerColliderRadius = Number(this._collisionWorld.radius) || 0.55
+    this.traversalProfile = normalizeCharacterTraversalProfile({
+      radius: Number(this._collisionWorld.radius) || undefined,
+    })
     this.groundRaycaster = THREE?.Raycaster ? new THREE.Raycaster() : null
     this.groundRayOrigin = THREE?.Vector3 ? new THREE.Vector3() : null
     this.groundRayDirection = THREE?.Vector3 ? new THREE.Vector3(0, -1, 0) : null
-    this.playerEyeHeight = 1.7
-    this.maxWalkableSlopeDegrees = 50
     this.gravity = 24
     this.verticalVelocity = 0
     this.grounded = true
-    this.maxStepHeight = 0.45
     this.groundProbeDistance = 60
     this.mode = 'overview'
     this.movementEnabled = true
@@ -92,6 +92,18 @@ export class InputController {
     }
   }
 
+  get playerColliderRadius() { return this.traversalProfile.radius }
+  set playerColliderRadius(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, radius: value }) }
+
+  get playerEyeHeight() { return this.traversalProfile.height }
+  set playerEyeHeight(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, height: value }) }
+
+  get maxWalkableSlopeDegrees() { return this.traversalProfile.maxSlopeClimbAngleDegrees }
+  set maxWalkableSlopeDegrees(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, maxSlopeClimbAngleDegrees: value }) }
+
+  get maxStepHeight() { return this.traversalProfile.maxStepHeight }
+  set maxStepHeight(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, maxStepHeight: value }) }
+
   get collisionWorld() {
     return this._collisionWorld
   }
@@ -123,11 +135,7 @@ export class InputController {
       id: this.physicsCharacterId,
       ownerId: this.physicsCharacterId,
       translation: { x: player.x, y: player.y - this.playerEyeHeight, z: player.z },
-      radius,
-      halfHeight,
-      maxStepHeight: this.maxStepHeight,
-      minStepWidth: Math.max(0.15, radius * 0.5),
-      maxSlopeClimbAngle: this.maxWalkableSlopeDegrees * Math.PI / 180,
+      traversalProfile: this.traversalProfile,
     })
     this.verticalVelocity = 0
     this.grounded = true

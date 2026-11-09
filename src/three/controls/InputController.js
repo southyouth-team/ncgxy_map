@@ -206,8 +206,8 @@ export class InputController {
     if (!this.movementEnabled || this.mode === 'overview' || !this.grounded || this.jumpActive) return false
     this.verticalVelocity = Math.sqrt(2 * this.gravity * this.traversalProfile.jumpHeight)
     this.jumpActive = true
-    this.jumpRequested = true
-    this.jumpLaunched = false
+    this.jumpRequested = Boolean(this.physicsRuntime)
+    this.jumpLaunched = !this.physicsRuntime
     this.grounded = false
     return true
   }
@@ -385,6 +385,7 @@ export class InputController {
         player.y = groundEyeY
         this.verticalVelocity = 0
         this.grounded = true
+        this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
         return
       }
     }
@@ -396,6 +397,7 @@ export class InputController {
       player.y = this.playerEyeHeight
       this.verticalVelocity = 0
       this.grounded = true
+      this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
     }
   }
 

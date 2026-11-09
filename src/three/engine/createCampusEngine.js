@@ -671,7 +671,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function replaceSandboxModel(id, replacement, metadata = {}) {
     const current = sandboxModels.get(String(id))
-    if (!current || !replacement?.isObject3D || replacement.parent) return false
+    if (!current || sandboxPlacementState?.model === current || !replacement?.isObject3D || replacement.parent) return false
     if (activeSandboxInterior?.modelId === String(id)) return false
     replacement.userData = {
       ...(replacement.userData || {}),
@@ -772,7 +772,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   // 所有程序化 Transform 修改统一经过此入口，保证世界矩阵、碰撞体、支撑面和阴影同步。
   function setSandboxModelTransform(id, transform = {}) {
     const model = sandboxModels.get(String(id))
-    if (!model || !transform || typeof transform !== 'object') return false
+    if (!model || sandboxPlacementState?.model === model || !transform || typeof transform !== 'object') return false
 
     let changed = false
     let hasValidTransformInput = false

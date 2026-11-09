@@ -1295,6 +1295,7 @@ MVP 只覆盖三类基础地形：平地、坡路、楼梯；两种移动行为�
 #### 3.8.3 MVP 跳跃与卡住复位
 
 - 跳跃使用同一全局人物 Profile 的固定跳跃高度和最大水平距离；人物外观、单个模型或单次测试不得覆盖这些参数。
+- 输入层提供短时 Jump Buffer（默认 140ms）与 Coyote Time（默认 100ms），用于容忍落地前输入和离开支撑面后的短暂起跳窗口；二者只改善输入容错，不改变跳跃高度、最大距离或胶囊体规格。
 - 跳跃验收必须同时满足：起跳距离不超过 Profile 上限、空中轨迹未被碰撞阻断、最终到达目标区域、Rapier 报告重新接地且落地高度合理。未接地、落点偏离或落地高度异常均失败。
 - 玩家按 Space 起跳；按 R 清除输入/寻路/跳跃状态，并复位到进入沙盒时记录的出生位置。复位通过物理 Runtime 同步角色胶囊体和相机位置。
 - 不实现二段跳、攀爬、自动绕障或复杂落点评分。
@@ -1308,7 +1309,7 @@ MVP 只覆盖三类基础地形：平地、坡路、楼梯；两种移动行为�
 
 当前实际执行契约（以代码为准）：
 
-- `capabilities.spatial.colliders`：执行 `shape: "box"` 阻挡体（保守世界空间 AABB）和显式声明的 `shape: "mesh"` 静态 Rapier Trimesh。Mesh 必须绑定唯一真实 componentId，提取目标部件下的实际 Mesh 几何并应用完整世界变换；不自动将可见 Mesh 纳入碰撞。
+- `capabilities.spatial.colliders`：执行 `shape: "box"` 阻挡体（Rapier 路径保留部件世界旋转与缩放，CollisionWorld 平面回退路径仍使用保守世界空间 AABB）和显式声明的 `shape: "mesh"` 静态 Rapier Trimesh。Mesh 必须绑定唯一真实 componentId，提取目标部件下的实际 Mesh 几何并应用完整世界变换；不自动将可见 Mesh 纳入碰撞。
 - `capabilities.spatial.traversability.stairs/ramps`：绑定到真实 Mesh 的楼梯/坡面几何可提取为静态 Rapier Triangle Mesh；几何绑定或注册成功不等于整条人物路线已经通过验收。
 - `capabilities.spatial.surfaces`：表达支撑/可行走意图，不是通用 Mesh 碰撞生成协议。
 - `passages`、`jumps`、`connections` 等声明在其专用运行时和验收完成前仍属于描述性数据，不能宣称已执行。
@@ -1325,6 +1326,14 @@ AI 生成端必须遵守同一契约：简单结构使用 Box blocker；山体�
 5. P2：碰撞注册、支撑面、门洞净空和人物路线统一生成可追溯验收报告。
 
 任何阶段都必须区分“声明有效”“几何绑定”“Collider 已注册”和“人物实际通过/被阻挡”四种状态；不能用其中一项替代其他验收。
+
+#### 3.8.6 键盘连续输入与铰链门碰撞同步（2026-11-10）
+
+- 键盘控制优先使用物理按键码（KeyboardEvent.code）归一化 WASD、方向键、Shift、Space 和复位键；keyup 必须使用同一归一化规则，避免 key 与 code/大小写不一致造成按键状态残留或提前释放。
+- 窗口失焦、页面隐藏、模式切换、传送、复位或禁用移动时清理按住状态和未消费的跳跃缓冲，避免焦点恢复后出现卡键或延迟跳跃。
+- 铰链门的开关状态只驱动门扇部件 Transform；门扇 Collider 必须在开/关两种状态下保持启用，并跟随部件世界 Transform 更新。门洞通行由墙体分段/真实开口保证，不得通过移除门扇 Collider 来模拟开门。
+- Rapier Box Collider 必须保留部件世界位置、旋转和缩放；不能把旋转门扇先转换为世界 AABB 后再作为未旋转 Box 注册，否则门打开后会出现错误阻挡区域或穿过门扇。
+- stateCondition 仍可用于真正需要启停的阻挡区域，但不应用于具有铰链 Transform 的实体门扇。AI 建模 Prompt 与 Runtime 必须遵守同一约定。
 
 
 #### 3.8.5 模型碰撞完整性门禁与定向修复（2026-11-10）

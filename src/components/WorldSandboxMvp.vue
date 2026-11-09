@@ -37,6 +37,12 @@ const selectedChunkKeys = ref([])
 const reclaimFeedback = ref(null)
 const selectedChunks = computed(() => (worldState.value?.chunks || []).filter(item => selectedChunkKeys.value.includes(item.x + ':' + item.z)))
 const managementMode = ref('sandbox')
+const sandboxViewMode = ref('free')
+function selectSandboxViewMode(mode) {
+  if (!['free', '2.5d', '3d'].includes(mode)) return
+  if (engine?.setViewMode?.(mode) === false) return
+  sandboxViewMode.value = mode
+}
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
 const timeEnabled = ref(true)
@@ -1114,6 +1120,7 @@ onMounted(async () => {
     await engine.init()
     if (disposed) return
     engine.setMode('overview')
+    engine.setViewMode('free')
     engine.setSandboxTransformMode(transformMode.value)
     const restored = await restoreSandbox()
     if (!restored) {
@@ -1138,7 +1145,7 @@ onBeforeUnmount(() => {
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
       <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>空白世界 · AI 模型构建与交互</span></div>
-      <div class="world-mvp__header-actions"><button :class="{ active: managementMode === 'sandbox' }" @click="setManagementMode('sandbox')">沙盒管理</button><button :class="{ active: managementMode === 'chunks' }" @click="toggleChunkManagement">{{ managementMode === 'chunks' ? '退出地块管理' : '地块管理' }}</button><button :class="{ active: managementMode === 'model' }" @click="setManagementMode('model')">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
+      <div class="world-mvp__header-actions"><div class="world-mvp__view-switch" role="group" aria-label="沙盒视角"><button :class="{ active: sandboxViewMode === 'free' }" @click="selectSandboxViewMode('free')">自由视角</button><button :class="{ active: sandboxViewMode === '2.5d' }" @click="selectSandboxViewMode('2.5d')">2.5D</button><button :class="{ active: sandboxViewMode === '3d' }" @click="selectSandboxViewMode('3d')">3D</button></div><button :class="{ active: managementMode === 'sandbox' }" @click="setManagementMode('sandbox')">沙盒管理</button><button :class="{ active: managementMode === 'chunks' }" @click="toggleChunkManagement">{{ managementMode === 'chunks' ? '退出地块管理' : '地块管理' }}</button><button :class="{ active: managementMode === 'model' }" @click="setManagementMode('model')">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
     </header>
 
     <section v-if="managementMode === 'chunks' && !placement.active" class="world-mvp__chunk-manager">
@@ -1337,6 +1344,9 @@ onBeforeUnmount(() => {
 .world-mvp__brand strong { font-size:13px; letter-spacing:1.1px; }
 .world-mvp__brand span { margin-top:4px; color:#8e9fa3; font-size:10px; }
 .world-mvp__header-actions { display:flex; align-items:center; gap:9px; }
+.world-mvp__view-switch { display:flex; align-items:center; gap:3px; padding:3px; border:1px solid rgba(165,201,177,.25); border-radius:8px; background:rgba(0,0,0,.16); }
+.world-mvp__view-switch button { padding:6px 8px; border-color:transparent; white-space:nowrap; }
+.world-mvp__view-switch button.active { border-color:#a5c9b1; color:#c6e4ce; background:rgba(165,201,177,.16); }
 .world-mvp__chunk-manager { position:absolute; z-index:4; top:76px; right:14px; width:min(420px,calc(100vw - 28px)); max-height:42vh; overflow:auto; padding:12px; border:1px solid rgba(255,255,255,.14); border-radius:10px; background:rgba(12,21,27,.9); box-shadow:0 12px 34px rgba(0,0,0,.28); backdrop-filter:blur(12px); }
 .world-mvp__chunk-manager-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .world-mvp__chunk-manager-head > div:first-child { display:grid; gap:4px; }
@@ -1439,6 +1449,8 @@ onBeforeUnmount(() => {
 .world-mvp__help { position:absolute; right:14px; bottom:12px; padding:8px 11px; border:1px solid rgba(255,255,255,.1); border-radius:7px; color:#c7d2d0; background:rgba(16,27,34,.75); font-size:10px; }
 @media(max-width:680px) {
   .world-mvp__header { height:54px; padding:0 10px; }
+  .world-mvp__header-actions { gap:5px; overflow-x:auto; }
+  .world-mvp__view-switch button { padding:5px 6px; font-size:9px; }
   .world-mvp__panel { top:auto; left:8px; right:8px; bottom:8px; width:auto; max-height:52vh; padding:0 12px 10px; }
   .world-mvp__help { display:none; }
   .world-mvp__chunk-manager { top:62px; right:8px; width:calc(100vw - 16px); max-height:45vh; padding:10px; }

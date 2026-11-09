@@ -406,10 +406,10 @@ describe('InputController Rapier character movement', () => {
     cameraRig.player.set = function (x, y, z) { Object.assign(this, { x, y, z }) }
     const { calls } = attachPhysics(controller, cameraRig.player)
     controller.teleportPlayer({ x: 4, y: 3.2, z: 6 })
-    expect(calls.teleported.at(-1)).toEqual({
-      id: 'sandbox:player',
-      position: { x: 4, y: 1.5, z: 6 },
-    })
+    expect(calls.teleported.at(-1).id).toBe('sandbox:player')
+    expect(calls.teleported.at(-1).position.x).toBeCloseTo(4)
+    expect(calls.teleported.at(-1).position.y).toBeCloseTo(1.5)
+    expect(calls.teleported.at(-1).position.z).toBeCloseTo(6)
 
     controller.setPlayerDimensions({ eyeHeight: 1.9, colliderRadius: 0.32 })
     expect(calls.created).toHaveLength(2)

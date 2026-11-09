@@ -4,6 +4,8 @@
  * Rendering objects remain owned by Three.js. This module owns physics state,
  * fixed-step simulation, and physics-body lifecycle only.
  */
+import { normalizeCharacterTraversalProfile } from './CharacterTraversalProfile.js'
+
 export class PhysicsRuntime {
   constructor(RAPIER, options = {}) {
     if (!RAPIER?.World || !RAPIER?.RigidBodyDesc || !RAPIER?.ColliderDesc) {
@@ -154,9 +156,23 @@ export class PhysicsRuntime {
     if (!id) throw new TypeError('Kinematic character requires a stable id')
     if (this.bodies.has(id)) throw new Error('Physics body id already exists: ' + id)
 
-    const radius = this.#positiveNumber(options.radius, 0.35)
-    const halfHeight = Math.max(0.01, Number(options.halfHeight) || 0.5)
-    const offset = this.#positiveNumber(options.offset, 0.01)
+    const traversalProfile = normalizeCharacterTraversalProfile(options.traversalProfile || {
+      radius: options.radius,
+      height: options.height || (Number(options.halfHeight) > 0 && Number(options.radius) > 0
+        ? Number(options.halfHeight) * 2 + Number(options.radius) * 2
+        : undefined),
+      maxStepHeight: options.maxStepHeight,
+      maxSlopeClimbAngleDegrees: Number.isFinite(Number(options.maxSlopeClimbAngle))
+        ? Number(options.maxSlopeClimbAngle) * 180 / Math.PI : undefined,
+      minSlopeSlideAngleDegrees: Number.isFinite(Number(options.minSlopeSlideAngle))
+        ? Number(options.minSlopeSlideAngle) * 180 / Math.PI : undefined,
+      minStepWidth: options.minStepWidth,
+      snapToGroundDistance: options.snapToGroundDistance,
+      colliderOffset: options.offset,
+    })
+    const radius = traversalProfile.radius
+    const halfHeight = Math.max(0.01, (traversalProfile.height - radius * 2) / 2)
+    const offset = traversalProfile.colliderOffset
     const translation = options.translation || { x: 0, y: 0, z: 0 }
     const position = [translation.x, translation.y, translation.z].map(Number)
     if (!position.every(Number.isFinite)) throw new TypeError('Kinematic character translation must be finite')
@@ -173,14 +189,14 @@ export class PhysicsRuntime {
       controller = this.world.createCharacterController(offset)
       controller.setUp?.({ x: 0, y: 1, z: 0 })
       controller.setSlideEnabled?.(true)
-      controller.setMaxSlopeClimbAngle?.(Number(options.maxSlopeClimbAngle) || (50 * Math.PI / 180))
-      controller.setMinSlopeSlideAngle?.(Number(options.minSlopeSlideAngle) || (30 * Math.PI / 180))
+      controller.setMaxSlopeClimbAngle?.(traversalProfile.maxSlopeClimbAngleDegrees * Math.PI / 180)
+      controller.setMinSlopeSlideAngle?.(traversalProfile.minSlopeSlideAngleDegrees * Math.PI / 180)
       controller.enableAutostep?.(
-        this.#positiveNumber(options.maxStepHeight, 0.45),
-        this.#positiveNumber(options.minStepWidth, 0.2),
+        traversalProfile.maxStepHeight,
+        traversalProfile.minStepWidth,
         false,
       )
-      controller.enableSnapToGround?.(this.#positiveNumber(options.snapToGroundDistance, 0.25))
+      controller.enableSnapToGround?.(traversalProfile.snapToGroundDistance)
       const entry = {
         id,
         ownerId: options.ownerId == null ? null : String(options.ownerId),
@@ -188,7 +204,8 @@ export class PhysicsRuntime {
         collider,
         controller,
         kind: 'kinematic-character',
-        dimensions: { radius, halfHeight },
+        dimensions: { radius, halfHeight, height: traversalProfile.height },
+        traversalProfile,
         desiredVelocity: { x: 0, y: 0, z: 0 },
         grounded: true,
         pendingGrounded: true,

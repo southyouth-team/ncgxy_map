@@ -120,6 +120,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let sandboxPlacementFootprint = null
   let sandboxPlacementFootprintOutline = null
   let chunkManagementActive = false
+  let chunkManagementPreviousCameraMode = null
   let selectedSandboxChunkKeys = new Set()
   let selectedGeneratedAsset = null
   let generatedAssetSequence = 0
@@ -367,14 +368,26 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function setSandboxChunkManagement(enabled) {
     if (!isBlankSandbox) return false
-    chunkManagementActive = Boolean(enabled)
+    const nextEnabled = Boolean(enabled)
+    if (nextEnabled && !chunkManagementActive) {
+      chunkManagementPreviousCameraMode = cameraRig?.mode || 'thirdPerson'
+      cameraRig?.setMode('overview')
+      input?.setMode('overview')
+    }
+    chunkManagementActive = nextEnabled
     if (!chunkManagementActive) selectedSandboxChunkKeys.clear()
-    input?.setMovementEnabled(!chunkManagementActive)
     if (chunkManagementActive) {
+      input?.setMovementEnabled(false)
       sandboxTransform?.detach()
       cameraRig?.setOrbitInteractionEnabled?.(true)
       // 地块管理始终先展示当前全部地块；随后用户可自由平移、旋转和缩放。
       focusSandboxOverview()
+    } else {
+      const restoreMode = chunkManagementPreviousCameraMode || 'thirdPerson'
+      if (cameraRig?.mode !== restoreMode) cameraRig?.setMode(restoreMode)
+      input?.setMode(restoreMode)
+      input?.setMovementEnabled(restoreMode !== 'overview')
+      chunkManagementPreviousCameraMode = null
     }
     campus?.userData?.setChunkManagementState?.(chunkManagementActive, Array.from(selectedSandboxChunkKeys))
     callbacks.onSandboxChunkSelectionChange?.({

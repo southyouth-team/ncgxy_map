@@ -114,10 +114,11 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     const entries = Array.isArray(state?.chunks) ? state.chunks : []
     for (const item of entries) {
       const x = Number(item?.x), z = Number(item?.z)
-      if (Number.isInteger(x) && Number.isInteger(z)) addChunk(x, z)
+      if (Number.isInteger(x) && Number.isInteger(z) && Math.abs(x) <= 1000 && Math.abs(z) <= 1000) addChunk(x, z)
     }
-    const xs = Array.from(chunks.values(), item => item.userData.worldChunk.x)
-    const zs = Array.from(chunks.values(), item => item.userData.worldChunk.z)
+    const coordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
+    const xs = coordinates.map(item => item.x)
+    const zs = coordinates.map(item => item.z)
     bounds.minX = Math.min(...xs) * chunkWidth - chunkWidth / 2
     bounds.maxX = Math.max(...xs) * chunkWidth + chunkWidth / 2
     bounds.minZ = Math.min(...zs) * chunkDepth - chunkDepth / 2
@@ -126,6 +127,7 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     root.userData.sampleBounds.depth = bounds.maxZ - bounds.minZ
     root.userData.sampleBounds.centerX = (bounds.minX + bounds.maxX) / 2
     root.userData.sampleBounds.centerZ = (bounds.minZ + bounds.maxZ) / 2
+    root.userData.worldChunks = coordinates.map(({ x, z }) => ({ x, z }))
     rebuildBoundary()
     return true
   }

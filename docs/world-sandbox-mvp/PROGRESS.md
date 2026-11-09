@@ -2846,3 +2846,20 @@ export const environmentBindings = [
 - 移除沙盒对 thirdPerson 的强制 overview 归一化。
 - 沙盒选择 2.5D / 3D 时，在切换投影后同步进入 thirdPerson，复用首页 CameraRig 的 2.5D 固定斜俯视跟随距离与 3D 透视跟随距离；选择自由视角则返回 overview。
 - 本轮仅完成远程源码修改和回读检查，未执行本地构建、自动化测试或浏览器验收。
+
+
+## 2026-11-09 — 沙盒底层统一阴影调度
+
+### 本轮实现
+
+- 新增 `src/three/engine/ShadowSystem.js`，将阴影贴图启用、质量配置、静态场景失效和动态投影失效收口为沙盒 Runtime 的统一服务。
+- `createCampusEngine.js` 不再直接散落管理阴影贴图刷新；静态场景/光照变化走静态失效，人物移动、垂直位置变化、人物显隐切换、模型 TransformControls 调整和受风摆动对象走动态失效。
+- 保留 `shadowMap.autoUpdate = false`，静态场景仍使用缓存；动态对象变化时在下一次场景渲染前标记 shadow map 需要更新，避免相机静止或自由总览按需渲染时阴影停留在旧位置。
+- 新增 `ShadowSystem.test.js`，覆盖阴影缓存配置、动态失效、禁用状态和 dispose 行为。
+
+### 当前边界
+
+- 这是统一阴影调度的第一步：当前 Three.js 仍使用共享 DirectionalLight ShadowMap，动态对象移动时会触发整张阴影贴图更新；尚未实现独立动态阴影图层、接触阴影、按可见区域裁剪或阴影预算调度。
+- 模型静态/动态状态目前由引擎已有的编辑与动画更新路径触发失效；未来新增动态实体时必须接入 ShadowSystem 的动态失效接口。
+- 人物外观仍是现有占位 Avatar，本轮没有改造人物 AI 建模、骨骼 Rig 或动画资产管线。
+- 远程源码与测试已写入目标功能分支；未运行本地构建、Vitest 或浏览器验收，不能标记为通过。

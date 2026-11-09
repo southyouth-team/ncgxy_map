@@ -32,7 +32,12 @@ function collectTargetMeshes(target, targetPartId) {
       ancestor = ancestor.parent
     }
     const position = mesh.geometry?.getAttribute?.('position')
-    if (position && position.itemSize >= 3 && position.count >= 3) meshes.push(mesh)
+    if (!position || position.itemSize < 3 || position.count < 3) return
+    const availableCount = mesh.geometry.index?.count ?? position.count
+    const start = Math.max(0, Number(mesh.geometry.drawRange?.start) || 0)
+    const requestedCount = Number(mesh.geometry.drawRange?.count)
+    const end = Math.min(availableCount, Number.isFinite(requestedCount) ? start + requestedCount : availableCount)
+    if (end - start >= 3) meshes.push(mesh)
   })
   return meshes
 }
@@ -49,6 +54,11 @@ export function analyzeModelCollisionCompleteness(root) {
   const issues = []
   const records = []
   const addIssue = (code, severity, path, detail) => issues.push({ code, severity, path, detail })
+
+  for (const componentId of duplicates) {
+    addIssue('collision.component-id.duplicate', 'error', `component:${componentId}`,
+      '模型中存在重复 componentId，碰撞目标无法可靠绑定')
+  }
 
   if (!Array.isArray(declarations)) {
     addIssue('collision.declarations.missing', 'warning', 'capabilities.spatial.colliders',
@@ -91,6 +101,11 @@ export function analyzeModelCollisionCompleteness(root) {
     }
     if (shape === 'box' && (!finitePositiveVector(declaration.size))) {
       addIssue('collision.box.size.invalid', 'error', path + '.size', 'Box 碰撞体必须提供正数 x/y/z 尺寸')
+      continue
+    }
+    if (shape === 'box' && declaration.center != null
+      && !['x', 'y', 'z'].every(key => Number.isFinite(Number(declaration.center?.[key])))) {
+      addIssue('collision.box.center.invalid', 'error', path + '.center', 'Box 碰撞体中心必须是有限的 x/y/z 坐标')
       continue
     }
     const meshes = collectTargetMeshes(target, targetPartId)

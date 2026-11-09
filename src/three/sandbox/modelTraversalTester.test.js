@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
-import { DEFAULT_CHARACTER_TRAVERSAL_PROFILE } from '../physics/CharacterTraversalProfile.js'
 import { testModelTraversalRoutes } from './modelTraversalTester.js'
 
 beforeAll(async () => {
@@ -64,14 +63,9 @@ describe('testModelTraversalRoutes', () => {
     }
 
     const result = await testModelTraversalRoutes(THREE, RAPIER, model, {
-      traversalProfile: {
-        ...DEFAULT_CHARACTER_TRAVERSAL_PROFILE,
-        radius: 0.2,
-        height: 1.7,
-        maxStepHeight: 0.22,
-        minStepWidth: 0.2,
-        snapToGroundDistance: 0.3,
-      },
+      // Deliberately attempt to override character dimensions. The probe must
+      // ignore this and use the same global profile as the live player.
+      traversalProfile: { radius: 1.4, height: 3, maxStepHeight: 0.01 },
       maxDuration: 8,
       speed: 2.2,
     })

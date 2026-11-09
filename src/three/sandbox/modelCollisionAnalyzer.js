@@ -60,9 +60,14 @@ export function analyzeModelCollisionCompleteness(root) {
       '模型中存在重复 componentId，碰撞目标无法可靠绑定')
   }
 
-  if (!Array.isArray(declarations)) {
+  if (parts.size === 0) {
+    addIssue('collision.components.missing', 'error', 'model',
+      '模型没有带稳定 componentId 的可审计部件组')
+  }
+  if (!Array.isArray(declarations)
+    && [...parts.values()].some(part => part.userData?.collisionPolicy !== 'none')) {
     addIssue('collision.declarations.missing', 'warning', 'capabilities.spatial.colliders',
-      '模型没有提供可执行的碰撞声明；可见 Mesh 不会自动成为 Collider')
+      '模型存在需要分类或阻挡的部件，但没有提供可执行的碰撞声明；可见 Mesh 不会自动成为 Collider')
   }
 
   const activeByTarget = new Map()

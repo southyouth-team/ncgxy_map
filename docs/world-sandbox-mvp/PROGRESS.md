@@ -3450,3 +3450,19 @@ export const environmentBindings = [
 - Vite build 通过。
 - 后端 CI：NestJS build 通过；96 passed / 1 failed，仍为既有 image-generation.procedural.spec.ts 的 shared-secret/chat/completions URL 配置错误；数据库集成步骤因此跳过。
 - 当前分支 HEAD：ac15ad05c8b14dff90b340bd4b4a706a08c73854（相对 ee3eff8b 仅追加进度文档）。本轮没有浏览器验收或用户本地测试。
+
+
+## 2026-11-10 — 模型空间碰撞 P0：AI 与 Runtime 能力契约对齐
+
+### 本轮改动
+
+1. 更新程序化模型生成 Prompt，明确当前物理执行边界：普通 `spatial.colliders` 只执行 Box blocker；楼梯/坡面真实几何另走静态 Rapier Trimesh 路径；支撑面声明不等于通用碰撞生成；通道/连接等未落地能力不得宣称可运行。
+2. 明确普通实体阻挡部件必须绑定真实 componentId 并声明 Box blocker，门洞/通道必须拆分；装饰薄片、叶片、线缆和玻璃等不得无差别阻挡。
+3. 明确水体的当前限制：水面 Mesh 不会自动阻挡，也不应成为站立面；只有在当前 Box/AABB 能力下可以可靠构成连续闭合岸线时才声明边界阻挡，不能宣称通用水域自动编译已完成。
+4. 修正 `refreshModelPhysicsRegistration` 注释，准确描述当前同时注册声明 Box 和楼梯/坡面 Trimesh，而非只注册 Box。
+
+### 验收边界
+
+- 新增服务端 Prompt 契约断言，锁定上述执行范围，防止未来 Prompt 再次把未实现能力描述为已支持。
+- 本轮只完成 P0 契约对齐，不包含通用 Mesh 自动碰撞、凸分解、水域边界自动生成或浏览器验收。
+- 代码和文档写入后需回读确认；CI 状态以本轮提交后的 Actions 为准，不能沿用历史结果。

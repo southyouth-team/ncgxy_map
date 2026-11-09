@@ -56,6 +56,8 @@ export function collectModelWaterVolumes(THREE, model, ownerId) {
       ownerId: String(ownerId),
       targetPartId: declaration.targetPartId,
       target,
+      model,
+      declaration,
       center: { x: values[0], z: values[1] },
       size: { x: values[2], z: values[3] },
       bottomY: values[4],
@@ -77,7 +79,8 @@ export function samplePlayerWaterState(THREE, volumes, playerPosition, eyeHeight
 
   for (const volume of volumes) {
     const target = volume?.target
-    if (!target?.matrixWorld || !Number.isFinite(volume.depth) || volume.depth <= 0) continue
+    const depth = resolveVolumeDepth(volume.model, volume.declaration) ?? volume.depth
+    if (!target?.matrixWorld || !Number.isFinite(depth) || depth <= 0) continue
     target.updateWorldMatrix?.(true, false)
     const elements = target.matrixWorld.elements
     // MVP water surfaces are horizontal. Reject tilted volumes rather than
@@ -92,7 +95,7 @@ export function samplePlayerWaterState(THREE, volumes, playerPosition, eyeHeight
 
     const bottom = new THREE.Vector3(volume.center.x, volume.bottomY, volume.center.z)
       .applyMatrix4(target.matrixWorld)
-    const surface = new THREE.Vector3(volume.center.x, volume.bottomY + volume.depth, volume.center.z)
+    const surface = new THREE.Vector3(volume.center.x, volume.bottomY + depth, volume.center.z)
       .applyMatrix4(target.matrixWorld)
     const worldDepth = surface.y - bottom.y
     if (!Number.isFinite(worldDepth) || worldDepth <= 0) continue

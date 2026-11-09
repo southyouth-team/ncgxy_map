@@ -163,3 +163,27 @@ describe('CollisionWorld support surface registry', () => {
     expect(collision.supportSurfaces.map(surface => surface.ownerId)).toEqual(['model-b'])
   })
 })
+
+
+describe('CollisionWorld walkable chunk regions', () => {
+  const regions = [
+    { minX: -27, maxX: 27, minZ: -21, maxZ: 21 },
+    { minX: 27, maxX: 81, minZ: -21, maxZ: 21 },
+    { minX: -27, maxX: 27, minZ: 21, maxZ: 63 },
+    // The south-east chunk is intentionally absent.
+  ]
+
+  it('keeps adjacent chunk seams continuously walkable', () => {
+    const collision = new CollisionWorld({ minX: -27, maxX: 81, minZ: -21, maxZ: 63 }, [], 0.62)
+    collision.setWalkableRegions(regions)
+    expect(collision.isBlocked(27, 0)).toBe(false)
+    expect(collision.isBlocked(0, 21)).toBe(false)
+  })
+
+  it('blocks a reclaimed chunk while preserving existing chunks', () => {
+    const collision = new CollisionWorld({ minX: -27, maxX: 81, minZ: -21, maxZ: 63 }, [], 0.62)
+    collision.setWalkableRegions(regions)
+    expect(collision.isBlocked(50, 40)).toBe(true)
+    expect(collision.isBlocked(0, 0)).toBe(false)
+  })
+})

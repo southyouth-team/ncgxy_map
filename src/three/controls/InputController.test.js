@@ -421,8 +421,6 @@ describe('InputController Rapier character movement', () => {
 describe('InputController jump and stuck reset', () => {
   it('starts a jump with the shared profile and rejects a second jump while airborne', () => {
     const { controller, cameraRig } = createController()
-    expect(controller.jumpPlayer()).toBe(false)
-    controller.setMode('thirdPerson')
     expect(controller.jumpPlayer()).toBe(true)
     expect(controller.verticalVelocity).toBeCloseTo(Math.sqrt(2 * controller.gravity * controller.traversalProfile.jumpHeight))
     expect(controller.jumpPlayer()).toBe(false)

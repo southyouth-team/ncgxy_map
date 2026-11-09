@@ -913,7 +913,12 @@ async function restoreSandbox() {
     const registeredIds = []
     try {
       for (const { id, model } of restoredModels) {
-        const registeredId = engine.addSandboxModel(model, { name: model.name, id })
+        // ObjectLoader 已从存档恢复完整 Transform；显式传回原位置，避免 addSandboxModel 的新模型默认落点覆盖存档坐标。
+        const registeredId = engine.addSandboxModel(model, {
+          name: model.name,
+          id,
+          position: { x: model.position.x, y: model.position.y, z: model.position.z },
+        })
         registeredIds.push(registeredId)
         objectsById.set(registeredId, model)
       }

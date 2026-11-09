@@ -134,11 +134,19 @@ export class CollisionWorld {
 
   isInsideWalkableRegions(x, z) {
     if (!this.walkableRegions) return true
-    const r = this.radius
-    return this.walkableRegions.some(region => (
-      x >= region.minX + r && x <= region.maxX - r
-      && z >= region.minZ + r && z <= region.maxZ - r
+    const inside = (px, pz) => this.walkableRegions.some(region => (
+      px >= region.minX && px <= region.maxX
+      && pz >= region.minZ && pz <= region.maxZ
     ))
+    // Probe the player's footprint, not just its center. Adjacent chunks form one
+    // continuous walkable union, while a reclaimed chunk remains a hard boundary.
+    const r = this.radius * 0.82
+    const probes = [
+      [x, z], [x - r, z], [x + r, z], [x, z - r], [x, z + r],
+      [x - r * 0.7, z - r * 0.7], [x + r * 0.7, z - r * 0.7],
+      [x - r * 0.7, z + r * 0.7], [x + r * 0.7, z + r * 0.7],
+    ]
+    return probes.every(([px, pz]) => inside(px, pz))
   }
 
   isBlocked(x, z) {

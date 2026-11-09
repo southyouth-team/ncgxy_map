@@ -3452,6 +3452,34 @@ export const environmentBindings = [
 - 当前分支 HEAD：ac15ad05c8b14dff90b340bd4b4a706a08c73854（相对 ee3eff8b 仅追加进度文档）。本轮没有浏览器验收或用户本地测试。
 
 
+## 2026-11-10 — P1：显式静态 Mesh Collider 编译
+
+### 本轮实现
+
+1. 新增 `collectModelDeclaredMeshColliders(THREE, model, ownerId)`，只处理 Manifest 中显式声明的 `spatial.colliders[].shape = "mesh"`，不把普通可见 Mesh 自动注册为碰撞体。
+2. 按稳定 `targetPartId/componentId` 定位部件，采集目标部件下的实际 Mesh 顶点与三角索引，并应用 Mesh 完整世界矩阵；生成 Rapier 可消费的 Float32 顶点和 Uint32 索引缓冲。
+3. 保留真实碰撞几何拓扑，因此只要模型提供的碰撞网格本身存在门洞/通道开口，运行时不会再用包围盒把开口封住。碰撞网格必须只包含应阻挡玩家的表面。
+4. 支持显式禁用、`blocksMovement: false`、模型 `worldState` 的布尔 `stateCondition`；跳过重复 componentId、无效/空几何和隐藏 Mesh。
+5. 嵌套的独立 componentId 子组件不会被父级 Mesh Collider 重复收集；目标部件内部可通过 `userData.collisionMode = "none"` 或 `userData.physicsCollision = false` 排除单个视觉 Mesh。
+6. 物理刷新先移除同一 owner 的旧注册，再注册楼梯/坡面 Trimesh 与显式 Mesh Collider；同一 targetPartId 的 Box collider 被 Mesh Trimesh 替代，避免双重碰撞体。注册失败会清理该 owner 本轮已创建的物理对象。
+7. 更新 AI 生成 Prompt：复杂静态实体可声明 Mesh collider；明确门洞几何保留、水面不得碰撞、水域只允许独立竖直岸线网格，禁止将水体做成实心体；动态/变形网格不允许走静态 Mesh collider 路径。
+8. 新增测试覆盖完整世界变换、视觉子 Mesh 排除、碰撞声明门控、stateCondition、Mesh 替代同部件 Box、重复刷新移除旧 owner 注册，以及 Prompt 能力契约。
+
+### 当前能力边界
+
+- 这是显式声明式静态 Trimesh 编译，不是 AI 自动识别任意 Mesh 语义，也不是自动为所有实体补碰撞体。
+- 门洞是否可通行取决于生成的碰撞几何是否真实留空；本轮没有自动从渲染模型推导门洞/开口。
+- 水域只支持模型提供独立的闭合竖直边界几何并声明为 Mesh collider；自动提取水体轮廓、自动生成岸线尚未实现。
+- Trimesh 是静态碰撞表示；动态复杂物体的凸包/凸分解、动态 Mesh 更新、网格简化/焊接/退化三角面清理尚未实现。
+- 本轮没有执行本地 Vitest、前后端构建或浏览器实测；代码测试等待 GitHub Actions。不能将 CI 前的测试写入描述为通过。
+
+### 仓库与提交
+
+- 分支：`feat/world-sandbox-conversational-model-editor`
+- 本轮从 `9af03b198905eca41eb3c26812589574beb30f5e` 开始；仅更新该功能分支，未修改 main、未合并 PR。
+- 核心实现和测试已提交；本条进度文档提交后需远程回读并核对最新 HEAD 与 Actions 状态。
+
+
 ## 2026-11-10 — 模型空间碰撞 P0：AI 与 Runtime 能力契约对齐
 
 ### 本轮改动

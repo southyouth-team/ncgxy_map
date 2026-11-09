@@ -3494,3 +3494,23 @@ export const environmentBindings = [
 - 新增服务端 Prompt 契约断言，锁定上述执行范围，防止未来 Prompt 再次把未实现能力描述为已支持。
 - 本轮只完成 P0 契约对齐，不包含通用 Mesh 自动碰撞、凸分解、水域边界自动生成或浏览器验收。
 - 代码和文档写入后需回读确认；CI 状态以本轮提交后的 Actions 为准，不能沿用历史结果。
+
+
+## 2026-11-10 — 模型碰撞完整性诊断与生成前定向修复
+
+### 已落地
+
+1. 新增 `analyzeModelCollisionCompleteness()`，对当前 Three.js Object3D 与 Manifest 执行声明级审计。
+2. 每个有意义 component Group 由 AI 显式设置 `userData.collisionPolicy = "required" | "none"`；required 部件必须绑定可执行 Collider，none 部件保持非阻挡。
+3. 诊断器检查重复 componentId、重复/缺失 Collider ID、目标部件缺失或歧义、shape 不支持、Box 尺寸/中心非法、Mesh 几何不可用、布尔状态条件非法、required 部件缺失活动 Collider、视觉部件却声明 Collider 等问题。
+4. `refreshModelPhysicsRegistration()` 会把诊断结果写入 `model.userData.proceduralModelCollisionAnalysis`，供运行时和 UI 读取。
+5. 后端新增 `POST /assets/ai-image/repair-procedural-collisions`，只接受已知诊断代码，构造受限的修复指令并复用现有程序化模型编辑服务；诊断字段按数据处理，不作为指令执行。
+6. `WorldSandboxMvp.vue` 在 AI 生成模型进入可保存草稿前先运行碰撞检查；最多触发一轮 AI 定向补齐并重新执行 Worker 构建与检查。检查未达到 `complete` 时阻止模型落位；保存前再次检查，防止编辑后引入缺失声明。
+7. 更新初次生成和后续编辑 Prompt，要求每个有意义部件明确 collisionPolicy，并使用 Runtime 当前支持的 Box/Mesh Collider。
+
+### 当前验收边界
+
+- 诊断结果 `complete` 只代表当前声明、目标绑定和基本几何数据满足 Runtime 接入前置条件，不证明门洞/窗洞净空、岸线闭合、复杂网格拓扑质量或人物胶囊体真实通行。
+- 纯视觉部件是否应阻挡仍依赖 AI 对几何意图的判断；系统不会按“建筑/树木/水体”等类别硬编码碰撞规则。
+- 自动修复最多一轮；仍未通过时明确阻止模型进入沙盒，保留草稿供进一步人工/对话修复。
+- 本轮未执行本地 Vitest、前后端构建或浏览器操作；需要以最新 GitHub Actions 和后续浏览器验收为准。

@@ -112,6 +112,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let sandboxSelectedModel = null
   let sandboxTransform = null
   let placementState = null
+  // AI 沙盒模型采用分层选址；与旧 generatedAssets 的 placementState 完全隔离。
+  let sandboxPlacementState = null
+  let sandboxPlacementFootprint = null
   let selectedGeneratedAsset = null
   let generatedAssetSequence = 0
   let navigationVisualGroup = null
@@ -323,6 +326,227 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function getSandboxPlacementWorldBounds() {
+    const bounds = campus?.userData?.sampleBounds || campus?.userData?.contentBounds || {}
+    const width = Math.max(20, Number(bounds.width) || 54)
+    const depth = Math.max(20, Number(bounds.depth) || 42)
+    return {
+      width,
+      depth,
+      centerX: Number.isFinite(bounds.centerX) ? bounds.centerX : 0,
+      centerZ: Number.isFinite(bounds.centerZ) ? bounds.centerZ : 0,
+    }
+  }
+
+  function getSandboxGroundPoint(event) {
+    if (!renderer || !cameraRig) return null
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
+    pointerNdc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointerNdc, cameraRig.camera)
+    const point = new THREE.Vector3()
+    return raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.025), point) ? point : null
+  }
+
+  function updateSandboxPlacementPreview(point) {
+    const state = sandboxPlacementState
+    if (!state || !point) return false
+    const world = getSandboxPlacementWorldBounds()
+    const halfWidth = state.footprintWidth / 2
+    const halfDepth = state.footprintDepth / 2
+    const x = THREE.MathUtils.clamp(point.x, world.centerX - world.width / 2 + halfWidth, world.centerX + world.width / 2 - halfWidth)
+    const z = THREE.MathUtils.clamp(point.z, world.centerZ - world.depth / 2 + halfDepth, world.centerZ + world.depth / 2 - halfDepth)
+    state.model.visible = true
+    state.model.position.x = x
+    state.model.position.z = z
+    state.model.updateWorldMatrix(true, true)
+    const bounds = new THREE.Box3().setFromObject(state.model)
+    if (!bounds.isEmpty()) state.model.position.y -= bounds.min.y
+    state.model.updateWorldMatrix(true, true)
+    const placedBounds = new THREE.Box3().setFromObject(state.model)
+    if (sandboxPlacementFootprint) {
+      sandboxPlacementFootprint.position.set(
+        (placedBounds.min.x + placedBounds.max.x) / 2,
+        0.035,
+        (placedBounds.min.z + placedBounds.max.z) / 2,
+      )
+      sandboxPlacementFootprint.visible = true
+    }
+    state.hasTarget = true
+    state.target = { x, y: state.model.position.y, z }
+    invalidateShadowMap()
+    requestFrame()
+    return true
+  }
+
+  function emitSandboxPlacementState(extra = {}) {
+    if (!sandboxPlacementState) {
+      callbacks.onSandboxPlacementChange?.({ active: false, ...extra })
+      return
+    }
+    callbacks.onSandboxPlacementChange?.({
+      active: true,
+      stage: sandboxPlacementState.stage,
+      level: sandboxPlacementState.level,
+      hasTarget: sandboxPlacementState.hasTarget,
+      modelName: sandboxPlacementState.model.name,
+      target: sandboxPlacementState.target,
+      ...extra,
+    })
+  }
+
+  function beginSandboxModelPlacement(modelOrId) {
+    if (!scene || sandboxPlacementState || indoorGroup) return false
+    const existingEntry = typeof modelOrId === 'string'
+      ? [String(modelOrId), sandboxModels.get(String(modelOrId))]
+      : Array.from(sandboxModels.entries()).find(([, item]) => item === modelOrId) || null
+    const existing = Boolean(existingEntry?.[1])
+    const model = existing ? existingEntry[1] : modelOrId
+    if (!model?.isObject3D || (!existing && model.parent)) return false
+    model.updateWorldMatrix(true, true)
+    const initialBounds = new THREE.Box3().setFromObject(model)
+    if (initialBounds.isEmpty()) return false
+    const size = initialBounds.getSize(new THREE.Vector3())
+    const footprintWidth = Math.max(0.25, size.x)
+    const footprintDepth = Math.max(0.25, size.z)
+    sandboxPlacementState = {
+      model,
+      existing,
+      id: existingEntry?.[0] || null,
+      originalPosition: model.position.clone(),
+      originalRotation: model.rotation.clone(),
+      originalScale: model.scale.clone(),
+      originalVisible: model.visible,
+      footprintWidth,
+      footprintDepth,
+      stage: 'area',
+      level: 0,
+      hasTarget: false,
+      target: null,
+    }
+    sandboxTransform?.detach()
+    if (!existing) scene.add(model)
+    model.visible = false
+    const footprintMaterial = new THREE.MeshBasicMaterial({
+      color: '#8bd5a5',
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+    sandboxPlacementFootprint = new THREE.Mesh(
+      new THREE.PlaneGeometry(footprintWidth, footprintDepth),
+      footprintMaterial,
+    )
+    sandboxPlacementFootprint.rotation.x = -Math.PI / 2
+    sandboxPlacementFootprint.position.y = 0.035
+    sandboxPlacementFootprint.visible = false
+    sandboxPlacementFootprint.renderOrder = 5
+    scene.add(sandboxPlacementFootprint)
+
+    if (cameraRig?.mode !== 'overview') cameraRig?.setMode('overview')
+    input?.setMode('overview')
+    input?.setMovementEnabled(false)
+    cameraRig?.setOrbitInteractionEnabled?.(true)
+    const world = getSandboxPlacementWorldBounds()
+    cameraRig?.focusBounds(world.width, world.depth, world.centerX, world.centerZ)
+    emitSandboxPlacementState({ instruction: '先从沙盒全貌选择目标区域' })
+    requestFrame()
+    return true
+  }
+
+  function onSandboxPlacementPointerDown(event) {
+    const state = sandboxPlacementState
+    if (!state || event.button !== 0) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    const point = getSandboxGroundPoint(event)
+    if (!point) return
+    if (state.stage === 'area') {
+      const world = getSandboxPlacementWorldBounds()
+      const currentSpan = Math.max(12, Number(cameraRig?.overviewSpan) || Math.max(world.width, world.depth) * 1.15)
+      const nextSpan = Math.max(8, currentSpan * 0.42)
+      state.level += 1
+      cameraRig?.focusBounds(nextSpan / 1.15, nextSpan / 1.15, point.x, point.z)
+      const modelScale = Math.max(state.footprintWidth, state.footprintDepth)
+      if (nextSpan <= modelScale * 8 || state.level >= 5) {
+        state.stage = 'point'
+        state.model.visible = true
+        updateSandboxPlacementPreview(point)
+        emitSandboxPlacementState({ instruction: '已进入精确落位；移动鼠标预览，点击地面确定位置' })
+      } else {
+        emitSandboxPlacementState({ instruction: '区域已聚焦；继续点击更小的区域逐级放大' })
+      }
+      requestFrame()
+      return
+    }
+    if (state.stage === 'point') {
+      updateSandboxPlacementPreview(point)
+      emitSandboxPlacementState({ instruction: '位置已选定；确认落位后可进行旋转、高度和缩放微调' })
+    }
+  }
+
+  function onSandboxPlacementPointerMove(event) {
+    const state = sandboxPlacementState
+    if (!state || state.stage !== 'point') return
+    const point = getSandboxGroundPoint(event)
+    if (point) updateSandboxPlacementPreview(point)
+  }
+
+  function clearSandboxPlacementFootprint() {
+    if (!sandboxPlacementFootprint) return
+    scene?.remove(sandboxPlacementFootprint)
+    sandboxPlacementFootprint.geometry?.dispose?.()
+    sandboxPlacementFootprint.material?.dispose?.()
+    sandboxPlacementFootprint = null
+  }
+
+  function confirmSandboxModelPlacement() {
+    const state = sandboxPlacementState
+    if (!state || state.stage !== 'point' || !state.hasTarget) return false
+    const { model, existing, id, target } = state
+    sandboxPlacementState = null
+    clearSandboxPlacementFootprint()
+    model.visible = true
+    if (existing) {
+      refreshSandboxModelSpatial(model)
+      selectSandboxModel(id)
+    } else {
+      scene.remove(model)
+      addSandboxModel(model, { name: model.name, position: target })
+    }
+    input?.setMovementEnabled(true)
+    invalidateShadowMap()
+    requestFrame()
+    callbacks.onSandboxPlacementChange?.({ active: false, confirmed: true, id: existing ? id : model.userData.sandboxModelId })
+    callbacks.onSandboxModelsChange?.(getSandboxModels())
+    return true
+  }
+
+  function cancelSandboxModelPlacement() {
+    const state = sandboxPlacementState
+    if (!state) return false
+    sandboxPlacementState = null
+    clearSandboxPlacementFootprint()
+    const { model, existing, id, originalPosition, originalRotation, originalScale, originalVisible } = state
+    model.position.copy(originalPosition)
+    model.rotation.copy(originalRotation)
+    model.scale.copy(originalScale)
+    model.visible = originalVisible
+    if (existing) {
+      refreshSandboxModelSpatial(model)
+      selectSandboxModel(id)
+    } else {
+      model.parent?.remove(model)
+      disposeObjectGroup(model)
+    }
+    input?.setMovementEnabled(true)
+    invalidateShadowMap()
+    requestFrame()
+    callbacks.onSandboxPlacementChange?.({ active: false, cancelled: true, existing })
+    return true
+  }
+
   function onSandboxPointerDown(event) {
     if (!renderer || !cameraRig || sandboxTransform?.dragging) return
     const rect = renderer.domElement.getBoundingClientRect()
@@ -466,8 +690,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function selectSandboxModel(id) {
     const model = id ? sandboxModels.get(String(id)) : null
     sandboxSelectedModel = model || null
-    if (sandboxSelectedModel) sandboxTransform?.attach(sandboxSelectedModel)
-    else sandboxTransform?.detach()
+    if (sandboxSelectedModel) {
+      sandboxTransform?.attach(sandboxSelectedModel)
+      // 精调阶段由 Gizmo 独占模型手势；需要移动镜头时切换到“浏览镜头”。
+      cameraRig?.setOrbitInteractionEnabled?.(false)
+    } else {
+      sandboxTransform?.detach()
+      cameraRig?.setOrbitInteractionEnabled?.(true)
+    }
     callbacks.onSandboxModelSelected?.(sandboxSelectedModel ? {
       id: sandboxSelectedModel.userData.sandboxModelId,
       name: sandboxSelectedModel.name,
@@ -478,7 +708,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function setSandboxTransformMode(mode) {
+    if (mode === 'browse') {
+      sandboxTransform?.detach()
+      cameraRig?.setOrbitInteractionEnabled?.(true)
+      requestFrame()
+      return true
+    }
     if (!['translate', 'rotate', 'scale'].includes(mode)) return false
+    if (sandboxSelectedModel) sandboxTransform?.attach(sandboxSelectedModel)
+    cameraRig?.setOrbitInteractionEnabled?.(!sandboxSelectedModel)
     sandboxTransform?.setMode(mode)
     requestFrame()
     return true
@@ -989,6 +1227,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
     sandboxTransform.addEventListener('change', requestFrame)
     scene.add(sandboxTransform.getHelper())
+    renderer.domElement.addEventListener('pointerdown', onSandboxPlacementPointerDown, true)
+    renderer.domElement.addEventListener('pointermove', onSandboxPlacementPointerMove, true)
     renderer.domElement.addEventListener('pointerdown', onSandboxPointerDown)
     renderer.domElement.addEventListener('dblclick', onSandboxDoubleClick)
     renderer.domElement.addEventListener('pointerdown', onScenePointerDown)
@@ -2659,6 +2899,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer?.domElement?.removeEventListener('pointermove', onScenePointerMove)
     renderer?.domElement?.removeEventListener('pointermove', requestFrame)
     renderer?.domElement?.removeEventListener('wheel', requestFrame)
+    renderer?.domElement?.removeEventListener('pointerdown', onSandboxPlacementPointerDown, true)
+    renderer?.domElement?.removeEventListener('pointermove', onSandboxPlacementPointerMove, true)
     renderer?.domElement?.removeEventListener('pointerdown', onSandboxPointerDown)
     renderer?.domElement?.removeEventListener('dblclick', onSandboxDoubleClick)
     sandboxTransform?.detach()
@@ -2672,6 +2914,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     clearRpgPreview()
     generatedAssets.clear()
     placementState = null
+    if (sandboxPlacementState) cancelSandboxModelPlacement()
+    clearSandboxPlacementFootprint()
     activeHorizonGround = null
     if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()
@@ -2686,5 +2930,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

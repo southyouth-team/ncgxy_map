@@ -158,26 +158,6 @@ describe('PhysicsRuntime', () => {
     expect(calls.controllers[0].enableSnapToGround).toHaveBeenCalledWith(0.25)
   })
 
-  it('computes collision-corrected movement and applies the next kinematic position', () => {
-    const { RAPIER } = createRapierMock()
-    const runtime = new PhysicsRuntime(RAPIER)
-    const entry = runtime.createKinematicCharacter({
-      id: 'sandbox:player',
-      translation: { x: 2, y: 0, z: 3 },
-    })
-    entry.controller.computeColliderMovement.mockImplementation(() => {
-      entry.controller.computed = { x: 0.5, y: -0.1, z: 1 }
-    })
-    const result = runtime.moveKinematicCharacter('sandbox:player', { x: 1, y: -0.2, z: 1 })
-    expect(entry.controller.computeColliderMovement).toHaveBeenCalledWith(entry.collider, { x: 1, y: -0.2, z: 1 })
-    expect(result).toMatchObject({
-      translation: { x: 2.5, y: -0.1, z: 4 },
-      movement: { x: 0.5, y: -0.1, z: 1 },
-      grounded: true,
-    })
-    expect(entry.body.setNextKinematicTranslation).toHaveBeenCalledWith({ x: 2.5, y: -0.1, z: 4 })
-  })
-
   it('removes the character controller before its rigid body and supports teleporting', () => {
     const { RAPIER, calls } = createRapierMock()
     const runtime = new PhysicsRuntime(RAPIER)

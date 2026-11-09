@@ -23,8 +23,9 @@ export class PlayerCharacterRuntime {
     this.activeAction = null
     this.assetId = 'builtin-placeholder'
     this.animationState = 'idle'
+    this.animationOverride = null
     this.disposed = false
-    anchor.userData.updateAnimation = (moving, seconds, dx, dz) => this.updateAnimation(moving, seconds, dx, dz)
+    anchor.userData.updateAnimation = (moving, seconds, dx, dz, running) => this.updateAnimation(moving, seconds, dx, dz, running)
   }
 
   setModel(model, animations = [], metadata = {}) {
@@ -74,7 +75,12 @@ export class PlayerCharacterRuntime {
       else if (/walk|move/.test(key)) this.actions.set('walk', this.mixer.clipAction(clip))
       else if (/run|sprint/.test(key)) this.actions.set('run', this.mixer.clipAction(clip))
     }
+    if (this.actions.size && !this.actions.has('idle')) {
+      const firstClip = (animations || []).find(clip => clip?.name)
+      if (firstClip) this.actions.set('idle', this.mixer.clipAction(firstClip))
+    }
     this.animationState = 'idle'
+    this.animationOverride = null
     this.playState('idle')
     return this.getInfo()
   }
@@ -91,21 +97,26 @@ export class PlayerCharacterRuntime {
   }
 
   setAnimationState(state) {
+    if (state === null || state === 'auto') {
+      this.animationOverride = null
+      return true
+    }
     const normalized = ['idle', 'walk', 'run'].includes(String(state)) ? String(state) : null
     if (!normalized) return false
+    this.animationOverride = normalized
     this.animationState = normalized
     if (this.activeVisual !== this.fallbackVisual) this.playState(normalized)
     return true
   }
 
-  updateAnimation(moving, seconds, dx = 0, dz = 0) {
+  updateAnimation(moving, seconds, dx = 0, dz = 0, running = false) {
     if (this.disposed) return
     if (Math.hypot(dx, dz) > 0.0005) this.anchor.rotation.y = Math.atan2(dx, dz)
     if (this.activeVisual === this.fallbackVisual) {
       this.fallbackUpdater?.call(this.anchor, Boolean(moving), seconds, dx, dz)
       return
     }
-    const state = moving ? (this.animationState === 'run' ? 'run' : 'walk') : 'idle'
+    const state = this.animationOverride || (moving ? (running ? 'run' : 'walk') : 'idle')
     if (state !== this.animationState || !this.activeAction) this.animationState = state
     this.playState(state)
   }
@@ -164,7 +175,10 @@ export class PlayerCharacterRuntime {
   dispose() {
     if (this.disposed) return
     this.clearMixer()
-    if (this.activeVisual !== this.fallbackVisual) this.disposeObject(this.activeVisual)
+    if (this.activeVisual !== this.fallbackVisual) {
+      this.anchor.remove(this.activeVisual)
+      this.disposeObject(this.activeVisual)
+    }
     this.disposed = true
   }
 }

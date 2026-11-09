@@ -6,15 +6,7 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
   const root = new THREE.Group()
   root.name = 'WorldSandboxBlankGround'
 
-  const horizon = new THREE.Mesh(
-    new THREE.PlaneGeometry(20000, 20000),
-    new THREE.MeshStandardMaterial({ color: '#748078', roughness: 1 }),
-  )
-  horizon.name = 'sandbox-horizon-ground'
-  horizon.rotation.x = -Math.PI / 2
-  horizon.position.y = -0.025
-  horizon.receiveShadow = true
-  root.add(horizon)
+  // The sandbox has finite walkable chunks; do not place an infinite fallback plane beneath reclaimed holes.
 
   const chunkGroup = new THREE.Group()
   chunkGroup.name = 'SandboxWorldChunks'

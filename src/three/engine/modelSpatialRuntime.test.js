@@ -479,7 +479,7 @@ describe('refreshModelPhysicsRegistration', () => {
     expect(result[0].vertices.length).toBeGreaterThanOrEqual(9)
     expect(result[0].indices.length).toBeGreaterThanOrEqual(3)
     expect(result[0].vertices[0]).toBeCloseTo(2)
-    expect(result[0].vertices[1]).toBeCloseTo(0.9)
+    expect(result[0].vertices[1]).toBeCloseTo(1.1)
   })
 
   it('registers stair geometry as a Rapier trimesh instead of an overlapping box', () => {

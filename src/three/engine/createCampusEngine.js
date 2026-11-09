@@ -10,10 +10,11 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
 import { PlayerCharacterRuntime } from '../characters/PlayerCharacterRuntime.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
+import { PhysicsRuntime } from '../physics/PhysicsRuntime.js'
 import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { applySandboxLightingState } from './sandboxLightingRuntime.js'
-import { refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
+import { refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
 import { executeSandboxInteractionAction } from './sandboxActionRuntime.js'
 import { resolveSandboxInteriorEntryPoint } from './sandboxInteriorRuntime.js'
@@ -69,6 +70,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let cameraRig
   let input
   let collisionWorld
+  let physicsRuntime = null
   let outdoorCollisionWorld = null
   let indoorGroup = null
   let indoorBuilding = null
@@ -356,6 +358,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return isBlankSandbox ? campus?.userData?.getWorldState?.() || null : null
   }
 
+  function getPhysicsDiagnostics() {
+    return {
+      active: Boolean(physicsRuntime && !physicsRuntime.disposed),
+      bodyCount: physicsRuntime?.bodies?.size || 0,
+      fixedTimeStep: physicsRuntime?.fixedTimeStep || null,
+      droppedTime: physicsRuntime?.droppedTime || 0,
+    }
+  }
+
   function focusSandboxOverview() {
     if (!isBlankSandbox || !cameraRig) return false
     const bounds = campus?.userData?.sampleBounds
@@ -473,6 +484,56 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function syncSandboxPhysicsWorld() {
+    if (!isBlankSandbox || !physicsRuntime || !campus?.userData?.walkableBounds) return false
+    const ownerId = 'sandbox:world-ground'
+    physicsRuntime.removeOwner(ownerId)
+    const state = getSandboxWorldState()
+    const chunkWidth = Number(state?.chunkSize?.width)
+    const chunkDepth = Number(state?.chunkSize?.depth)
+    const bounds = campus.userData.walkableBounds
+    if (!(chunkWidth > 0) || !(chunkDepth > 0) || !Array.isArray(state?.chunks)) return false
+    try {
+      for (const chunk of state.chunks) {
+        const x = Number(chunk.x), z = Number(chunk.z)
+        if (!Number.isInteger(x) || !Number.isInteger(z)) continue
+        physicsRuntime.createStaticBox({
+          id: ownerId + ':floor:' + x + ':' + z,
+          ownerId,
+          translation: { x: x * chunkWidth, y: -0.12, z: z * chunkDepth },
+          halfExtents: { x: chunkWidth / 2, y: 0.12, z: chunkDepth / 2 },
+          friction: 0.9,
+        })
+      }
+      const minX = Number(bounds.minX), maxX = Number(bounds.maxX)
+      const minZ = Number(bounds.minZ), maxZ = Number(bounds.maxZ)
+      if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || maxX <= minX || maxZ <= minZ) {
+        throw new TypeError('Sandbox world bounds are invalid')
+      }
+      const centerX = (minX + maxX) / 2
+      const centerZ = (minZ + maxZ) / 2
+      const width = maxX - minX
+      const depth = maxZ - minZ
+      const wallHeight = 12
+      const wallThickness = 0.5
+      const wall = (id, translation, halfExtents) => physicsRuntime.createStaticBox({
+        id: ownerId + ':boundary:' + id,
+        ownerId,
+        translation,
+        halfExtents,
+        friction: 0.8,
+      })
+      wall('west', { x: minX - wallThickness / 2, y: wallHeight / 2, z: centerZ }, { x: wallThickness / 2, y: wallHeight / 2, z: depth / 2 + wallThickness })
+      wall('east', { x: maxX + wallThickness / 2, y: wallHeight / 2, z: centerZ }, { x: wallThickness / 2, y: wallHeight / 2, z: depth / 2 + wallThickness })
+      wall('north', { x: centerX, y: wallHeight / 2, z: minZ - wallThickness / 2 }, { x: width / 2, y: wallHeight / 2, z: wallThickness / 2 })
+      wall('south', { x: centerX, y: wallHeight / 2, z: maxZ + wallThickness / 2 }, { x: width / 2, y: wallHeight / 2, z: wallThickness / 2 })
+    } catch (error) {
+      physicsRuntime.removeOwner(ownerId)
+      throw error
+    }
+    return true
+  }
+
   function syncSandboxWalkableChunks() {
     if (!isBlankSandbox || !collisionWorld) return
     const state = getSandboxWorldState()
@@ -485,6 +546,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       minZ: chunk.z * depth - depth / 2,
       maxZ: chunk.z * depth + depth / 2,
     })))
+    syncSandboxPhysicsWorld()
   }
 
   function removeSandboxWorldChunk(chunkX, chunkZ) {
@@ -957,10 +1019,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!ownerId) return
     collisionWorld?.removeObstaclesByOwner(String(ownerId))
     collisionWorld?.removeSupportSurfacesByOwner(String(ownerId))
+    physicsRuntime?.removeOwner(String(ownerId))
   }
 
   function refreshSandboxModelSpatial(model) {
-    return refreshModelSpatialRegistration(THREE, model, collisionWorld)
+    const spatialCount = refreshModelSpatialRegistration(THREE, model, collisionWorld)
+    if (isBlankSandbox) refreshModelPhysicsRegistration(THREE, model, physicsRuntime)
+    return spatialCount
   }
 
   function addSandboxModel(model, options = {}) {
@@ -1563,7 +1628,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       circularObstacles.push({ x: position.x, z: position.z, radius })
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
-    if (isBlankSandbox) syncSandboxWalkableChunks()
+    if (isBlankSandbox) {
+      syncSandboxWalkableChunks()
+      physicsRuntime = await PhysicsRuntime.create()
+      syncSandboxPhysicsWorld()
+    }
     for (const { object, polygons } of buildingWallSets) {
       object.userData.collisionObstacleStart = collisionWorld.obstacles.length
       polygons.forEach(polygon => collisionWorld.addPolygonObstacle({ outer: polygon }))
@@ -2527,6 +2596,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     frameId = 0
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
+    physicsRuntime?.step(delta)
     if (stairTransition) updateStairTransition(delta)
     else input?.update(delta)
     if (pendingRoomTransition) {
@@ -3397,6 +3467,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     activeHorizonGround = null
     if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()
+    physicsRuntime?.dispose()
+    physicsRuntime = null
     playerCharacterRuntime?.dispose()
     playerCharacterRuntime = null
     cameraRig?.dispose()
@@ -3412,5 +3484,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, getPhysicsDiagnostics, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

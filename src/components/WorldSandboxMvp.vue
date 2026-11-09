@@ -194,8 +194,9 @@ function handleSandboxModelInteract(payload) {
   }
 }
 
-function selectModel(object) {
-  if (object) engine?.selectSandboxModel(object.userData.sandboxModelId)
+function selectModel(item) {
+  const id = item?.id || item?.userData?.sandboxModelId
+  if (id) engine?.selectSandboxModel(id)
 }
 function setMode(mode) {
   transformMode.value = mode
@@ -1077,7 +1078,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="world-mvp__list">
-          <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" :disabled="placement.active" @click="selectModel(objectsById.get(item.id))">{{ item.name }}</button>
+          <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" :disabled="placement.active" @click="selectModel(item)">{{ item.name }}</button>
         </div>
       </section>
 

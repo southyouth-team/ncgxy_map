@@ -3323,3 +3323,11 @@ export const environmentBindings = [
 - 当 Manifest 声明 `riserHeight` / `treadDepth` 时，分析器会与几何统计结果进行偏差提示。
 - 新增四级楼梯 Mesh 几何测试，验证 4 个高度层、0.18 级高和 0.4 踏面深度的提取。
 - 该统计不等于完整楼梯识别：尚未证明各级踏面连续、梯段边缘无断裂、人物胶囊体能逐级通过；验收状态仍保持未认证。
+
+
+### 几何分析器 CI 回归结果（提交 b56861fc）
+
+- Frontend CI：`modelTraversabilityAnalyzer.test.js` 4/4 通过；全量前端测试 40 个测试文件通过、5 个既有测试文件失败（与前一轮 11559aae 的 5 个失败文件一致）；Vite build 通过。
+- Backend CI：NestJS build 通过；单测 96 passed / 1 failed，仍为既有 `image-generation.procedural.spec.ts` 的配置/URL 解析失败。
+- 本轮新增楼梯几何统计测试通过；没有引入新的 CI 失败项。
+- 真实浏览器、Rapier 运行时的楼梯/坡面行走验收仍未执行。

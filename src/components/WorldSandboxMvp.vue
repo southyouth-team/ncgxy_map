@@ -1156,7 +1156,7 @@ onBeforeUnmount(() => {
       @parameter-change="handleParameterChange"
       @capability-change="handleCapabilityChange"
     />
-    <footer class="world-mvp__help">WASD / 方向键移动人物 · 重新选址：全局选区→逐级聚焦→精确落位 · 精调阶段使用坐标轴</footer>
+    <footer class="world-mvp__help">WASD / 方向键移动人物 · 重新选址：全景预览占地→点击锁定候选位置→确认落地 · 精调阶段使用坐标轴</footer>
   </main>
 </template>
 
@@ -1190,6 +1190,17 @@ onBeforeUnmount(() => {
 .world-mvp__secondary-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .world-mvp__empty-selection { margin:10px 0 0; padding:10px; border:1px dashed rgba(255,255,255,.14); border-radius:7px; color:#9eafad; font-size:10px; line-height:1.6; }
 .world-mvp__tools { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:8px; }
+.world-mvp__operation-panel { min-height:100%; }
+.world-mvp__operation-name { display:block; margin:5px 0 10px; color:#e5efe8; font-size:13px; overflow-wrap:anywhere; }
+.world-mvp__operation-panel .world-mvp__message { margin:8px 0 12px; line-height:1.65; }
+.world-mvp__footprint-info { display:grid; gap:5px; margin:12px 0; padding:10px; border:1px solid rgba(165,201,177,.28); border-radius:8px; background:rgba(165,201,177,.07); }
+.world-mvp__footprint-info span { color:#aabbb4; font-size:10px; }
+.world-mvp__footprint-info strong { color:#c6e4ce; font-size:14px; font-variant-numeric:tabular-nums; }
+.world-mvp__footprint-info small { color:#81958d; font-size:9px; }
+.world-mvp__placement-status { margin:12px 0; color:#c6e4ce; font-size:10px; line-height:1.6; }
+.world-mvp__placement-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.world-mvp__placement-actions button:first-child { grid-column:1 / -1; border-color:#8fbea0; color:#14251c; background:#a5c9b1; font-weight:700; }
+.world-mvp__placement-actions button:disabled { color:#dce7e3; background:rgba(255,255,255,.06); }
 .world-mvp__placement { margin-top:9px; padding:10px; border:1px solid rgba(165,201,177,.35); border-radius:8px; background:rgba(165,201,177,.08); }
 .world-mvp__placement strong { display:block; color:#c6e4ce; font-size:11px; }
 .world-mvp__placement p { margin:7px 0; color:#b4c1c1; font-size:10px; line-height:1.55; }

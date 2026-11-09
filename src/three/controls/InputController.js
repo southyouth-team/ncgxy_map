@@ -35,10 +35,11 @@ export class InputController {
       const target = event.target
       if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return
       this.keys.add(key)
+      this.onMovementInput?.()
       // 第一人称 WASD 也必须阻止浏览器默认滚动，否则按键会同时滚动页面。
       event.preventDefault()
     }
-    this.onKeyUp = (event) => this.keys.delete(event.key.toLowerCase())
+    this.onKeyUp = (event) => { this.keys.delete(event.key.toLowerCase()); this.onMovementInput?.() }
     this.onWindowBlur = () => this.keys.clear()
     this.onMouseDown = (event) => {
       if (event.button !== 0) return

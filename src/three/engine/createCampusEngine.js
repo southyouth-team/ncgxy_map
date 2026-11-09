@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
+import { createBlankSandboxScene } from '../world/campus/createBlankSandboxScene.js'
 import { CameraRig } from '../camera/CameraRig.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
@@ -53,7 +54,8 @@ function getObjectLocalBounds(THREE, root) {
 }
 
 export function createCampusEngine(container, callbacks = {}, options = {}) {
-  const isRpgSample = options.sceneType === 'rpg-sample'
+  const isBlankSandbox = options.sceneType === 'blank-sandbox'
+  const isRpgSample = options.sceneType === 'rpg-sample' || isBlankSandbox
   let renderer
   let scene
   let campus
@@ -359,6 +361,31 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.025), point) ? point : null
   }
 
+  function getSandboxPlacementConflict(bounds, state) {
+    const overlaps = (a, b) => a.min.x < b.max.x - 0.015 && a.max.x > b.min.x + 0.015
+      && a.min.z < b.max.z - 0.015 && a.max.z > b.min.z + 0.015
+      && a.min.y < b.max.y - 0.015 && a.max.y > b.min.y + 0.015
+
+    for (const [id, model] of sandboxModels) {
+      if (model === state.model || !model.visible) continue
+      model.updateWorldMatrix(true, true)
+      const otherBounds = new THREE.Box3().setFromObject(model)
+      if (!otherBounds.isEmpty() && overlaps(bounds, otherBounds)) return model.name || id
+    }
+
+    // Also respect registered world colliders, including future static obstacles.
+    // This is a conservative XZ broad-phase; model-vs-model checks above include height.
+    for (const obstacle of collisionWorld?.obstacles || []) {
+      if (obstacle.ownerId && obstacle.ownerId === state.id) continue
+      if (bounds.max.x > obstacle.minX + 0.015 && bounds.min.x < obstacle.maxX - 0.015
+        && bounds.max.z > obstacle.minZ + 0.015 && bounds.min.z < obstacle.maxZ - 0.015) {
+        const owner = obstacle.ownerId ? sandboxModels.get(String(obstacle.ownerId)) : null
+        return owner?.name || '已有场景碰撞区域'
+      }
+    }
+    return null
+  }
+
   function updateSandboxPlacementPreview(point) {
     const state = sandboxPlacementState
     if (!state || !point) return false
@@ -375,7 +402,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!bounds.isEmpty()) state.model.position.y += 0.012 - bounds.min.y
     state.model.updateWorldMatrix(true, true)
     const placedBounds = new THREE.Box3().setFromObject(state.model)
+    const blockerName = getSandboxPlacementConflict(placedBounds, state)
+    state.blocked = Boolean(blockerName)
+    state.blockerName = blockerName
     if (sandboxPlacementFootprint) {
+      sandboxPlacementFootprint.material.color.set(state.blocked ? '#e66b68' : '#8bd5a5')
       sandboxPlacementFootprint.position.set(
         (placedBounds.min.x + placedBounds.max.x) / 2,
         0.035,
@@ -384,6 +415,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       sandboxPlacementFootprint.visible = true
     }
     if (sandboxPlacementFootprintOutline) {
+      sandboxPlacementFootprintOutline.material.color.set(state.blocked ? '#ff8b82' : '#b8f5c8')
       sandboxPlacementFootprintOutline.position.set(
         (placedBounds.min.x + placedBounds.max.x) / 2,
         0.055,
@@ -393,6 +425,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     state.hasTarget = true
     state.target = { x, y: state.model.position.y, z }
+    if (state.lastReportedBlocker !== blockerName) {
+      state.lastReportedBlocker = blockerName
+      emitSandboxPlacementState({ instruction: blockerName ? `位置冲突：与“${blockerName}”重叠，请重新选择位置` : '位置可用：未检测到现有模型或碰撞区域重叠' })
+    }
     invalidateShadowMap()
     requestFrame()
     return true
@@ -412,6 +448,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       modelName: sandboxPlacementState.model.name,
       footprint: { width: sandboxPlacementState.footprintWidth, depth: sandboxPlacementState.footprintDepth },
       target: sandboxPlacementState.target,
+      blocked: sandboxPlacementState.blocked === true,
+      blockerName: sandboxPlacementState.blockerName || null,
+      canConfirm: sandboxPlacementState.hasTarget && sandboxPlacementState.candidateLocked && sandboxPlacementState.blocked !== true,
       ...extra,
     })
   }
@@ -479,6 +518,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       hasTarget: false,
       candidateLocked: false,
       target: null,
+      blocked: false,
+      blockerName: null,
+      lastReportedBlocker: undefined,
       materialSnapshots: [],
     }
     if (!existing) selectSandboxModel(null)
@@ -582,6 +624,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const state = sandboxPlacementState
     if (!state || state.stage !== 'point' || !state.hasTarget || !state.candidateLocked) return false
     const { model, existing, id, target } = state
+    model.updateWorldMatrix(true, true)
+    const currentBounds = new THREE.Box3().setFromObject(model)
+    const blockerName = getSandboxPlacementConflict(currentBounds, state)
+    if (blockerName) {
+      state.blocked = true
+      state.blockerName = blockerName
+      emitSandboxPlacementState({ instruction: `无法落地：与“${blockerName}”发生空间重叠，请重新选择位置` })
+      return false
+    }
     sandboxPlacementState = null
     clearSandboxPlacementFootprint()
     restoreSandboxPlacementGhost(state)
@@ -1124,7 +1175,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     container.appendChild(renderer.domElement)
 
     // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
-    campus = isRpgSample ? createRpgSampleScene(THREE) : createCampusScene(THREE, options.featureCollection || null, { manifest: options.assetManifest || null, buildingTemplates: options.buildingTemplates || [], assetBaseUrl: options.assetBaseUrl || '' })
+    campus = isBlankSandbox
+      ? createBlankSandboxScene(THREE, options.worldBounds || { width: 54, depth: 42 })
+      : isRpgSample
+        ? createRpgSampleScene(THREE)
+        : createCampusScene(THREE, options.featureCollection || null, { manifest: options.assetManifest || null, buildingTemplates: options.buildingTemplates || [], assetBaseUrl: options.assetBaseUrl || '' })
     windSwayTargets = []
     campus.traverse(object => {
       if (object.name !== 'tree-canopy-occluder') return

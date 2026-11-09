@@ -186,4 +186,12 @@ describe('CollisionWorld walkable chunk regions', () => {
     expect(collision.isBlocked(50, 40)).toBe(true)
     expect(collision.isBlocked(0, 0)).toBe(false)
   })
+
+  it('stops a moving player at the edge of a reclaimed chunk', () => {
+    const collision = new CollisionWorld({ minX: -27, maxX: 81, minZ: -21, maxZ: 63 }, [], 0.62)
+    collision.setWalkableRegions(regions)
+    const result = collision.move({ x: 0, z: 40 }, 50, 0)
+    expect(result.x).toBeLessThan(27)
+    expect(collision.isBlocked(result.x, result.z)).toBe(false)
+  })
 })

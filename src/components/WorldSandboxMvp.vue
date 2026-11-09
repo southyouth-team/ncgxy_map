@@ -39,6 +39,7 @@ const wind = ref(20)
 const windEnabled = ref(true)
 const artificialLightingEnabled = ref(true)
 const transformMode = ref('translate')
+const placement = ref({ active: false, stage: '', level: 0, hasTarget: false, instruction: '' })
 const objectTypes = [
   { id: 'box', label: '立方体' }, { id: 'sphere', label: '球体' },
   { id: 'cylinder', label: '圆柱体' }, { id: 'cone', label: '圆锥体' },
@@ -195,6 +196,38 @@ function selectModel(object) {
 function setMode(mode) {
   transformMode.value = mode
   engine?.setSandboxTransformMode(mode)
+}
+function beginMoveSelected() {
+  if (!selected) return
+  const started = engine?.beginSandboxModelPlacement(selected.userData.sandboxModelId)
+  if (started) message.value = '已进入分层选址：先选区域，再逐级放大到具体落点。'
+}
+function confirmPlacement() {
+  if (!engine?.confirmSandboxModelPlacement?.()) {
+    message.value = '请先在精确落位阶段点击地面选定位置。'
+  }
+}
+function cancelPlacement() {
+  engine?.cancelSandboxModelPlacement?.()
+}
+function handlePlacementChange(payload) {
+  placement.value = payload || { active: false }
+  if (payload?.confirmed && payload.id) {
+    const model = engine?.getSandboxModel(payload.id)
+    if (model) {
+      objectsById.set(payload.id, model)
+      selected = model
+    }
+    syncObjects()
+    const saved = saveSandbox()
+    message.value = saved ? '模型已完成落位并保存；可继续旋转、高度和缩放微调。' : '模型已完成落位，但存档失败，请检查存储空间后重试。'
+    saveStatus.value = saved ? '已保存' : '存档失败'
+  } else if (payload?.cancelled) {
+    syncObjects()
+    message.value = payload.existing ? '已取消移动，模型恢复原位置。' : '已取消新模型放置。'
+  } else if (payload?.active) {
+    message.value = payload.instruction || '正在进行分层选址。'
+  }
 }
 function deleteSelected() {
   if (!selected) return
@@ -575,11 +608,20 @@ function saveEditorModel() {
   const wasDraft = isDraftModel.value
   if (wasDraft) {
     const name = model.userData?.assetName || model.name || 'AI 程序化模型'
-    registerModel(model, name + ' ' + (objects.value.length + 1))
+    model.name = name + ' ' + (objects.value.length + 1)
+    const started = engine?.beginSandboxModelPlacement?.(model)
+    if (!started) {
+      message.value = '无法启动模型选址，请确认当前处于室外沙盒且模型未被挂载。'
+      return
+    }
     isDraftModel.value = false
     aiPrompt.value = ''
     referenceImageDataUrl.value = ''
     referenceImageName.value = ''
+    editorOpen.value = false
+    editingModel.value = null
+    message.value = '模型已生成，尚未加入存档。请从沙盒全貌逐级选择区域并确认落位。'
+    return
   }
   const persisted = saveSandbox()
   if (!persisted) {
@@ -929,6 +971,7 @@ onMounted(async () => {
       onReady: () => { message.value = 'RPG 校园场景已就绪，使用 WASD 或方向键移动人物。' },
       onError: error => { message.value = '校园场景初始化失败：' + (error?.message || '未知错误') },
       onSandboxModelsChange: list => { objects.value = list },
+      onSandboxPlacementChange: handlePlacementChange,
       onSandboxModelSelected: handleModelSelected,
       onSandboxModelDoubleClick: openModelEditor,
       onSandboxInteractionPromptChange: payload => {
@@ -996,9 +1039,21 @@ onBeforeUnmount(() => {
           <button :disabled="!selectedName" @click="duplicateSelected">复制</button><button :disabled="!selectedName" @click="deleteSelected">删除</button>
         </div>
         <div class="world-mvp__tools">
-          <button :class="{ active: transformMode === 'translate' }" :disabled="!selectedName" @click="setMode('translate')">移动</button>
-          <button :class="{ active: transformMode === 'rotate' }" :disabled="!selectedName" @click="setMode('rotate')">旋转</button>
-          <button :class="{ active: transformMode === 'scale' }" :disabled="!selectedName" @click="setMode('scale')">缩放</button>
+          <button :disabled="!selectedName || placement.active" @click="beginMoveSelected">重新选址</button>
+          <button :class="{ active: transformMode === 'translate' }" :disabled="!selectedName || placement.active" @click="setMode('translate')">精调位置</button>
+          <button :class="{ active: transformMode === 'rotate' }" :disabled="!selectedName || placement.active" @click="setMode('rotate')">旋转</button>
+          <button :class="{ active: transformMode === 'scale' }" :disabled="!selectedName || placement.active" @click="setMode('scale')">缩放</button>
+          <button :disabled="!selectedName || placement.active" @click="setMode('browse')">浏览镜头</button>
+        </div>
+        <div v-if="placement.active" class="world-mvp__placement">
+          <strong>{{ placement.stage === 'area' ? '分层选址 · 区域选择' : '分层选址 · 精确落位' }}</strong>
+          <p>{{ placement.instruction }}</p>
+          <p v-if="placement.stage === 'area'">第 {{ placement.level }} 级区域定位 · 点击目标区域继续缩小范围，也可滚轮缩放、右键平移。</p>
+          <p v-else-if="placement.target">目标坐标：X {{ placement.target.x.toFixed(2) }} / Z {{ placement.target.z.toFixed(2) }}</p>
+          <div class="world-mvp__tools">
+            <button :disabled="placement.stage !== 'point' || !placement.hasTarget" @click="confirmPlacement">确认落位</button>
+            <button @click="cancelPlacement">取消</button>
+          </div>
         </div>
         <div class="world-mvp__list">
           <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" @click="selectModel(objectsById.get(item.id))">{{ item.name }}</button>

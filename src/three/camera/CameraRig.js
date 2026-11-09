@@ -4,6 +4,8 @@ export class CameraRig {
   constructor(THREE, domElement, options = {}) {
     this.THREE = THREE
     this.isometricRpg = Boolean(options.isometricRpg)
+    // 沙盒构建总览不受 2.5D 固定方位约束；人物探索镜头仍由 player 跟随逻辑独立驱动。
+    this.freeOverview = Boolean(options.freeOverview)
     // 展示投影与相机操控模式分离：2.5D 使用正交投影，3D 使用透视投影。
     this.viewMode = options.viewMode === '3d' ? '3d' : '2.5d'
     this.domElement = domElement
@@ -115,21 +117,21 @@ export class CameraRig {
     this.orbit.dampingFactor = 0.075
     this.orbit.screenSpacePanning = true
     this.orbit.maxPolarAngle = Math.PI * 0.49
-    this.orbit.minZoom = 0.55
-    this.orbit.maxZoom = 2.8
-    this.orbit.minDistance = 24
-    this.orbit.maxDistance = 190
+    this.orbit.minZoom = this.freeOverview ? 0.12 : 0.55
+    this.orbit.maxZoom = this.freeOverview ? 8 : 2.8
+    this.orbit.minDistance = this.freeOverview ? 4 : 24
+    this.orbit.maxDistance = this.freeOverview ? 1200 : 190
     this.orbit.target.set(0, 0, 0)
     this.orbit.enabled = this.mode === 'overview'
     // 2.5D 总览是固定方位的地图浏览，只允许平移/缩放；3D 总览保留旋转观察。
-    this.orbit.enableRotate = this.viewMode === '3d'
+    this.orbit.enableRotate = this.freeOverview || this.viewMode === '3d'
     // 3D 总览遵循常见三维地图操作：左键旋转、右键平移；2.5D 左右键均平移。
-    this.orbit.mouseButtons.LEFT = this.viewMode === '3d' ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
+    this.orbit.mouseButtons.LEFT = this.viewMode === '3d' || this.freeOverview ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
     // 右键和中键均提供平移，避免触控板/鼠标中键习惯差异导致无法操作。
     this.orbit.mouseButtons.RIGHT = this.THREE.MOUSE.PAN
     this.orbit.mouseButtons.MIDDLE = this.THREE.MOUSE.PAN
     if (this.orbit.touches) {
-      this.orbit.touches.ONE = this.viewMode === '3d' ? this.THREE.TOUCH.ROTATE : this.THREE.TOUCH.PAN
+      this.orbit.touches.ONE = this.viewMode === '3d' || this.freeOverview ? this.THREE.TOUCH.ROTATE : this.THREE.TOUCH.PAN
       this.orbit.touches.TWO = this.THREE.TOUCH.DOLLY_PAN
     }
   }
@@ -159,8 +161,9 @@ export class CameraRig {
       this.activateCamera(this.viewMode === '2.5d' ? this.overviewCamera : this.perspectiveCamera)
       if (this.viewMode === '2.5d') this.resetOverviewZoom()
       this.transitioningToOverview = true
-      this.desiredPosition.set(0, 145, 145)
-      this.desiredTarget.set(0, 0, 0)
+      const overviewTarget = this.overviewTargets[this.viewMode] || new this.THREE.Vector3()
+      this.desiredTarget.copy(overviewTarget)
+      this.desiredPosition.set(overviewTarget.x, overviewTarget.y + 145, overviewTarget.z + 145)
     } else {
       const targetCamera = mode === 'firstPerson' || this.viewMode === '3d'
         ? this.perspectiveCamera

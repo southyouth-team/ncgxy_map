@@ -10,9 +10,8 @@ export class InputController {
     this._collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
     this.physicsRuntime = null
     this.physicsCharacterId = null
-    this.traversalProfile = normalizeCharacterTraversalProfile({
-      radius: Number(this._collisionWorld.radius) || undefined,
-    })
+    this.traversalProfile = Object.freeze(normalizeCharacterTraversalProfile())
+    this._collisionWorld?.setRadius?.(this.traversalProfile.radius)
     this.groundRaycaster = THREE?.Raycaster ? new THREE.Raycaster() : null
     this.groundRayOrigin = THREE?.Vector3 ? new THREE.Vector3() : null
     this.groundRayDirection = THREE?.Vector3 ? new THREE.Vector3(0, -1, 0) : null
@@ -99,16 +98,16 @@ export class InputController {
   }
 
   get playerColliderRadius() { return this.traversalProfile.radius }
-  set playerColliderRadius(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, radius: value }) }
+  set playerColliderRadius(_value) { /* Global character dimensions are immutable in the MVP. */ }
 
   get playerEyeHeight() { return this.traversalProfile.height }
-  set playerEyeHeight(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, height: value }) }
+  set playerEyeHeight(_value) { /* Visual avatar scale must not change physics dimensions. */ }
 
   get maxWalkableSlopeDegrees() { return this.traversalProfile.maxSlopeClimbAngleDegrees }
-  set maxWalkableSlopeDegrees(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, maxSlopeClimbAngleDegrees: value }) }
+  set maxWalkableSlopeDegrees(_value) { /* Traversal limits are global. */ }
 
   get maxStepHeight() { return this.traversalProfile.maxStepHeight }
-  set maxStepHeight(value) { this.traversalProfile = normalizeCharacterTraversalProfile({ ...this.traversalProfile, maxStepHeight: value }) }
+  set maxStepHeight(_value) { /* Traversal limits are global. */ }
 
   get collisionWorld() {
     return this._collisionWorld
@@ -116,7 +115,7 @@ export class InputController {
 
   set collisionWorld(world) {
     this._collisionWorld = world
-    world?.setRadius?.(this.playerColliderRadius)
+    world?.setRadius?.(this.traversalProfile.radius)
   }
 
   setPhysicsRuntime(runtime, { id = 'sandbox:player' } = {}) {
@@ -213,24 +212,9 @@ export class InputController {
     return true
   }
 
-  setPlayerDimensions({ eyeHeight, colliderRadius } = {}) {
-    const previousEyeHeight = this.playerEyeHeight
-    const nextEyeHeight = Number(eyeHeight)
-    const nextRadius = Number(colliderRadius)
-    if (Number.isFinite(nextRadius) && nextRadius > 0) {
-      this.playerColliderRadius = Math.max(0.1, Math.min(1.5, nextRadius))
-      this.collisionWorld?.setRadius?.(this.playerColliderRadius)
-    }
-    if (Number.isFinite(nextEyeHeight) && nextEyeHeight > 0.5) {
-      this.playerEyeHeight = Math.max(0.8, Math.min(2.8, nextEyeHeight))
-    }
-    const eyeHeightDelta = this.playerEyeHeight - previousEyeHeight
-    if (Math.abs(eyeHeightDelta) > 0.0001 && this.grounded && this.cameraRig?.player) {
-      this.cameraRig.player.y += eyeHeightDelta
-      if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
-      else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
-    }
-    if (this.physicsRuntime) this.createPhysicsCharacter()
+  setPlayerDimensions() {
+    // Kept as a compatibility API for visual-avatar callers. The MVP player
+    // collider and traversal profile are globally fixed and cannot be resized.
     return { eyeHeight: this.playerEyeHeight, colliderRadius: this.playerColliderRadius }
   }
 

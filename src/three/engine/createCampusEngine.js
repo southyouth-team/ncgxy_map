@@ -1582,6 +1582,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 3D 建筑模型延迟到用户切换 3D/跟随视角时加载，2.5D 总览不承担 GLB 下载与解析成本。
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
     input.setFreeCameraMovementEnabled(isBlankSandbox)
+    input.onMovementInput = () => { if (isBlankSandbox && cameraRig?.mode === 'overview') requestFrame() }
     input.attach()
     sandboxTransform = new TransformControls(cameraRig.camera, renderer.domElement)
     sandboxTransform.setMode('translate')
@@ -2690,7 +2691,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
     }
     // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
-    if (cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0) requestFrame()
+    const freePlayerIsMoving = isBlankSandbox && input?.freeCameraMovementEnabled && input?.movementEnabled
+      && (input.keys.size > 0 || Boolean(input.navigationPath) || !input.grounded)
+    if (cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0 || freePlayerIsMoving) requestFrame()
   }
 
   function updateSceneObject(sceneObject) {
@@ -3229,13 +3232,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 沙盒默认统一使用自由总览相机；人物移动由 InputController 独立驱动，不切回跟随镜头。
     const nextMode = isBlankSandbox && mode === 'thirdPerson' ? 'overview' : mode
     cameraRig?.setMode(nextMode)
-    if (isBlankSandbox && mode === 'overview') focusSandboxOverview()
+    if (isBlankSandbox && nextMode === 'overview') focusSandboxOverview()
     if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
     input?.setMode(nextMode)
     input?.setMovementEnabled(chunkManagementActive ? false : (isBlankSandbox || nextMode !== 'overview'))
     syncRenderQuality()
     requestFrame()
-    if (mode !== 'overview' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
+    if (nextMode !== 'overview' && !editorPreviewActive) void ensureCampusBuildingModelsLoaded()
     loadedBuildingModels.forEach((model) => { model.visible = shouldShowBuildingModels() })
   }
 

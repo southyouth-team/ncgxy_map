@@ -293,6 +293,7 @@ export class InputController {
   setMode(mode) {
     this.mode = mode
     this.keys.clear()
+    this.jumpBufferRemaining = 0
     this.navigationPath = null
     this.navigationPathIndex = 0
     this.navigationPathCompleted = false
@@ -309,6 +310,8 @@ export class InputController {
     this.keys.clear()
     this.setNavigationPath(null)
     this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+    this.jumpBufferRemaining = 0
+    this.coyoteTimeRemaining = this.coyoteTimeDuration
     this.verticalVelocity = 0; this.grounded = true
     const x = Number(position.x) || 0
     const y = Number.isFinite(Number(position.y)) ? Number(position.y) : this.playerEyeHeight
@@ -327,6 +330,8 @@ export class InputController {
     this.pointerDown = false
     this.verticalVelocity = 0
     this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+    this.jumpBufferRemaining = 0
+    this.coyoteTimeRemaining = this.coyoteTimeDuration
     this.grounded = true
     this.cameraRig.player.set(values[0], values[1], values[2])
     this.syncPhysicsCharacterPosition()

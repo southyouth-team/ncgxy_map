@@ -116,6 +116,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   // AI 沙盒模型采用分层选址；与旧 generatedAssets 的 placementState 完全隔离。
   let sandboxPlacementState = null
   let sandboxPlacementFootprint = null
+  let sandboxPlacementFootprintOutline = null
   let selectedGeneratedAsset = null
   let generatedAssetSequence = 0
   let navigationVisualGroup = null
@@ -382,6 +383,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       )
       sandboxPlacementFootprint.visible = true
     }
+    if (sandboxPlacementFootprintOutline) {
+      sandboxPlacementFootprintOutline.position.set(
+        (placedBounds.min.x + placedBounds.max.x) / 2,
+        0.055,
+        (placedBounds.min.z + placedBounds.max.z) / 2,
+      )
+      sandboxPlacementFootprintOutline.visible = true
+    }
     state.hasTarget = true
     state.target = { x, y: state.model.position.y, z }
     invalidateShadowMap()
@@ -399,10 +408,42 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       stage: sandboxPlacementState.stage,
       level: sandboxPlacementState.level,
       hasTarget: sandboxPlacementState.hasTarget,
+      candidateLocked: sandboxPlacementState.candidateLocked,
       modelName: sandboxPlacementState.model.name,
+      footprint: { width: sandboxPlacementState.footprintWidth, depth: sandboxPlacementState.footprintDepth },
       target: sandboxPlacementState.target,
       ...extra,
     })
+  }
+
+  function applySandboxPlacementGhost(state) {
+    state.materialSnapshots = []
+    state.model.traverse(object => {
+      if (!object.isMesh || !object.material) return
+      const original = object.material
+      const makeGhost = material => {
+        const clone = material.clone()
+        clone.transparent = true
+        clone.opacity = Math.min(Number.isFinite(material.opacity) ? material.opacity : 1, 0.42)
+        clone.depthWrite = false
+        clone.needsUpdate = true
+        return clone
+      }
+      const preview = Array.isArray(original) ? original.map(makeGhost) : makeGhost(original)
+      state.materialSnapshots.push({ object, original, preview, renderOrder: object.renderOrder })
+      object.material = preview
+      object.renderOrder = 20
+    })
+  }
+
+  function restoreSandboxPlacementGhost(state) {
+    for (const snapshot of state?.materialSnapshots || []) {
+      snapshot.object.material = snapshot.original
+      snapshot.object.renderOrder = snapshot.renderOrder
+      if (Array.isArray(snapshot.preview)) snapshot.preview.forEach(material => material?.dispose?.())
+      else snapshot.preview?.dispose?.()
+    }
+    state.materialSnapshots = []
   }
 
   function beginSandboxModelPlacement(modelOrId) {
@@ -431,15 +472,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       originalVisible: model.visible,
       footprintWidth,
       footprintDepth,
-      stage: 'area',
+      stage: 'point',
       level: 0,
       hasTarget: false,
+      candidateLocked: false,
       target: null,
+      materialSnapshots: [],
     }
     if (!existing) selectSandboxModel(null)
     else sandboxTransform?.detach()
     if (!existing) scene.add(model)
-    model.visible = false
+    model.visible = true
+    applySandboxPlacementGhost(sandboxPlacementState)
     const footprintMaterial = new THREE.MeshBasicMaterial({
       color: '#8bd5a5',
       transparent: true,
@@ -456,6 +500,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxPlacementFootprint.visible = false
     sandboxPlacementFootprint.renderOrder = 5
     scene.add(sandboxPlacementFootprint)
+    const outlineGeometry = new THREE.EdgesGeometry(new THREE.PlaneGeometry(footprintWidth, footprintDepth))
+    sandboxPlacementFootprintOutline = new THREE.LineSegments(outlineGeometry, new THREE.LineBasicMaterial({
+      color: '#b8f5c8', transparent: true, opacity: 0.98, depthTest: false,
+    }))
+    sandboxPlacementFootprintOutline.rotation.x = -Math.PI / 2
+    sandboxPlacementFootprintOutline.position.y = 0.055
+    sandboxPlacementFootprintOutline.visible = false
+    sandboxPlacementFootprintOutline.renderOrder = 1001
+    scene.add(sandboxPlacementFootprintOutline)
 
     if (cameraRig?.mode !== 'overview') cameraRig?.setMode('overview')
     input?.setMode('overview')
@@ -488,52 +541,51 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     event.stopImmediatePropagation()
     const point = getSandboxGroundPoint(event)
     if (!point) return
-    if (state.stage === 'area') {
-      const world = getSandboxPlacementWorldBounds()
-      const currentSpan = Math.max(8, getCurrentSandboxPlacementViewSpan() || Math.max(world.width, world.depth) * 1.15)
-      const nextSpan = Math.max(8, currentSpan * 0.42)
-      state.level += 1
-      cameraRig?.focusBounds(nextSpan / 1.15, nextSpan / 1.15, point.x, point.z)
-      configureSandboxPlacementOrbit(nextSpan, world)
-      const modelScale = Math.max(state.footprintWidth, state.footprintDepth)
-      if (nextSpan <= modelScale * 8 || state.level >= 5) {
-        state.stage = 'point'
-        state.model.visible = true
-        updateSandboxPlacementPreview(point)
-        emitSandboxPlacementState({ instruction: '已进入精确落位；移动鼠标预览，点击地面确定位置' })
-      } else {
-        emitSandboxPlacementState({ instruction: '区域已聚焦；继续点击更小的区域逐级放大' })
-      }
-      requestFrame()
-      return
-    }
-    if (state.stage === 'point') {
-      updateSandboxPlacementPreview(point)
-      emitSandboxPlacementState({ instruction: '位置已选定；确认落位后可进行旋转、高度和缩放微调' })
-    }
+    updateSandboxPlacementPreview(point)
+    state.candidateLocked = true
+    emitSandboxPlacementState({ instruction: '候选位置已锁定；确认前可点击“重新选择”调整位置' })
+    requestFrame()
+    return;
   }
 
   function onSandboxPlacementPointerMove(event) {
     const state = sandboxPlacementState
-    if (!state || state.stage !== 'point') return
+    if (!state || state.stage !== 'point' || state.candidateLocked) return
     const point = getSandboxGroundPoint(event)
     if (point) updateSandboxPlacementPreview(point)
   }
 
   function clearSandboxPlacementFootprint() {
-    if (!sandboxPlacementFootprint) return
-    scene?.remove(sandboxPlacementFootprint)
-    sandboxPlacementFootprint.geometry?.dispose?.()
-    sandboxPlacementFootprint.material?.dispose?.()
-    sandboxPlacementFootprint = null
+    if (sandboxPlacementFootprint) {
+      scene?.remove(sandboxPlacementFootprint)
+      sandboxPlacementFootprint.geometry?.dispose?.()
+      sandboxPlacementFootprint.material?.dispose?.()
+      sandboxPlacementFootprint = null
+    }
+    if (sandboxPlacementFootprintOutline) {
+      scene?.remove(sandboxPlacementFootprintOutline)
+      sandboxPlacementFootprintOutline.geometry?.dispose?.()
+      sandboxPlacementFootprintOutline.material?.dispose?.()
+      sandboxPlacementFootprintOutline = null
+    }
+  }
+
+  function unlockSandboxPlacementCandidate() {
+    const state = sandboxPlacementState
+    if (!state || !state.candidateLocked) return false
+    state.candidateLocked = false
+    emitSandboxPlacementState({ instruction: '移动鼠标预览占地范围，再点击地面锁定候选位置' })
+    requestFrame()
+    return true
   }
 
   function confirmSandboxModelPlacement() {
     const state = sandboxPlacementState
-    if (!state || state.stage !== 'point' || !state.hasTarget) return false
+    if (!state || state.stage !== 'point' || !state.hasTarget || !state.candidateLocked) return false
     const { model, existing, id, target } = state
     sandboxPlacementState = null
     clearSandboxPlacementFootprint()
+    restoreSandboxPlacementGhost(state)
     model.visible = true
     if (existing) {
       refreshSandboxModelSpatial(model)
@@ -556,6 +608,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxPlacementState = null
     clearSandboxPlacementFootprint()
     const { model, existing, id, originalPosition, originalRotation, originalScale, originalVisible } = state
+    restoreSandboxPlacementGhost(state)
     model.position.copy(originalPosition)
     model.rotation.copy(originalRotation)
     model.scale.copy(originalScale)
@@ -2957,5 +3010,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

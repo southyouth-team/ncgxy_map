@@ -3,6 +3,20 @@ import * as THREE from 'three'
 import { createBlankSandboxScene } from './createBlankSandboxScene.js'
 
 describe('createBlankSandboxScene expandable world', () => {
+  it('includes a visible player avatar at the configured spawn point', () => {
+    const world = createBlankSandboxScene(THREE)
+    const player = world.getObjectByName('PixelExplorerSprite')
+
+    expect(player).toBeTruthy()
+    expect(player.visible).toBe(true)
+    expect(player.position.x).toBe(world.userData.playerSpawn.x)
+    expect(player.position.z).toBe(world.userData.playerSpawn.z)
+    expect(player.getObjectByName('avatar-body')).toBeTruthy()
+    expect(player.getObjectByName('avatar-head')).toBeTruthy()
+    expect(player.getObjectByName('avatar-ground-marker')).toBeTruthy()
+    expect(typeof player.userData.updateAnimation).toBe('function')
+  })
+
   it('shows real ground chunk boundaries and selected fills only in management mode', () => {
     const world = createBlankSandboxScene(THREE)
     const fill = world.getObjectByName('sandbox-chunk-selection-fill-0:0')

@@ -3442,3 +3442,11 @@ export const environmentBindings = [
 
 - 将空中水平速度上限从起跳第一帧开始执行，避免起跳帧使用普通移动速度造成总跳跃距离略微超出 Profile 上限。
 - 对应代码提交：ee3eff8bbb36230b4fb2697c375b89f28fedee75。该提交后的 GitHub Actions 正在执行；上一代码提交 cb34ad09 的跳跃/复位相关测试已通过。
+
+
+### 最新跳跃实现 CI 结果（代码提交 ee3eff8b）
+
+- 前端 CI：Model Traversal Tester 3/3、PhysicsRuntime 12/12、CharacterTraversalProfile 3/3 通过；InputController 本轮新增跳跃、重复跳跃、R 复位测试通过。全量仍为 513 passed / 6 failed（519 total），失败集合与项目既有基线一致，没有新增失败。
+- Vite build 通过。
+- 后端 CI：NestJS build 通过；96 passed / 1 failed，仍为既有 image-generation.procedural.spec.ts 的 shared-secret/chat/completions URL 配置错误；数据库集成步骤因此跳过。
+- 当前分支 HEAD：ac15ad05c8b14dff90b340bd4b4a706a08c73854（相对 ee3eff8b 仅追加进度文档）。本轮没有浏览器验收或用户本地测试。

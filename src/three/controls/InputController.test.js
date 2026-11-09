@@ -299,26 +299,24 @@ describe('InputController vertical camera synchronization', () => {
 })
 
 
-describe('InputController player dimensions', () => {
-  it('updates eye height and collider radius while preserving the grounded floor position', () => {
+describe('InputController fixed player dimensions', () => {
+  it('keeps the canonical collider and eye height when visual dimensions are requested', () => {
     const { controller, cameraRig, collisionWorld } = createController()
     collisionWorld.setRadius = vi.fn()
     const result = controller.setPlayerDimensions({ eyeHeight: 1.9, colliderRadius: 0.32 })
-    expect(result).toEqual({ eyeHeight: 1.9, colliderRadius: 0.32 })
-    expect(cameraRig.player.y).toBeCloseTo(1.9)
-    expect(collisionWorld.setRadius).toHaveBeenCalledWith(0.32)
-    expect(cameraRig.updateThirdPersonDesired).toHaveBeenCalledOnce()
+    expect(result).toEqual({ eyeHeight: 1.7, colliderRadius: 0.55 })
+    expect(cameraRig.player.y).toBe(1.7)
+    expect(controller.traversalProfile).toMatchObject({ height: 1.7, radius: 0.55 })
+    expect(collisionWorld.setRadius).not.toHaveBeenCalled()
   })
 
-  it('applies the configured collider radius when the active collision world changes', () => {
+  it('applies the canonical collider radius when the active collision world changes', () => {
     const { controller } = createController()
-    controller.setPlayerDimensions({ colliderRadius: 0.28 })
     const nextWorld = { setRadius: vi.fn() }
     controller.collisionWorld = nextWorld
-    expect(nextWorld.setRadius).toHaveBeenCalledWith(0.28)
+    expect(nextWorld.setRadius).toHaveBeenCalledWith(0.55)
   })
 })
-
 
 describe('InputController Rapier character movement', () => {
   function attachPhysics(controller, player) {
@@ -411,9 +409,9 @@ describe('InputController Rapier character movement', () => {
     expect(calls.teleported.at(-1).position.z).toBeCloseTo(6)
 
     controller.setPlayerDimensions({ eyeHeight: 1.9, colliderRadius: 0.32 })
-    expect(calls.created).toHaveLength(2)
-    expect(calls.created.at(-1).traversalProfile).toMatchObject({ radius: 0.32, height: 1.9 })
-    expect(cameraRig.player.y).toBeCloseTo(3.4)
+    expect(calls.created).toHaveLength(1)
+    expect(controller.traversalProfile).toMatchObject({ radius: 0.55, height: 1.7 })
+    expect(cameraRig.player.y).toBeCloseTo(3.2)
   })
 })
 

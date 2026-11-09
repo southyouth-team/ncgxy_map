@@ -108,6 +108,33 @@ describe('InputController first-person controls', () => {
 
     expect(controller.keys.size).toBe(0)
   })
+
+  it('normalizes physical key codes so keydown and keyup cannot disagree on letter casing', () => {
+    const { controller } = createController()
+    const preventDefault = vi.fn()
+
+    controller.onKeyDown({ key: 'W', code: 'KeyW', target: { tagName: 'CANVAS' }, preventDefault })
+    expect(controller.keys.has('w')).toBe(true)
+    controller.onKeyUp({ key: 'w', code: 'KeyW' })
+    expect(controller.keys.has('w')).toBe(false)
+
+    controller.onKeyDown({ key: 'Shift', code: 'ShiftLeft', target: { tagName: 'CANVAS' }, preventDefault })
+    expect(controller.keys.has('shift')).toBe(true)
+    controller.onKeyUp({ key: 'Shift', code: 'ShiftLeft' })
+    expect(controller.keys.has('shift')).toBe(false)
+  })
+
+  it('normalizes virtual controls and clears buffered jump input on focus loss', () => {
+    const { controller } = createController()
+    expect(controller.setVirtualKey('ArrowUp', true)).toBe(true)
+    expect(controller.keys.has('arrowup')).toBe(true)
+    controller.jumpBufferRemaining = 0.1
+
+    controller.onWindowBlur()
+
+    expect(controller.keys.size).toBe(0)
+    expect(controller.jumpBufferRemaining).toBe(0)
+  })
 })
 
 
@@ -427,6 +454,31 @@ describe('InputController jump and stuck reset', () => {
     for (let step = 0; step < 80; step += 1) controller.updateVerticalMotion(cameraRig.player, 0.05)
     expect(controller.grounded).toBe(true)
     expect(controller.jumpPlayer()).toBe(true)
+  })
+
+  it('buffers a jump briefly until the character becomes grounded', () => {
+    const { controller } = createController()
+    controller.grounded = false
+    controller.coyoteTimeRemaining = 0
+
+    expect(controller.jumpPlayer()).toBe(true)
+    expect(controller.jumpActive).toBe(false)
+    expect(controller.jumpBufferRemaining).toBeGreaterThan(0)
+
+    controller.updateJumpInputWindow(0.016, true)
+
+    expect(controller.jumpActive).toBe(true)
+    expect(controller.jumpBufferRemaining).toBe(0)
+  })
+
+  it('allows a jump during the short coyote-time window after leaving a ledge', () => {
+    const { controller } = createController()
+    controller.grounded = false
+    controller.coyoteTimeRemaining = 0.08
+
+    expect(controller.jumpPlayer()).toBe(true)
+    expect(controller.jumpActive).toBe(true)
+    expect(controller.coyoteTimeRemaining).toBe(0)
   })
 
   it('uses Space to jump and R to return to the recorded spawn point', () => {

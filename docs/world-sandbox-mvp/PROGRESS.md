@@ -3426,3 +3426,13 @@ export const environmentBindings = [
 - 沙盒 InputController 现在直接消费全局默认 CharacterTraversalProfile，不再从旧 CollisionWorld 的半径覆盖人物规格。
 - 旧 setPlayerDimensions 仅保留兼容返回值，不再允许外观模型修改人物物理高度/半径；碰撞世界切换时也统一应用标准半径。
 - 出生位置仅在首次接入 PhysicsRuntime 时记录，后续 Runtime 重新绑定不会覆盖复位点。
+
+
+### 跳跃/复位实现 CI 核验（代码提交 cb34ad09）
+
+- 前端 CI：modelTraversalTester.test.js 3/3 通过（含真实 Rapier 跳跃并在目标平台重新接地的测试）；PhysicsRuntime.test.js 12/12 通过；CharacterTraversalProfile.test.js 3/3 通过。新增的跳跃、R 复位和重复跳跃测试均通过。
+- 前端全量：513 passed / 6 failed（519 total；46 个测试文件中 41 个通过、5 个既有失败文件）。失败仍为既有 PlayerCharacterRuntime、InputController 坡面断言、solarPosition、modelCapabilityManifest 未知能力保留断言、createBlankSandboxScene 两项；本轮新增测试没有增加失败项。
+- Vite build 通过。
+- 后端 NestJS build 通过；单测 96 passed / 1 failed，仍为既有 image-generation.procedural.spec.ts 中 shared-secret/chat/completions URL 配置错误。数据库迁移/API 集成/Schema 校验因此跳过。
+- 以上为 GitHub Actions 结果，不代表浏览器实测。没有在用户本地环境运行测试；Space 跳跃、R 复位、真实场景落地仍需浏览器验收。
+- 代码提交：cb34ad094941642ea97ab19e8e3c3fd6423ad96d；随后仅有计划/进度文档提交。main 未修改，未合并 PR。

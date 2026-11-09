@@ -402,18 +402,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         && player.z >= minWorldZ && player.z <= maxWorldZ) {
         blockers.push('玩家当前位置')
       }
-      const tileBounds = new THREE.Box3(
-        new THREE.Vector3(minWorldX, -Infinity, minWorldZ),
-        new THREE.Vector3(maxWorldX, Infinity, maxWorldZ),
-      )
       for (const [id, model] of sandboxModels) {
         if (!model.visible) continue
         model.updateWorldMatrix(true, true)
         const modelBounds = new THREE.Box3().setFromObject(model)
-        if (!modelBounds.isEmpty() && modelBounds.min.x < tileBounds.max.x
-          && modelBounds.max.x > tileBounds.min.x
-          && modelBounds.min.z < tileBounds.max.z
-          && modelBounds.max.z > tileBounds.min.z) {
+        if (!modelBounds.isEmpty() && modelBounds.min.x < maxWorldX
+          && modelBounds.max.x > minWorldX
+          && modelBounds.min.z < maxWorldZ
+          && modelBounds.max.z > minWorldZ) {
           blockers.push(model.name || id)
         }
       }

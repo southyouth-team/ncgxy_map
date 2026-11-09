@@ -152,6 +152,86 @@ export function collectModelSupportSurfaces(root, ownerId) {
 
 
 /**
+ * Compile explicitly declared static Mesh blockers into world-space Rapier
+ * triangle buffers. This is opt-in: visible render meshes never become
+ * colliders unless their component has a spatial collider declaration.
+ *
+ * Mesh geometry is preserved as authored (including real openings); callers
+ * should provide collision-ready geometry rather than decorative render detail.
+ */
+export function collectModelDeclaredMeshColliders(THREE, model, ownerId) {
+  if (!THREE?.Vector3 || !model?.traverse || !ownerId) return []
+  model.updateWorldMatrix(true, true)
+  const colliders = model.userData?.proceduralModelCapabilityManifest
+    ?.capabilities?.spatial?.colliders
+  if (!Array.isArray(colliders) || !colliders.length) return []
+
+  const parts = new Map()
+  const duplicates = new Set()
+  model.traverse(object => {
+    const id = object.userData?.componentId
+    if (typeof id !== 'string' || !id.trim()) return
+    if (parts.has(id)) duplicates.add(id)
+    else parts.set(id, object)
+  })
+
+  const output = []
+  const seenTargets = new Set()
+  for (const declaration of colliders) {
+    if (!declaration || declaration.enabled === false || declaration.shape !== 'mesh'
+      || declaration.blocksMovement === false
+      || typeof declaration.targetPartId !== 'string') continue
+    const targetPartId = declaration.targetPartId
+    if (duplicates.has(targetPartId) || seenTargets.has(targetPartId)) continue
+    const target = parts.get(targetPartId)
+    if (!target?.traverse) continue
+
+    const vertices = []
+    const indices = []
+    target.traverse(mesh => {
+      if (!mesh.isMesh || mesh.visible === false
+        || mesh.userData?.physicsCollision === false
+        || mesh.userData?.collisionMode === 'none') return
+      const position = mesh.geometry?.getAttribute?.('position')
+      if (!position || position.itemSize < 3 || position.count < 3) return
+      const index = mesh.geometry.index
+      const availableCount = index ? index.count : position.count
+      const start = Math.max(0, Number(mesh.geometry.drawRange?.start) || 0)
+      const requestedCount = Number(mesh.geometry.drawRange?.count)
+      const end = Math.min(
+        availableCount,
+        Number.isFinite(requestedCount) ? start + requestedCount : availableCount,
+      )
+      const vertexOffset = vertices.length / 3
+      const point = new THREE.Vector3()
+      for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex += 1) {
+        point.fromBufferAttribute(position, vertexIndex).applyMatrix4(mesh.matrixWorld)
+        vertices.push(point.x, point.y, point.z)
+      }
+      const readIndex = i => index ? index.getX(i) : i
+      for (let i = start; i + 2 < end; i += 3) {
+        indices.push(
+          vertexOffset + readIndex(i),
+          vertexOffset + readIndex(i + 1),
+          vertexOffset + readIndex(i + 2),
+        )
+      }
+    })
+    if (vertices.length < 9 || indices.length < 3) continue
+    seenTargets.add(targetPartId)
+    output.push({
+      ownerId: String(ownerId),
+      colliderId: String(declaration.id || targetPartId),
+      targetPartId,
+      vertices: new Float32Array(vertices),
+      indices: new Uint32Array(indices),
+    })
+  }
+  return output
+}
+
+
+/**
  * Compile validated stair/ramp Mesh geometry into world-space triangle buffers.
  * These are static collision shapes; they do not by themselves certify that a
  * character can traverse the complete route.
@@ -254,12 +334,16 @@ export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
   const key = String(ownerId)
   physicsRuntime.removeOwner(key)
   const traversalMeshes = collectModelTraversalTrimeshes(THREE, model, key)
-  const traversalPartIds = new Set(traversalMeshes.map(item => item.targetPartId))
+  const declaredMeshColliders = collectModelDeclaredMeshColliders(THREE, model, key)
+  const trimeshPartIds = new Set([
+    ...traversalMeshes.map(item => item.targetPartId),
+    ...declaredMeshColliders.map(item => item.targetPartId),
+  ])
   const boxes = collectModelMovementObstacles(THREE, model, key, { includeAllHeights: true })
-    .filter(box => !traversalPartIds.has(box.targetPartId))
+    .filter(box => !trimeshPartIds.has(box.targetPartId))
   let added = 0
   try {
-    traversalMeshes.forEach(item => {
+    [...traversalMeshes, ...declaredMeshColliders].forEach(item => {
       physicsRuntime.createStaticTrimesh({
         id: key + ':manifest-trimesh:' + item.surfaceId,
         ownerId: key,

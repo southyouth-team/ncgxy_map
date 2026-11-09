@@ -6,6 +6,8 @@ export const DEFAULT_CHARACTER_TRAVERSAL_PROFILE = Object.freeze({
   height: 1.7,
   radius: 0.55,
   maxStepHeight: 0.45,
+  jumpHeight: 1.1,
+  jumpMaxDistance: 3,
   maxSlopeClimbAngleDegrees: 50,
   minSlopeSlideAngleDegrees: 30,
   minStepWidth: 0.275,
@@ -33,6 +35,8 @@ export function normalizeCharacterTraversalProfile(input = {}, base = DEFAULT_CH
     height,
     radius,
     maxStepHeight: finitePositive(source.maxStepHeight, fallback.maxStepHeight),
+    jumpHeight: finitePositive(source.jumpHeight, fallback.jumpHeight),
+    jumpMaxDistance: finitePositive(source.jumpMaxDistance, fallback.jumpMaxDistance),
     maxSlopeClimbAngleDegrees: Number.isFinite(maxSlope)
       ? Math.max(1, Math.min(89, maxSlope))
       : fallback.maxSlopeClimbAngleDegrees,

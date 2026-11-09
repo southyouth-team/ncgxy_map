@@ -2,7 +2,7 @@
  * Normalize the versioned, data-only model capability contract while retaining
  * unknown capability sections for forward compatibility.
  */
-const TRAVERSABILITY_COLLECTIONS = ['stairs', 'ramps', 'passages', 'connections']
+const TRAVERSABILITY_COLLECTIONS = ['stairs', 'ramps', 'jumps', 'passages', 'connections']
 
 /**
  * Normalize the extensible, data-only traversal declarations. This does not

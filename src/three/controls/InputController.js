@@ -173,7 +173,7 @@ export class InputController {
     else if (!currentState.grounded && !launchPending) this.verticalVelocity -= this.gravity * dt
     let horizontalX = (Number(dx) || 0) / dt
     let horizontalZ = (Number(dz) || 0) / dt
-    if (this.jumpActive && !currentState.grounded) {
+    if (this.jumpActive) {
       const flightTime = 2 * Math.sqrt((2 * this.traversalProfile.jumpHeight) / this.gravity)
       const maxAirSpeed = this.traversalProfile.jumpMaxDistance / Math.max(flightTime, 0.001)
       const horizontalSpeed = Math.hypot(horizontalX, horizontalZ)

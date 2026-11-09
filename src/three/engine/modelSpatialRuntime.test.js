@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { collectModelMovementObstacles, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
+import { collectModelMovementObstacles, refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 
 describe('collectModelMovementObstacles', () => {
@@ -410,5 +410,63 @@ describe('spatial registration persistence', () => {
     expect(restored.userData.proceduralModelCapabilityControlDocument.overrides).toEqual(
       root.userData.proceduralModelCapabilityControlDocument.overrides,
     )
+  })
+})
+
+
+describe('refreshModelPhysicsRegistration', () => {
+  function createPhysicsModel() {
+    const root = new THREE.Group()
+    root.userData.sandboxModelId = 'physics-model'
+    const upperWall = new THREE.Group()
+    upperWall.userData.componentId = 'upper-wall'
+    upperWall.position.y = 4
+    root.add(upperWall)
+    const door = new THREE.Group()
+    door.userData.componentId = 'door-panel'
+    root.add(door)
+    root.userData.worldState = { doorOpen: false }
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      parameters: [],
+      capabilities: { spatial: { colliders: [
+        { id: 'upper-wall-box', targetPartId: 'upper-wall', shape: 'box', center: { x: 0, y: 0, z: 0 }, size: { x: 4, y: 2, z: 0.4 } },
+        { id: 'door-box', targetPartId: 'door-panel', shape: 'box', center: { x: 0, y: 1, z: 0 }, size: { x: 1, y: 2, z: 0.15 }, stateCondition: { key: 'doorOpen', equals: false, defaultValue: false } },
+      ] } },
+    }
+    return root
+  }
+
+  it('registers full-height Rapier boxes, including elevated colliders', () => {
+    const model = createPhysicsModel()
+    model.position.set(10, 0, 5)
+    const calls = []
+    const runtime = {
+      removeOwner: id => calls.push({ type: 'remove', id }),
+      createStaticBox: options => calls.push({ type: 'create', options }),
+    }
+    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(2)
+    const boxes = calls.filter(item => item.type === 'create').map(item => item.options)
+    expect(boxes).toHaveLength(2)
+    expect(boxes[0]).toMatchObject({
+      ownerId: 'physics-model',
+      translation: { x: 10, y: 4, z: 5 },
+      halfExtents: { x: 2, y: 1, z: 0.2 },
+    })
+  })
+
+  it('honors state-conditioned door colliders and removes stale owner bodies', () => {
+    const model = createPhysicsModel()
+    const calls = []
+    const runtime = {
+      removeOwner: id => calls.push({ type: 'remove', id }),
+      createStaticBox: options => calls.push({ type: 'create', options }),
+    }
+    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(2)
+    model.userData.worldState.doorOpen = true
+    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(1)
+    expect(calls.filter(item => item.type === 'remove')).toHaveLength(2)
+    const ids = calls.filter(item => item.type === 'create').slice(-1).map(item => item.options.id)
+    expect(ids[0]).toContain('upper-wall-box')
   })
 })

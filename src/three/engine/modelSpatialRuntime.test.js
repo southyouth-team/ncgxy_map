@@ -249,12 +249,19 @@ describe('collectModelDeclaredMeshColliders', () => {
     disabled.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()))
     const empty = new THREE.Group()
     empty.userData.componentId = 'empty'
-    model.add(wall, disabled, empty)
+    const duplicate = new THREE.Group()
+    duplicate.userData.componentId = 'duplicate'
+    duplicate.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()))
+    const duplicateAgain = new THREE.Group()
+    duplicateAgain.userData.componentId = 'duplicate'
+    duplicateAgain.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()))
+    model.add(wall, disabled, empty, duplicate, duplicateAgain)
     model.userData.proceduralModelCapabilityManifest = {
       capabilities: { spatial: { colliders: [
         { id: 'wall', targetPartId: 'wall', shape: 'mesh', enabled: false },
         { id: 'disabled', targetPartId: 'disabled', shape: 'mesh', blocksMovement: false },
         { id: 'empty', targetPartId: 'empty', shape: 'mesh' },
+        { id: 'duplicate', targetPartId: 'duplicate', shape: 'mesh' },
         { id: 'undeclared-shape', targetPartId: 'wall', shape: 'convex' },
       ] } },
     }

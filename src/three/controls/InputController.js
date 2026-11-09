@@ -31,6 +31,8 @@ export class InputController {
     this.navigationPath = null
     this.navigationPathIndex = 0
     this.navigationPathCompleted = false
+    this.navigationPathPhysicsCommanded = false
+    this.lastPhysicsStepCount = 0
     this.lastTouchLook = { x: 0, y: 0 }
     this.onKeyDown = (event) => {
       const key = event.key.toLowerCase()
@@ -129,36 +131,47 @@ export class InputController {
     })
     this.verticalVelocity = 0
     this.grounded = true
+    this.lastPhysicsStepCount = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)?.stepCount || 0
     return true
   }
 
   syncPhysicsCharacterPosition() {
     if (!this.physicsRuntime || !this.physicsCharacterId || !this.cameraRig?.player) return false
     const player = this.cameraRig.player
-    return this.physicsRuntime.setKinematicCharacterPosition(this.physicsCharacterId, {
+    const synced = this.physicsRuntime.setKinematicCharacterPosition(this.physicsCharacterId, {
       x: player.x,
       y: player.y - this.playerEyeHeight,
       z: player.z,
     })
+    this.lastPhysicsStepCount = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)?.stepCount || 0
+    return synced
   }
 
   moveWithPhysics(player, dx, dz, delta) {
     if (!this.physicsRuntime || !this.physicsCharacterId) return null
     const dt = Math.max(0, Math.min(Number(delta) || 0, 0.05))
     if (!dt) return null
-    this.verticalVelocity -= this.gravity * dt
-    const result = this.physicsRuntime.moveKinematicCharacter(this.physicsCharacterId, {
-      x: Number(dx) || 0,
-      y: this.verticalVelocity * dt,
-      z: Number(dz) || 0,
+    const previousStepCount = this.lastPhysicsStepCount
+    const currentState = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
+    if (!currentState) return null
+    this.grounded = currentState.grounded === true
+    if (this.grounded) this.verticalVelocity = 0
+    else this.verticalVelocity -= this.gravity * dt
+    // 固定物理步长内由 PhysicsRuntime 消费速度；渲染帧率高于 60Hz 时不会反复覆盖尚未执行的位移。
+    const verticalSpeed = this.grounded ? -2 : this.verticalVelocity
+    this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, {
+      x: (Number(dx) || 0) / dt,
+      y: verticalSpeed,
+      z: (Number(dz) || 0) / dt,
     })
-    if (!result) return null
-    player.x = result.translation.x
-    player.y = result.translation.y + this.playerEyeHeight
-    player.z = result.translation.z
-    this.grounded = result.grounded === true
+    const state = this.physicsRuntime.getKinematicCharacterState(this.physicsCharacterId)
+    player.x = state.translation.x
+    player.y = state.translation.y + this.playerEyeHeight
+    player.z = state.translation.z
+    this.grounded = state.grounded === true
+    this.lastPhysicsStepCount = state.stepCount
     if (this.grounded && this.verticalVelocity < 0) this.verticalVelocity = 0
-    return result
+    return { ...state, physicsStepped: state.stepCount > previousStepCount }
   }
 
   setPlayerDimensions({ eyeHeight, colliderRadius } = {}) {
@@ -209,6 +222,7 @@ export class InputController {
     this.navigationPath = null
     this.navigationPathIndex = 0
     this.navigationPathCompleted = false
+    this.navigationPathPhysicsCommanded = false
     this.pointerDown = false
     if (mode !== 'firstPerson') this.exitPointerLock()
   }
@@ -244,6 +258,7 @@ export class InputController {
       : null
     this.navigationPathIndex = this.navigationPath ? 1 : 0
     this.navigationPathCompleted = false
+    this.navigationPathPhysicsCommanded = false
     return Boolean(this.navigationPath)
   }
 
@@ -371,7 +386,13 @@ export class InputController {
         const previous = { x: player.x, y: player.y, z: player.z }
         const result = this.moveWithPhysics(player, dx / distance * travel, dz / distance * travel, delta)
         const moved = result ? Math.hypot(player.x - previous.x, player.z - previous.z) : 0
-        if (moved < 0.002) { this.navigationPath = null; this.navigationPathCompleted = false; return }
+        if (this.navigationPathPhysicsCommanded && result?.physicsStepped && moved < 0.002) {
+          this.navigationPath = null
+          this.navigationPathCompleted = false
+          this.navigationPathPhysicsCommanded = false
+          return
+        }
+        this.navigationPathPhysicsCommanded = true
       } else {
         const movement = this.collisionWorld.move(player, dx / distance * travel, dz / distance * travel)
         const moved = Math.hypot(movement.x - player.x, movement.z - player.z)
@@ -387,11 +408,11 @@ export class InputController {
     }
     if (!forward && !strafe) {
       const player = this.cameraRig.player
-      const previousY = player.y
+      const previous = { x: player.x, y: player.y, z: player.z }
       if (this.physicsRuntime) this.moveWithPhysics(player, 0, 0, delta)
       else this.updateVerticalMotion(player, delta)
-      // 空中无输入时仍需同步相机，否则角色会下落而镜头停留在原高度。
-      if (Math.abs(player.y - previousY) > 0.0001) {
+      // 物理固定步长可能在当前渲染帧开始时完成移动；三个轴都必须同步到跟随相机。
+      if (Math.hypot(player.x - previous.x, player.y - previous.y, player.z - previous.z) > 0.0001) {
         if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
         else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
       }

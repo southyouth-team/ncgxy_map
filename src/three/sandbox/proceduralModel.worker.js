@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest, validateSpatialTraversability } from './modelCapabilityManifest.js'
 import { createCapabilityControlDocument } from './capabilityControl.js'
 import { collectProceduralModelGeometryDiagnostics } from './geometryDiagnostics.js'
+import { analyzeModelTraversability } from './modelTraversabilityAnalyzer.js'
 
 /**
  * Dedicated module worker for generated model code.
@@ -115,6 +116,7 @@ self.addEventListener('message', async (event) => {
     root.updateMatrixWorld(true)
     await reportProgress(port, 'diagnostics', '采集几何诊断信息')
     root.userData.proceduralModelGeometryDiagnostics = collectProceduralModelGeometryDiagnostics(THREE, root)
+    root.userData.proceduralModelTraversabilityAnalysis = analyzeModelTraversability(THREE, root)
     await reportProgress(port, 'serializing', '序列化模型预览数据')
     port.postMessage({
       ok: true,

@@ -851,15 +851,20 @@ function expandWorld(direction) {
   return true
 }
 
-function toggleChunkManagement() {
-  const enabled = managementMode.value !== 'chunks'
-  managementMode.value = enabled ? 'chunks' : 'sandbox'
-  engine?.setSandboxChunkManagement?.(enabled)
-  if (!enabled) {
+function setManagementMode(mode) {
+  const nextMode = mode === 'chunks' ? 'chunks' : mode === 'model' ? 'model' : 'sandbox'
+  if (managementMode.value === 'chunks' && nextMode !== 'chunks') {
+    engine?.setSandboxChunkManagement?.(false)
     selectedChunkKeys.value = []
     selectedChunkKey.value = ''
     reclaimFeedback.value = null
   }
+  managementMode.value = nextMode
+  if (nextMode === 'chunks') engine?.setSandboxChunkManagement?.(true)
+}
+
+function toggleChunkManagement() {
+  setManagementMode(managementMode.value === 'chunks' ? 'sandbox' : 'chunks')
 }
 
 function handleSandboxChunkSelectionChange(payload) {
@@ -1133,7 +1138,7 @@ onBeforeUnmount(() => {
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
       <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>空白世界 · AI 模型构建与交互</span></div>
-      <div class="world-mvp__header-actions"><button :class="{ active: managementMode === 'sandbox' }" @click="managementMode = 'sandbox'">沙盒管理</button><button :class="{ active: managementMode === 'chunks' }" @click="toggleChunkManagement">{{ managementMode === 'chunks' ? '退出地块管理' : '地块管理' }}</button><button :class="{ active: managementMode === 'model' }" @click="managementMode = 'model'">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
+      <div class="world-mvp__header-actions"><button :class="{ active: managementMode === 'sandbox' }" @click="setManagementMode('sandbox')">沙盒管理</button><button :class="{ active: managementMode === 'chunks' }" @click="toggleChunkManagement">{{ managementMode === 'chunks' ? '退出地块管理' : '地块管理' }}</button><button :class="{ active: managementMode === 'model' }" @click="setManagementMode('model')">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
     </header>
 
     <section v-if="managementMode === 'chunks' && !placement.active" class="world-mvp__chunk-manager">

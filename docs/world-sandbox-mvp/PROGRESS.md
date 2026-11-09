@@ -2444,3 +2444,23 @@ export const environmentBindings = [
 - GitHub 源码写入与回读：已完成；每次提交均核验分支 HEAD 与写入提交一致。
 - Vitest、前端构建和浏览器真实按 E/灯光变化/存档恢复：本轮执行环境没有仓库工作区、Node 依赖和浏览器，尚未执行，不标记通过。GitHub Combined Status 返回 0 项检查；当前可用的 workflow-run 查询仅返回 PR 触发运行且结果为空，因此 push 触发 CI 是否完成无法确认，不标记通过。
 - main 保持 608a9f2c1f739cd581acb833b1e70410672e258b；未修改或合并 main，未创建 PR。
+
+---
+
+## 2026-11-09 — 模型 Transform 拖拽期间锁定相机输入
+
+### 问题
+
+- 总览模式下，Three.js TransformControls 与 CameraRig 的 OrbitControls 共用同一个渲染 DOM。原有 dragging-changed 只暂停角色输入，没有暂停 OrbitControls，因此拖拽模型 Gizmo 时相机仍可能响应同一指针手势。
+- 即使关闭相机输入，OrbitControls 的阻尼更新仍可能在拖拽期间继续应用残余惯性。
+
+### 实际修改
+
+- src/three/camera/CameraRig.js：新增 setOrbitInteractionEnabled(enabled)，集中控制总览相机是否接受用户输入；模型拖拽期间设置 orbitInteractionSuppressed，并跳过 OrbitControls.update()，同时暂停残余阻尼移动。
+- src/three/engine/createCampusEngine.js：TransformControls 的 dragging-changed 事件同时锁定/恢复相机输入和角色移动输入；拖拽结束后仅在总览模式恢复 OrbitControls。
+- 不改变模型 Transform 更新、碰撞体/支撑面刷新和空白区域相机操控逻辑。
+
+### 验证边界
+
+- GitHub 源码写入后回读确认 CameraRig 锁定方法、阻尼暂停分支和 TransformControls 事件联动均存在。
+- 本轮未运行前端构建、单元测试或浏览器实测；仍需验证 2.5D/3D 总览拖拽模型时镜头静止、拖拽结束后空白区域相机操作恢复，以及角色模式下模型 Gizmo 操作不触发角色移动。

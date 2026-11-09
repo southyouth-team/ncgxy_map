@@ -48,7 +48,7 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('closed perimeter');
     expect(request.messages[0].content).toContain('For water bodies in this Runtime version');
     expect(request.messages[0].content).toContain('static Rapier triangle meshes');
-    expect(request.messages[0].content).toContain('do not use dynamic/deforming geometry as a static mesh collider');
+    expect(request.messages[0].content).toContain('Do not use dynamic/deforming geometry as a static mesh collider');
     expect(result).toMatchObject({
       model: 'vision-test',
       objectType: '教学楼',

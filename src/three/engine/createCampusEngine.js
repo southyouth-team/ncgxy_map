@@ -456,6 +456,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function getCurrentSandboxPlacementViewSpan() {
+    const camera = cameraRig?.camera
+    if (!camera) return Number(cameraRig?.overviewSpan) || 60
+    if (camera.isOrthographicCamera) {
+      return Math.max(8, (camera.top - camera.bottom) / Math.max(camera.zoom, 0.001))
+    }
+    const target = cameraRig?.orbit?.target || new THREE.Vector3()
+    const distance = camera.position.distanceTo(target)
+    const halfFov = THREE.MathUtils.degToRad(camera.fov || 48) / 2
+    return Math.max(8, 2 * distance * Math.tan(halfFov))
+  }
+
   function onSandboxPlacementPointerDown(event) {
     const state = sandboxPlacementState
     if (!state || event.button !== 0) return
@@ -465,7 +477,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!point) return
     if (state.stage === 'area') {
       const world = getSandboxPlacementWorldBounds()
-      const currentSpan = Math.max(12, Number(cameraRig?.overviewSpan) || Math.max(world.width, world.depth) * 1.15)
+      const currentSpan = Math.max(8, getCurrentSandboxPlacementViewSpan() || Math.max(world.width, world.depth) * 1.15)
       const nextSpan = Math.max(8, currentSpan * 0.42)
       state.level += 1
       cameraRig?.focusBounds(nextSpan / 1.15, nextSpan / 1.15, point.x, point.z)

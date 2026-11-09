@@ -1599,6 +1599,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig.setObstructionObjects(cameraObstacleRoots)
     // 3D 建筑模型延迟到用户切换 3D/跟随视角时加载，2.5D 总览不承担 GLB 下载与解析成本。
     input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
+    if (playerCharacterRuntime) input.setPlayerDimensions(playerCharacterRuntime.getInfo().dimensions)
     input.setFreeCameraMovementEnabled(isBlankSandbox)
     input.onMovementInput = () => { if (isBlankSandbox && cameraRig?.mode === 'overview') requestFrame() }
     input.attach()
@@ -2677,7 +2678,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       // 第一人称相机位于角色眼部，隐藏完整角色模型，避免模型遮挡视野。
       playerSprite.visible = cameraRig.mode !== 'firstPerson'
       // cameraRig.player 表示眼部高度，角色根节点需要回落到当前楼层地面。
-      playerSprite.position.set(cameraRig.player.x, Math.max(0, cameraRig.player.y - 1.7), cameraRig.player.z)
+      playerSprite.position.set(cameraRig.player.x, Math.max(0, cameraRig.player.y - (input?.playerEyeHeight || 1.7)), cameraRig.player.z)
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
       const dy = playerSprite.position.y - lastPlayerY
@@ -3272,6 +3273,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       sourceUrl,
       assetId: metadata.assetId || sourceUrl,
     })
+    input?.setPlayerDimensions?.(result.dimensions)
     invalidateShadowMap()
     requestFrame()
     callbacks.onPlayerCharacterChange?.(result)
@@ -3281,6 +3283,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function setPlayerCharacterModel(model, animations = [], metadata = {}) {
     if (!isBlankSandbox || !playerCharacterRuntime) throw new Error('当前场景不支持替换角色模型')
     const result = playerCharacterRuntime.setModel(model, animations, metadata)
+    input?.setPlayerDimensions?.(result.dimensions)
     invalidateShadowMap()
     requestFrame()
     callbacks.onPlayerCharacterChange?.(result)
@@ -3296,6 +3299,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function restorePlayerCharacterFallback() {
     const restored = playerCharacterRuntime?.restoreFallback() || false
     if (restored) {
+      input?.setPlayerDimensions?.(playerCharacterRuntime.getInfo().dimensions)
       invalidateShadowMap()
       requestFrame()
       callbacks.onPlayerCharacterChange?.(playerCharacterRuntime.getInfo())

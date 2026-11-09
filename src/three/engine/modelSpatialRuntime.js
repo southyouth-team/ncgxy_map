@@ -161,8 +161,8 @@ export function collectModelTraversalTrimeshes(THREE, model, ownerId) {
   model.updateWorldMatrix(true, true)
   const manifest = model.userData?.proceduralModelCapabilityManifest
   const declarations = manifest?.capabilities?.spatial?.traversability || {}
-  const analysis = model.userData?.proceduralModelTraversabilityAnalysis
-    || analyzeModelTraversability(THREE, model)
+  const analysis = analyzeModelTraversability(THREE, model)
+  model.userData.proceduralModelTraversabilityAnalysis = analysis
   const parts = new Map()
   model.traverse(object => {
     const id = object.userData?.componentId

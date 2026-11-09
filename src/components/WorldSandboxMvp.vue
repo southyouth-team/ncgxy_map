@@ -32,6 +32,7 @@ const editHistory = ref([])
 const message = ref('正在初始化空白沙盒…')
 const saveStatus = ref('尚未保存')
 const worldState = ref(null)
+const managementMode = ref('sandbox')
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
 const timeEnabled = ref(true)
@@ -846,6 +847,28 @@ function expandWorld(direction) {
   return true
 }
 
+function removeWorldEdge(direction) {
+  if (!engine || placement.value.active) return false
+  const result = engine.removeSandboxWorldEdge(direction)
+  if (!result?.ok) {
+    const reasons = {
+      'origin-anchor': '不能回收包含初始中心区块的边缘；请从其他方向回收。',
+      'minimum-world-size': '至少保留一个区块，不能继续回收。',
+      occupied: '该边缘地块仍被占用：' + (result.blockers || []).join('、') + '。请先移走相关对象或人物。',
+      'unsupported-world': '当前场景不支持地块回收。',
+    }
+    message.value = reasons[result?.reason] || '地块回收失败，请检查世界状态。'
+    return false
+  }
+  worldState.value = result.world || engine.getSandboxWorldState()
+  const bounds = worldState.value?.bounds
+  message.value = bounds
+    ? `已回收${({ north: '北侧', south: '南侧', east: '东侧', west: '西侧' })[direction]}边缘地块；当前世界尺寸 ${(bounds.maxX - bounds.minX).toFixed(0)} × ${(bounds.maxZ - bounds.minZ).toFixed(0)}。`
+    : '边缘地块已回收。'
+  saveStatus.value = '有未保存的世界变更'
+  return true
+}
+
 function saveSandbox() {
   if (!engine) return false
   try {
@@ -1059,7 +1082,7 @@ onBeforeUnmount(() => {
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
       <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>空白世界 · AI 模型构建与交互</span></div>
-      <div class="world-mvp__header-actions"><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
+      <div class="world-mvp__header-actions"><button :class="{ active: managementMode === 'sandbox' }" @click="managementMode = 'sandbox'">沙盒管理</button><button :class="{ active: managementMode === 'model' }" @click="managementMode = 'model'">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
     </header>
 
     <aside class="world-mvp__panel">
@@ -1093,9 +1116,10 @@ onBeforeUnmount(() => {
           </div>
         </section>
       </template>
-      <template v-else-if="selectedName">
+      <template v-else-if="managementMode === 'model' && selectedName">
         <section class="world-mvp__operation-panel">
-          <h2>{{ precisionModeActive ? '精细调整' : '模型操作' }}</h2>
+          <h2>{{ precisionModeActive ? '精细调整' : '模型管理' }}</h2>
+          <div class="world-mvp__list"><button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" @click="selectModel(item)">{{ item.name }}</button></div>
           <strong class="world-mvp__operation-name">{{ selectedName }}</strong>
           <template v-if="precisionModeActive">
             <p class="world-mvp__message">当前仅操作这个模型。拖动坐标轴调整对象，镜头输入已锁定。</p>
@@ -1121,7 +1145,7 @@ onBeforeUnmount(() => {
         </section>
       </template>
       <template v-else>
-        <section class="world-mvp__world-panel">
+        <section v-if="managementMode === 'sandbox'" class="world-mvp__world-panel">
           <h2>世界空间</h2>
           <p class="world-mvp__message">当前世界可向四周扩建。扩建只增加空间，不移动已有模型；区域分组是可选管理功能，不影响自由建造。</p>
           <div class="world-mvp__world-size">
@@ -1135,9 +1159,14 @@ onBeforeUnmount(() => {
             <button :disabled="placement.active" @click="expandWorld('east')">向东扩建</button>
             <span></span><button :disabled="placement.active" @click="expandWorld('south')">向南扩建</button><span></span>
           </div>
-          <small class="world-mvp__world-note">每次扩建一个完整区块边缘；当前区块尺寸 54 × 42 世界单位。</small>
+          <small class="world-mvp__world-note">每次扩建或回收一个完整边缘区块；区块尺寸 54 × 42 世界单位。回收仅允许外围整排/整列，且不能包含中心锚点。</small>
+          <div class="world-mvp__expand-grid world-mvp__reclaim-grid">
+            <span></span><button :disabled="placement.active" @click="removeWorldEdge('north')">回收北侧</button><span></span>
+            <button :disabled="placement.active" @click="removeWorldEdge('west')">回收西侧</button><span class="world-mvp__world-center">回收</span><button :disabled="placement.active" @click="removeWorldEdge('east')">回收东侧</button>
+            <span></span><button :disabled="placement.active" @click="removeWorldEdge('south')">回收南侧</button><span></span>
+          </div>
         </section>
-        <section>
+        <section v-if="managementMode === 'model'">
           <h2>AI 建模</h2>
           <div class="world-mvp__command">
             <input v-model="aiPrompt" placeholder="描述模型，例如：一栋带玻璃幕墙的现代图书馆" @keydown.enter="generateAiModel">
@@ -1149,8 +1178,8 @@ onBeforeUnmount(() => {
           <p v-if="referenceImageName" class="world-mvp__message">参考图：{{ referenceImageName }}</p>
           <p class="world-mvp__message">AI 返回 Three.js 源码，在隔离环境构建后直接加入 RPG 场景；不经过 GLB。</p>
         </section>
-        <section>
-          <h2>基础模型</h2>
+        <section v-if="managementMode === 'model'">
+          <h2>模型列表与基础模型</h2>
           <div class="world-mvp__model-grid">
             <button v-for="item in objectTypes" :key="item.id" @click="addModel(item.id)">＋ {{ item.label }}</button>
           </div>
@@ -1159,11 +1188,11 @@ onBeforeUnmount(() => {
             <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" @click="selectModel(item)">{{ item.name }}</button>
           </div>
         </section>
-        <section>
-          <h2>校园场景</h2>
+        <section v-if="managementMode === 'sandbox'">
+          <h2>场景信息</h2>
           <p class="world-mvp__message">已加载南昌工学院校园空间底图，校园建筑、道路、湖泊和公共区域作为场景环境。</p>
         </section>
-        <section>
+        <section v-if="managementMode === 'sandbox'">
           <h2>环境</h2>
           <label class="world-mvp__toggle"><input v-model="timeEnabled" type="checkbox" @change="updateEnvironment"><span>时间系统</span><b>{{ timeEnabled ? '开启' : '关闭' }}</b></label>
           <label class="world-mvp__field"><span>当前时间 <b>{{ String(Math.floor(time)).padStart(2, '0') }}:{{ String(Math.round((time % 1) * 60)).padStart(2, '0') }}</b></span>
@@ -1182,8 +1211,8 @@ onBeforeUnmount(() => {
             <input v-model.number="wind" type="range" min="0" max="100" step="5" :disabled="!windEnabled" @input="updateEnvironment">
           </label>
         </section>
-        <section>
-          <h2>任务交互</h2>
+        <section v-if="managementMode === 'model'">
+          <h2>快捷操作</h2>
           <div class="world-mvp__command">
             <input v-model="command" placeholder="输入任务，例如：创建球体" @keydown.enter="executeTask">
             <button @click="executeTask">执行</button>
@@ -1227,6 +1256,8 @@ onBeforeUnmount(() => {
 .world-mvp__brand strong { font-size:13px; letter-spacing:1.1px; }
 .world-mvp__brand span { margin-top:4px; color:#8e9fa3; font-size:10px; }
 .world-mvp__header-actions { display:flex; align-items:center; gap:9px; }
+.world-mvp__reclaim-grid { margin-top:8px; }
+.world-mvp__reclaim-grid button { border-color:rgba(230,139,126,.3); color:#efb0a6; }
 .world-mvp__save-status { color:#a9bbb3; font-size:10px; }
 .world-mvp .world-mvp__save-button { border-color:#8fbea0; color:#14251c; background:#a5c9b1; font-weight:700; }
 .world-mvp a,.world-mvp button { border:1px solid rgba(255,255,255,.13); border-radius:7px; padding:8px 10px; color:#dce7e3; background:rgba(255,255,255,.06); text-decoration:none; cursor:pointer; font:inherit; font-size:11px; }

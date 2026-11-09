@@ -301,6 +301,13 @@ export class InputController {
     this.domElement.addEventListener('pointercancel', this.onTouchPointerUp)
   }
 
+  hasMovementInput() {
+    if (!this.movementEnabled) return false
+    const directionalInput = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']
+      .some(key => this.keys.has(key))
+    return directionalInput || Boolean(this.navigationPath && !this.navigationPathCompleted)
+  }
+
   setVirtualKey(key, pressed) {
     const normalized = normalizeControlKey(key)
     if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(normalized)) return false

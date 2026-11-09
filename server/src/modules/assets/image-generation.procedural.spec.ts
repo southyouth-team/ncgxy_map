@@ -36,6 +36,10 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('img2threejs editable procedural-draft');
     expect(request.messages[0].content).toContain('export function createModel(THREE)');
     expect(request.messages[0].content).toContain('Physical execution contract v1');
+    expect(request.messages[0].content).toContain('userData.collisionPolicy');
+    expect(request.messages[0].content).toContain('required');
+    expect(request.messages[0].content).toContain('collisionPolicy to either');
+    expect(request.messages[0].content).toContain('incomplete model');
     expect(request.messages[0].content).toContain('a visible Mesh is NOT automatically a collider');
     expect(request.messages[0].content).toContain('shape:"mesh" blockers as static Rapier triangle meshes');
     expect(request.messages[0].content).toContain('exact authored geometry, including real holes/openings, is preserved');

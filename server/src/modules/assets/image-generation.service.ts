@@ -953,7 +953,7 @@ export class ImageGenerationService {
             .filter((part: any) => part && typeof part.text === 'string'
               && (!part.type || part.type === 'text' || part.type === 'output_text'))
             .map((part: any) => part.text)
-            .join('\\n')
+            .join(String.fromCharCode(10))
           : '';
       if (!raw.trim()) {
         const contentType = Array.isArray(rawContent) ? 'array' : typeof rawContent;

@@ -107,6 +107,7 @@ self.addEventListener('message', async (event) => {
       proceduralModelPartsSource: Array.isArray(modelModule.modelParts) ? 'module' : 'legacy',
       proceduralModelEnvironmentBindings: manifestEnvironmentBindings,
       proceduralModelCapabilityManifest: modelCapabilityManifest,
+      proceduralModelTraversalValidation: traversalValidation,
       proceduralModelCapabilityManifestSource: hasModuleManifest ? 'module' : 'legacy',
       proceduralModelCapabilityControlDocument: capabilityControlDocument,
       proceduralModelParameterValues: parameters,

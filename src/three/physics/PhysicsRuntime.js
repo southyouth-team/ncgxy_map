@@ -224,32 +224,6 @@ export class PhysicsRuntime {
     }
   }
 
-  moveKinematicCharacter(id, desiredTranslation = {}) {
-    this.#assertActive()
-    const entry = this.bodies.get(String(id))
-    if (!entry || entry.kind !== 'kinematic-character') return null
-    const desired = [desiredTranslation.x, desiredTranslation.y, desiredTranslation.z].map(Number)
-    if (!desired.every(Number.isFinite)) throw new TypeError('Character movement must be finite')
-
-    const current = entry.body.translation()
-    entry.controller.computeColliderMovement(entry.collider, {
-      x: desired[0], y: desired[1], z: desired[2],
-    })
-    const corrected = entry.controller.computedMovement()
-    const translation = {
-      x: current.x + corrected.x,
-      y: current.y + corrected.y,
-      z: current.z + corrected.z,
-    }
-    entry.body.setNextKinematicTranslation(translation)
-    return {
-      translation,
-      movement: { x: corrected.x, y: corrected.y, z: corrected.z },
-      grounded: entry.controller.computedGrounded(),
-      collisions: entry.controller.numComputedCollisions?.() || 0,
-    }
-  }
-
   setKinematicCharacterPosition(id, translation = {}) {
     this.#assertActive()
     const entry = this.bodies.get(String(id))

@@ -51,14 +51,17 @@ describe('analyzeModelCollisionCompleteness', () => {
         { id: 'missing', targetPartId: 'absent', shape: 'mesh' },
         { id: 'unknown', targetPartId: 'bad-box', shape: 'convex' },
         { id: 'bad-size', targetPartId: 'bad-box', shape: 'box', size: { x: 1, y: 0, z: 1 } },
+        { id: 'bad-center', targetPartId: 'bad-box', shape: 'box', size: { x: 1, y: 1, z: 1 }, center: { x: 0, y: Number.NaN, z: 0 } },
       ] } },
     }
     const result = analyzeModelCollisionCompleteness(root)
     expect(result.issues.map(issue => issue.code)).toEqual(expect.arrayContaining([
+      'collision.component-id.duplicate',
       'collision.target.ambiguous',
       'collision.target.missing',
       'collision.shape.unsupported',
       'collision.box.size.invalid',
+      'collision.box.center.invalid',
     ]))
   })
 

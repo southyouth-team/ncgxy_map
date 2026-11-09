@@ -156,18 +156,20 @@ export class PhysicsRuntime {
     if (!id) throw new TypeError('Static trimesh collider requires a stable id')
     if (this.bodies.has(id)) throw new Error('Physics body id already exists: ' + id)
 
-    const vertices = options.vertices instanceof Float32Array
-      ? options.vertices
-      : new Float32Array(options.vertices || [])
-    const indices = options.indices instanceof Uint32Array
-      ? options.indices
-      : new Uint32Array(options.indices || [])
-    if (vertices.length < 9 || vertices.length % 3 !== 0
-      || indices.length < 3 || indices.length % 3 !== 0
-      || !Array.from(vertices).every(Number.isFinite)
-      || !Array.from(indices).every(index => Number.isInteger(index) && index >= 0 && index < vertices.length / 3)) {
+    const rawVertices = Array.from(options.vertices || [])
+    const rawIndices = Array.from(options.indices || [])
+    if (rawVertices.length < 9 || rawVertices.length % 3 !== 0
+      || rawIndices.length < 3 || rawIndices.length % 3 !== 0
+      || !rawVertices.every(value => Number.isFinite(Number(value)))
+      || !rawIndices.every(index => Number.isInteger(Number(index)) && Number(index) >= 0 && Number(index) < rawVertices.length / 3)) {
       throw new TypeError('Static trimesh requires finite xyz vertices and valid triangle indices')
     }
+    const vertices = options.vertices instanceof Float32Array
+      ? options.vertices
+      : new Float32Array(rawVertices)
+    const indices = options.indices instanceof Uint32Array
+      ? options.indices
+      : new Uint32Array(rawIndices)
     if (typeof this.RAPIER.ColliderDesc.trimesh !== 'function') {
       throw new TypeError('Rapier runtime does not support static trimesh colliders')
     }

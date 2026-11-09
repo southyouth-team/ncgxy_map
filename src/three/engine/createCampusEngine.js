@@ -15,6 +15,7 @@ import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { applySandboxLightingState } from './sandboxLightingRuntime.js'
 import { refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
+import { collectModelWaterVolumes, samplePlayerWaterState } from './waterVolumeRuntime.js'
 import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
 import { executeSandboxInteractionAction } from './sandboxActionRuntime.js'
 import { resolveSandboxInteriorEntryPoint } from './sandboxInteriorRuntime.js'
@@ -117,6 +118,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let generatedAssetsGroup = null
   const generatedAssets = new Map()
   const sandboxModels = new Map()
+  const sandboxWaterVolumes = new Map()
+  let lastPlayerWaterStateKey = null
   let sandboxModelSequence = 0
   let activeSandboxInterior = null
   let sandboxSelectedModel = null
@@ -379,6 +382,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         } : null,
       },
     }
+  }
+
+  function getPlayerWaterState() {
+    const volumes = Array.from(sandboxWaterVolumes.values()).flat()
+    return samplePlayerWaterState(THREE, volumes, cameraRig?.player, input?.playerEyeHeight)
   }
 
   function focusSandboxOverview() {
@@ -1034,11 +1042,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     collisionWorld?.removeObstaclesByOwner(String(ownerId))
     collisionWorld?.removeSupportSurfacesByOwner(String(ownerId))
     physicsRuntime?.removeOwner(String(ownerId))
+    sandboxWaterVolumes.delete(String(ownerId))
   }
 
   function refreshSandboxModelSpatial(model) {
     const spatialCount = refreshModelSpatialRegistration(THREE, model, collisionWorld)
     if (isBlankSandbox) refreshModelPhysicsRegistration(THREE, model, physicsRuntime)
+    const ownerId = model?.userData?.sandboxModelId
+    if (ownerId) {
+      const volumes = collectModelWaterVolumes(THREE, model, String(ownerId))
+      if (volumes.length) sandboxWaterVolumes.set(String(ownerId), volumes)
+      else sandboxWaterVolumes.delete(String(ownerId))
+    }
     return spatialCount
   }
 
@@ -2758,6 +2773,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         callbacks.onIndoorPromptChange?.(prompt ? { visible: true, text: prompt.text } : { visible: false })
       }
     }
+    const playerWaterState = getPlayerWaterState()
+    const playerWaterStateKey = playerWaterState
+      ? playerWaterState.volumeId + ':' + Math.round(playerWaterState.immersionDepth * 50)
+      : ''
+    if (playerWaterStateKey !== lastPlayerWaterStateKey) {
+      lastPlayerWaterStateKey = playerWaterStateKey
+      callbacks.onPlayerWaterStateChange?.(playerWaterState)
+    }
     const playerSprite = playerSpriteObject || scene?.getObjectByName('CampusPlanPlayerSprite')
     if (playerSprite && cameraRig?.player) {
       // 第一人称相机位于角色眼部，隐藏完整角色模型，避免模型遮挡视野。
@@ -3501,5 +3524,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, getPhysicsDiagnostics, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, getPhysicsDiagnostics, getPlayerWaterState, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

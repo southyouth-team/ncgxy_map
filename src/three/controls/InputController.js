@@ -6,7 +6,8 @@ export class InputController {
     this.domElement = domElement
     this.cameraRig = cameraRig
     this.bounds = bounds || { minX: -75, maxX: 75, minZ: -75, maxZ: 75 }
-    this.collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
+    this._collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
+    this.playerColliderRadius = Number(this._collisionWorld.radius) || 0.55
     this.groundRaycaster = THREE?.Raycaster ? new THREE.Raycaster() : null
     this.groundRayOrigin = THREE?.Vector3 ? new THREE.Vector3() : null
     this.groundRayDirection = THREE?.Vector3 ? new THREE.Vector3(0, -1, 0) : null
@@ -85,6 +86,35 @@ export class InputController {
     this.onTouchPointerUp = (event) => {
       if (event.pointerId === this.touchLookPointerId) this.touchLookPointerId = null
     }
+  }
+
+  get collisionWorld() {
+    return this._collisionWorld
+  }
+
+  set collisionWorld(world) {
+    this._collisionWorld = world
+    world?.setRadius?.(this.playerColliderRadius)
+  }
+
+  setPlayerDimensions({ eyeHeight, colliderRadius } = {}) {
+    const previousEyeHeight = this.playerEyeHeight
+    const nextEyeHeight = Number(eyeHeight)
+    const nextRadius = Number(colliderRadius)
+    if (Number.isFinite(nextEyeHeight) && nextEyeHeight > 0.5) {
+      this.playerEyeHeight = Math.max(0.8, Math.min(2.8, nextEyeHeight))
+    }
+    if (Number.isFinite(nextRadius) && nextRadius > 0) {
+      this.playerColliderRadius = Math.max(0.1, Math.min(1.5, nextRadius))
+      this.collisionWorld?.setRadius?.(this.playerColliderRadius)
+    }
+    const eyeHeightDelta = this.playerEyeHeight - previousEyeHeight
+    if (Math.abs(eyeHeightDelta) > 0.0001 && this.grounded && this.cameraRig?.player) {
+      this.cameraRig.player.y += eyeHeightDelta
+      if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
+      else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
+    }
+    return { eyeHeight: this.playerEyeHeight, colliderRadius: this.playerColliderRadius }
   }
 
   attach() {

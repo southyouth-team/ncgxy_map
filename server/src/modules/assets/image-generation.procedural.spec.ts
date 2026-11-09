@@ -39,6 +39,8 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('A visible Mesh is NOT automatically a collider');
     expect(request.messages[0].content).toContain('spatial.colliders currently executes only shape:"box"');
     expect(request.messages[0].content).toContain('stairs and ramps');
+    expect(request.messages[0].content).toContain('isolated Rapier character-route test passes');
+    expect(request.messages[0].content).toContain('Passages and spatial connections remain descriptive only');
     expect(request.messages[0].content).toContain('closed perimeter');
     expect(request.messages[0].content).toContain('For water bodies in this Runtime version');
     expect(request.messages[0].content).toContain('static Rapier triangle meshes');

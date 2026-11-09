@@ -31,6 +31,7 @@ const editError = ref('')
 const editHistory = ref([])
 const message = ref('正在初始化空白沙盒…')
 const saveStatus = ref('尚未保存')
+const worldState = ref(null)
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
 const timeEnabled = ref(true)
@@ -829,6 +830,22 @@ async function handleParameterChange(payload) {
   }
 }
 
+function expandWorld(direction) {
+  if (!engine || placement.value.active) return false
+  const expanded = engine.expandSandboxWorld(direction, 1)
+  if (!expanded) {
+    message.value = '世界扩建失败，请检查当前沙盒状态'
+    return false
+  }
+  worldState.value = engine.getSandboxWorldState()
+  const bounds = worldState.value?.bounds
+  message.value = bounds
+    ? `世界已扩建：${(bounds.maxX - bounds.minX).toFixed(0)} × ${(bounds.maxZ - bounds.minZ).toFixed(0)}，原有模型坐标保持不变。`
+    : '世界已扩建，原有模型坐标保持不变。'
+  saveStatus.value = '有未保存的世界变更'
+  return true
+}
+
 function saveSandbox() {
   if (!engine) return false
   try {
@@ -837,7 +854,8 @@ function saveSandbox() {
       return model ? [{ id, name: model.name || name, object: model.toJSON() }] : []
     })
     const snapshot = {
-      version: 3,
+      version: 4,
+      world: engine.getSandboxWorldState(),
       savedAt: new Date().toISOString(),
       environment: {
         time: Number(time.value),
@@ -871,7 +889,13 @@ async function restoreSandbox() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return false
     snapshot = JSON.parse(raw)
-    if (![1, 2, 3].includes(snapshot?.version) || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
+    if (![1, 2, 3, 4].includes(snapshot?.version) || !Array.isArray(snapshot.models)) throw new Error('保存文件版本不兼容')
+    if (snapshot.world) {
+      engine.restoreSandboxWorld(snapshot.world)
+      worldState.value = engine.getSandboxWorldState()
+    } else {
+      worldState.value = engine.getSandboxWorldState()
+    }
     const loader = new THREE.ObjectLoader()
     const restoredModels = snapshot.models
       .filter(item => item?.object && item?.id)
@@ -987,6 +1011,7 @@ onMounted(async () => {
       onReady: () => { message.value = '空白沙盒已就绪，可生成模型并放置到场景中。' },
       onError: error => { message.value = '沙盒初始化失败：' + (error?.message || '未知错误') },
       onSandboxModelsChange: list => { objects.value = list },
+      onSandboxWorldChange: state => { worldState.value = state },
       onSandboxPlacementChange: handlePlacementChange,
       onSandboxModelSelected: handleModelSelected,
       onSandboxInteractionPromptChange: payload => {
@@ -1082,6 +1107,22 @@ onBeforeUnmount(() => {
         </section>
       </template>
       <template v-else>
+        <section class="world-mvp__world-panel">
+          <h2>世界空间</h2>
+          <p class="world-mvp__message">当前世界可向四周扩建。扩建只增加空间，不移动已有模型；区域分组是可选管理功能，不影响自由建造。</p>
+          <div class="world-mvp__world-size">
+            <span>当前世界尺寸</span>
+            <strong>{{ worldState?.bounds ? (worldState.bounds.maxX - worldState.bounds.minX).toFixed(0) + ' × ' + (worldState.bounds.maxZ - worldState.bounds.minZ).toFixed(0) : '54 × 42' }}</strong>
+          </div>
+          <div class="world-mvp__expand-grid">
+            <span></span><button :disabled="placement.active" @click="expandWorld('north')">向北扩建</button><span></span>
+            <button :disabled="placement.active" @click="expandWorld('west')">向西扩建</button>
+            <span class="world-mvp__world-center">当前世界</span>
+            <button :disabled="placement.active" @click="expandWorld('east')">向东扩建</button>
+            <span></span><button :disabled="placement.active" @click="expandWorld('south')">向南扩建</button><span></span>
+          </div>
+          <small class="world-mvp__world-note">每次扩建一个完整区块边缘；当前区块尺寸 54 × 42 世界单位。</small>
+        </section>
         <section>
           <h2>AI 建模</h2>
           <div class="world-mvp__command">
@@ -1180,6 +1221,13 @@ onBeforeUnmount(() => {
 .world-mvp__placement-status.is-blocked { color:#ff918b; }
 .world-mvp__panel { position:absolute; z-index:2; top:78px; left:14px; bottom:48px; width:290px; overflow:auto; padding:0 14px 14px; border:1px solid rgba(255,255,255,.1); border-radius:11px; background:rgba(16,27,34,.91); box-shadow:0 14px 42px rgba(0,0,0,.22); backdrop-filter:blur(16px); }
 .world-mvp__panel section { padding:15px 0; border-bottom:1px solid rgba(255,255,255,.09); }
+.world-mvp__world-size { display:flex; align-items:center; justify-content:space-between; margin:8px 0; padding:9px; border:1px solid rgba(165,201,177,.22); border-radius:7px; background:rgba(165,201,177,.05); }
+.world-mvp__world-size span,.world-mvp__world-note { color:#9eafad; font-size:10px; }
+.world-mvp__world-size strong { color:#c6e4ce; font-size:13px; font-variant-numeric:tabular-nums; }
+.world-mvp__expand-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; align-items:center; }
+.world-mvp__expand-grid button { padding:8px 3px; font-size:10px; }
+.world-mvp__world-center { text-align:center; color:#c6e4ce; font-size:10px; }
+.world-mvp__world-note { display:block; margin-top:8px; line-height:1.5; }
 .world-mvp__panel h2 { margin:0 0 12px; font-size:12px; }
 .world-mvp__model-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
 .world-mvp .world-mvp__demo-button { width:100%; margin-top:7px; border-color:rgba(165,201,177,.45); color:#c6e4ce; }

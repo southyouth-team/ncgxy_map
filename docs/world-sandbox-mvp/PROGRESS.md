@@ -3523,3 +3523,30 @@ export const environmentBindings = [
 - 本轮新增的模型碰撞诊断、运行时诊断挂载和前端自动修复/落位门禁均通过对应自动化测试与构建检查。
 - 未执行浏览器实测；尚未在真实生成模型样本上验证 AI 能否稳定判断每个部件的 required/none 策略，也未验证门洞、水域边界和人物胶囊体实际通行。
 - CI 工作流：Frontend `42676443612`（测试步骤因既有基线失败而整体失败，Build 通过）；Backend `42676443600`（success）。
+
+
+## 2026-11-10 — 真实人物碰撞验收：隔离测试世界补齐 Mesh 与 Passage
+
+### 本轮实现
+
+1. 修复验收链路不一致：testModelTraversalRoutes() 原先只复制楼梯/坡面 Trimesh、支撑面和 Box 阻挡体，没有把正式运行时支持的显式静态 Mesh Collider 复制进隔离 Rapier World。
+2. 现在通过 collectModelDeclaredMeshColliders() 收集真实世界变换后的顶点/索引，并在隔离世界注册静态 Rapier Trimesh；与楼梯/坡面目标重合时避免重复注册。
+3. 将 traversability.passages 纳入人物路线测试。提供真实 targetPartId 和起终点后，使用同一全局人物胶囊体执行直线路径测试；connections 仍未验收。
+4. 新增真实 Rapier 场景测试：
+   - 建筑门洞：使用门框两侧立柱和横梁构成保留开口的 Mesh Collider，验证人物能够通过。
+   - 山体：实体 Mesh 阻挡路径，验证人物不能穿过。
+   - 水域：独立竖直岸线阻止人物进入；高于岸线的桥面保持可通行。
+   - 原有楼梯上行与跳跃落点测试继续保留。
+
+### 验收边界
+
+- 本轮新增测试已提交，等待 GitHub Actions；尚未执行本地 Vitest、浏览器验收或真实 AI 模型样本批量回归。
+- 门洞/山体/水域结果目前是合成 Three.js 几何夹具的 Rapier 集成测试，不等于真实 AI 生成资产已经全部通过。
+- 水域自动提取轮廓和自动生成岸线仍未实现；当前要求模型提供独立竖直边界 Mesh。
+- passage 只验证声明起终点之间的直线路径；不提供自动寻路，也不覆盖所有可能入口。
+- 测试通过仅代表该测试几何和全局人物规格下的结果，不得外推为所有模型都不会穿模。
+
+### 仓库状态
+
+- 分支：feat/world-sandbox-conversational-model-editor
+- 仅更新功能分支；main 未修改，未合并 PR。

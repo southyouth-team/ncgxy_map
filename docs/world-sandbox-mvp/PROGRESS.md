@@ -2740,3 +2740,5 @@ export const environmentBindings = [
 
 - createBlankSandboxScene.js 已移除无限延伸的 horizon fallback 地面，避免回收区块后仍被下层大平面视觉填满；实际洞口边缘和远景效果仍待浏览器验收。
 - CollisionWorld.test.js 增加从有效地块向缺失地块移动时的边缘阻挡测试。
+
+- createCampusEngine.js 另增加放置占地校验：模型 footprint 覆盖到任何已回收区块时标记为阻塞，避免回收后又把新模型放进洞内。

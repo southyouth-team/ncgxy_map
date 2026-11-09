@@ -3550,3 +3550,26 @@ export const environmentBindings = [
 
 - 分支：feat/world-sandbox-conversational-model-editor
 - 仅更新功能分支；main 未修改，未合并 PR。
+
+
+## 2026-11-10 — 程序化模型生成响应诊断
+
+### 问题定位
+
+- 用户在浏览器触发完整模型生成后，服务端返回“视觉模型未返回程序化 Three.js 源码”。
+- 对照当前分支源码，错误发生在模型 API 响应解析阶段：旧逻辑只接受 `choices[0].message.content` 为非空字符串；若上游返回 typed text content 数组、空 content、拒绝响应或仅有 reasoning 字段，都会被统一误报为“没有源码”。
+- 仅凭现有错误无法判定 DeepSeek 网关本次实际返回了哪一种结构；此前代码没有记录响应形状、finish_reason 或 usage，因此不能将根因直接归咎于模型本身。
+
+### 本轮改动
+
+1. 程序化模型生成响应现在兼容 OpenAI 兼容接口中明确标记为 `text`/`output_text` 的文本分段，并拼接为源码候选。
+2. 不把 reasoning、refusal 或任意对象当作可执行源码；保留原有 createModel 工厂与源码长度校验。
+3. 当响应没有可用文本时，服务端记录受限诊断信息：响应模型/ID、choice 数量、finish_reason、message keys、content 类型/分段类型、refusal/reasoning 是否存在、上游错误摘要和 token usage。不会记录 API Key 或完整模型响应。
+4. 对外错误附带 contentType 和 finish_reason，便于区分空响应、结构不兼容和输出长度终止。
+5. 新增测试覆盖 typed text content 归一化，以及仅返回 reasoning 且 finish_reason=length 的失败诊断。
+
+### 验证边界
+
+- 本轮修改尚未执行本地 Jest、NestJS Build 或 GitHub Actions；不得视为测试通过。
+- 这轮属于响应协议兼容与可观测性修复。若 DeepSeek 返回的是空 content / reasoning-only / token 截断，仍需根据新增诊断判断是否需要调整请求参数或模型输出预算；本轮不会把 reasoning 当源码，也不会自动重试消耗额外模型额度。
+- 浏览器端尚未复测；需重新生成一次，并根据服务端日志确认真实响应结构。

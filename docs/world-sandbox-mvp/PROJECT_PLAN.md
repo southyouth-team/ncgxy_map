@@ -1238,3 +1238,16 @@ MVP 验收以一条真实闭环为准：创建世界 → 控制环境 → AI 生
 6. Rapier 物理更新使用固定时间步；渲染循环只提供 delta，不直接改变物理步长。
 
 本阶段验收必须分别确认：Rapier 初始化、地面/边界注册、模型 Box Collider 注册、模型生命周期同步、物理资源销毁。自动化测试、构建和浏览器验证分别记录，不以源码存在代替运行验收。
+
+
+## 13. 沙盒人物 Kinematic Character Controller 接入（2026-11-09）
+
+人物控制迁移仅对 blank-sandbox 生效，保留 InputController 的键盘/触屏输入、相机模式、自动寻路和动画回调契约；人物运动求解由 Rapier `KinematicCharacterController` 接管。
+
+- 人物使用 position-based kinematic rigid body + capsule collider，刚体原点位于脚底，胶囊中心通过 collider local translation 对齐；相机仍使用 eye-height 坐标。
+- 每帧由输入层提供水平期望位移和重力垂直位移；Rapier 计算碰撞修正后的位移，InputController 将结果回写 cameraRig.player。
+- 控制器配置包括最大可爬坡角、自动跨越台阶高度/最小宽度、snap-to-ground；重力仍由角色控制层提供，不把角色伪装成动态刚体。
+- 重置位置、传送和角色尺寸变化必须同步/重建胶囊体；销毁时先从 World 移除 CharacterController，再移除刚体。
+- 非 blank-sandbox 场景继续走原有 InputController / CollisionWorld 路径，不建立双引擎兼容层；此约束不是为旧校园编辑器增加支持，而是当前仓库其他非沙盒运行模式的隔离。
+
+验收需覆盖：墙体阻挡、沿墙滑动、台阶自动跨越、坡面可爬/不可爬、离开平台后重力下落、落地贴合、自动寻路受阻、角色尺寸更新、重置/传送以及 Engine dispose。三角网格碰撞、室内多楼层语义和动态物体推挤不在本阶段完成范围。

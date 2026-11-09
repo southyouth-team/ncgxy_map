@@ -64,6 +64,16 @@ function createRapierMock() {
         setTranslation(x, y, z) { this.translation = { x, y, z }; return this },
       }
     }
+    static trimesh(vertices, indices) {
+      return {
+        vertices,
+        indices,
+        setFriction(value) { this.friction = value; return this },
+        setRestitution(value) { this.restitution = value; return this },
+        setSensor(value) { this.sensor = value; return this },
+        setCollisionGroups(value) { this.collisionGroups = value; return this },
+      }
+    }
     static cuboid(x, y, z) {
       return {
         halfExtents: { x, y, z },
@@ -113,6 +123,30 @@ describe('PhysicsRuntime', () => {
     expect(calls.colliders[0].description.halfExtents).toEqual({ x: 2, y: 1, z: 0.2 })
     expect(runtime.setBodyTransform(entry.id, { translation: { x: 4, y: 5, z: 6 } })).toBe(true)
     expect(entry.body.setTranslation).toHaveBeenCalledWith({ x: 4, y: 5, z: 6 }, true)
+  })
+
+  it('registers static trimesh geometry for walkable model structures', () => {
+    const { RAPIER, calls } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER)
+    const entry = runtime.createStaticTrimesh({
+      id: 'stairs:mesh',
+      ownerId: 'stairs-model',
+      vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      indices: [0, 1, 2],
+      friction: 0.9,
+    })
+    expect(entry).toMatchObject({ kind: 'static-trimesh', vertexCount: 3, triangleCount: 1 })
+    expect(calls.colliders[0].description.vertices).toBeInstanceOf(Float32Array)
+    expect(calls.colliders[0].description.indices).toBeInstanceOf(Uint32Array)
+    expect(calls.colliders[0].description.friction).toBe(0.9)
+  })
+
+  it('rejects malformed static trimesh vertex and index buffers', () => {
+    const { RAPIER } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER)
+    expect(() => runtime.createStaticTrimesh({
+      id: 'bad-mesh', vertices: [0, 0, 0], indices: [0, 1, 2],
+    })).toThrow(/finite xyz vertices/)
   })
 
   it('removes all bodies owned by a model instance', () => {

@@ -479,6 +479,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function getSandboxPlacementConflict(bounds, state) {
+    if (isBlankSandbox) {
+      const worldState = getSandboxWorldState()
+      const width = Number(worldState?.chunkSize?.width)
+      const depth = Number(worldState?.chunkSize?.depth)
+      if (width > 0 && depth > 0) {
+        const minChunkX = Math.floor((bounds.min.x + width / 2 + 0.001) / width)
+        const maxChunkX = Math.floor((bounds.max.x + width / 2 - 0.001) / width)
+        const minChunkZ = Math.floor((bounds.min.z + depth / 2 + 0.001) / depth)
+        const maxChunkZ = Math.floor((bounds.max.z + depth / 2 - 0.001) / depth)
+        const existing = new Set((worldState.chunks || []).map(chunk => chunk.x + ':' + chunk.z))
+        for (let x = minChunkX; x <= maxChunkX; x += 1) {
+          for (let z = minChunkZ; z <= maxChunkZ; z += 1) {
+            if (!existing.has(x + ':' + z)) return '该位置包含已回收的地块'
+          }
+        }
+      }
+    }
     const overlaps = (a, b) => a.min.x < b.max.x - 0.015 && a.max.x > b.min.x + 0.015
       && a.min.z < b.max.z - 0.015 && a.max.z > b.min.z + 0.015
       && a.min.y < b.max.y - 0.015 && a.max.y > b.min.y + 0.015

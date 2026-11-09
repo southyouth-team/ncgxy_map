@@ -2886,3 +2886,21 @@ export const environmentBindings = [
 
 - 已同步更新 `PROJECT_PLAN.md` 与本进度记录；本次仅更新项目决策文档，没有修改运行时代码。
 - 未运行构建、测试或浏览器验收（本次为纯文档决策更新）。
+
+## 2026-11-09 — 角色视觉资产与控制器解耦（第一阶段）
+
+### 实际修改
+
+- 新增 `src/three/characters/PlayerCharacterRuntime.js`：将人物视觉层挂载在稳定角色根节点下，提供模型替换、尺寸归一化、GLTF 动画混合器、`idle / walk / run` 状态映射、占位模型回退和资源释放。
+- `createCampusEngine.js`：仅在空白沙盒初始化该 Runtime；暴露 `loadPlayerCharacter`、`setPlayerCharacterModel`、`setPlayerCharacterAnimation`、`restorePlayerCharacterFallback`、`getPlayerCharacterInfo`。人物移动仍由原有 CameraRig / InputController 驱动。
+- `createBlankSandboxScene.js`：改为复用现有 `createCampusPlayer.js` 作为内置人物视觉，不再维护第二套沙盒专用人物几何体。
+- `createCampusPlayer.js`：增加无浏览器 Canvas 环境下的 DataTexture 接触阴影回退，使共享人物创建模块可在 Node 测试环境实例化。
+- 新增 `PlayerCharacterRuntime.test.js`，覆盖视觉替换不改变控制根节点、动画名称映射、恢复占位人物和无效模型拒绝；同步更新空白沙盒人物断言。
+
+### 当前边界
+
+- 当前已建立运行时替换接口，但尚未接入前端角色资产选择 UI，也没有提供默认线上 GLB 地址。
+- 角色资产 ID 目前只保存在当前 Runtime 实例中；角色资产引用、出生点及角色配置尚未写入世界存档。
+- 动画状态自动映射目前按移动/静止切换 walk/idle；run 可通过接口显式设置，尚未与 Shift 冲刺输入自动联动。
+- 不具备骨骼动画的 GLB 可作为静态角色显示；不自动生成 Rig 或动作。
+- 本轮仅完成远程源码与测试文件写入；未运行本地构建、Vitest 或浏览器验收，不能标记为通过。

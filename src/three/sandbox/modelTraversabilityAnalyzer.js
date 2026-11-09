@@ -279,6 +279,7 @@ export function analyzeModelTraversability(THREE, root) {
         bounds,
         upwardTriangleCount: surface.upwardTriangleCount,
         medianSlopeDegrees: surface.medianSlopeDegrees,
+        stairProfile,
       })
     }
   }

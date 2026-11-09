@@ -75,3 +75,39 @@ describe('testModelTraversalRoutes', () => {
     expect(result.certifiedWalkable).toBe(true)
   })
 })
+
+
+it('requires a real grounded landing on the destination platform for jump routes', async () => {
+  const model = new THREE.Group()
+  const frame = new THREE.Group()
+  frame.userData.componentId = 'jump-frame'
+  model.add(frame)
+  const startPlatform = new THREE.Group()
+  startPlatform.userData.componentId = 'jump-start'
+  const startMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 4), new THREE.MeshBasicMaterial())
+  startMesh.position.set(-1.5, 0, 0)
+  startPlatform.add(startMesh)
+  model.add(startPlatform)
+  const landingPlatform = new THREE.Group()
+  landingPlatform.userData.componentId = 'jump-landing'
+  const landingMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 4), new THREE.MeshBasicMaterial())
+  landingMesh.position.set(1.5, 0, 0)
+  landingPlatform.add(landingMesh)
+  model.add(landingPlatform)
+  model.userData.proceduralModelCapabilityManifest = {
+    capabilities: { spatial: {
+      surfaces: [
+        { id: 'start-surface', targetPartId: 'jump-start', shape: 'mesh', supportsStanding: true, walkable: true },
+        { id: 'landing-surface', targetPartId: 'jump-landing', shape: 'mesh', supportsStanding: true, walkable: true },
+      ],
+      traversability: { jumps: [{
+        id: 'gap-jump', targetPartId: 'jump-frame',
+        startPoint: { x: -0.8, y: 0.1, z: 0 }, endPoint: { x: 0.8, y: 0.1, z: 0 },
+      }] },
+    } },
+  }
+  const result = await testModelTraversalRoutes(THREE, RAPIER, model, { maxDuration: 3 })
+  expect(result.routes[0].type).toBe('jumps')
+  expect(result.routes[0].status).toBe('passed')
+  expect(result.routes[0].finalState.grounded).toBe(true)
+})

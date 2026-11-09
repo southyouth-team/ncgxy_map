@@ -61,6 +61,36 @@ describe('ImageGenerationService procedural generation', () => {
     });
   });
 
+  it('normalizes typed text content from OpenAI-compatible vision gateways', async () => {
+    const service = createService({ VISION_API_KEY: 'test-key', VISION_API_BASE_URL: 'http://vision.local/v1', VISION_MODEL: 'vision-test' });
+    const source = 'export function createModel(THREE) { const group = new THREE.Group(); return group; }';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ finish_reason: 'stop', message: {
+        content: [{ type: 'text', text: source }],
+      } }] }),
+    });
+    global.fetch = fetchMock as never;
+
+    const result = await service.generateProceduralObjectFromPrompt('一个测试模型', '模型', 'stylized');
+
+    expect(result.generatedCode).toBe(source);
+  });
+
+  it('reports response-shape diagnostics when the vision gateway returns no source text', async () => {
+    const service = createService({ VISION_API_KEY: 'test-key', VISION_MODEL: 'vision-test' });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ finish_reason: 'length', message: {
+        content: null,
+        reasoning_content: 'analysis only',
+      } }] }),
+    }) as never;
+
+    await expect(service.generateProceduralObjectFromPrompt('一个测试模型', '模型', 'stylized'))
+      .rejects.toThrow('contentType=object，finish_reason=length');
+  });
+
   it('passes the reference image to the multimodal model', async () => {
     const service = createService({ VISION_API_KEY: 'test-key', VISION_MODEL: 'vision-test' });
     const imageDataUrl = 'data:image/png;base64,aGVsbG8=';

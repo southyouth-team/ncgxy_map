@@ -40,6 +40,8 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('spatial.colliders currently executes only shape:"box"');
     expect(request.messages[0].content).toContain('stairs and ramps');
     expect(request.messages[0].content).toContain('closed perimeter');
+    expect(request.messages[0].content).toContain('For water bodies in this Runtime version');
+    expect(request.messages[0].content).toContain('static Rapier triangle meshes');
     expect(request.messages[0].content).toContain('general-purpose mesh-cooking pipeline is not implemented yet');
     expect(result).toMatchObject({
       model: 'vision-test',

@@ -1174,7 +1174,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.toneMapping = THREE.NoToneMapping
     container.appendChild(renderer.domElement)
 
-    // 南昌工学院像素校园是默认主场景，不再由空 GIS 接口或演示数据替换。
+    // MVP 使用独立空白地面；正式校园与旧 RPG 样板仅在明确选择对应 sceneType 时加载。
     campus = isBlankSandbox
       ? createBlankSandboxScene(THREE, options.worldBounds || { width: 54, depth: 42 })
       : isRpgSample

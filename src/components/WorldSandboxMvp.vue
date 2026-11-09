@@ -33,8 +33,13 @@ const message = ref('正在初始化空白沙盒…')
 const saveStatus = ref('尚未保存')
 const worldState = ref(null)
 const selectedChunkKey = ref('')
+const selectedChunkKeys = ref([])
 const reclaimFeedback = ref(null)
-const mapCellSize = ref(72)
+const mapCellSize = ref(88)
+const chunkMapViewport = ref(null)
+const chunkMapPointer = ref(null)
+const chunkMapDragging = ref(false)
+const chunkMapDragOrigin = ref(null)
 const chunkMap = computed(() => {
   const chunks = worldState.value?.chunks || []
   if (!chunks.length) return { chunks: [], width: 120, height: 80 }
@@ -56,6 +61,7 @@ const chunkMap = computed(() => {
   }
 })
 const selectedChunk = computed(() => chunkMap.value.chunks.find(item => item.key === selectedChunkKey.value) || null)
+const selectedChunks = computed(() => chunkMap.value.chunks.filter(item => selectedChunkKeys.value.includes(item.key)))
 const managementMode = ref('sandbox')
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
@@ -871,40 +877,103 @@ function expandWorld(direction) {
   return true
 }
 
-function removeSelectedWorldChunk() {
-  const chunk = selectedChunk.value
-  if (!engine || placement.value.active || !chunk) return false
+function toggleChunkSelection(chunk, event) {
+  if (!chunk) return
   reclaimFeedback.value = null
-  const result = engine.removeSandboxWorldChunk(chunk.x, chunk.z)
-  if (!result?.ok) {
-    const blockers = [...new Set(result?.blockers || [])]
-    const messages = {
-      'origin-anchor': '这是世界初始中心地块，为保护世界基准位置，不能回收。',
-      'chunk-not-found': '该地块已经不存在。请重新选择地块。',
-      'occupied': '回收已拦截：该地块仍有对象占用。请先移动或移除占用对象。',
-      'cannot-remove-chunk': '当前世界至少需要保留一个地块，无法继续回收。',
-      'invalid-chunk': '地块坐标无效，请重新选择。',
-    }
-    reclaimFeedback.value = {
-      type: 'error',
-      title: '地块回收失败',
-      message: messages[result?.reason] || '系统未能完成回收，请检查地块状态后重试。',
-      blockers,
-    }
-    message.value = reclaimFeedback.value.message
-    return false
+  const multi = event?.ctrlKey || event?.metaKey || event?.shiftKey
+  if (!multi) {
+    selectedChunkKeys.value = [chunk.key]
+  } else if (selectedChunkKeys.value.includes(chunk.key)) {
+    selectedChunkKeys.value = selectedChunkKeys.value.filter(key => key !== chunk.key)
+  } else {
+    selectedChunkKeys.value = [...selectedChunkKeys.value, chunk.key]
   }
-  worldState.value = result.world || engine.getSandboxWorldState()
+  selectedChunkKey.value = chunk.key
+}
+
+function selectAllChunks() {
+  selectedChunkKeys.value = chunkMap.value.chunks.map(chunk => chunk.key)
+  selectedChunkKey.value = selectedChunkKeys.value[selectedChunkKeys.value.length - 1] || ''
+}
+
+function clearChunkSelection() {
+  selectedChunkKeys.value = []
   selectedChunkKey.value = ''
-  reclaimFeedback.value = {
-    type: 'success',
-    title: '地块已回收',
-    message: `区块（${chunk.x}, ${chunk.z}）已成功回收，其他地块的位置没有变化。`,
-    blockers: [],
+  reclaimFeedback.value = null
+}
+
+function handleChunkMapPointerDown(event) {
+  if (event.button !== 0 || event.target.closest('.world-mvp__chunk-map-item')) return
+  const viewportEl = chunkMapViewport.value
+  if (!viewportEl) return
+  chunkMapPointer.value = { x: event.clientX, y: event.clientY, scrollLeft: viewportEl.scrollLeft, scrollTop: viewportEl.scrollTop }
+  chunkMapDragging.value = true
+  viewportEl.setPointerCapture?.(event.pointerId)
+}
+
+function handleChunkMapPointerMove(event) {
+  if (!chunkMapDragging.value || !chunkMapPointer.value || !chunkMapViewport.value) return
+  const dx = event.clientX - chunkMapPointer.value.x
+  const dy = event.clientY - chunkMapPointer.value.y
+  chunkMapViewport.value.scrollLeft = chunkMapPointer.value.scrollLeft - dx
+  chunkMapViewport.value.scrollTop = chunkMapPointer.value.scrollTop - dy
+}
+
+function handleChunkMapPointerUp() {
+  chunkMapDragging.value = false
+  chunkMapPointer.value = null
+}
+
+function zoomChunkMap(delta) {
+  mapCellSize.value = Math.max(42, Math.min(150, mapCellSize.value + delta))
+}
+
+function removeSelectedWorldChunks() {
+  if (!engine || placement.value.active || !selectedChunks.value.length) return false
+  reclaimFeedback.value = null
+  const targets = [...selectedChunks.value]
+  const failures = []
+  let removed = 0
+  for (const chunk of targets) {
+    const result = engine.removeSandboxWorldChunk(chunk.x, chunk.z)
+    if (result?.ok) {
+      removed += 1
+      worldState.value = result.world || engine.getSandboxWorldState()
+    } else {
+      const reasonMessages = {
+        'origin-anchor': '世界锚点受保护',
+        'chunk-not-found': '地块已不存在',
+        'occupied': '仍有玩家、模型或碰撞对象占用',
+        'cannot-remove-chunk': '至少需要保留一个地块',
+        'invalid-chunk': '地块坐标无效',
+      }
+      failures.push({ chunk, reason: reasonMessages[result?.reason] || '系统拒绝回收', blockers: [...new Set(result?.blockers || [])] })
+    }
+  }
+  const remainingKeys = new Set((worldState.value?.chunks || []).map(chunk => chunk.x + ':' + chunk.z))
+  selectedChunkKeys.value = selectedChunkKeys.value.filter(key => remainingKeys.has(key))
+  selectedChunkKey.value = selectedChunkKeys.value[selectedChunkKeys.value.length - 1] || ''
+  if (removed) saveStatus.value = '有未保存的世界变更'
+  if (failures.length) {
+    reclaimFeedback.value = {
+      type: removed ? 'warning' : 'error',
+      title: removed ? '部分地块已回收' : '地块回收失败',
+      message: `已回收 ${removed} 块，${failures.length} 块未回收。被占用或受保护的地块已保留。`,
+      blockers: failures.flatMap(item => [
+        `地块（${item.chunk.x}, ${item.chunk.z}）：${item.reason}`,
+        ...item.blockers.map(blocker => `  · ${blocker}`),
+      ]),
+    }
+  } else {
+    reclaimFeedback.value = {
+      type: 'success',
+      title: '批量回收完成',
+      message: `已成功回收 ${removed} 块地块，其他地块的位置没有变化。`,
+      blockers: [],
+    }
   }
   message.value = reclaimFeedback.value.message
-  saveStatus.value = '有未保存的世界变更'
-  return true
+  return failures.length === 0
 }
 
 function saveSandbox() {
@@ -1120,10 +1189,51 @@ onBeforeUnmount(() => {
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
       <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>空白世界 · AI 模型构建与交互</span></div>
-      <div class="world-mvp__header-actions"><button :class="{ active: managementMode === 'sandbox' }" @click="managementMode = 'sandbox'">沙盒管理</button><button :class="{ active: managementMode === 'model' }" @click="managementMode = 'model'">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
+      <div class="world-mvp__header-actions"><button :class="{ active: managementMode === 'sandbox' }" @click="managementMode = 'sandbox'">沙盒管理</button><button :class="{ active: managementMode === 'chunks' }" @click="managementMode = 'chunks'">地块管理</button><button :class="{ active: managementMode === 'model' }" @click="managementMode = 'model'">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
     </header>
 
-    <aside class="world-mvp__panel">
+    <section v-if="managementMode === 'chunks' && !placement.active" class="world-mvp__chunk-manager">
+      <div class="world-mvp__chunk-manager-head">
+        <div><span>WORLD SPACE</span><h1>地块管理</h1><p>全景空间视图 · 拖拽平移 · 滚轮缩放 · Ctrl / Shift 多选</p></div>
+        <div class="world-mvp__chunk-manager-actions">
+          <button @click="zoomChunkMap(-10)" :disabled="mapCellSize <= 42">−</button>
+          <button @click="zoomChunkMap(10)" :disabled="mapCellSize >= 150">＋</button>
+          <button @click="mapCellSize = 88">适应视图</button>
+          <button @click="selectAllChunks">全选</button>
+          <button @click="clearChunkSelection">清空选择</button>
+          <button class="danger" :disabled="!selectedChunks.length" @click="removeSelectedWorldChunks">回收选中（{{ selectedChunks.length }}）</button>
+          <button @click="managementMode = 'sandbox'">完成</button>
+        </div>
+      </div>
+      <div class="world-mvp__chunk-manager-summary">
+        <span>现有地块 <b>{{ chunkMap.chunks.length }}</b></span>
+        <span>已选择 <b>{{ selectedChunks.length }}</b></span>
+        <span>锚点地块 <b>1</b></span>
+        <span>当前缩放 <b>{{ Math.round(mapCellSize / 88 * 100) }}%</b></span>
+      </div>
+      <div ref="chunkMapViewport" class="world-mvp__chunk-map-viewport world-mvp__chunk-map-viewport--fullscreen"
+        :class="{ dragging: chunkMapDragging }"
+        @pointerdown="handleChunkMapPointerDown" @pointermove="handleChunkMapPointerMove" @pointerup="handleChunkMapPointerUp" @pointercancel="handleChunkMapPointerUp"
+        @wheel.prevent="zoomChunkMap($event.deltaY < 0 ? 5 : -5)">
+        <svg class="world-mvp__chunk-map world-mvp__chunk-map--overview" :width="chunkMap.width" :height="chunkMap.height" :viewBox="`0 0 ${chunkMap.width} ${chunkMap.height}`" role="group" aria-label="沙盒全景地块管理画布">
+          <g v-for="chunk in chunkMap.chunks" :key="chunk.key" class="world-mvp__chunk-map-item" :class="{ active: selectedChunkKeys.includes(chunk.key), anchor: chunk.isAnchor }" @click.stop="toggleChunkSelection(chunk, $event)">
+            <rect :x="chunk.mapX" :y="chunk.mapY" :width="mapCellSize - 5" :height="mapCellSize * 0.72 - 5" rx="8" />
+            <text :x="chunk.mapX + (mapCellSize - 5) / 2" :y="chunk.mapY + (mapCellSize * 0.72 - 5) / 2 + 4" text-anchor="middle">{{ chunk.isAnchor ? '世界锚点' : '地块' }}</text>
+            <text class="coordinate" :x="chunk.mapX + (mapCellSize - 5) / 2" :y="chunk.mapY + (mapCellSize * 0.72 - 5) / 2 + 18" text-anchor="middle">{{ chunk.x }}, {{ chunk.z }}</text>
+          </g>
+        </svg>
+        <div v-if="!chunkMap.chunks.length" class="world-mvp__chunk-map-empty">当前没有可管理的地块</div>
+      </div>
+      <div class="world-mvp__chunk-manager-footer">
+        <div class="world-mvp__chunk-legend"><span><i class="anchor"></i>世界锚点</span><span><i class="normal"></i>普通地块</span><span><i class="selected"></i>已选地块</span><span><i class="missing"></i>空缺区域</span></div>
+        <div v-if="selectedChunks.length" class="world-mvp__chunk-selection">已选 {{ selectedChunks.length }} 块 · {{ selectedChunks.slice(0, 5).map(item => `(${item.x}, ${item.z})`).join('、') }}{{ selectedChunks.length > 5 ? '…' : '' }}</div>
+        <div v-if="reclaimFeedback" class="world-mvp__reclaim-feedback" :class="reclaimFeedback.type" role="status" aria-live="polite">
+          <b>{{ reclaimFeedback.title }}</b><p>{{ reclaimFeedback.message }}</p>
+          <ul v-if="reclaimFeedback.blockers.length"><li v-for="(blocker, index) in reclaimFeedback.blockers" :key="index">{{ blocker }}</li></ul>
+        </div>
+      </div>
+    </section>
+    <aside v-if="managementMode !== 'chunks'" class="world-mvp__panel">
       <template v-if="placement.active">
         <section class="world-mvp__operation-panel">
           <h2>重新选址 · 全局视图</h2>
@@ -1207,30 +1317,7 @@ onBeforeUnmount(() => {
             <button :disabled="placement.active" @click="expandWorld('east')">向东扩建</button>
             <span></span><button :disabled="placement.active" @click="expandWorld('south')">向南扩建</button><span></span>
           </div>
-          <small class="world-mvp__world-note">空间布局图 · 可缩放、可滚动。点击地块查看属性；中心地块为世界锚点，不可回收。</small>
-          <div class="world-mvp__map-toolbar">
-            <span>{{ chunkMap.chunks.length }} 个有效地块</span>
-            <div><button aria-label="缩小地图" :disabled="mapCellSize <= 48" @click="mapCellSize = Math.max(48, mapCellSize - 8)">−</button><button aria-label="放大地图" :disabled="mapCellSize >= 112" @click="mapCellSize = Math.min(112, mapCellSize + 8)">＋</button></div>
-          </div>
-          <div class="world-mvp__chunk-map-viewport">
-            <svg class="world-mvp__chunk-map" :width="chunkMap.width" :height="chunkMap.height" :viewBox="`0 0 ${chunkMap.width} ${chunkMap.height}`" role="group" aria-label="沙盒地块空间布局图">
-              <g v-for="chunk in chunkMap.chunks" :key="chunk.key" class="world-mvp__chunk-map-item" :class="{ active: selectedChunkKey === chunk.key, anchor: chunk.isAnchor }" @click="selectedChunkKey = chunk.key; reclaimFeedback = null">
-                <rect :x="chunk.mapX" :y="chunk.mapY" :width="mapCellSize - 5" :height="mapCellSize * 0.72 - 5" rx="7" />
-                <text :x="chunk.mapX + (mapCellSize - 5) / 2" :y="chunk.mapY + (mapCellSize * 0.72 - 5) / 2 + 4" text-anchor="middle">{{ chunk.isAnchor ? '中心' : '地块' }}</text>
-              </g>
-            </svg>
-          </div>
-          <div v-if="selectedChunk" class="world-mvp__selected-chunk">
-            <div><b>已选地块</b><span>坐标 {{ selectedChunk.x }}, {{ selectedChunk.z }}</span></div>
-            <small>尺寸 {{ worldState?.chunkSize?.width }} × {{ worldState?.chunkSize?.depth }} 世界单位</small>
-            <small v-if="selectedChunk.isAnchor">这是初始中心地块，受保护不可回收。</small>
-          </div>
-          <button class="world-mvp__reclaim-button" :disabled="placement.active || !selectedChunk || selectedChunk.isAnchor" @click="removeSelectedWorldChunk">回收选中地块</button>
-          <div v-if="reclaimFeedback" class="world-mvp__reclaim-feedback" :class="reclaimFeedback.type" role="status" aria-live="polite">
-            <b>{{ reclaimFeedback.title }}</b>
-            <p>{{ reclaimFeedback.message }}</p>
-            <ul v-if="reclaimFeedback.blockers.length"><li v-for="(blocker, index) in reclaimFeedback.blockers" :key="index">{{ blocker }}</li></ul>
-          </div>
+          <button class="world-mvp__open-chunk-manager" @click="managementMode = 'chunks'">打开地块管理全景图 <span>{{ chunkMap.chunks.length }} 个地块 · 支持多选回收</span></button>
         </section>
         <section v-if="managementMode === 'model'">
           <h2>AI 建模</h2>
@@ -1322,6 +1409,37 @@ onBeforeUnmount(() => {
 .world-mvp__brand strong { font-size:13px; letter-spacing:1.1px; }
 .world-mvp__brand span { margin-top:4px; color:#8e9fa3; font-size:10px; }
 .world-mvp__header-actions { display:flex; align-items:center; gap:9px; }
+.world-mvp__chunk-manager { position:absolute; z-index:4; inset:62px 0 0; display:flex; flex-direction:column; padding:18px 22px 16px; background:rgba(12,21,27,.97); }
+.world-mvp__chunk-manager-head { display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; }
+.world-mvp__chunk-manager-head > div:first-child > span { color:#8eaa9a; font-size:9px; letter-spacing:1.8px; }
+.world-mvp__chunk-manager-head h1 { margin:5px 0; color:#e5efe8; font-size:20px; }
+.world-mvp__chunk-manager-head p { margin:0; color:#9eafad; font-size:11px; }
+.world-mvp__chunk-manager-actions { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.world-mvp__chunk-manager-actions .danger { border-color:rgba(230,139,126,.5); color:#ffc1b6; }
+.world-mvp__chunk-manager-actions .danger:disabled { opacity:.35; }
+.world-mvp__chunk-manager-summary { display:flex; flex-wrap:wrap; gap:22px; margin:15px 0 10px; padding:10px 13px; border:1px solid rgba(255,255,255,.09); border-radius:8px; background:rgba(255,255,255,.025); color:#9eafad; font-size:10px; }
+.world-mvp__chunk-manager-summary b { margin-left:5px; color:#dce8df; font-size:12px; }
+.world-mvp__chunk-map-viewport--fullscreen { position:relative; flex:1; width:100%; max-width:none; max-height:none; min-height:220px; overflow:auto; cursor:grab; border-color:rgba(255,255,255,.13); background-color:#142129; background-image:linear-gradient(rgba(177,205,188,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(177,205,188,.035) 1px,transparent 1px); background-size:24px 24px; }
+.world-mvp__chunk-map-viewport--fullscreen.dragging { cursor:grabbing; user-select:none; }
+.world-mvp__chunk-map--overview { max-width:none; margin:auto; padding:34px; }
+.world-mvp__chunk-map-item rect { fill:#496858; fill-opacity:.9; stroke:rgba(204,226,210,.4); stroke-width:1.5; }
+.world-mvp__chunk-map-item:hover rect { fill:#6d9278; }
+.world-mvp__chunk-map-item.active rect { fill:#8cad91; stroke:#f0ffe9; stroke-width:3; }
+.world-mvp__chunk-map-item.anchor rect { fill:#405b51; stroke:#d4e8d8; stroke-dasharray:5 3; }
+.world-mvp__chunk-map-item text { fill:#f0f5ef; font-size:10px; font-weight:600; pointer-events:none; }
+.world-mvp__chunk-map-item text.coordinate { fill:rgba(238,247,239,.65); font-size:8px; font-weight:400; }
+.world-mvp__chunk-map-empty { position:absolute; inset:0; display:grid; place-items:center; color:#aabbb4; font-size:13px; }
+.world-mvp__chunk-manager-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-top:10px; }
+.world-mvp__chunk-legend { display:flex; flex-wrap:wrap; gap:14px; color:#9eafad; font-size:10px; }
+.world-mvp__chunk-legend span { display:flex; align-items:center; gap:6px; }
+.world-mvp__chunk-legend i { width:10px; height:10px; display:inline-block; border-radius:3px; background:#496858; }
+.world-mvp__chunk-legend i.anchor { background:#405b51; border:1px dashed #d4e8d8; }
+.world-mvp__chunk-legend i.selected { background:#8cad91; }
+.world-mvp__chunk-legend i.missing { background:transparent; border:1px dashed #63736e; }
+.world-mvp__chunk-selection { color:#c8e5d0; font-size:10px; }
+.world-mvp__chunk-manager-footer .world-mvp__reclaim-feedback { max-width:560px; max-height:120px; overflow:auto; margin:0; }
+.world-mvp__open-chunk-manager { width:100%; margin-top:12px; padding:13px!important; border-color:rgba(165,201,177,.42)!important; text-align:left; color:#d5eadb!important; background:rgba(165,201,177,.08)!important; }
+.world-mvp__open-chunk-manager span { display:block; margin-top:5px; color:#9eafad; font-size:10px; }
 .world-mvp__map-toolbar { display:flex; align-items:center; justify-content:space-between; margin:9px 0 6px; color:#9eafae; font-size:10px; }
 .world-mvp__map-toolbar div { display:flex; gap:5px; }
 .world-mvp__map-toolbar button { width:27px; height:25px; padding:0; font-size:15px; }
@@ -1411,5 +1529,12 @@ onBeforeUnmount(() => {
   .world-mvp__header { height:54px; padding:0 10px; }
   .world-mvp__panel { top:auto; left:8px; right:8px; bottom:8px; width:auto; max-height:52vh; padding:0 12px 10px; }
   .world-mvp__help { display:none; }
+  .world-mvp__chunk-manager { inset:54px 0 0; padding:12px; }
+  .world-mvp__chunk-manager-head { align-items:flex-start; }
+  .world-mvp__chunk-manager-head h1 { font-size:17px; }
+  .world-mvp__chunk-manager-actions { gap:5px; }
+  .world-mvp__chunk-manager-actions button { padding:7px 8px; font-size:10px; }
+  .world-mvp__chunk-manager-summary { gap:10px; margin:9px 0; }
+  .world-mvp__chunk-manager-footer { align-items:flex-start; }
 }
 </style>

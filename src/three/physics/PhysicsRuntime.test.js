@@ -158,6 +158,31 @@ describe('PhysicsRuntime', () => {
     expect(calls.controllers[0].enableSnapToGround).toHaveBeenCalledWith(0.25)
   })
 
+  it('uses the shared traversal profile for capsule dimensions and controller limits', () => {
+    const { RAPIER, calls } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER)
+    const profile = {
+      height: 2,
+      radius: 0.4,
+      maxStepHeight: 0.22,
+      maxSlopeClimbAngleDegrees: 35,
+      minSlopeSlideAngleDegrees: 25,
+      minStepWidth: 0.3,
+      snapToGroundDistance: 0.18,
+      colliderOffset: 0.02,
+    }
+    const entry = runtime.createKinematicCharacter({
+      id: 'profiled-player',
+      traversalProfile: profile,
+    })
+    expect(entry.traversalProfile).toEqual(profile)
+    expect(entry.dimensions).toMatchObject({ radius: 0.4, halfHeight: 0.6, height: 2 })
+    expect(calls.controllers[0].setMaxSlopeClimbAngle).toHaveBeenCalledWith(35 * Math.PI / 180)
+    expect(calls.controllers[0].setMinSlopeSlideAngle).toHaveBeenCalledWith(25 * Math.PI / 180)
+    expect(calls.controllers[0].enableAutostep).toHaveBeenCalledWith(0.22, 0.3, false)
+    expect(calls.controllers[0].enableSnapToGround).toHaveBeenCalledWith(0.18)
+  })
+
   it('removes the character controller before its rigid body and supports teleporting', () => {
     const { RAPIER, calls } = createRapierMock()
     const runtime = new PhysicsRuntime(RAPIER)

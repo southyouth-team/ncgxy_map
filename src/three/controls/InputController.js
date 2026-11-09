@@ -33,12 +33,18 @@ export class InputController {
     this.navigationPathCompleted = false
     this.navigationPathPhysicsCommanded = false
     this.lastPhysicsStepCount = 0
+    this.jumpActive = false
+    this.jumpRequested = false
+    this.jumpLaunched = false
+    this.spawnPosition = null
     this.lastTouchLook = { x: 0, y: 0 }
     this.onKeyDown = (event) => {
       const key = event.key.toLowerCase()
-      if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) return
       const target = event.target
       if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return
+      if (key === 'r') { this.resetPosition(); event.preventDefault(); return }
+      if (key === ' ' || key === 'space' || event.code === 'Space') { if (!event.repeat) this.jumpPlayer(); event.preventDefault(); return }
+      if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) return
       this.keys.add(key)
       this.onMovementInput?.()
       // 第一人称 WASD 也必须阻止浏览器默认滚动，否则按键会同时滚动页面。
@@ -119,6 +125,10 @@ export class InputController {
     }
     this.physicsRuntime = runtime || null
     this.physicsCharacterId = runtime ? String(id) : null
+    if (runtime && this.cameraRig?.player) {
+      const player = this.cameraRig.player
+      this.spawnPosition = { x: player.x, y: player.y, z: player.z }
+    }
     if (!runtime) return false
     this.createPhysicsCharacter()
     return true
@@ -159,24 +169,48 @@ export class InputController {
     const previousStepCount = this.lastPhysicsStepCount
     const currentState = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
     if (!currentState) return null
-    this.grounded = currentState.grounded === true
-    if (this.grounded) this.verticalVelocity = 0
-    else this.verticalVelocity -= this.gravity * dt
-    // 固定物理步长内由 PhysicsRuntime 消费速度；渲染帧率高于 60Hz 时不会反复覆盖尚未执行的位移。
-    const verticalSpeed = this.grounded ? -2 : this.verticalVelocity
-    this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, {
-      x: (Number(dx) || 0) / dt,
-      y: verticalSpeed,
-      z: (Number(dz) || 0) / dt,
-    })
+    const launchPending = this.jumpRequested
+    if (currentState.grounded && !this.jumpActive) this.verticalVelocity = 0
+    else if (!currentState.grounded && !launchPending) this.verticalVelocity -= this.gravity * dt
+    let horizontalX = (Number(dx) || 0) / dt
+    let horizontalZ = (Number(dz) || 0) / dt
+    if (this.jumpActive && !currentState.grounded) {
+      const flightTime = 2 * Math.sqrt((2 * this.traversalProfile.jumpHeight) / this.gravity)
+      const maxAirSpeed = this.traversalProfile.jumpMaxDistance / Math.max(flightTime, 0.001)
+      const horizontalSpeed = Math.hypot(horizontalX, horizontalZ)
+      if (horizontalSpeed > maxAirSpeed) {
+        const scale = maxAirSpeed / horizontalSpeed
+        horizontalX *= scale
+        horizontalZ *= scale
+      }
+    }
+    const verticalSpeed = this.jumpActive ? this.verticalVelocity : (currentState.grounded ? -2 : this.verticalVelocity)
+    this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, { x: horizontalX, y: verticalSpeed, z: horizontalZ })
+    if (launchPending) { this.jumpRequested = false; this.jumpLaunched = true }
     const state = this.physicsRuntime.getKinematicCharacterState(this.physicsCharacterId)
     player.x = state.translation.x
     player.y = state.translation.y + this.playerEyeHeight
     player.z = state.translation.z
     this.grounded = state.grounded === true
     this.lastPhysicsStepCount = state.stepCount
-    if (this.grounded && this.verticalVelocity < 0) this.verticalVelocity = 0
+    if (this.jumpActive && this.jumpLaunched && this.grounded && state.stepCount > previousStepCount) {
+      this.jumpActive = false
+      this.jumpLaunched = false
+      this.verticalVelocity = 0
+    } else if (this.grounded && !this.jumpActive && this.verticalVelocity < 0) {
+      this.verticalVelocity = 0
+    }
     return { ...state, physicsStepped: state.stepCount > previousStepCount }
+  }
+
+  jumpPlayer() {
+    if (!this.movementEnabled || this.mode === 'overview' || !this.grounded || this.jumpActive) return false
+    this.verticalVelocity = Math.sqrt(2 * this.gravity * this.traversalProfile.jumpHeight)
+    this.jumpActive = true
+    this.jumpRequested = true
+    this.jumpLaunched = false
+    this.grounded = false
+    return true
   }
 
   setPlayerDimensions({ eyeHeight, colliderRadius } = {}) {
@@ -236,12 +270,18 @@ export class InputController {
     if (document.pointerLockElement === this.domElement) document.exitPointerLock?.()
   }
 
-  resetPosition(position = { x: 0, z: 24 }) {
+  resetPosition(position = this.spawnPosition || { x: 0, z: 24 }) {
     this.keys.clear()
-    this.cameraRig.player.set(Number(position.x) || 0, this.playerEyeHeight, Number(position.z) || 0)
-    this.verticalVelocity = 0
-    this.grounded = true
+    this.setNavigationPath(null)
+    this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+    this.verticalVelocity = 0; this.grounded = true
+    const x = Number(position.x) || 0
+    const y = Number.isFinite(Number(position.y)) ? Number(position.y) : this.playerEyeHeight
+    const z = Number(position.z) || 0
+    this.cameraRig.player.set(x, y, z)
     this.syncPhysicsCharacterPosition()
+    if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired?.()
+    else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired?.()
   }
 
   teleportPlayer(position) {
@@ -251,6 +291,7 @@ export class InputController {
     this.setNavigationPath(null)
     this.pointerDown = false
     this.verticalVelocity = 0
+    this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
     this.grounded = true
     this.cameraRig.player.set(values[0], values[1], values[2])
     this.syncPhysicsCharacterPosition()

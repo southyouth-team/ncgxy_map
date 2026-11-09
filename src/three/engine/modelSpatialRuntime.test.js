@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { collectModelMovementObstacles, collectModelDeclaredMeshColliders, collectModelTraversalTrimeshes, refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
+import { applyWorldStateBindings } from './worldStateRuntime.js'
 
 describe('collectModelMovementObstacles', () => {
   it('converts a declared part-local box collider into world-space bounds', () => {
@@ -91,10 +92,13 @@ describe('collectModelMovementObstacles', () => {
     expect(result[0].ownerId).toBe('sandbox_scope')
   })
 
-  it('toggles a door-leaf collider from closed to open using persisted model state', () => {
+  it('keeps an open hinged door solid and rotates its Rapier box with the door part', () => {
     const root = new THREE.Group()
     const door = new THREE.Group()
     door.userData.componentId = 'door-panel'
+    door.userData.stateBinding = {
+      key: 'doorOpen', property: 'rotationY', enabledValue: -Math.PI / 2, disabledValue: 0,
+    }
     root.add(door)
     root.userData.worldState = { doorOpen: false }
     root.userData.proceduralModelCapabilityManifest = {
@@ -102,13 +106,21 @@ describe('collectModelMovementObstacles', () => {
       capabilities: { spatial: { colliders: [{
         id: 'door-leaf-collider', targetPartId: 'door-panel', shape: 'box',
         size: { x: 0.9, y: 2, z: 0.12 }, blocksMovement: true,
-        stateCondition: { key: 'doorOpen', equals: false, defaultValue: false },
       }] } },
     }
 
-    expect(collectModelMovementObstacles(THREE, root, 'door-model')).toHaveLength(1)
+    applyWorldStateBindings(root, root.userData.worldState)
+    const closed = collectModelMovementObstacles(THREE, root, 'door-model')
+    expect(closed).toHaveLength(1)
+    expect(Math.abs(closed[0].physicsBox.rotation.y)).toBeCloseTo(0)
+
     root.userData.worldState = { doorOpen: true }
-    expect(collectModelMovementObstacles(THREE, root, 'door-model')).toEqual([])
+    applyWorldStateBindings(root, root.userData.worldState)
+    const opened = collectModelMovementObstacles(THREE, root, 'door-model')
+    expect(opened).toHaveLength(1)
+    expect(Math.abs(opened[0].physicsBox.rotation.y)).toBeCloseTo(Math.SQRT1_2)
+    expect(opened[0].physicsBox.halfExtents.x).toBeCloseTo(0.45)
+    expect(opened[0].physicsBox.halfExtents.z).toBeCloseTo(0.06)
   })
 
   it('lets an explicit user collider override take precedence over door state', () => {
@@ -198,6 +210,38 @@ describe('collectModelMovementObstacles', () => {
   it('keeps models without spatial declarations non-blocking', () => {
     const root = new THREE.Group()
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_3')).toEqual([])
+  })
+})
+
+
+describe('refreshModelPhysicsRegistration', () => {
+  it('passes the rotated part transform to Rapier for box colliders', () => {
+    const root = new THREE.Group()
+    root.userData.sandboxModelId = 'hinged-door'
+    const door = new THREE.Group()
+    door.userData.componentId = 'door-panel'
+    door.rotation.y = Math.PI / 2
+    root.add(door)
+    root.userData.proceduralModelCapabilityManifest = {
+      version: 1,
+      capabilities: { spatial: { colliders: [{
+        id: 'door-leaf', targetPartId: 'door-panel', shape: 'box',
+        size: { x: 0.9, y: 2, z: 0.12 },
+      }] } },
+    }
+    const created = []
+    const physicsRuntime = {
+      removeOwner() {},
+      createStaticBox(options) { created.push(options) },
+      createStaticTrimesh() { throw new Error('unexpected trimesh') },
+    }
+
+    refreshModelPhysicsRegistration(THREE, root, physicsRuntime)
+
+    expect(created).toHaveLength(1)
+    expect(Math.abs(created[0].rotation.y)).toBeCloseTo(Math.SQRT1_2)
+    expect(created[0].halfExtents.x).toBeCloseTo(0.45)
+    expect(created[0].halfExtents.z).toBeCloseTo(0.06)
   })
 })
 

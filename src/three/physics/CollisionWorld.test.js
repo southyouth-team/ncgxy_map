@@ -195,3 +195,15 @@ describe('CollisionWorld walkable chunk regions', () => {
     expect(collision.isBlocked(result.x, result.z)).toBe(false)
   })
 })
+
+
+describe('CollisionWorld runtime player radius', () => {
+  it('updates the player footprint without rebuilding world obstacles', () => {
+    const collision = new CollisionWorld({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 }, [], 0.62)
+    expect(collision.setRadius(0.3)).toBe(0.3)
+    expect(collision.radius).toBe(0.3)
+    expect(collision.move({ x: 9.5, z: 0 }, 2, 0).x).toBe(9.7)
+    expect(collision.setRadius(Number.NaN)).toBe(false)
+    expect(collision.setRadius(8)).toBe(1.5)
+  })
+})

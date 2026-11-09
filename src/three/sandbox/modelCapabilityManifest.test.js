@@ -76,16 +76,18 @@ describe('resolveProceduralModelParts', () => {
 
 
 describe('model spatial traversability contract', () => {
-  it('normalizes stairs, ramps, passages and connections without discarding extensions', () => {
+  it('normalizes stairs, ramps, jumps, passages and connections without discarding extensions', () => {
     const normalized = normalizeSpatialTraversability({
       stairs: [{ id: 'stair-main', targetPartId: 'stair-mesh', riserHeight: 0.18 }],
       ramps: [{ id: 'ramp-east', targetPartId: 'ramp-mesh', slopeDegrees: 8 }],
+      jumps: [{ id: 'gap-jump', targetPartId: 'jump-frame' }],
       passages: [{ id: 'doorway', targetPartId: 'door-frame', width: 1.2 }],
       connections: [{ id: 'floor-link', from: 'floor-1', to: 'floor-2', type: 'stairs' }],
       customTraversalData: { vendor: 'ai' },
     })
     expect(normalized.stairs).toHaveLength(1)
     expect(normalized.ramps).toHaveLength(1)
+    expect(normalized.jumps).toHaveLength(1)
     expect(normalized.passages).toHaveLength(1)
     expect(normalized.connections).toHaveLength(1)
     expect(normalized.customTraversalData).toEqual({ vendor: 'ai' })
@@ -113,6 +115,7 @@ describe('model spatial traversability contract', () => {
     expect(normalized.capabilities.spatial.traversability).toMatchObject({
       stairs: [{ id: 's', targetPartId: 'p' }],
       ramps: [],
+      jumps: [],
       passages: [],
       connections: [],
     })

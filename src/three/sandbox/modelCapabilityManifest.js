@@ -62,6 +62,13 @@ export function normalizeModelCapabilityManifest(input, legacyParameters = [], l
   if (!Array.isArray(capabilities.environmentBindings) && Array.isArray(legacyEnvironmentBindings)) {
     capabilities.environmentBindings = legacyEnvironmentBindings
   }
+  if (capabilities.spatial && typeof capabilities.spatial === 'object' && !Array.isArray(capabilities.spatial)) {
+    const spatial = { ...capabilities.spatial }
+    if (spatial.traversability && typeof spatial.traversability === 'object' && !Array.isArray(spatial.traversability)) {
+      spatial.traversability = normalizeSpatialTraversability(spatial.traversability)
+    }
+    capabilities.spatial = spatial
+  }
   return {
     ...source,
     version: Number.isInteger(source.version) ? source.version : 1,

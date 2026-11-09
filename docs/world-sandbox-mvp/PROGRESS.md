@@ -3241,3 +3241,45 @@ export const environmentBindings = [
 - 后端 CI：NestJS build **通过**；单测为 96 passed / 1 failed，失败仍为 `image-generation.procedural.spec.ts` 的既有失败；PostGIS migration / API integration / schema verification 因后端单测失败而跳过。与本轮开始基线一致，且本轮没有修改后端源码。
 - 浏览器实测未执行，故碰撞行为（墙体阻挡/滑动、台阶、坡面、下落和落地）仍需在真实沙盒页面验收。
 - 最新功能分支 HEAD（本条文档更新前）：`686be5193835ee2de1e13af4e2319f2a9393d002`；`main` 保持 `608a9f2c1f739cd581acb833b1e70410672e258b`。
+
+
+## 2026-11-10 — 人物通行 Profile 与模型 Traversability Manifest（第一阶段）
+
+### 仓库与基线
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 分支：`feat/world-sandbox-conversational-model-editor`
+- 本轮开始分支 HEAD：`0964ceb63760f3dc87582e85a567c8d25a5a7283`。
+- 本轮修改仅提交到上述功能分支；没有修改 `main`，没有创建或合并 PR。
+
+### 已落地
+
+1. 新增 `src/three/physics/CharacterTraversalProfile.js`，统一人物高度、胶囊半径、最大跨阶高度、最大爬坡角、最小滑落角、自动跨阶最小宽度、贴地吸附距离和 Collider offset。
+2. 第一阶段默认值沿用当前沙盒既有参数（height 1.7、radius 0.55、maxStepHeight 0.45、climb angle 50°、slide angle 30°、min step width 0.275、snap distance 0.25、offset 0.01），本轮不擅自改变角色手感；这些仍是工程默认值，不是最终人体工学验收值。
+3. `InputController` 以该 Profile 作为参数唯一来源，并通过兼容访问器保留既有内部调用；角色尺寸变化会重新归一化 Profile，再重建 Rapier 胶囊体。
+4. `PhysicsRuntime.createKinematicCharacter()` 消费同一 Profile 计算 Capsule 高度和 CharacterController 的坡度、跨阶、贴地参数；保留旧 options 形式作为内部兼容入口，沙盒新调用统一传 Profile。
+5. `modelCapabilityManifest.js` 增加 `capabilities.spatial.traversability` 的规范化与基础结构校验，包含 `stairs`、`ramps`、`passages`、`connections` 四类开放数据集合，并保留未知扩展字段。
+6. Procedural Model Worker 将基础校验结果写入模型根节点 `userData.proceduralModelTraversalValidation`。当前校验只覆盖声明记录结构、稳定 ID、部件引用字段和连接端点；尚未验证 targetPartId 是否真实存在，也未生成对应 Collider。
+7. AI 模型生成和编辑 Prompt 已增加上述 Traversability 声明格式，并明确禁止将“AI 声明”描述成“运行时已可通行”。
+
+### 新增/调整测试
+
+- 新增 `CharacterTraversalProfile.test.js`：默认值、胶囊尺寸约束、非法坡度/尺寸归一化。
+- 扩展 `PhysicsRuntime.test.js`：确认同一 Profile 驱动胶囊尺寸、坡度、自动跨阶和贴地参数。
+- 扩展 `InputController.test.js`：确认角色创建与尺寸变化通过 Profile 传递。
+- 扩展 `modelCapabilityManifest.test.js`：覆盖四类声明规范化、扩展字段保留、缺少 ID/部件引用/连接端点诊断。
+
+### 尚未完成（不得误报）
+
+- Traversability Manifest 目前是声明协议和基础结构校验，不是自动识别器。
+- Worker 目前未校验 targetPartId 与真实 Object3D componentId 的对应关系。
+- 尚未实现楼梯踏步/坡面几何提取、坡度测量、楼梯连续性和门洞净空分析。
+- 尚未将楼梯/坡面 Mesh 转成 Rapier trimesh/compound Collider；当前现有模型碰撞仍以 Box Collider/AABB 为主。
+- 尚未实现人物自动路径探测、通行测试、失败诊断和 AI 自动修复闭环。
+- 多楼层/房间连接仍未接入可运行导航图。
+
+### 验证状态
+
+- 代码与文档已通过 GitHub 远程回读；当前功能分支 HEAD 以本记录提交后的分支状态为准。
+- 本轮没有本地仓库执行环境，未运行 Vitest、前端构建、后端测试或浏览器验收。新增测试仅已写入，不能标记为通过。
+- 需要 CI 验证本轮新增测试和构建；浏览器仍需验证真实 Rapier 胶囊尺寸与角色移动行为。

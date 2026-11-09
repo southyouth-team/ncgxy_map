@@ -68,19 +68,23 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     const normalized = String(direction || '').toLowerCase()
     if (!['north', 'south', 'east', 'west'].includes(normalized)) return false
     const amount = Math.max(1, Math.min(20, Math.floor(Number(count) || 1)))
-    for (let index = 0; index < amount; index += 1) {
-      const xs = Array.from(chunks.values(), item => item.userData.worldChunk.x)
-      const zs = Array.from(chunks.values(), item => item.userData.worldChunk.z)
-      const nextX = normalized === 'east' ? Math.max(...xs) + 1
-        : normalized === 'west' ? Math.min(...xs) - 1
-          : Math.round((Math.min(...xs) + Math.max(...xs)) / 2)
-      const nextZ = normalized === 'south' ? Math.max(...zs) + 1
-        : normalized === 'north' ? Math.min(...zs) - 1
-          : Math.round((Math.min(...zs) + Math.max(...zs)) / 2)
-      addChunk(nextX, nextZ)
+    for (let layer = 0; layer < amount; layer += 1) {
+      const coordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
+      const minX = Math.min(...coordinates.map(item => item.x))
+      const maxX = Math.max(...coordinates.map(item => item.x))
+      const minZ = Math.min(...coordinates.map(item => item.z))
+      const maxZ = Math.max(...coordinates.map(item => item.z))
+      if (normalized === 'east' || normalized === 'west') {
+        const x = normalized === 'east' ? maxX + 1 : minX - 1
+        for (let z = minZ; z <= maxZ; z += 1) addChunk(x, z)
+      } else {
+        const z = normalized === 'south' ? maxZ + 1 : minZ - 1
+        for (let x = minX; x <= maxX; x += 1) addChunk(x, z)
+      }
     }
-    const xs = Array.from(chunks.values(), item => item.userData.worldChunk.x)
-    const zs = Array.from(chunks.values(), item => item.userData.worldChunk.z)
+    const coordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
+    const xs = coordinates.map(item => item.x)
+    const zs = coordinates.map(item => item.z)
     bounds.minX = Math.min(...xs) * chunkWidth - chunkWidth / 2
     bounds.maxX = Math.max(...xs) * chunkWidth + chunkWidth / 2
     bounds.minZ = Math.min(...zs) * chunkDepth - chunkDepth / 2
@@ -89,6 +93,7 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     root.userData.sampleBounds.depth = bounds.maxZ - bounds.minZ
     root.userData.sampleBounds.centerX = (bounds.minX + bounds.maxX) / 2
     root.userData.sampleBounds.centerZ = (bounds.minZ + bounds.maxZ) / 2
+    root.userData.worldChunks = coordinates.map(({ x, z }) => ({ x, z }))
     rebuildBoundary()
     return true
   }

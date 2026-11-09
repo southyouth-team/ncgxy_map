@@ -127,6 +127,9 @@ describe('collectModelMovementObstacles', () => {
     const root = new THREE.Group()
     const door = new THREE.Group()
     door.userData.componentId = 'door-panel'
+    door.userData.stateBinding = {
+      key: 'doorOpen', property: 'rotationY', enabledValue: -Math.PI / 2, disabledValue: 0,
+    }
     root.add(door)
     root.userData.worldState = { doorOpen: true }
     root.userData.proceduralModelCapabilityManifest = {
@@ -685,7 +688,7 @@ describe('refreshModelPhysicsRegistration', () => {
     expect(calls.filter(item => item.type === 'trimesh')).toHaveLength(2)
   })
 
-  it('honors state-conditioned door colliders and removes stale owner bodies', () => {
+  it('keeps a hinged door leaf collidable and rotates its Rapier collider with the open door', () => {
     const model = createPhysicsModel()
     const calls = []
     const runtime = {
@@ -693,10 +696,19 @@ describe('refreshModelPhysicsRegistration', () => {
       createStaticBox: options => calls.push({ type: 'create', options }),
     }
     expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(2)
+    const closedDoor = calls.filter(item => item.type === 'create').find(item => item.options.id.includes('door-box'))
+    expect(closedDoor).toBeTruthy()
+    expect(closedDoor.options.rotation.y).toBeCloseTo(0)
+
+    const door = model.children.find(item => item.userData.componentId === 'door-panel')
+    door.rotation.y = -Math.PI / 2
     model.userData.worldState.doorOpen = true
-    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(1)
+    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(2)
+
+    const openDoor = calls.filter(item => item.type === 'create').slice(-2).find(item => item.options.id.includes('door-box'))
+    expect(openDoor).toBeTruthy()
+    expect(openDoor.options.rotation.y).toBeCloseTo(-Math.SQRT1_2)
+    expect(openDoor.options.rotation.w).toBeCloseTo(Math.SQRT1_2)
     expect(calls.filter(item => item.type === 'remove')).toHaveLength(2)
-    const ids = calls.filter(item => item.type === 'create').slice(-1).map(item => item.options.id)
-    expect(ids[0]).toContain('upper-wall-box')
   })
 })

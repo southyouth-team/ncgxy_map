@@ -3373,3 +3373,12 @@ export const environmentBindings = [
 - 路线探测目前仅支持声明式楼梯/坡面路线；门洞净空、房间/楼层连接、电梯等还未纳入路线测试。
 - 探测使用当前模型声明的碰撞体和支撑面副本；未声明的静态环境对象不会自动进入隔离测试世界，因此模型若依赖沙盒外部地面/平台，必须在测试场景中提供对应支撑几何。
 - 当前移动路径为起点到终点的直线水平引导，尚未实现自动绕障寻路；路线失败能报告阻挡/卡住，但不能自动求解替代路线。
+
+
+### 隔离式人物通行探测器 CI 结果（提交 b0d06b3f）
+
+- `modelTraversalTester.test.js` 2/2 通过，其中包含真实 Rapier CharacterController 四级楼梯上行测试。
+- `modelSpatialRuntime.test.js` 20/20、`PhysicsRuntime.test.js` 12/12、`modelTraversabilityAnalyzer.test.js` 4/4 通过。
+- 前端全量测试：41 个测试文件通过、5 个既有测试文件失败；与加入本轮功能前的失败集合一致。Vite build 通过。
+- 后端 NestJS build 通过；96 passed / 1 failed，仍为既有 `image-generation.procedural.spec.ts` 的 URL 配置失败，PostGIS/API 后续步骤按工作流策略跳过。
+- 真实 Rapier 测试证明了当前测试夹具中的楼梯路线可通过；没有执行浏览器里的实际用户场景，也没有对 AI 生成模型样本库进行批量验收。

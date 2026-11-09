@@ -339,6 +339,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
   }
 
+  function configureSandboxPlacementOrbit(span, world) {
+    const orbit = cameraRig?.orbit
+    if (!orbit) return
+    // Three-dimensional overview defaults to minDistance=24; that is too far for small models.
+    orbit.minDistance = Math.max(1, Math.min(24, Math.max(8, span) * 0.18))
+    orbit.maxDistance = Math.max(190, Math.max(world.width, world.depth) * 3)
+  }
+
   function getSandboxGroundPoint(event) {
     if (!renderer || !cameraRig) return null
     const rect = renderer.domElement.getBoundingClientRect()
@@ -453,6 +461,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig?.setOrbitInteractionEnabled?.(true)
     const world = getSandboxPlacementWorldBounds()
     cameraRig?.focusBounds(world.width, world.depth, world.centerX, world.centerZ)
+    configureSandboxPlacementOrbit(cameraRig?.overviewSpan || Math.max(world.width, world.depth), world)
     emitSandboxPlacementState({ instruction: '先从沙盒全貌选择目标区域' })
     requestFrame()
     return true
@@ -483,6 +492,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const nextSpan = Math.max(8, currentSpan * 0.42)
       state.level += 1
       cameraRig?.focusBounds(nextSpan / 1.15, nextSpan / 1.15, point.x, point.z)
+      configureSandboxPlacementOrbit(nextSpan, world)
       const modelScale = Math.max(state.footprintWidth, state.footprintDepth)
       if (nextSpan <= modelScale * 8 || state.level >= 5) {
         state.stage = 'point'

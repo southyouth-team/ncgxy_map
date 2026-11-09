@@ -51,6 +51,12 @@ export class PlayerCharacterRuntime {
       -bounds.min.y * scale,
       -((bounds.min.z + bounds.max.z) / 2) * scale,
     )
+    // 外部角色模型遵循世界统一的真实投影/接收规则，不继承来源文件中可能关闭的阴影标记。
+    model.traverse(object => {
+      if (!object.isMesh) return
+      object.castShadow = true
+      object.receiveShadow = true
+    })
     wrapper.add(model)
     wrapper.updateMatrixWorld(true)
 

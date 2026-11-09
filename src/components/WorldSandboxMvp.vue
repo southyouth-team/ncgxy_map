@@ -1142,6 +1142,16 @@ onBeforeUnmount(() => {
               <button @click="deleteSelected">删除</button>
             </div>
           </template>
+          <section>
+            <h2>创建新模型</h2>
+            <div class="world-mvp__command">
+              <input v-model="aiPrompt" placeholder="描述要创建的新模型" @keydown.enter="generateAiModel">
+              <button :disabled="aiBusy || (!aiPrompt.trim() && !referenceImageDataUrl)" @click="generateAiModel">{{ aiBusy ? '生成中' : '生成' }}</button>
+            </div>
+            <div class="world-mvp__command" style="margin-top:7px">
+              <input type="file" accept="image/png,image/jpeg,image/webp" @change="onReferenceImageChange">
+            </div>
+          </section>
         </section>
       </template>
       <template v-else>

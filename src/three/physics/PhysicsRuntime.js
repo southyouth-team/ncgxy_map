@@ -60,6 +60,10 @@ export class PhysicsRuntime {
         if (entry.kind !== 'kinematic-character') continue
         const current = entry.body.translation()
         const desired = entry.desiredVelocity
+        const acceleration = entry.desiredAcceleration
+        desired.x += acceleration.x * this.fixedTimeStep
+        desired.y += acceleration.y * this.fixedTimeStep
+        desired.z += acceleration.z * this.fixedTimeStep
         entry.controller.computeColliderMovement(entry.collider, {
           x: desired.x * this.fixedTimeStep,
           y: desired.y * this.fixedTimeStep,
@@ -262,6 +266,7 @@ export class PhysicsRuntime {
         dimensions: { radius, halfHeight, height: traversalProfile.height },
         traversalProfile,
         desiredVelocity: { x: 0, y: 0, z: 0 },
+        desiredAcceleration: { x: 0, y: 0, z: 0 },
         grounded: true,
         pendingGrounded: true,
         position: { x: position[0], y: position[1], z: position[2] },
@@ -285,12 +290,23 @@ export class PhysicsRuntime {
     return true
   }
 
+  setKinematicCharacterAcceleration(id, acceleration = {}) {
+    this.#assertActive()
+    const entry = this.bodies.get(String(id))
+    if (!entry || entry.kind !== 'kinematic-character') return false
+    const values = [acceleration.x ?? 0, acceleration.y ?? 0, acceleration.z ?? 0].map(Number)
+    if (!values.every(Number.isFinite)) throw new TypeError('Character acceleration must be finite')
+    entry.desiredAcceleration = { x: values[0], y: values[1], z: values[2] }
+    return true
+  }
+
   getKinematicCharacterState(id) {
     const entry = this.bodies.get(String(id))
     if (!entry || entry.kind !== 'kinematic-character') return null
     const translation = entry.position || entry.body.translation()
     return {
       translation: { x: translation.x, y: translation.y, z: translation.z },
+      velocity: { ...entry.desiredVelocity },
       grounded: entry.grounded === true,
       stepCount: this.stepCount,
     }
@@ -306,6 +322,7 @@ export class PhysicsRuntime {
     entry.body.setNextKinematicTranslation?.({ x: values[0], y: values[1], z: values[2] })
     entry.position = { x: values[0], y: values[1], z: values[2] }
     entry.desiredVelocity = { x: 0, y: 0, z: 0 }
+    entry.desiredAcceleration = { x: 0, y: 0, z: 0 }
     entry.grounded = true
     entry.pendingGrounded = true
     return true

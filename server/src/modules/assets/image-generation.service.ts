@@ -940,9 +940,46 @@ export class ImageGenerationService {
         throw new ServiceUnavailableException('视觉模型响应内容不完整，已尝试 ' + attempt + ' 次');
       }
 
-      const raw = payload?.choices?.[0]?.message?.content;
-      if (typeof raw !== 'string' || !raw.trim()) {
-        throw new ServiceUnavailableException('视觉模型未返回程序化 Three.js 源码');
+      const choice = payload?.choices?.[0];
+      const message = choice?.message;
+      const rawContent = message?.content;
+      // Some OpenAI-compatible multimodal gateways return content as typed text parts
+      // instead of a plain string. Normalize only explicit text parts; never treat
+      // reasoning, refusal metadata, or arbitrary objects as executable source.
+      const raw = typeof rawContent === 'string'
+        ? rawContent
+        : Array.isArray(rawContent)
+          ? rawContent
+            .filter((part: any) => part && typeof part.text === 'string'
+              && (!part.type || part.type === 'text' || part.type === 'output_text'))
+            .map((part: any) => part.text)
+            .join('\\n')
+          : '';
+      if (!raw.trim()) {
+        const contentType = Array.isArray(rawContent) ? 'array' : typeof rawContent;
+        const contentPartTypes = Array.isArray(rawContent)
+          ? rawContent.slice(0, 12).map((part: any) => typeof part?.type === 'string' ? part.type : typeof part)
+          : [];
+        const diagnostic = {
+          responseId: typeof payload?.id === 'string' ? payload.id : undefined,
+          responseModel: typeof payload?.model === 'string' ? payload.model : undefined,
+          choiceCount: Array.isArray(payload?.choices) ? payload.choices.length : 0,
+          finishReason: choice?.finish_reason ?? null,
+          messageKeys: message && typeof message === 'object' ? Object.keys(message).slice(0, 20) : [],
+          contentType,
+          contentPartTypes,
+          hasRefusal: typeof message?.refusal === 'string' && Boolean(message.refusal),
+          hasReasoningContent: typeof message?.reasoning_content === 'string' && Boolean(message.reasoning_content),
+          upstreamError: typeof payload?.error?.message === 'string' ? payload.error.message.slice(0, 300) : undefined,
+          usage: payload?.usage && typeof payload.usage === 'object'
+            ? { prompt_tokens: payload.usage.prompt_tokens, completion_tokens: payload.usage.completion_tokens }
+            : undefined,
+        };
+        this.logger.warn('程序化 Three.js 生成响应未包含可用源码文本：' + JSON.stringify(diagnostic));
+        throw new ServiceUnavailableException(
+          '视觉模型未返回程序化 Three.js 源码（contentType=' + contentType
+          + '，finish_reason=' + String(choice?.finish_reason ?? 'unknown') + '）',
+        );
       }
       generatedCode = raw.trim()
         .replace(/^```(?:javascript|js|typescript|ts)?\s*/i, '')

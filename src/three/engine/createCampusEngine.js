@@ -8,6 +8,7 @@ import { createBlankSandboxScene } from '../world/campus/createBlankSandboxScene
 import { CameraRig } from '../camera/CameraRig.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { InputController } from '../controls/InputController.js'
+import { PlayerCharacterRuntime } from '../characters/PlayerCharacterRuntime.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
@@ -93,6 +94,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let lastEntranceCheckPosition = null
   let frameId = 0
   let playerSpriteObject = null
+  let playerCharacterRuntime = null
   let resizeObserver
   let previousTime = 0
   let initialized = false
@@ -1461,6 +1463,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode, freeOverview: isBlankSandbox })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     playerSpriteObject = campus.getObjectByName('PixelExplorerSprite')
+    if (isBlankSandbox && playerSpriteObject) playerCharacterRuntime = new PlayerCharacterRuntime(THREE, playerSpriteObject)
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
     const spawn = campus.userData.playerSpawn || fallbackSpawn
     cameraRig.player.set(playerSpriteObject?.position.x ?? spawn.x, 1.7, playerSpriteObject?.position.z ?? spawn.z)
@@ -2693,6 +2696,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       lastPlayerX = cameraRig.player.x
       lastPlayerZ = cameraRig.player.z
     }
+    playerCharacterRuntime?.update(delta)
     const cameraChanged = cameraRig?.update(delta) || false
     updateRainEffect(delta)
     if (windSwayTargets.length) {
@@ -3254,6 +3258,55 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     input?.setVirtualKey(key, pressed)
   }
 
+  async function loadPlayerCharacter(url, metadata = {}) {
+    if (!isBlankSandbox || !playerCharacterRuntime) throw new Error('当前场景不支持替换角色模型')
+    const sourceUrl = String(url || '').trim()
+    if (!sourceUrl) throw new TypeError('角色模型地址不能为空')
+    const gltf = await new GLTFLoader().loadAsync(sourceUrl)
+    if (disposed) {
+      disposeObjectGroup(gltf.scene)
+      return false
+    }
+    const result = playerCharacterRuntime.setModel(gltf.scene, gltf.animations || [], {
+      ...metadata,
+      sourceUrl,
+      assetId: metadata.assetId || sourceUrl,
+    })
+    invalidateShadowMap()
+    requestFrame()
+    callbacks.onPlayerCharacterChange?.(result)
+    return result
+  }
+
+  function setPlayerCharacterModel(model, animations = [], metadata = {}) {
+    if (!isBlankSandbox || !playerCharacterRuntime) throw new Error('当前场景不支持替换角色模型')
+    const result = playerCharacterRuntime.setModel(model, animations, metadata)
+    invalidateShadowMap()
+    requestFrame()
+    callbacks.onPlayerCharacterChange?.(result)
+    return result
+  }
+
+  function setPlayerCharacterAnimation(state) {
+    const changed = playerCharacterRuntime?.setAnimationState(state) || false
+    if (changed) requestFrame()
+    return changed
+  }
+
+  function restorePlayerCharacterFallback() {
+    const restored = playerCharacterRuntime?.restoreFallback() || false
+    if (restored) {
+      invalidateShadowMap()
+      requestFrame()
+      callbacks.onPlayerCharacterChange?.(playerCharacterRuntime.getInfo())
+    }
+    return restored
+  }
+
+  function getPlayerCharacterInfo() {
+    return playerCharacterRuntime?.getInfo() || null
+  }
+
   function setMode(mode) {
     // 沙盒自由视角与首页近景跟随视角并存；thirdPerson 不再被强制归一化为 overview。
     const nextMode = mode
@@ -3340,6 +3393,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     activeHorizonGround = null
     if (indoorGroup) { scene?.remove(indoorGroup); disposeObjectGroup(indoorGroup); indoorGroup = null }
     input?.dispose()
+    playerCharacterRuntime?.dispose()
+    playerCharacterRuntime = null
     cameraRig?.dispose()
     shadowSystem?.dispose()
     shadowSystem = null
@@ -3353,5 +3408,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

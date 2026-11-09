@@ -3140,3 +3140,13 @@ export const environmentBindings = [
 1. 先在真实开发环境执行依赖安装、模型空间测试、PhysicsRuntime 测试和前端构建，修复实际暴露的问题。
 2. 浏览器验收 blank sandbox 的 Rapier 初始化、地面/边界/模型 Box 注册，扩展/删除/恢复区块，以及模型新增/移动/替换/删除后的 bodyCount 和资源清理。
 3. 验证通过后，开始迁移人物到 Rapier KinematicCharacterController；输入与相机控制继续保留，不同时重构交互 UI。
+
+
+### CI 结果补充（模型物理注册测试修正后）
+
+- 首次前端 CI 暴露本轮新增测试的浮点数精度断言问题（世界 AABB 的 Z 半尺寸为 `0.20000000000000018`）；已将该断言改为 `toBeCloseTo`，提交 `ddf33bfb16b76985c4db534d6fff0e9f1acaf2a4`。
+- 修正后的前端 CI：`npm install` 成功；`npm test` 为 485 passed / 6 failed（491 total，5 个测试文件失败）；本轮新增的 Rapier 模型物理注册测试已通过。
+- 与本轮开始基线 `573cdd53c389960a0e75820f3dcc33a7526c9e11` 的前端 CI 对比：基线同样是 5 个测试文件失败、6 个测试失败；失败测试文件和断言与本轮修正后的结果一致。因此目前看到的 5 个失败文件属于本轮开始前已存在的基线问题，不是本轮 Rapier 改动新增的失败。
+- 前端 `npm run build` 因 CI 工作流在测试失败后跳过，尚无本轮构建结果。
+- 后端基线 CI 在 `image-generation.procedural.spec.ts` 有 1 项失败（96 passed / 1 failed）；本轮新提交对应的后端 CI 当时仍在执行中，尚未取得最终结论。后端源码本轮没有修改。
+- 本轮没有在本地环境运行测试；上述结果均来自 GitHub Actions。浏览器验收仍未执行。

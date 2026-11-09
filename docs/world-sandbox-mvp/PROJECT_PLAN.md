@@ -131,6 +131,8 @@ Three.js Object3D 是渲染/运行时载体，不是唯一权威世界数据。�
 - 玩家角色尺寸变化必须通过同一 profile 重新计算胶囊体高度/半高；角色尺寸、坡度和跨阶参数不能由 InputController 与 Rapier 分别设置。
 - 模型 Manifest 在 `capabilities.spatial.traversability` 下增加开放的数据声明集合：`stairs`、`ramps`、`passages`、`connections`。楼梯/坡面/通道记录使用稳定 `id` 和真实 `targetPartId`；空间连接记录稳定 `id` 与 `from/to` 端点。未知字段必须保留，不建立模型类别白名单。
 - Manifest 规范化只负责数据结构；基础校验负责记录 ID、部件引用字段和连接端点完整性。几何真实性、坡度/踏步测量、碰撞生成、人物可达性测试仍由后续 Analyzer/Physics Runtime 阶段负责。
+- 第一阶段几何分析器 `analyzeModelTraversability` 在 Worker 中执行：将楼梯/坡面/通道声明绑定到真实 `componentId`，拒绝缺失或重复 ID，统计实际 Mesh 数量、世界包围范围、朝上三角面数量和坡面三角面坡度证据。
+- 分析器输出 `proceduralModelTraversabilityAnalysis` 诊断报告，区分 `invalid`、`needs-review`、`geometry-bound`；`certifiedWalkable` 在本阶段固定为 false。楼梯逐级连续性、坡面连续通行、门洞净空、空间连接端点和 Rapier 人物路线测试仍不得视为已完成。
 - AI 生成和编辑 Prompt 可以输出/维护上述声明，但必须明确声明不等于运行时可通行。未通过真实几何绑定和 Rapier 人物测试，不得把楼梯、坡道或多楼层连接标记为已验收可通行。
 
 

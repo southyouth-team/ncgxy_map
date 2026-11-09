@@ -74,6 +74,9 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
       const maxX = Math.max(...coordinates.map(item => item.x))
       const minZ = Math.min(...coordinates.map(item => item.z))
       const maxZ = Math.max(...coordinates.map(item => item.z))
+      const nextWidth = maxX - minX + 1 + (normalized === 'east' || normalized === 'west' ? 1 : 0)
+      const nextDepth = maxZ - minZ + 1 + (normalized === 'north' || normalized === 'south' ? 1 : 0)
+      if (nextWidth * nextDepth > 2500) return false
       if (normalized === 'east' || normalized === 'west') {
         const x = normalized === 'east' ? maxX + 1 : minX - 1
         for (let z = minZ; z <= maxZ; z += 1) addChunk(x, z)
@@ -111,11 +114,18 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     bounds: { ...bounds },
   })
   root.userData.restoreWorldState = state => {
-    const entries = Array.isArray(state?.chunks) ? state.chunks : []
-    for (const item of entries) {
-      const x = Number(item?.x), z = Number(item?.z)
-      if (Number.isInteger(x) && Number.isInteger(z) && Math.abs(x) <= 1000 && Math.abs(z) <= 1000) addChunk(x, z)
-    }
+    const savedWidth = Number(state?.chunkSize?.width)
+    const savedDepth = Number(state?.chunkSize?.depth)
+    const entries = state?.version === 1 && Array.isArray(state?.chunks) ? state.chunks : null
+    if (!entries || savedWidth !== chunkWidth || savedDepth !== chunkDepth || entries.length > 2500) return false
+    const parsed = entries.map(item => ({ x: Number(item?.x), z: Number(item?.z) }))
+    if (parsed.some(({ x, z }) => !Number.isInteger(x) || !Number.isInteger(z) || Math.abs(x) > 50 || Math.abs(z) > 50)) return false
+    const xs = parsed.map(item => item.x), zs = parsed.map(item => item.z)
+    const minX = Math.min(...xs), maxX = Math.max(...xs)
+    const minZ = Math.min(...zs), maxZ = Math.max(...zs)
+    if ((maxX - minX + 1) * (maxZ - minZ + 1) !== new Set(parsed.map(item => item.x + ':' + item.z)).size) return false
+    if (!parsed.some(item => item.x === 0 && item.z === 0)) return false
+    for (const { x, z } of parsed) addChunk(x, z)
     const coordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
     const xs = coordinates.map(item => item.x)
     const zs = coordinates.map(item => item.z)

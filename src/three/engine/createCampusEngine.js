@@ -524,18 +524,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
-  function getCurrentSandboxPlacementViewSpan() {
-    const camera = cameraRig?.camera
-    if (!camera) return Number(cameraRig?.overviewSpan) || 60
-    if (camera.isOrthographicCamera) {
-      return Math.max(8, (camera.top - camera.bottom) / Math.max(camera.zoom, 0.001))
-    }
-    const target = cameraRig?.orbit?.target || new THREE.Vector3()
-    const distance = camera.position.distanceTo(target)
-    const halfFov = THREE.MathUtils.degToRad(camera.fov || 48) / 2
-    return Math.max(8, 2 * distance * Math.tan(halfFov))
-  }
-
   function onSandboxPlacementPointerDown(event) {
     const state = sandboxPlacementState
     if (!state || event.button !== 0) return

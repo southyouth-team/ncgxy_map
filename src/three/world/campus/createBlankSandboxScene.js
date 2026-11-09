@@ -68,15 +68,20 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     const normalized = String(direction || '').toLowerCase()
     if (!['north', 'south', 'east', 'west'].includes(normalized)) return false
     const amount = Math.max(1, Math.min(20, Math.floor(Number(count) || 1)))
+    const initialCoordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
+    const initialMinX = Math.min(...initialCoordinates.map(item => item.x))
+    const initialMaxX = Math.max(...initialCoordinates.map(item => item.x))
+    const initialMinZ = Math.min(...initialCoordinates.map(item => item.z))
+    const initialMaxZ = Math.max(...initialCoordinates.map(item => item.z))
+    const projectedWidth = initialMaxX - initialMinX + 1 + (normalized === 'east' || normalized === 'west' ? amount : 0)
+    const projectedDepth = initialMaxZ - initialMinZ + 1 + (normalized === 'north' || normalized === 'south' ? amount : 0)
+    if (projectedWidth * projectedDepth > 2500) return false
     for (let layer = 0; layer < amount; layer += 1) {
       const coordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
       const minX = Math.min(...coordinates.map(item => item.x))
       const maxX = Math.max(...coordinates.map(item => item.x))
       const minZ = Math.min(...coordinates.map(item => item.z))
       const maxZ = Math.max(...coordinates.map(item => item.z))
-      const nextWidth = maxX - minX + 1 + (normalized === 'east' || normalized === 'west' ? 1 : 0)
-      const nextDepth = maxZ - minZ + 1 + (normalized === 'north' || normalized === 'south' ? 1 : 0)
-      if (nextWidth * nextDepth > 2500) return false
       if (normalized === 'east' || normalized === 'west') {
         const x = normalized === 'east' ? maxX + 1 : minX - 1
         for (let z = minZ; z <= maxZ; z += 1) addChunk(x, z)

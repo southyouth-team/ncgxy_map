@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { collectModelMovementObstacles, refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
+import { collectModelMovementObstacles, collectModelTraversalTrimeshes, refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 
 describe('collectModelMovementObstacles', () => {
@@ -455,6 +455,55 @@ describe('refreshModelPhysicsRegistration', () => {
     expect(boxes[0].halfExtents.x).toBeCloseTo(2)
     expect(boxes[0].halfExtents.y).toBeCloseTo(1)
     expect(boxes[0].halfExtents.z).toBeCloseTo(0.2)
+  })
+
+  it('compiles declared stair Mesh geometry into world-space triangle buffers', () => {
+    const model = new THREE.Group()
+    const stairs = new THREE.Group()
+    stairs.userData.componentId = 'stairs-main'
+    stairs.position.set(3, 1, 2)
+    stairs.add(new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 1), new THREE.MeshBasicMaterial()))
+    model.add(stairs)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: {
+        traversability: { stairs: [{ id: 'main-stairs', targetPartId: 'stairs-main' }] },
+        colliders: [{ id: 'stairs-box', targetPartId: 'stairs-main', shape: 'box', size: { x: 2, y: 0.2, z: 1 } }],
+      } },
+    }
+    const result = collectModelTraversalTrimeshes(THREE, model, 'stairs-instance')
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      ownerId: 'stairs-instance', surfaceId: 'main-stairs',
+      targetPartId: 'stairs-main', type: 'stairs',
+    })
+    expect(result[0].vertices.length).toBeGreaterThanOrEqual(9)
+    expect(result[0].indices.length).toBeGreaterThanOrEqual(3)
+    expect(result[0].vertices[0]).toBeCloseTo(2)
+    expect(result[0].vertices[1]).toBeCloseTo(0.9)
+  })
+
+  it('registers stair geometry as a Rapier trimesh instead of an overlapping box', () => {
+    const model = new THREE.Group()
+    model.userData.sandboxModelId = 'stairs-instance'
+    const stairs = new THREE.Group()
+    stairs.userData.componentId = 'stairs-main'
+    stairs.add(new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 1), new THREE.MeshBasicMaterial()))
+    model.add(stairs)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: {
+        traversability: { stairs: [{ id: 'main-stairs', targetPartId: 'stairs-main' }] },
+        colliders: [{ id: 'stairs-box', targetPartId: 'stairs-main', shape: 'box', size: { x: 2, y: 0.2, z: 1 } }],
+      } },
+    }
+    const calls = []
+    const runtime = {
+      removeOwner: id => calls.push({ type: 'remove', id }),
+      createStaticBox: options => calls.push({ type: 'box', options }),
+      createStaticTrimesh: options => calls.push({ type: 'trimesh', options }),
+    }
+    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(1)
+    expect(calls.filter(item => item.type === 'trimesh')).toHaveLength(1)
+    expect(calls.filter(item => item.type === 'box')).toHaveLength(0)
   })
 
   it('honors state-conditioned door colliders and removes stale owner bodies', () => {

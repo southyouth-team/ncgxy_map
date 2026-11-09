@@ -351,6 +351,7 @@ export class InputController {
     this.pointerDown = false
     this.verticalVelocity = 0
     this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+    this.jumpWasAirborne = false
     this.jumpBufferRemaining = 0
     this.coyoteTimeRemaining = this.coyoteTimeDuration
     this.grounded = true
@@ -387,6 +388,7 @@ export class InputController {
     if (!this.movementEnabled) {
       this.keys.clear()
       this.jumpActive = false; this.jumpRequested = false; this.jumpLaunched = false
+      this.jumpWasAirborne = false
       this.jumpBufferRemaining = 0
       this.coyoteTimeRemaining = this.coyoteTimeDuration
       this.verticalVelocity = 0

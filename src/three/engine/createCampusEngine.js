@@ -365,6 +365,85 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function removeSandboxWorldEdge(direction) {
+    if (!isBlankSandbox || !campus?.userData?.removeWorldEdge) {
+      return { ok: false, reason: 'unsupported-world' }
+    }
+    const normalized = String(direction || '').toLowerCase()
+    if (!['north', 'south', 'east', 'west'].includes(normalized)) {
+      return { ok: false, reason: 'invalid-direction' }
+    }
+    const worldState = getSandboxWorldState()
+    const chunks = worldState?.chunks || []
+    if (!chunks.length) return { ok: false, reason: 'empty-world' }
+    const minX = Math.min(...chunks.map(item => item.x))
+    const maxX = Math.max(...chunks.map(item => item.x))
+    const minZ = Math.min(...chunks.map(item => item.z))
+    const maxZ = Math.max(...chunks.map(item => item.z))
+    const edge = normalized === 'west' ? minX
+      : normalized === 'east' ? maxX
+        : normalized === 'north' ? minZ : maxZ
+    const strip = chunks.filter(item => (
+      normalized === 'west' || normalized === 'east' ? item.x === edge : item.z === edge
+    ))
+    if (strip.some(item => item.x === 0 && item.z === 0)) {
+      return { ok: false, reason: 'origin-anchor', blockers: ['初始中心区块'] }
+    }
+    const width = Number(worldState.chunkSize?.width)
+    const depth = Number(worldState.chunkSize?.depth)
+    const blockers = []
+    const player = getPlayerPosition()
+    for (const chunk of strip) {
+      const minWorldX = chunk.x * width - width / 2
+      const maxWorldX = chunk.x * width + width / 2
+      const minWorldZ = chunk.z * depth - depth / 2
+      const maxWorldZ = chunk.z * depth + depth / 2
+      if (player && player.x >= minWorldX && player.x <= maxWorldX
+        && player.z >= minWorldZ && player.z <= maxWorldZ) {
+        blockers.push('玩家当前位置')
+      }
+      const tileBounds = new THREE.Box3(
+        new THREE.Vector3(minWorldX, -Infinity, minWorldZ),
+        new THREE.Vector3(maxWorldX, Infinity, maxWorldZ),
+      )
+      for (const [id, model] of sandboxModels) {
+        if (!model.visible) continue
+        model.updateWorldMatrix(true, true)
+        const modelBounds = new THREE.Box3().setFromObject(model)
+        if (!modelBounds.isEmpty() && modelBounds.min.x < tileBounds.max.x
+          && modelBounds.max.x > tileBounds.min.x
+          && modelBounds.min.z < tileBounds.max.z
+          && modelBounds.max.z > tileBounds.min.z) {
+          blockers.push(model.name || id)
+        }
+      }
+      for (const obstacle of collisionWorld?.obstacles || []) {
+        if (obstacle.maxX > minWorldX && obstacle.minX < maxWorldX
+          && obstacle.maxZ > minWorldZ && obstacle.minZ < maxWorldZ) {
+          const owner = obstacle.ownerId ? sandboxModels.get(String(obstacle.ownerId)) : null
+          blockers.push(owner?.name || '已登记的碰撞区域')
+        }
+      }
+    }
+    const uniqueBlockers = [...new Set(blockers)]
+    if (uniqueBlockers.length) {
+      return { ok: false, reason: 'occupied', blockers: uniqueBlockers }
+    }
+    if (!campus.userData.removeWorldEdge(normalized)) {
+      return { ok: false, reason: 'minimum-world-size' }
+    }
+    if (collisionWorld) collisionWorld.bounds = campus.userData.walkableBounds
+    if (input) {
+      input.bounds = campus.userData.walkableBounds
+      if (input.collisionWorld) input.collisionWorld.bounds = campus.userData.walkableBounds
+    }
+    const world = getSandboxPlacementWorldBounds()
+    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(190, Math.max(world.width, world.depth) * 3)
+    callbacks.onSandboxWorldChange?.(getSandboxWorldState())
+    requestFrame()
+    return { ok: true, world: getSandboxWorldState() }
+  }
+
   function restoreSandboxWorld(state) {
     if (!isBlankSandbox || !campus?.userData?.restoreWorldState || !state) return false
     const restored = campus.userData.restoreWorldState(state)
@@ -3106,5 +3185,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, expandSandboxWorld, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, expandSandboxWorld, removeSandboxWorldEdge, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

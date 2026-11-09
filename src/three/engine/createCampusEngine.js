@@ -110,6 +110,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let sandboxModelSequence = 0
   let activeSandboxInterior = null
   let sandboxSelectedModel = null
+  let sandboxSelectionHelper = null
   let sandboxTransform = null
   let placementState = null
   // AI 沙盒模型采用分层选址；与旧 generatedAssets 的 placementState 完全隔离。
@@ -680,16 +681,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     applyWorldStateBindings(replacement, replacement.userData.worldState || {})
     applySandboxLightingState(replacement, replacement.userData.worldState || {})
     applySandboxEnvironmentBindings(replacement)
-    if (sandboxSelectedModel === current) {
-      sandboxSelectedModel = replacement
-      sandboxTransform?.attach(replacement)
-    }
+    const wasSelected = sandboxSelectedModel === current
+    if (wasSelected) sandboxSelectedModel = replacement
     current.parent?.remove(current)
     disposeObjectGroup(current)
+    if (wasSelected) selectSandboxModel(id)
     invalidateShadowMap()
     requestFrame()
     callbacks.onSandboxModelsChange?.(getSandboxModels())
-    callbacks.onSandboxModelSelected?.({
+    if (!wasSelected) callbacks.onSandboxModelSelected?.({
       id: String(id),
       name: replacement.name,
       spec: replacement.userData.objectSculptSpec || null,
@@ -697,10 +697,30 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
+  function clearSandboxSelectionHelper() {
+    if (!sandboxSelectionHelper) return
+    scene?.remove(sandboxSelectionHelper)
+    sandboxSelectionHelper.geometry?.dispose?.()
+    const material = sandboxSelectionHelper.material
+    if (Array.isArray(material)) material.forEach(item => item?.dispose?.())
+    else material?.dispose?.()
+    sandboxSelectionHelper = null
+  }
+
   function selectSandboxModel(id) {
     if (sandboxPlacementState && id) return false
     const model = id ? sandboxModels.get(String(id)) : null
     sandboxSelectedModel = model || null
+    clearSandboxSelectionHelper()
+    if (sandboxSelectedModel) {
+      sandboxSelectionHelper = new THREE.BoxHelper(sandboxSelectedModel, '#a5c9b1')
+      sandboxSelectionHelper.material.depthTest = false
+      sandboxSelectionHelper.material.transparent = true
+      sandboxSelectionHelper.material.opacity = 0.95
+      sandboxSelectionHelper.material.toneMapped = false
+      sandboxSelectionHelper.renderOrder = 1000
+      scene?.add(sandboxSelectionHelper)
+    }
     // 选中与精细调整分离：单击只更新选择，不自动挂载 Gizmo，也不接管相机。
     sandboxTransform?.detach()
     cameraRig?.setOrbitInteractionEnabled?.(true)
@@ -774,6 +794,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!hasValidTransformInput) return true
     model.updateMatrixWorld(true)
     refreshSandboxModelSpatial(model)
+    if (sandboxSelectedModel === model) sandboxSelectionHelper?.update()
     invalidateShadowMap()
     requestFrame()
     return true
@@ -1223,6 +1244,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
     sandboxTransform.addEventListener('objectChange', () => {
       if (sandboxSelectedModel) {
+        sandboxSelectionHelper?.update()
         const model = sandboxSelectedModel
         setSandboxModelTransform(model.userData.sandboxModelId, {
           position: model.position,
@@ -2910,6 +2932,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform?.detach()
     sandboxTransform?.dispose()
     sandboxTransform = null
+    clearSandboxSelectionHelper()
     for (const id of sandboxModels.keys()) removeSandboxModelSpatialRegistration(id)
     sandboxModels.clear()
     sandboxSelectedModel = null

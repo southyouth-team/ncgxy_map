@@ -13,6 +13,7 @@ export class CollisionWorld {
     )
     this.radius = Math.max(0.1, Number(radius) || 0.55)
     this.supportSurfaces = []
+    this.walkableRegions = null
   }
 
   addObstacle(bounds, ownerId = null) {
@@ -123,7 +124,25 @@ export class CollisionWorld {
       z > obstacle.minZ - r && z < obstacle.maxZ + r
   }
 
+  setWalkableRegions(regions) {
+    this.walkableRegions = Array.isArray(regions)
+      ? regions.filter(region => Number.isFinite(region.minX) && Number.isFinite(region.maxX)
+        && Number.isFinite(region.minZ) && Number.isFinite(region.maxZ)
+        && region.maxX > region.minX && region.maxZ > region.minZ)
+      : null
+  }
+
+  isInsideWalkableRegions(x, z) {
+    if (!this.walkableRegions) return true
+    const r = this.radius
+    return this.walkableRegions.some(region => (
+      x >= region.minX + r && x <= region.maxX - r
+      && z >= region.minZ + r && z <= region.maxZ - r
+    ))
+  }
+
   isBlocked(x, z) {
+    if (!this.isInsideWalkableRegions(x, z)) return true
     return this.obstacles.some(obstacle => this.isObstacleBlocked(x, z, obstacle))
   }
 

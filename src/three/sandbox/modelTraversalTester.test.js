@@ -27,6 +27,70 @@ describe('testModelTraversalRoutes', () => {
   })
 
 
+
+  it('allows a character to enter a building through its actual doorway opening', async () => {
+    const model = new THREE.Group()
+    const shell = new THREE.Group()
+    shell.userData.componentId = 'building-shell'
+    const jamb = new THREE.BoxGeometry(0.3, 2.2, 0.4)
+    const left = new THREE.Mesh(jamb, new THREE.MeshBasicMaterial())
+    left.position.set(-1.15, 1.1, 0)
+    const right = new THREE.Mesh(jamb, new THREE.MeshBasicMaterial())
+    right.position.set(1.15, 1.1, 0)
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(2, 0.35, 0.4), new THREE.MeshBasicMaterial())
+    lintel.position.set(0, 2.125, 0)
+    shell.add(left, right, lintel)
+    model.add(shell)
+    const route = new THREE.Group()
+    route.userData.componentId = 'building-entry-route'
+    model.add(route)
+    const ground = new THREE.Group()
+    ground.userData.componentId = 'building-ground'
+    ground.add(new THREE.Mesh(new THREE.BoxGeometry(8, 0.2, 4), new THREE.MeshBasicMaterial()))
+    model.add(ground)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: {
+        colliders: [{ id: 'building-shell-mesh', targetPartId: 'building-shell', shape: 'mesh' }],
+        surfaces: [{ id: 'building-ground-surface', targetPartId: 'building-ground', shape: 'mesh', supportsStanding: true, walkable: true }],
+        traversability: { passages: [{
+          id: 'building-entry', targetPartId: 'building-entry-route',
+          startPoint: { x: 0, y: 0.1, z: 1.5 }, endPoint: { x: 0, y: 0.1, z: -1.5 },
+        }] },
+      } },
+    }
+    const result = await testModelTraversalRoutes(THREE, RAPIER, model, { maxDuration: 5, speed: 2 })
+    expect(result.routes[0]).toMatchObject({ status: 'passed', type: 'passages' })
+    expect(result.certifiedWalkable).toBe(true)
+  })
+
+  it('prevents a character from passing through a solid mountain Mesh', async () => {
+    const model = new THREE.Group()
+    const mountain = new THREE.Group()
+    mountain.userData.componentId = 'mountain-body'
+    mountain.add(new THREE.Mesh(new THREE.BoxGeometry(3, 3, 0.8), new THREE.MeshBasicMaterial()))
+    model.add(mountain)
+    const route = new THREE.Group()
+    route.userData.componentId = 'mountain-crossing-route'
+    model.add(route)
+    const ground = new THREE.Group()
+    ground.userData.componentId = 'mountain-ground'
+    ground.add(new THREE.Mesh(new THREE.BoxGeometry(8, 0.2, 4), new THREE.MeshBasicMaterial()))
+    model.add(ground)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: {
+        colliders: [{ id: 'mountain-mesh', targetPartId: 'mountain-body', shape: 'mesh' }],
+        surfaces: [{ id: 'mountain-ground-surface', targetPartId: 'mountain-ground', shape: 'mesh', supportsStanding: true, walkable: true }],
+        traversability: { passages: [{
+          id: 'mountain-crossing', targetPartId: 'mountain-crossing-route',
+          startPoint: { x: 0, y: 0.1, z: 1.5 }, endPoint: { x: 0, y: 0.1, z: -1.5 },
+        }] },
+      } },
+    }
+    const result = await testModelTraversalRoutes(THREE, RAPIER, model, { maxDuration: 4, speed: 2 })
+    expect(result.routes[0]).toMatchObject({ status: 'failed', reason: 'blocked-or-stuck' })
+    expect(result.certifiedWalkable).toBe(false)
+  })
+
   it('blocks entry into a water volume while keeping an elevated bridge route open', async () => {
     const model = new THREE.Group()
     const shoreline = new THREE.Group()

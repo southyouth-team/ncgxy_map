@@ -1011,7 +1011,7 @@ onMounted(async () => {
       syncObjects()
     }
   } catch (error) {
-    message.value = '校园场景初始化失败：' + (error?.message || '未知错误')
+    message.value = '沙盒初始化失败：' + (error?.message || '未知错误')
   }
 })
 onBeforeUnmount(() => {
@@ -1027,7 +1027,7 @@ onBeforeUnmount(() => {
   <main class="world-mvp">
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
-      <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>RPG 校园探索 · AI 独立建模组</span></div>
+      <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>空白世界 · AI 模型构建与交互</span></div>
       <div class="world-mvp__header-actions"><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
     </header>
 
@@ -1159,7 +1159,7 @@ onBeforeUnmount(() => {
       @parameter-change="handleParameterChange"
       @capability-change="handleCapabilityChange"
     />
-    <footer class="world-mvp__help">WASD / 方向键移动人物 · 重新选址：全景预览占地→点击锁定候选位置→确认落地 · 精调阶段使用坐标轴</footer>
+    <footer class="world-mvp__help">WASD / 方向键移动角色 · 沙盒默认仅保留空白地面 · 重新选址会检测已有模型占地冲突</footer>
   </main>
 </template>
 

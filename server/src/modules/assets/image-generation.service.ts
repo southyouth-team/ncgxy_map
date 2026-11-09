@@ -956,7 +956,7 @@ export class ImageGenerationService {
             .join(String.fromCharCode(10))
           : '';
       if (!raw.trim()) {
-        const contentType = Array.isArray(rawContent) ? 'array' : typeof rawContent;
+        const contentType = rawContent === null ? 'null' : Array.isArray(rawContent) ? 'array' : typeof rawContent;
         const contentPartTypes = Array.isArray(rawContent)
           ? rawContent.slice(0, 12).map((part: any) => typeof part?.type === 'string' ? part.type : typeof part)
           : [];

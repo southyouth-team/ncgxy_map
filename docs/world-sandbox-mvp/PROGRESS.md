@@ -3283,3 +3283,10 @@ export const environmentBindings = [
 - 代码与文档已通过 GitHub 远程回读；当前功能分支 HEAD 以本记录提交后的分支状态为准。
 - 本轮没有本地仓库执行环境，未运行 Vitest、前端构建、后端测试或浏览器验收。新增测试仅已写入，不能标记为通过。
 - 需要 CI 验证本轮新增测试和构建；浏览器仍需验证真实 Rapier 胶囊尺寸与角色移动行为。
+
+
+### CI 回归核验（2026-11-10）
+
+- 当前功能分支提交 `db523a485407c12485113004e2ebc15674ab82ea` 的 Frontend CI：`npm test` 为 500 passed / 6 failed（506 total）；本轮新增的 `CharacterTraversalProfile`、Rapier Profile 消费、模型 Traversability Manifest 测试均通过。6 项失败仍落在既有失败用例（InputController 既有坡面断言、模型 Manifest 既有空环境绑定断言、沙盒场景两项、PlayerCharacterRuntime 一项、太阳位置一项）；与此前基线的失败总数一致。前端 `npm run build` 通过。
+- 同一提交的 Backend CI：NestJS build 通过；单测 96 passed / 1 failed，仍为既有 `image-generation.procedural.spec.ts` 失败，与本轮新增 Prompt 声明无关。后端数据库集成验证因单测失败按现有工作流策略未继续。
+- 以上为 GitHub Actions 结果，不代表浏览器实测。尚未完成真实模型楼梯/坡面、门洞净空、人物起终点可达性验收。

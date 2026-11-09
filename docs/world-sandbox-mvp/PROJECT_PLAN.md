@@ -1270,7 +1270,7 @@ MVP 验收以一条真实闭环为准：创建世界 → 控制环境 → AI 生
 人物控制迁移仅对 blank-sandbox 生效，保留 InputController 的键盘/触屏输入、相机模式、自动寻路和动画回调契约；人物运动求解由 Rapier `KinematicCharacterController` 接管。
 
 - 人物使用 position-based kinematic rigid body + capsule collider，刚体原点位于脚底，胶囊中心通过 collider local translation 对齐；相机仍使用 eye-height 坐标。
-- 每帧由输入层提供水平期望位移和重力垂直位移；Rapier 计算碰撞修正后的位移，InputController 将结果回写 cameraRig.player。
+- 输入层每个渲染帧提供水平期望速度、跳跃初始垂直速度和垂直加速度；PhysicsRuntime 只在固定物理子步积分加速度并计算碰撞修正位移，InputController 将权威物理位置回写 cameraRig.player。
 - 控制器配置包括最大可爬坡角、自动跨越台阶高度/最小宽度、snap-to-ground；重力仍由角色控制层提供，不把角色伪装成动态刚体。
 - 重置位置、传送和角色尺寸变化必须同步/重建胶囊体；销毁时先从 World 移除 CharacterController，再移除刚体。
 - 非 blank-sandbox 场景继续走原有 InputController / CollisionWorld 路径，不建立双引擎兼容层；此约束不是为旧校园编辑器增加支持，而是当前仓库其他非沙盒运行模式的隔离。
@@ -1280,7 +1280,7 @@ MVP 验收以一条真实闭环为准：创建世界 → 控制环境 → AI 生
 
 ### 人物控制固定步长补充约束（2026-11-09）
 
-输入采样与物理求解必须解耦：InputController 每个渲染帧只更新人物期望速度；PhysicsRuntime 在每个固定物理子步中计算 CharacterController 位移、设置下一运动学位置并推进 World。禁止在渲染帧内直接执行一次性 CharacterController 位移，否则 120Hz/144Hz 等高刷新率下可能反复覆盖尚未执行的运动学目标，造成移动速度与帧率相关。自动寻路的阻塞检测必须依据物理 stepCount 前进后的实际位置变化，而不能在首个尚未执行的命令帧立即判定阻塞。
+输入采样与物理求解必须解耦：InputController 每个渲染帧只更新人物期望速度/加速度；PhysicsRuntime 在每个固定物理子步中先积分加速度，再计算 CharacterController 位移、设置下一运动学位置并推进 World。跳跃和离开支撑面后的重力不得按渲染 delta 积分，否则 30/60/120/144Hz 会产生不同的垂直速度曲线。禁止在渲染帧内直接执行一次性 CharacterController 位移，否则高刷新率下可能反复覆盖尚未执行的运动学目标，造成移动速度与帧率相关。自动寻路的阻塞检测必须依据物理 stepCount 前进后的实际位置变化，而不能在首个尚未执行的命令帧立即判定阻塞。
 
 
 #### 3.8.2 MVP 人物通行范围冻结（2026-11-10）

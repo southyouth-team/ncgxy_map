@@ -33,20 +33,29 @@ const message = ref('正在初始化空白沙盒…')
 const saveStatus = ref('尚未保存')
 const worldState = ref(null)
 const selectedChunkKey = ref('')
-const chunkGrid = computed(() => {
+const reclaimFeedback = ref(null)
+const mapCellSize = ref(72)
+const chunkMap = computed(() => {
   const chunks = worldState.value?.chunks || []
-  if (!chunks.length) return []
+  if (!chunks.length) return { chunks: [], width: 120, height: 80 }
   const minX = Math.min(...chunks.map(item => item.x))
+  const maxX = Math.max(...chunks.map(item => item.x))
   const minZ = Math.min(...chunks.map(item => item.z))
-  return chunks.map(item => ({
-    ...item,
-    key: item.x + ':' + item.z,
-    gridColumn: item.x - minX + 1,
-    gridRow: item.z - minZ + 1,
-    isAnchor: item.x === 0 && item.z === 0,
-  }))
+  const maxZ = Math.max(...chunks.map(item => item.z))
+  const cell = mapCellSize.value
+  return {
+    chunks: chunks.map(item => ({
+      ...item,
+      key: item.x + ':' + item.z,
+      mapX: 12 + (item.x - minX) * cell,
+      mapY: 12 + (item.z - minZ) * cell * 0.72,
+      isAnchor: item.x === 0 && item.z === 0,
+    })),
+    width: 24 + (maxX - minX + 1) * cell,
+    height: 24 + (maxZ - minZ + 1) * cell * 0.72,
+  }
 })
-const selectedChunk = computed(() => chunkGrid.value.find(item => item.key === selectedChunkKey.value) || null)
+const selectedChunk = computed(() => chunkMap.value.chunks.find(item => item.key === selectedChunkKey.value) || null)
 const managementMode = ref('sandbox')
 const STORAGE_KEY = 'world-sandbox-mvp:workspace:v1'
 const time = ref(14)
@@ -865,20 +874,35 @@ function expandWorld(direction) {
 function removeSelectedWorldChunk() {
   const chunk = selectedChunk.value
   if (!engine || placement.value.active || !chunk) return false
+  reclaimFeedback.value = null
   const result = engine.removeSandboxWorldChunk(chunk.x, chunk.z)
   if (!result?.ok) {
-    const reasons = {
-      'origin-anchor': '初始中心地块不可回收。',
-      'chunk-not-found': '该地块已不存在，请刷新选择。',
-      'occupied': '该地块仍被占用：' + (result.blockers || []).join('、'),
-      'cannot-remove-chunk': '至少保留一个地块，或地块状态已变化。',
+    const blockers = [...new Set(result?.blockers || [])]
+    const messages = {
+      'origin-anchor': '这是世界初始中心地块，为保护世界基准位置，不能回收。',
+      'chunk-not-found': '该地块已经不存在。请重新选择地块。',
+      'occupied': '回收已拦截：该地块仍有对象占用。请先移动或移除占用对象。',
+      'cannot-remove-chunk': '当前世界至少需要保留一个地块，无法继续回收。',
+      'invalid-chunk': '地块坐标无效，请重新选择。',
     }
-    message.value = reasons[result?.reason] || '地块回收失败，请检查世界状态。'
+    reclaimFeedback.value = {
+      type: 'error',
+      title: '地块回收失败',
+      message: messages[result?.reason] || '系统未能完成回收，请检查地块状态后重试。',
+      blockers,
+    }
+    message.value = reclaimFeedback.value.message
     return false
   }
   worldState.value = result.world || engine.getSandboxWorldState()
   selectedChunkKey.value = ''
-  message.value = `已回收区块（${chunk.x}, ${chunk.z}）。其他区块坐标保持不变。`
+  reclaimFeedback.value = {
+    type: 'success',
+    title: '地块已回收',
+    message: `区块（${chunk.x}, ${chunk.z}）已成功回收，其他地块的位置没有变化。`,
+    blockers: [],
+  }
+  message.value = reclaimFeedback.value.message
   saveStatus.value = '有未保存的世界变更'
   return true
 }
@@ -1183,14 +1207,30 @@ onBeforeUnmount(() => {
             <button :disabled="placement.active" @click="expandWorld('east')">向东扩建</button>
             <span></span><button :disabled="placement.active" @click="expandWorld('south')">向南扩建</button><span></span>
           </div>
-          <small class="world-mvp__world-note">选择任意单块地块后独立回收。初始中心地块不可删除；人物、模型、碰撞体或可站立表面占用时会阻止回收。</small>
-          <div class="world-mvp__chunk-grid" :style="{ gridTemplateColumns: `repeat(${Math.max(1, (worldState?.bounds ? Math.round((worldState.bounds.maxX - worldState.bounds.minX) / (worldState.chunkSize?.width || 54)) : 1))}, 1fr)` }">
-            <button v-for="chunk in chunkGrid" :key="chunk.key" :style="{ gridColumn: chunk.gridColumn, gridRow: chunk.gridRow }" :class="{ active: selectedChunkKey === chunk.key, 'is-anchor': chunk.isAnchor }" :disabled="chunk.isAnchor || placement.active" @click="selectedChunkKey = chunk.key">
-              {{ chunk.x }}, {{ chunk.z }}{{ chunk.isAnchor ? ' · 中心' : '' }}
-            </button>
+          <small class="world-mvp__world-note">空间布局图 · 可缩放、可滚动。点击地块查看属性；中心地块为世界锚点，不可回收。</small>
+          <div class="world-mvp__map-toolbar">
+            <span>{{ chunkMap.chunks.length }} 个有效地块</span>
+            <div><button aria-label="缩小地图" :disabled="mapCellSize <= 48" @click="mapCellSize = Math.max(48, mapCellSize - 8)">−</button><button aria-label="放大地图" :disabled="mapCellSize >= 112" @click="mapCellSize = Math.min(112, mapCellSize + 8)">＋</button></div>
           </div>
-          <p v-if="selectedChunk" class="world-mvp__world-note">已选区块：({{ selectedChunk.x }}, {{ selectedChunk.z }}) · {{ worldState?.chunkSize?.width }} × {{ worldState?.chunkSize?.depth }}</p>
+          <div class="world-mvp__chunk-map-viewport">
+            <svg class="world-mvp__chunk-map" :width="chunkMap.width" :height="chunkMap.height" :viewBox="`0 0 ${chunkMap.width} ${chunkMap.height}`" role="group" aria-label="沙盒地块空间布局图">
+              <g v-for="chunk in chunkMap.chunks" :key="chunk.key" class="world-mvp__chunk-map-item" :class="{ active: selectedChunkKey === chunk.key, anchor: chunk.isAnchor }" @click="selectedChunkKey = chunk.key; reclaimFeedback = null">
+                <rect :x="chunk.mapX" :y="chunk.mapY" :width="mapCellSize - 5" :height="mapCellSize * 0.72 - 5" rx="7" />
+                <text :x="chunk.mapX + (mapCellSize - 5) / 2" :y="chunk.mapY + (mapCellSize * 0.72 - 5) / 2 + 4" text-anchor="middle">{{ chunk.isAnchor ? '中心' : '地块' }}</text>
+              </g>
+            </svg>
+          </div>
+          <div v-if="selectedChunk" class="world-mvp__selected-chunk">
+            <div><b>已选地块</b><span>坐标 {{ selectedChunk.x }}, {{ selectedChunk.z }}</span></div>
+            <small>尺寸 {{ worldState?.chunkSize?.width }} × {{ worldState?.chunkSize?.depth }} 世界单位</small>
+            <small v-if="selectedChunk.isAnchor">这是初始中心地块，受保护不可回收。</small>
+          </div>
           <button class="world-mvp__reclaim-button" :disabled="placement.active || !selectedChunk || selectedChunk.isAnchor" @click="removeSelectedWorldChunk">回收选中地块</button>
+          <div v-if="reclaimFeedback" class="world-mvp__reclaim-feedback" :class="reclaimFeedback.type" role="status" aria-live="polite">
+            <b>{{ reclaimFeedback.title }}</b>
+            <p>{{ reclaimFeedback.message }}</p>
+            <ul v-if="reclaimFeedback.blockers.length"><li v-for="(blocker, index) in reclaimFeedback.blockers" :key="index">{{ blocker }}</li></ul>
+          </div>
         </section>
         <section v-if="managementMode === 'model'">
           <h2>AI 建模</h2>
@@ -1282,10 +1322,26 @@ onBeforeUnmount(() => {
 .world-mvp__brand strong { font-size:13px; letter-spacing:1.1px; }
 .world-mvp__brand span { margin-top:4px; color:#8e9fa3; font-size:10px; }
 .world-mvp__header-actions { display:flex; align-items:center; gap:9px; }
-.world-mvp__chunk-grid { display:grid; grid-auto-rows:42px; gap:5px; margin-top:10px; overflow:auto; }
-.world-mvp__chunk-grid button { min-width:0; padding:4px 2px; font-size:9px; }
-.world-mvp__chunk-grid button.is-anchor { border-color:rgba(165,201,177,.35); color:#91a99b; }
+.world-mvp__map-toolbar { display:flex; align-items:center; justify-content:space-between; margin:9px 0 6px; color:#9eafae; font-size:10px; }
+.world-mvp__map-toolbar div { display:flex; gap:5px; }
+.world-mvp__map-toolbar button { width:27px; height:25px; padding:0; font-size:15px; }
+.world-mvp__chunk-map-viewport { max-width:100%; max-height:260px; overflow:auto; border:1px solid rgba(255,255,255,.1); border-radius:9px; background:radial-gradient(ellipse at center,rgba(91,124,109,.12),rgba(13,23,29,.45)); }
+.world-mvp__chunk-map { display:block; max-width:none; }
+.world-mvp__chunk-map-item { cursor:pointer; }
+.world-mvp__chunk-map-item rect { fill:#526b60; fill-opacity:.82; stroke:rgba(204,226,210,.35); stroke-width:1.3; transition:fill .15s,stroke .15s; }
+.world-mvp__chunk-map-item:hover rect { fill:#708c78; }
+.world-mvp__chunk-map-item.active rect { fill:#8cad91; stroke:#e2f4df; stroke-width:2.5; }
+.world-mvp__chunk-map-item.anchor rect { fill:#405b51; stroke:#9eb9a8; stroke-dasharray:3 2; }
+.world-mvp__chunk-map-item text { fill:#f0f5ef; font-size:10px; pointer-events:none; }
+.world-mvp__selected-chunk { display:flex; flex-direction:column; gap:4px; margin-top:9px; padding:9px; border-radius:8px; background:rgba(165,201,177,.08); color:#dce8df; font-size:10px; }
+.world-mvp__selected-chunk div { display:flex; justify-content:space-between; gap:8px; }
+.world-mvp__selected-chunk small { color:#a8b8b3; }
 .world-mvp .world-mvp__reclaim-button { width:100%; margin-top:8px; border-color:rgba(230,139,126,.4); color:#efb0a6; }
+.world-mvp__reclaim-feedback { margin-top:9px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:8px; font-size:10px; line-height:1.5; }
+.world-mvp__reclaim-feedback.error { border-color:rgba(230,139,126,.45); background:rgba(130,47,42,.16); color:#ffd1c9; }
+.world-mvp__reclaim-feedback.success { border-color:rgba(130,190,145,.4); background:rgba(53,103,68,.16); color:#c8ebd0; }
+.world-mvp__reclaim-feedback p { margin:5px 0; }
+.world-mvp__reclaim-feedback ul { margin:5px 0 0; padding-left:17px; color:#f4c4bb; }
 .world-mvp__save-status { color:#a9bbb3; font-size:10px; }
 .world-mvp .world-mvp__save-button { border-color:#8fbea0; color:#14251c; background:#a5c9b1; font-weight:700; }
 .world-mvp a,.world-mvp button { border:1px solid rgba(255,255,255,.13); border-radius:7px; padding:8px 10px; color:#dce7e3; background:rgba(255,255,255,.06); text-decoration:none; cursor:pointer; font:inherit; font-size:11px; }

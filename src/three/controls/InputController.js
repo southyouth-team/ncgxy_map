@@ -195,8 +195,17 @@ export class InputController {
     if (!currentState) return null
     this.updateJumpInputWindow(dt, currentState.grounded)
     const launchPending = this.jumpRequested
-    if (currentState.grounded && !this.jumpActive) this.verticalVelocity = 0
-    else if (!currentState.grounded && !launchPending) this.verticalVelocity -= this.gravity * dt
+    if (this.jumpActive && this.jumpLaunched && currentState.grounded && currentState.stepCount > previousStepCount) {
+      this.jumpActive = false
+      this.jumpLaunched = false
+      this.verticalVelocity = 0
+    }
+    if (!currentState.grounded && Number.isFinite(currentState.velocity?.y)) {
+      // Rapier owns the vertical velocity clock; never integrate gravity once per render frame.
+      this.verticalVelocity = currentState.velocity.y
+    } else if (currentState.grounded && !this.jumpActive && !launchPending) {
+      this.verticalVelocity = 0
+    }
     let horizontalX = (Number(dx) || 0) / dt
     let horizontalZ = (Number(dz) || 0) / dt
     if (this.jumpActive) {
@@ -211,6 +220,11 @@ export class InputController {
     }
     const verticalSpeed = this.jumpActive ? this.verticalVelocity : (currentState.grounded ? -2 : this.verticalVelocity)
     this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, { x: horizontalX, y: verticalSpeed, z: horizontalZ })
+    this.physicsRuntime.setKinematicCharacterAcceleration?.(this.physicsCharacterId, {
+      x: 0,
+      y: (this.jumpActive || !currentState.grounded) ? -this.gravity : 0,
+      z: 0,
+    })
     if (launchPending) { this.jumpRequested = false; this.jumpLaunched = true }
     const state = this.physicsRuntime.getKinematicCharacterState(this.physicsCharacterId)
     player.x = state.translation.x
@@ -357,6 +371,7 @@ export class InputController {
   stopPhysicsCharacterMovement() {
     if (this.physicsRuntime && this.physicsCharacterId) {
       this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, { x: 0, y: 0, z: 0 })
+      this.physicsRuntime.setKinematicCharacterAcceleration?.(this.physicsCharacterId, { x: 0, y: 0, z: 0 })
     }
   }
 

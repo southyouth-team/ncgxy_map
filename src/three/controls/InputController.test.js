@@ -431,9 +431,11 @@ describe('InputController jump and stuck reset', () => {
   it('uses Space to jump and R to return to the recorded spawn point', () => {
     const { controller, cameraRig } = createController()
     cameraRig.player.set = function (x, y, z) { Object.assign(this, { x, y, z }) }
-    controller.setMode('thirdPerson')
     controller.spawnPosition = { x: 3, y: 1.7, z: -4 }
-    controller.jumpPlayer()
+    const jumpPreventDefault = vi.fn()
+    controller.onKeyDown({ key: ' ', code: 'Space', target: { tagName: 'CANVAS' }, preventDefault: jumpPreventDefault })
+    expect(jumpPreventDefault).toHaveBeenCalledOnce()
+    expect(controller.jumpActive).toBe(true)
     const preventDefault = vi.fn()
     controller.onKeyDown({ key: 'r', target: { tagName: 'CANVAS' }, preventDefault })
     expect(preventDefault).toHaveBeenCalledOnce()

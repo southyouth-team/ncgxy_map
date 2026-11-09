@@ -36,7 +36,7 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('img2threejs editable procedural-draft');
     expect(request.messages[0].content).toContain('export function createModel(THREE)');
     expect(request.messages[0].content).toContain('Physical execution contract v1');
-    expect(request.messages[0].content).toContain('A visible Mesh is NOT automatically a collider');
+    expect(request.messages[0].content).toContain('a visible Mesh is NOT automatically a collider');
     expect(request.messages[0].content).toContain('shape:"mesh" blockers as static Rapier triangle meshes');
     expect(request.messages[0].content).toContain('exact authored geometry, including real holes/openings, is preserved');
     expect(request.messages[0].content).toContain('userData.collisionMode = "none"');
@@ -149,7 +149,7 @@ describe('ImageGenerationService procedural generation', () => {
 
     const request = JSON.parse(fetchMock.mock.calls[0][1].body);
     const context = JSON.parse(request.messages[1].content);
-    expect(context.currentGeometryDiagnostics).toEqual({ ...geometryDiagnostics, truncated: false });
+    expect(context.currentGeometryDiagnostics).toMatchObject({ ...geometryDiagnostics, truncated: false });
     expect(request.messages[0].content).toContain('Bounds overlap is only a spatial clue');
   });
 

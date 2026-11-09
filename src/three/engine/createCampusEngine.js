@@ -343,6 +343,44 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
   }
 
+  function getSandboxWorldState() {
+    return isBlankSandbox ? campus?.userData?.getWorldState?.() || null : null
+  }
+
+  function expandSandboxWorld(direction, count = 1) {
+    if (!isBlankSandbox || !campus?.userData?.expandWorld) return false
+    const expanded = campus.userData.expandWorld(direction, count)
+    if (!expanded) return false
+    // walkableBounds is mutated in place, so CollisionWorld and InputController retain
+    // the same authoritative bounds object without replacing their references.
+    if (collisionWorld) collisionWorld.bounds = campus.userData.walkableBounds
+    if (input) {
+      input.bounds = campus.userData.walkableBounds
+      if (input.collisionWorld) input.collisionWorld.bounds = campus.userData.walkableBounds
+    }
+    const world = getSandboxPlacementWorldBounds()
+    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(190, Math.max(world.width, world.depth) * 3)
+    callbacks.onSandboxWorldChange?.(getSandboxWorldState())
+    requestFrame()
+    return true
+  }
+
+  function restoreSandboxWorld(state) {
+    if (!isBlankSandbox || !campus?.userData?.restoreWorldState || !state) return false
+    const restored = campus.userData.restoreWorldState(state)
+    if (!restored) return false
+    if (collisionWorld) collisionWorld.bounds = campus.userData.walkableBounds
+    if (input) {
+      input.bounds = campus.userData.walkableBounds
+      if (input.collisionWorld) input.collisionWorld.bounds = campus.userData.walkableBounds
+    }
+    const world = getSandboxPlacementWorldBounds()
+    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(190, Math.max(world.width, world.depth) * 3)
+    callbacks.onSandboxWorldChange?.(getSandboxWorldState())
+    requestFrame()
+    return true
+  }
+
   function configureSandboxPlacementOrbit(span, world) {
     const orbit = cameraRig?.orbit
     if (!orbit) return
@@ -3007,7 +3045,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
     if (cameraRig?.mode === 'overview') {
       // 总览只重置当前投影下的取景，不切换相机模式；优先按实际校园内容包络居中。
-      const bounds = campus?.userData.contentBounds
+      const bounds = isBlankSandbox
+        ? campus?.userData.sampleBounds
+        : campus?.userData.contentBounds
       if (bounds) {
         cameraRig.focusBounds(bounds.width, bounds.depth, bounds.centerX, bounds.centerZ)
       } else {
@@ -3066,5 +3106,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, setMode, setViewMode, setVirtualKey, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, expandSandboxWorld, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

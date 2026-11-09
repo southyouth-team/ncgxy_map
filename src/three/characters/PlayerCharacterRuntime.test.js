@@ -26,7 +26,18 @@ describe('PlayerCharacterRuntime', () => {
 
     expect(anchor.position.toArray()).toEqual([4, 0, 7])
     expect(info).toMatchObject({ assetId: 'character-test', hasExternalModel: true })
+    const externalMesh = anchor.getObjectByName('')
+    const assetMeshes = []
+    anchor.getObjectByName('player-character-asset').traverse(object => { if (object.isMesh) assetMeshes.push(object) })
+    expect(assetMeshes.length).toBe(1)
+    expect(assetMeshes[0].castShadow).toBe(true)
+    expect(assetMeshes[0].receiveShadow).toBe(true)
     expect(anchor.getObjectByName('avatar-ground-marker')).toBeTruthy()
+    const assetMesh = anchor.getObjectByName('')
+    const renderedMeshes = []
+    anchor.traverse(object => { if (object.isMesh && object.name !== 'avatar-ground-marker') renderedMeshes.push(object) })
+    expect(renderedMeshes.length).toBeGreaterThan(0)
+    expect(renderedMeshes.every(object => object.castShadow && object.receiveShadow)).toBe(true)
     expect(anchor.getObjectByName('player-character-asset')).toBeTruthy()
     expect(anchor.getObjectByName('avatar-body')).toBeFalsy()
   })

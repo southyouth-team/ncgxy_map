@@ -1115,7 +1115,7 @@ onBeforeUnmount(() => {
       @parameter-change="handleParameterChange"
       @capability-change="handleCapabilityChange"
     />
-    <footer class="world-mvp__help">WASD / 方向键移动人物 · 点击建模组选择 · 双击 AI 模型打开微调编辑器 · 拖动坐标轴编辑模型</footer>
+    <footer class="world-mvp__help">WASD / 方向键移动人物 · 重新选址：全局选区→逐级聚焦→精确落位 · 精调阶段使用坐标轴</footer>
   </main>
 </template>
 
@@ -1143,6 +1143,10 @@ onBeforeUnmount(() => {
 .world-mvp__selected strong { grid-column:1; font-size:11px; }
 .world-mvp__selected button:nth-of-type(1) { grid-column:2; grid-row:1 / span 2; }.world-mvp__selected button:nth-of-type(2) { grid-column:3; grid-row:1 / span 2; }
 .world-mvp__tools { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:8px; }
+.world-mvp__placement { margin-top:9px; padding:10px; border:1px solid rgba(165,201,177,.35); border-radius:8px; background:rgba(165,201,177,.08); }
+.world-mvp__placement strong { display:block; color:#c6e4ce; font-size:11px; }
+.world-mvp__placement p { margin:7px 0; color:#b4c1c1; font-size:10px; line-height:1.55; }
+.world-mvp__placement .world-mvp__tools { grid-template-columns:repeat(2,1fr); }
 .world-mvp button.active { border-color:#a5c9b1; color:#c6e4ce; background:rgba(165,201,177,.16); }
 .world-mvp__list { display:grid; gap:4px; max-height:100px; overflow:auto; margin-top:8px; }
 .world-mvp__list button { text-align:left; }

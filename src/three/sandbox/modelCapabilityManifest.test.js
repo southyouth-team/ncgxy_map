@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest, resolveProceduralModelParts } from './modelCapabilityManifest.js'
+import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest, normalizeSpatialTraversability, resolveProceduralModelParts, validateSpatialTraversability } from './modelCapabilityManifest.js'
 
 describe('normalizeModelCapabilityManifest', () => {
   it('creates a v1 manifest from legacy model metadata', () => {
@@ -108,7 +108,7 @@ describe('model spatial traversability contract', () => {
 
   it('normalizes traversal collections when a spatial traversal section exists', () => {
     const normalized = normalizeModelCapabilityManifest({
-      capabilities: { spatial: { traversability: { stairs: [{ id: 's', targetPartId: 'p' }] } },
+      capabilities: { spatial: { traversability: { stairs: [{ id: 's', targetPartId: 'p' }] } } },
     })
     expect(normalized.capabilities.spatial.traversability).toMatchObject({
       stairs: [{ id: 's', targetPartId: 'p' }],

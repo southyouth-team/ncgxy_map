@@ -29,6 +29,16 @@ describe('analyzeModelCollisionCompleteness', () => {
     expect(result.summary.missingRequiredCount).toBe(0)
   })
 
+  it('accepts an explicitly visual-only model without a collider collection', () => {
+    const root = new THREE.Group()
+    root.add(makePart('foliage', 'none'), makePart('glass', 'none'))
+    root.userData.proceduralModelCapabilityManifest = { capabilities: { spatial: {} } }
+    const result = analyzeModelCollisionCompleteness(root)
+    expect(result.status).toBe('complete')
+    expect(result.canRegisterDeclaredColliders).toBe(true)
+    expect(result.summary.boundColliderCount).toBe(0)
+  })
+
   it('blocks readiness when a required solid part has no active collider', () => {
     const root = new THREE.Group()
     root.add(makePart('wall'))

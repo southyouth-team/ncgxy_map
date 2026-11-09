@@ -1215,3 +1215,12 @@ MVP 验收以一条真实闭环为准：创建世界 → 控制环境 → AI 生
 ### 物理架构决策覆盖说明（2026-11-09）
 
 本节 3.30 的统一 Physics Runtime / Rapier 迁移决策，覆盖并取代 3.29「人物地面探测与坡面贴合」中“本阶段不引入第三方物理引擎或完整刚体/胶囊体系统”的旧阶段性约束。该旧约束只描述当时的实现边界，不再是后续 MVP 的目标架构。迁移仍须分阶段完成，不代表 Rapier 已经接入。
+
+
+## 3.31 Physics Runtime 第一阶段落地（2026-11-09）
+
+- 固定依赖 `@dimforge/rapier3d-compat@0.21.0`，通过异步初始化加载 WASM 物理模块。
+- 新增沙盒专属 `src/three/physics/PhysicsRuntime.js`，封装 Rapier World、固定时间步累积器、最大子步限制、静态 Box Collider 创建、实例 Transform 更新、按 owner 清理和 dispose。
+- Three.js 仍负责渲染；Physics Runtime 独立持有物理状态。后续人物控制器和模型空间适配只能通过该模块接入，不直接在 UI 或生成模型中操作 Rapier。
+- 本阶段只建立运行时基础，不代表 Engine 已切换物理系统。当前 CollisionWorld/InputController 仍在原路径运行；下一阶段才接入 Engine、地面与模型碰撞，并迁移人物控制。
+- 仓库当前没有提交 npm/yarn/pnpm lockfile；依赖安装后应由实际开发环境生成并提交项目采用的锁文件（本仓库暂未发现锁文件，不擅自引入不同包管理器）。

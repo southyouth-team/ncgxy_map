@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { collectModelMovementObstacles, collectModelTraversalTrimeshes, refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
+import { collectModelMovementObstacles, collectModelDeclaredMeshColliders, collectModelTraversalTrimeshes, refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 
 describe('collectModelMovementObstacles', () => {
@@ -198,6 +198,84 @@ describe('collectModelMovementObstacles', () => {
   it('keeps models without spatial declarations non-blocking', () => {
     const root = new THREE.Group()
     expect(collectModelMovementObstacles(THREE, root, 'sandbox_3')).toEqual([])
+  })
+})
+
+
+describe('collectModelDeclaredMeshColliders', () => {
+  it('compiles only explicitly declared static Mesh parts with full world transforms', () => {
+    const model = new THREE.Group()
+    model.position.set(10, 2, -3)
+    const wall = new THREE.Group()
+    wall.userData.componentId = 'wall-shell'
+    wall.position.set(1, 0, 0)
+    const left = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.2), new THREE.MeshBasicMaterial())
+    left.position.x = -0.75
+    const right = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.2), new THREE.MeshBasicMaterial())
+    right.position.x = 0.75
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.05), new THREE.MeshBasicMaterial({ transparent: true }))
+    glass.userData.collisionMode = 'none'
+    glass.position.y = 0.5
+    wall.add(left, right, glass)
+    model.add(wall)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: { colliders: [
+        { id: 'wall-shell-mesh', targetPartId: 'wall-shell', shape: 'mesh' },
+      ] } },
+    }
+
+    const result = collectModelDeclaredMeshColliders(THREE, model, 'mesh-instance')
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      ownerId: 'mesh-instance',
+      colliderId: 'wall-shell-mesh',
+      targetPartId: 'wall-shell',
+    })
+    expect(result[0].indices.length).toBe(72)
+    const xs = []
+    for (let i = 0; i < result[0].vertices.length; i += 3) xs.push(result[0].vertices[i])
+    expect(Math.min(...xs)).toBeCloseTo(9.15)
+    expect(Math.max(...xs)).toBeCloseTo(11.85)
+    expect(result[0].vertices).not.toContain(10.5)
+  })
+
+  it('does not compile undeclared, disabled, non-blocking, duplicate-id or empty Mesh parts', () => {
+    const model = new THREE.Group()
+    const wall = new THREE.Group()
+    wall.userData.componentId = 'wall'
+    wall.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()))
+    const disabled = new THREE.Group()
+    disabled.userData.componentId = 'disabled'
+    disabled.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()))
+    const empty = new THREE.Group()
+    empty.userData.componentId = 'empty'
+    model.add(wall, disabled, empty)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: { colliders: [
+        { id: 'wall', targetPartId: 'wall', shape: 'mesh', enabled: false },
+        { id: 'disabled', targetPartId: 'disabled', shape: 'mesh', blocksMovement: false },
+        { id: 'empty', targetPartId: 'empty', shape: 'mesh' },
+        { id: 'undeclared-shape', targetPartId: 'wall', shape: 'convex' },
+      ] } },
+    }
+    expect(collectModelDeclaredMeshColliders(THREE, model, 'mesh-instance')).toEqual([])
+  })
+
+  it('honors state-conditioned mesh blockers', () => {
+    const model = new THREE.Group()
+    const door = new THREE.Group()
+    door.userData.componentId = 'door'
+    door.add(new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.1), new THREE.MeshBasicMaterial()))
+    model.add(door)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: { colliders: [{
+        id: 'door-leaf', targetPartId: 'door', shape: 'mesh',
+        stateCondition: { key: 'doorOpen', equals: false, defaultValue: false },
+      }] } },
+    }
+    expect(collectModelDeclaredMeshColliders(THREE, model, 'door-instance')).toHaveLength(1)
+    model.userData.worldState = { doorOpen: true }
+    expect(collectModelDeclaredMeshColliders(THREE, model, 'door-instance')).toEqual([])
   })
 })
 
@@ -504,6 +582,37 @@ describe('refreshModelPhysicsRegistration', () => {
     expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(1)
     expect(calls.filter(item => item.type === 'trimesh')).toHaveLength(1)
     expect(calls.filter(item => item.type === 'box')).toHaveLength(0)
+  })
+
+
+  it('registers declared mesh colliders as Rapier trimeshes and replaces same-part boxes', () => {
+    const model = new THREE.Group()
+    model.userData.sandboxModelId = 'mesh-instance'
+    const shell = new THREE.Group()
+    shell.userData.componentId = 'building-shell'
+    shell.add(new THREE.Mesh(new THREE.BoxGeometry(4, 3, 0.3), new THREE.MeshBasicMaterial()))
+    model.add(shell)
+    model.userData.proceduralModelCapabilityManifest = {
+      capabilities: { spatial: { colliders: [
+        { id: 'shell-mesh', targetPartId: 'building-shell', shape: 'mesh' },
+        { id: 'shell-box', targetPartId: 'building-shell', shape: 'box', size: { x: 4, y: 3, z: 0.3 } },
+      ] } },
+    }
+    const calls = []
+    const runtime = {
+      removeOwner: id => calls.push({ type: 'remove', id }),
+      createStaticBox: options => calls.push({ type: 'box', options }),
+      createStaticTrimesh: options => calls.push({ type: 'trimesh', options }),
+    }
+
+    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(1)
+    expect(calls.filter(item => item.type === 'trimesh')).toHaveLength(1)
+    expect(calls.filter(item => item.type === 'box')).toHaveLength(0)
+    expect(calls.find(item => item.type === 'trimesh').options.id).toBe('mesh-instance:manifest-trimesh:shell-mesh')
+
+    expect(refreshModelPhysicsRegistration(THREE, model, runtime)).toBe(1)
+    expect(calls.filter(item => item.type === 'remove')).toHaveLength(2)
+    expect(calls.filter(item => item.type === 'trimesh')).toHaveLength(2)
   })
 
   it('honors state-conditioned door colliders and removes stale owner bodies', () => {

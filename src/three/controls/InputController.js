@@ -19,6 +19,7 @@ export class InputController {
     this.groundProbeDistance = 60
     this.mode = 'overview'
     this.movementEnabled = true
+    this.freeCameraMovementEnabled = false
     this.keys = new Set()
     this.pointerDown = false
     this.lastPointer = { x: 0, y: 0 }
@@ -159,6 +160,10 @@ export class InputController {
     if (!this.movementEnabled) this.keys.clear()
   }
 
+  setFreeCameraMovementEnabled(enabled) {
+    this.freeCameraMovementEnabled = Boolean(enabled)
+  }
+
   getPlayerSupportHit(player, { walking = false } = {}) {
     if (!this.groundRaycaster || !this.groundRayOrigin || !this.groundRayDirection) return null
     const surfaces = this.collisionWorld?.supportSurfaces || []
@@ -239,7 +244,7 @@ export class InputController {
   }
 
   update(delta) {
-    if (this.mode === 'overview' || !this.movementEnabled) return
+    if ((this.mode === 'overview' && !this.freeCameraMovementEnabled) || !this.movementEnabled) return
     const forward = (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0) - (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0)
     const strafe = (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0)
     if (forward || strafe) this.navigationPath = null
@@ -266,7 +271,7 @@ export class InputController {
       player.z = resolved.z
       this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
       if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
-      else this.cameraRig.updateFirstPersonDesired()
+      else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
       return
     }
     if (!forward && !strafe) {
@@ -276,13 +281,20 @@ export class InputController {
       // 空中无输入时仍需同步相机，否则角色会下落而镜头停留在原高度。
       if (Math.abs(player.y - previousY) > 0.0001) {
         if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
-        else this.cameraRig.updateFirstPersonDesired()
+        else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
       }
       return
     }
     const speed = (this.keys.has('shift') ? 18 : 9) * delta
     // 第三人称 yaw 描述的是相机相对角色的偏移方向，角色前进方向与其相反。
-    const yaw = this.mode === 'firstPerson' ? this.cameraRig.firstYaw : this.cameraRig.thirdYaw + Math.PI
+    const yaw = this.mode === 'firstPerson'
+      ? this.cameraRig.firstYaw
+      : this.mode === 'thirdPerson'
+        ? this.cameraRig.thirdYaw + Math.PI
+        : Math.atan2(
+          (this.cameraRig.orbit?.target?.x ?? 0) - this.cameraRig.camera.position.x,
+          (this.cameraRig.orbit?.target?.z ?? 0) - this.cameraRig.camera.position.z,
+        )
     const length = Math.hypot(forward, strafe) || 1
     const f = forward / length
     const s = strafe / length
@@ -296,7 +308,7 @@ export class InputController {
     player.z = resolved.z
     this.updateVerticalMotion(player, delta, { walking: Boolean(resolved.support) })
     if (this.mode === 'thirdPerson') this.cameraRig.updateThirdPersonDesired()
-    else this.cameraRig.updateFirstPersonDesired()
+    else if (this.mode === 'firstPerson') this.cameraRig.updateFirstPersonDesired()
   }
 
   dispose() {

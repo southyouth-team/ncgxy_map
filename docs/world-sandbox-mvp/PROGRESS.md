@@ -3419,3 +3419,10 @@ export const environmentBindings = [
 - 当前实现是直线跳跃测试，不做自动寻路或自动寻找替代落点。
 - R 复位点是进入沙盒时记录的出生位置；后续如需检查点系统，再另行扩展。
 - 本轮代码已写入功能分支，等待 GitHub Actions；未执行本地 Vitest、构建或浏览器验收。
+
+
+### 统一人物规格补充
+
+- 沙盒 InputController 现在直接消费全局默认 CharacterTraversalProfile，不再从旧 CollisionWorld 的半径覆盖人物规格。
+- 旧 setPlayerDimensions 仅保留兼容返回值，不再允许外观模型修改人物物理高度/半径；碰撞世界切换时也统一应用标准半径。
+- 出生位置仅在首次接入 PhysicsRuntime 时记录，后续 Runtime 重新绑定不会覆盖复位点。

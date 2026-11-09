@@ -619,7 +619,7 @@ export class ImageGenerationService {
                 '材质颜色必须贴合提示词和对象类别，不允许全部白色或灰色。禁止重复 ID、缺失父节点和循环层级。使用通用 geometry 时不得再声明 primitive。',
                 '参考图片结构分析（必须优先遵循；不确定项不得臆造）：' + (visualAnalysis || '无参考图片分析'),
                 '目标对象类型：' + objectType + '；视觉风格：' + visualStyle + '；用户要求：' + prompt,
-              ].join('\\n'),
+              ].join('\n'),
             },
             {
               role: 'user',

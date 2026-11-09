@@ -91,6 +91,23 @@ export function collectModelMovementObstacles(THREE, root, ownerId, { includeAll
       new THREE.Vector3(values[3], values[4], values[5]),
     )
     const worldBounds = localBounds.applyMatrix4(part.matrixWorld)
+    // Preserve the oriented box transform for Rapier. The XZ fallback still
+    // consumes the conservative world AABB above, while the 3D physics path
+    // receives the actual part rotation so hinged leaves remain solid when open.
+    const worldCenter = new THREE.Vector3(values[0], values[1], values[2]).applyMatrix4(part.matrixWorld)
+    const worldPosition = new THREE.Vector3()
+    const worldQuaternion = new THREE.Quaternion()
+    const worldScale = new THREE.Vector3()
+    part.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale)
+    const physicsBox = {
+      translation: { x: worldCenter.x, y: worldCenter.y, z: worldCenter.z },
+      halfExtents: {
+        x: Math.abs(values[3] * worldScale.x) / 2,
+        y: Math.abs(values[4] * worldScale.y) / 2,
+        z: Math.abs(values[5] * worldScale.z) / 2,
+      },
+      rotation: { x: worldQuaternion.x, y: worldQuaternion.y, z: worldQuaternion.z, w: worldQuaternion.w },
+    }
     // The current player controller is a grounded XZ mover. Ignore elevated
     // colliders that do not intersect the player's standing-height interval.
     if (!includeAllHeights && (worldBounds.min.y > 1.7 || worldBounds.max.y < 0)) continue
@@ -104,6 +121,7 @@ export function collectModelMovementObstacles(THREE, root, ownerId, { includeAll
       maxX: worldBounds.max.x,
       minZ: worldBounds.min.z,
       maxZ: worldBounds.max.z,
+      physicsBox,
     })
   }
   return obstacles
@@ -374,7 +392,7 @@ export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
       added += 1
     })
     boxes.forEach((box, index) => {
-      const halfExtents = {
+      const halfExtents = box.physicsBox?.halfExtents || {
         x: (box.maxX - box.minX) / 2,
         y: (box.maxY - box.minY) / 2,
         z: (box.maxZ - box.minZ) / 2,
@@ -383,11 +401,12 @@ export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
       physicsRuntime.createStaticBox({
         id: key + ':manifest-box:' + box.colliderId + ':' + index,
         ownerId: key,
-        translation: {
+        translation: box.physicsBox?.translation || {
           x: (box.minX + box.maxX) / 2,
           y: (box.minY + box.maxY) / 2,
           z: (box.minZ + box.maxZ) / 2,
         },
+        rotation: box.physicsBox?.rotation,
         halfExtents,
         friction: 0.85,
       })

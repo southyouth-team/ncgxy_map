@@ -20,6 +20,8 @@ const aiPrompt = ref('')
 const referenceImageDataUrl = ref('')
 const referenceImageName = ref('')
 const aiBusy = ref(false)
+const characterPrompt = ref('一名完整的现代风格 3D 游戏角色，人体比例自然，包含头部、躯干、双臂、双腿、手掌和鞋子，适合第三人称视角观察')
+const characterBusy = ref(false)
 // Three.js Object3D must remain raw; deep Vue proxies violate Three.js property invariants.
 const editingModel = shallowRef(null)
 const editorOpen = ref(false)
@@ -574,6 +576,96 @@ async function generateAiModel() {
     aiBusy.value = false
   }
 }
+
+
+async function generateAiPlayerCharacter() {
+  const prompt = characterPrompt.value.trim()
+  if (!prompt || characterBusy.value) return
+  if (!engine?.setPlayerCharacterModel) {
+    message.value = '当前场景不支持角色替换'
+    return
+  }
+  characterBusy.value = true
+  message.value = '正在通过 AI 生成角色模型…'
+  try {
+    const response = await fetch(API_BASE + '/assets/ai-image/generate-procedural-object-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Dev-User-Id': DEV_USER_ID },
+      body: JSON.stringify({
+        prompt: prompt + '。请生成一个完整、居中、Y 轴向上的可渲染人形角色模型，双脚落在模型底部基准面，正面朝向 +Z。使用适度细节的 Three.js 几何体和材质构建完整身体，不要生成地面、底座、场景或文字。模型必须是单一完整角色层级，便于作为玩家外观替换。',
+        objectType: '第三人称玩家角色',
+        visualStyle: 'stylized',
+      }),
+    })
+    if (!response.ok || !response.body) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload.message || 'AI 角色生成失败：HTTP ' + response.status)
+    }
+    let buffer = ''
+    let result = null
+    let completed = false
+    const decoder = new TextDecoder()
+    const processEvent = event => {
+      if (!event || typeof event.type !== 'string') return
+      if (event.type === 'single') result = event.result
+      else if (event.type === 'error') throw new Error(event.message || 'AI 角色生成失败')
+      else if (event.type === 'complete') completed = true
+    }
+    const reader = response.body.getReader()
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let newline
+      while ((newline = buffer.indexOf('\\n')) >= 0) {
+        const line = buffer.slice(0, newline).trim()
+        buffer = buffer.slice(newline + 1)
+        if (line) processEvent(JSON.parse(line))
+      }
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) processEvent(JSON.parse(buffer.trim()))
+    if (!completed || !result?.generatedCode) throw new Error('AI 角色生成事件流提前结束，未收到完整模型源码')
+
+    message.value = 'AI 已返回角色模型，正在隔离 Worker 中构建…'
+    const model = await executeProceduralModel(result.generatedCode, { timeoutMs: 60000 })
+    model.name = 'AI 玩家角色'
+    const info = engine.setPlayerCharacterModel(model, [], {
+      assetId: 'ai-character-' + Date.now().toString(36),
+      targetHeight: 2.25,
+      source: 'ai-procedural',
+      prompt,
+    })
+    message.value = `AI 角色已加载：高度 ${info.dimensions?.height?.toFixed(2) || '—'}，碰撞半径 ${info.dimensions?.colliderRadius?.toFixed(2) || '—'}。当前模型未提供动作剪辑时使用基础移动表现。`
+  } catch (error) {
+    message.value = 'AI 角色生成失败：' + (error?.message || '未知错误')
+  } finally {
+    characterBusy.value = false
+  }
+}
+
+async function importPlayerCharacter(event) {
+  const file = event?.target?.files?.[0]
+  if (!file || characterBusy.value) return
+  if (!/\\.glb$/i.test(file.name)) {
+    message.value = '当前仅支持单文件 GLB 导入；含外部依赖的 glTF 暂不支持'
+    event.target.value = ''
+    return
+  }
+  characterBusy.value = true
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const info = await engine.loadPlayerCharacter(objectUrl, { assetId: 'glb:' + file.name, source: 'glb' })
+    message.value = `GLB 角色已加载：高度 ${info.dimensions?.height?.toFixed(2) || '—'}，碰撞半径 ${info.dimensions?.colliderRadius?.toFixed(2) || '—'}。`
+  } catch (error) {
+    message.value = 'GLB 角色导入失败：' + (error?.message || '未知错误')
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+    characterBusy.value = false
+    event.target.value = ''
+  }
+}
+
 
 function handleCapabilityChange(payload) {
   const model = editingModel.value
@@ -1279,6 +1371,21 @@ onBeforeUnmount(() => {
         <section v-if="managementMode === 'sandbox'">
           <h2>场景信息</h2>
           <p class="world-mvp__message">已加载南昌工学院校园空间底图，校园建筑、道路、湖泊和公共区域作为场景环境。</p>
+        </section>
+
+        <section v-if="managementMode === 'sandbox'">
+          <h2>玩家角色</h2>
+          <div class="world-mvp__command">
+            <input v-model="characterPrompt" :disabled="characterBusy" placeholder="描述要生成的玩家角色" @keydown.enter="generateAiPlayerCharacter">
+            <button :disabled="characterBusy || !characterPrompt.trim()" @click="generateAiPlayerCharacter">{{ characterBusy ? '生成中' : 'AI 生成角色' }}</button>
+          </div>
+          <div class="world-mvp__command" style="margin-top:7px">
+            <input type="file" accept=".glb,model/gltf-binary" :disabled="characterBusy" @change="importPlayerCharacter">
+          </div>
+          <div class="world-mvp__tools">
+            <button :disabled="characterBusy" @click="engine?.restorePlayerCharacterFallback?.()">恢复默认角色</button>
+          </div>
+          <p class="world-mvp__message">支持 AI 程序化生成与单文件 GLB 导入。角色外观、碰撞半径和视点高度由同一运行时适配；无动画资源时保留基础移动。</p>
         </section>
         <section v-if="managementMode === 'sandbox'">
           <h2>环境</h2>

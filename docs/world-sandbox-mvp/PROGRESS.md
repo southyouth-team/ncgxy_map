@@ -3677,3 +3677,10 @@ export const environmentBindings = [
 - 新增 30/60/120Hz 渲染频率模拟测试，以及 InputController 空中重力委托测试；均已写入，尚未执行。
 - 新增/更新代码提交：`075c09e1d5b195300f4e7e2107e49eda46a726e5`、`911540b37b264195f8f5212fce393a0a537af15c`、`6d5ea0018bd9117abdbd83db21efe5ba286fa2fb`、`a1192ca772b84c35d30cf970bbcee9ab449bb386`；计划文档提交：`359dd2a06efde461c8dac858749630f657211c4c`。
 - 本项仍需 CI 和浏览器验证；特别检查跳跃高度/距离上限、落地清零、离开平台后自由下落和不同刷新率下轨迹一致性。
+
+
+### 固定步长改动后的 CI 状态（HEAD `927e4159f9dda6957a31e72d86d1645119215c9a`）
+
+- Frontend CI（run `42689392590`）：单测 534 passed / 7 failed（541 total），前端 Build 成功。失败仍为同一组既有失败项；新增的 InputController、PhysicsRuntime 固定步长加速度测试未出现在失败列表，门扇 OBB 测试也未出现在失败列表。
+- Backend CI（run `42689392495`）：查询时仍在执行；此前 `a1192ca772b84c35d30cf970bbcee9ab449bb386` 对应 Backend CI 已成功，包含更新后的 Prompt 测试修正之前的服务端逻辑构建/测试；最新提交仍需以当前 run 为准。
+- 当前全量 Frontend CI 仍不通过，不能将本轮标记为整体 CI 通过。浏览器验收仍未执行。

@@ -123,9 +123,9 @@ export class CameraRig {
     this.orbit.maxDistance = this.freeOverview ? 1200 : 190
     this.orbit.target.set(0, 0, 0)
     this.orbit.enabled = this.mode === 'overview'
-    // 2.5D 总览是固定方位的地图浏览，只允许平移/缩放；3D 总览保留旋转观察。
+    // 普通校园 2.5D 总览保持固定方位；沙盒自由总览和 3D 总览允许旋转观察。
     this.orbit.enableRotate = this.freeOverview || this.viewMode === '3d'
-    // 3D 总览遵循常见三维地图操作：左键旋转、右键平移；2.5D 左右键均平移。
+    // 自由总览/3D 总览遵循三维地图操作：左键旋转、右键平移；普通 2.5D 左右键均平移。
     this.orbit.mouseButtons.LEFT = this.viewMode === '3d' || this.freeOverview ? this.THREE.MOUSE.ROTATE : this.THREE.MOUSE.PAN
     // 右键和中键均提供平移，避免触控板/鼠标中键习惯差异导致无法操作。
     this.orbit.mouseButtons.RIGHT = this.THREE.MOUSE.PAN

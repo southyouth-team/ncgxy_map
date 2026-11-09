@@ -2926,3 +2926,40 @@ export const environmentBindings = [
 
 - 源码修改与测试断言已写入；尚未运行本地 Vitest、构建或浏览器验收。
 - 需要在沙盒中确认人物投影随移动、转向、跳跃/垂直变化及 GLB 替换正确更新，并与普通模型使用相同光照方向和阴影质量。
+
+## 2026-11-09 — 玩家角色 AI 生成入口与动态物理尺寸适配
+
+### 仓库基线
+
+- 仓库：southyouth-team/ncgxy_map
+- 分支：feat/world-sandbox-conversational-model-editor
+- 本轮开始 HEAD：ca373b35c6a07e7189ad64addfa1a411895407eb
+- 本轮基于该分支源码审查后实施；未修改 main，未创建或合并 PR。
+
+### 本轮目标
+
+在已有 GLB 角色加载能力上增加 AI 程序化角色生成入口，并让两种来源统一经过角色运行时和物理尺寸适配；不新增物理引擎。
+
+### 实际改动
+
+- src/three/characters/PlayerCharacterRuntime.js：读取模型包围盒并归一化尺寸，向外暴露宽、高、深、视点高度和碰撞半径。默认目标高度仍为 2.25 世界单位；眼高按归一化高度的 0.76 推导，水平碰撞半径按最大水平尺寸的 0.28 推导并限制安全范围。内置回退角色使用稳定默认尺寸；模型无有效高度时拒绝替换。
+- src/three/physics/CollisionWorld.js：新增运行时碰撞半径更新接口；不重建世界障碍物。
+- src/three/controls/InputController.js：增加角色眼高/碰撞半径适配接口。CollisionWorld 切换时自动应用当前角色碰撞半径；眼高变化时在角色站立状态下保持脚底高度。
+- src/three/engine/createCampusEngine.js：GLB 加载和程序化 Object3D 加载统一应用角色尺寸。默认角色恢复时同步恢复默认物理尺寸。角色视觉根节点使用控制器当前眼高回落到地面，不再硬编码 1.7。
+- src/components/WorldSandboxMvp.vue：新增 AI 角色描述生成入口，复用现有程序化模型 NDJSON API 和隔离 Worker。新增单文件 GLB 导入；暂不支持引用外部资源的 .gltf。AI 角色构建后直接替换玩家视觉模型，不作为普通世界物体加入沙盒。无动画剪辑时保留现有基础移动表现。
+- 新增/更新 CollisionWorld、InputController、PlayerCharacterRuntime 单元测试，覆盖半径更新、碰撞世界切换、眼高保持和模型尺寸推导。
+
+### 验证状态
+
+- GitHub 远程文件写入：已完成，随后逐文件回读核对。
+- 自动化测试：本轮没有可用的本地仓库执行环境，未执行。
+- 前端构建：未执行。
+- 后端测试：未执行；本轮复用既有生成 API，没有新增后端接口。
+- CI：未核验。
+- 浏览器验收：未执行。AI 生成效果、GLB 加载、角色行走/碰撞、楼梯和室内切换仍需本地验证。
+
+### 已知边界
+
+- AI 角色生成当前输出的是程序化静态角色模型；生成模型不保证具备骨骼或 idle/walk/run 动画。
+- 当前碰撞体是 XZ 平面圆形简化碰撞，不是完整胶囊体/刚体；高度仅用于视点和视觉落地适配。
+- AI 角色资产本轮只替换当前会话中的玩家外观，尚未加入独立角色资产库或世界存档持久化。

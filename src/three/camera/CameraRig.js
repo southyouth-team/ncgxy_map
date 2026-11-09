@@ -42,6 +42,7 @@ export class CameraRig {
     this.obstructionObjects = []
     this.obstructionMargin = 0.38
     this.orbit = null
+    this.orbitInteractionSuppressed = false
     this.createOrbitControls(this.camera)
     // 3D 总览独立处理右键/中键拖动，避免 OrbitControls 鼠标映射被浏览器或其他监听器干扰。
     this.panPointer = null
@@ -362,11 +363,14 @@ export class CameraRig {
 
   setOrbitInteractionEnabled(enabled) {
     // TransformControls 拖动期间暂停总览相机输入，避免同一指针手势同时驱动模型和 OrbitControls。
+    this.orbitInteractionSuppressed = !enabled
     this.orbit.enabled = Boolean(enabled) && this.mode === 'overview' && !this.transitioningToOverview
   }
 
   update(delta) {
     if (this.mode === 'overview' && !this.transitioningToOverview) {
+      // 拖拽模型时连 OrbitControls 的阻尼更新也暂停，避免残余惯性继续推动镜头。
+      if (this.orbitInteractionSuppressed) return false
       // OrbitControls.update() 返回相机是否仍在变化；供引擎判断是否需要下一帧。
       return this.orbit.update()
     }

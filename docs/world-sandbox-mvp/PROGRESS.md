@@ -2565,3 +2565,10 @@ export const environmentBindings = [
 - 尚未运行前端构建、Vitest 或浏览器交互验收；不能标记为端到端通过。
 - 本地工作区尚未自动更新；用户需在功能分支拉取后验证单击/空白取消/双击无业务动作/显式精调/镜头恢复/编辑按钮启用条件。
 - 未修改 `main`，未创建或合并 PR。
+
+
+### 精调相机锁定补充
+
+- `src/three/engine/createCampusEngine.js`：修正 TransformControls 的 `dragging-changed` 恢复条件。只要 Gizmo 仍挂载在选中对象上，OrbitControls 就持续保持禁用；只有显式点击“完成调整”执行 detach 后才恢复镜头输入。
+- 提交：`019e09078dd5de0e4e95d7898b06facc8d4dfe90`。
+- 该补充已完成 GitHub 源码回读；仍未运行浏览器拖拽回归。

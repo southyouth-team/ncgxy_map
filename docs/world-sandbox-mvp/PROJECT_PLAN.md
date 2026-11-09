@@ -133,6 +133,7 @@ Three.js Object3D 是渲染/运行时载体，不是唯一权威世界数据。�
 - Manifest 规范化只负责数据结构；基础校验负责记录 ID、部件引用字段和连接端点完整性。几何真实性、坡度/踏步测量、碰撞生成、人物可达性测试仍由后续 Analyzer/Physics Runtime 阶段负责。
 - 第一阶段几何分析器 `analyzeModelTraversability` 在 Worker 中执行：将楼梯/坡面/通道声明绑定到真实 `componentId`，拒绝缺失或重复 ID，统计实际 Mesh 数量、世界包围范围、朝上三角面数量和坡面三角面坡度证据。
 - 楼梯分析进一步按世界空间高度聚类朝上三角面，提取可观察的踏步高度层数量、平均级高和沿楼梯主运行方向的平均踏面深度；可与 Manifest 声明做偏差诊断。该结果仍是几何统计，不代表踏步连通或人物可走。
+- 已建立 Rapier 静态三角网格 Collider 能力：对通过部件绑定的楼梯/坡面目标提取真实 Mesh 世界顶点与三角索引，注册为静态 trimesh；同一部件的 Box Collider 会被该 trimesh 替代，避免重复碰撞体。模型物理刷新前重新分析当前几何，不复用陈旧分析结果。
 - 分析器输出 `proceduralModelTraversabilityAnalysis` 诊断报告，区分 `invalid`、`needs-review`、`geometry-bound`；`certifiedWalkable` 在本阶段固定为 false。楼梯逐级连续性、坡面连续通行、门洞净空、空间连接端点和 Rapier 人物路线测试仍不得视为已完成。
 - AI 生成和编辑 Prompt 可以输出/维护上述声明，但必须明确声明不等于运行时可通行。未通过真实几何绑定和 Rapier 人物测试，不得把楼梯、坡道或多楼层连接标记为已验收可通行。
 

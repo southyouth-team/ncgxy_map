@@ -5,6 +5,7 @@
  */
 import { resolveCapabilityRecords } from '../sandbox/capabilityControl.js'
 import { analyzeModelTraversability } from '../sandbox/modelTraversabilityAnalyzer.js'
+import { analyzeModelCollisionCompleteness } from '../sandbox/modelCollisionAnalyzer.js'
 
 export function collectModelMovementObstacles(THREE, root, ownerId, { includeAllHeights = false } = {}) {
   if (!THREE?.Box3 || !root?.traverse || !ownerId) return []
@@ -351,6 +352,7 @@ export function refreshModelPhysicsRegistration(THREE, model, physicsRuntime) {
   if (!ownerId || !physicsRuntime) return 0
   const key = String(ownerId)
   physicsRuntime.removeOwner(key)
+  model.userData.proceduralModelCollisionAnalysis = analyzeModelCollisionCompleteness(model)
   const traversalMeshes = collectModelTraversalTrimeshes(THREE, model, key)
   const declaredMeshColliders = collectModelDeclaredMeshColliders(THREE, model, key)
   const trimeshPartIds = new Set([

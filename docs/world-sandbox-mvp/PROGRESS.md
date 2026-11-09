@@ -3017,3 +3017,43 @@ export const environmentBindings = [
 - 本轮开始 HEAD：`dd7efcf0df3c9133f3be31f20e6d984d207bde51`
 - 本轮仅更新项目决策文档，不修改运行时代码；未运行测试、构建或浏览器验收。
 - 未修改 `main`，未创建或合并 PR。
+
+
+
+## 2026-11-09 — World Sandbox 运行时与物理架构审计（第一轮）
+
+### 审计基线
+
+- 分支 HEAD：`de8159722cc76f3034b46c98ebe01fad5a4b1c5f`
+- 已检查：`package.json`、`WorldSandboxMvp.vue`、`createCampusEngine.js`、`InputController.js`、`CollisionWorld.js`、`modelSpatialRuntime.js`、`sandboxModelLifecycle.js`、`sandboxInteriorRuntime.js`、`worldStateRuntime.js`、`createBlankSandboxScene.js`、`modelCapabilityManifest.js`。
+- 本轮为远程源码审计；没有修改运行时代码，也没有运行本地测试/构建/浏览器。
+
+### 已确认的现状
+
+1. **物理引擎尚未接入**：根目录依赖只有 Three.js、Vue 和 polygon-clipping，没有 Rapier。当前 `CollisionWorld` 是自研 XZ 平面碰撞，按角色半径做 AABB/圆/多边形阻挡和步进移动。
+2. **人物不是完整 3D Character Controller**：`InputController` 负责 XZ 移动，另用向下射线检测支撑面，并自行处理重力、眼高、最大坡度和台阶高度；没有胶囊体全身碰撞、头顶/侧向高度碰撞或物理接触求解。帧间 delta 被截断到 0.05 秒，但目前不是固定物理步长。
+3. **模型碰撞声明能力有限**：`modelSpatialRuntime.js` 当前只消费 Manifest 的 box collider，并把世界包围盒投影成 XZ 障碍；还按固定 Y 区间过滤。它无法表达完整 3D 复合碰撞、斜面/楼梯碰撞或真实门洞体积。
+4. **可站立面已具备声明式基础**：Manifest 的 mesh surfaces 可关联真实 componentId Mesh，并由 InputController 射线采样；注册记录持有运行时 Mesh 引用，模型刷新时会先删除同 owner 的旧障碍和旧支撑面，再重建。
+5. **模型生命周期已有部分闭环**：新增、替换、Transform API、TransformControls objectChange、实例状态变化会刷新空间注册；删除和 Engine dispose 会注销对应 owner 的障碍/支撑面。AI 重建时保留实例 Transform、worldState 和 environmentOverrides。
+6. **室内能力尚未形成完整沙盒空间拓扑**：当前通用沙盒的 enter/exit 路径主要解析 Manifest entryPoint 并传送人物；没有独立的楼层/房间碰撞世界、楼梯连接图和多层 Character Controller 闭环。旧室内原型的楼层切换不能当作通用沙盒已完成能力。
+7. **持久化由页面层主导**：`WorldSandboxMvp.vue` 将 world chunks、模型 Object3D.toJSON()、环境开关/参数及选中模型写入 localStorage v4；恢复时通过 ObjectLoader 重建模型，再调用 addSandboxModel 重建空间注册。存档闭环已存在，但 World Document 尚未成为 Engine/Runtime 的统一权威文档。
+8. **角色与玩家状态没有完整持久化**：当前快照没有保存玩家位置/朝向、角色资产引用或角色配置；AI/GLB 替换的人物视觉资产只在当前 Runtime 会话内存在，刷新后不能保证恢复。
+9. **环境数据仍由 Vue 页面持有**：时间、天气、风和开关保存在页面响应式状态，Engine 负责把有效值应用到视觉 Runtime；这与模型实例状态/世界数据尚未收敛到统一 World Document。
+10. **资源释放已有基础**：模型替换/删除通过 sandbox lifecycle helper 释放克隆材质/贴图；Engine dispose 会注销模型空间记录、销毁控制器/角色/阴影系统并遍历场景释放几何和材质。Rapier 接入后仍需新增刚体、碰撞体、事件队列和 World 的明确销毁顺序。
+
+### 迁移结论
+
+- 不直接把 Rapier API 散落到 Vue、InputController 或模型生成代码中。
+- 先建立沙盒专属 Physics Runtime，统一持有 Rapier World、固定时间步、刚体/碰撞体注册表、角色控制器和模型碰撞适配；Three.js 继续只负责渲染。
+- 人物控制从当前 XZ + 射线逻辑迁移到 Rapier Character Controller（优先运动学角色控制器），保留输入/相机职责，不把视觉角色 Mesh 当作刚体。
+- 模型 Manifest 继续作为声明式数据源；先扩展/校验 collider 与 surface 数据，再由 Physics Runtime 生成受控碰撞表示。禁止无差别将所有 Mesh 自动变成障碍。
+- 静态建筑/地形可使用三角网格或复合碰撞；动态门扇/设备优先使用 box/capsule 等简单碰撞体；门洞必须由分段墙体/复合体表达，不能被整体凸包封闭。
+- 楼层、房间、楼梯/坡面应建模为明确的空间连接与可行走面，不把“传送到入口”视为完整室内通行。
+- 后续将 World Document 从页面层存档逐步上移为 Engine 的权威数据契约，并补齐玩家状态、角色资产引用、环境值和对象状态恢复。
+
+### 审计未完成项
+
+- AI Worker 与后端 Manifest 输出校验是否覆盖 collider/surface/entryPoint 引用、唯一 ID、尺寸范围和目标部件存在性。
+- 模型参数编辑、重建、撤销/重做及失败回滚时的资源和物理注册事务边界。
+- 场景加载失败、重复恢复、重置世界和异常 dispose 的完整性。
+- Rapier 对应版本、WebAssembly 加载方式、Vite Worker/SSR 测试兼容性与锁文件策略。

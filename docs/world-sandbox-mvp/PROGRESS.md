@@ -3573,3 +3573,79 @@ export const environmentBindings = [
 - 本轮修改尚未执行本地 Jest、NestJS Build 或 GitHub Actions；不得视为测试通过。
 - 这轮属于响应协议兼容与可观测性修复。若 DeepSeek 返回的是空 content / reasoning-only / token 截断，仍需根据新增诊断判断是否需要调整请求参数或模型输出预算；本轮不会把 reasoning 当源码，也不会自动重试消耗额外模型额度。
 - 浏览器端尚未复测；需重新生成一次，并根据服务端日志确认真实响应结构。
+
+
+---
+
+## 2026-11-10 — 玩家输入连续性与铰链门碰撞同步（第一阶段）
+
+### 本轮目标
+
+针对浏览器综合测试反馈，先处理键盘输入/跳跃容错和开门状态下门扇碰撞的基础缺口。水深问题单独梳理，避免在没有确认“水深”语义前把表面高度、底部深度和人物浮力混为一个参数。
+
+### 仓库与边界
+
+- 仓库：`southyouth-team/ncgxy_map`
+- 工作分支：`feat/world-sandbox-conversational-model-editor`
+- 本轮基线 HEAD：`211439278933d47e0ec948d7ff16a8db563ac0cf`
+- 所有代码与文档写入均显式指定功能分支；没有向 main 写入，没有创建 PR。
+- 本轮不调整 CharacterTraversalProfile 的人物胶囊体尺寸、跳跃高度 1.1 或最大跳跃距离 3.0；不更换 Rapier 物理引擎。
+
+### 实际代码变更
+
+1. `src/three/controls/InputController.js`
+   - 新增按 `KeyboardEvent.code` 优先的输入归一化；keydown/keyup 使用同一规则处理 WASD、方向键、Shift、Space 和 R。
+   - 页面隐藏、窗口失焦时清理按住状态和待消费跳跃缓冲。
+   - 增加默认 140ms Jump Buffer 和 100ms Coyote Time；这两个窗口只改善输入容错，不改变跳跃物理规格。
+   - 模式切换、传送、复位和禁用移动时清除残留跳跃缓冲。
+   - 虚拟按键入口统一归一化大小写/方向键值。
+
+2. `src/three/controls/InputController.test.js`
+   - 新增物理按键码与 keyup 归一化一致性测试。
+   - 新增虚拟方向键和失焦清理测试。
+   - 新增 Jump Buffer 与 Coyote Time 测试。
+   - 测试已写入仓库，尚未执行。
+
+3. `src/three/engine/modelSpatialRuntime.js`
+   - Box Collider 注册 Rapier 时不再只传世界 AABB。
+   - 新增保留目标部件世界位置、旋转和缩放的 oriented-box 数据；Rapier 物理路径将旋转四元数传给 Static Box。
+   - CollisionWorld 平面回退路径仍保留原有保守世界 AABB 行为。
+
+4. `src/three/engine/modelSpatialRuntime.test.js`
+   - 将铰链门测试改为验证开门后门扇 Collider 仍存在且随部件旋转。
+   - 新增验证 Rapier Static Box 接收门扇旋转四元数和缩放后的半尺寸。
+   - 测试已写入仓库，尚未执行。
+
+5. `server/src/modules/assets/image-generation.service.ts`
+   - 修正 AI 建模契约：铰链门扇 Collider 在开/关状态下都保持启用；门状态驱动门扇旋转，Collider 跟随同一部件 Transform。
+   - 明确门洞通行来自墙体真实开口，而不是删除门扇自身碰撞体。
+
+6. 项目文档
+   - `PROJECT_PLAN.md` 新增键盘输入、跳跃缓冲和铰链门碰撞同步约束。
+   - 明确 Rapier Box 保留 OBB Transform；stateCondition 不应用于具有铰链 Transform 的实体门扇。
+
+### 当前未完成与注意事项
+
+- 行走/加速间歇停顿：已修正键值归一化和焦点状态清理路径，但仍需在浏览器持续按住 WASD/Shift 验证；目前不能认定已完全解决。
+- 跳跃：Jump Buffer/Coyote Time 已实现，固定步长下的垂直速度积分一致性仍需专项检查。
+- 门：新生成/编辑的铰链门应按新 Prompt 生成；已有门模型若 Collider 声明包含 doorOpen stateCondition，需要重新生成或定向编辑 Manifest。浏览器尚未验证。
+- 水深：本轮没有修改水体 Runtime。现有检查未发现通用水体深度/人物浸入 Runtime 契约；下一步需先明确参数代表“水面相对地面高度”还是“水面固定、仅水体向下厚度”，再定义通用空间体与人物涉水行为，不能只改水面视觉。
+- OBB 对包含非均匀父级缩放与子级旋转的复杂层级可能出现矩阵分解近似；后续需要增加嵌套 Transform 测试，复杂模型必要时改用 Trimesh/复合碰撞。
+
+### 验证状态
+
+- 代码写入：已提交到功能分支。
+- 源码回读：需在最终核验中确认最新文件内容和 HEAD。
+- 自动化测试：本轮新增测试尚未执行。
+- 前端构建：未执行。
+- 后端测试/类型检查：未执行。
+- GitHub Actions：需检查最新 HEAD 对应 workflow 状态；未取得成功记录前不标记通过。
+- 浏览器验收：尚未执行；需验证持续走路/加速、落地前按跳、离开平台边缘后按跳、门扇开关时碰撞同步。
+- main：本轮开始核对为 `608a9f2c1f739cd581acb833b1e70410672e258b`；最终需再次核验保持不变。
+
+### 下一步
+
+1. 在当前分支执行 InputController、PhysicsRuntime、modelSpatialRuntime 相关单测和前端构建。
+2. 核对跳跃重力积分是否严格随 Rapier 固定步长推进，避免渲染帧率影响跳跃高度/时长。
+3. 明确水深参数语义后，设计并实现通用空间体/涉水 Runtime，不按模型类别硬编码。
+4. 浏览器回归后再决定是否继续相机插值或动画层优化。

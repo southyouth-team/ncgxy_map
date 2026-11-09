@@ -424,6 +424,9 @@ describe('InputController jump and stuck reset', () => {
     expect(controller.jumpPlayer()).toBe(false)
     controller.updateVerticalMotion(cameraRig.player, 0.05)
     expect(cameraRig.player.y).toBeGreaterThan(controller.playerEyeHeight)
+    for (let step = 0; step < 80; step += 1) controller.updateVerticalMotion(cameraRig.player, 0.05)
+    expect(controller.grounded).toBe(true)
+    expect(controller.jumpPlayer()).toBe(true)
   })
 
   it('uses Space to jump and R to return to the recorded spawn point', () => {

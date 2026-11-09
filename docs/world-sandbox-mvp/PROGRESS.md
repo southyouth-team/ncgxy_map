@@ -3667,3 +3667,13 @@ export const environmentBindings = [
 - 已将该断言更新为当前实际执行契约，并增加门扇 Collider 开/关状态保持启用、跟随部件 Transform 的 Prompt 断言。测试修改提交：`b6169ac69bcdb19a95f0051b5d831d07ad102841`。
 - 最新代码提交之后 CI 需重新执行；不能沿用旧 run 的失败/成功结论。
 - 再次检查生成 Prompt，已确认不存在“开门时移除门扇 Collider”及“Rapier Box 一律使用 AABB”的旧指导语句。
+
+
+### 固定步长重力积分补充
+
+- 进一步确认人物跳跃/下落的重力原先由 InputController 按渲染帧 delta 积分，而 Rapier 按固定 1/60s 子步求解；这会导致不同渲染帧率下垂直速度曲线不同。
+- `PhysicsRuntime` 新增运动学角色加速度输入，固定物理子步内积分加速度；角色状态同时返回物理速度。
+- `InputController` 不再对 Rapier 角色按渲染帧积分重力，而是提交重力加速度并读取物理速度；非 Rapier 的旧 CollisionWorld 路径保持原有独立更新方式。
+- 新增 30/60/120Hz 渲染频率模拟测试，以及 InputController 空中重力委托测试；均已写入，尚未执行。
+- 新增/更新代码提交：`075c09e1d5b195300f4e7e2107e49eda46a726e5`、`911540b37b264195f8f5212fce393a0a537af15c`、`6d5ea0018bd9117abdbd83db21efe5ba286fa2fb`、`a1192ca772b84c35d30cf970bbcee9ab449bb386`；计划文档提交：`359dd2a06efde461c8dac858749630f657211c4c`。
+- 本项仍需 CI 和浏览器验证；特别检查跳跃高度/距离上限、落地清零、离开平台后自由下落和不同刷新率下轨迹一致性。

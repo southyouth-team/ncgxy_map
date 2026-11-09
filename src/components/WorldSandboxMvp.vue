@@ -1039,7 +1039,7 @@ onBeforeUnmount(() => {
             <strong>{{ placement.footprint.width.toFixed(2) }} × {{ placement.footprint.depth.toFixed(2) }}</strong>
             <small>世界单位 · 模型包围盒水平投影</small>
           </div>
-          <div v-if="placement.target" class="world-mvp__footprint-info">
+          <div v-if="placement.target && placement.candidateLocked" class="world-mvp__footprint-info">
             <span>候选位置</span>
             <strong>X {{ placement.target.x.toFixed(2) }} / Z {{ placement.target.z.toFixed(2) }}</strong>
           </div>

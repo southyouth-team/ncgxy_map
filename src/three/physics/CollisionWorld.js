@@ -16,6 +16,13 @@ export class CollisionWorld {
     this.walkableRegions = null
   }
 
+  setRadius(radius) {
+    const value = Number(radius)
+    if (!Number.isFinite(value) || value <= 0) return false
+    this.radius = Math.max(0.1, Math.min(1.5, value))
+    return this.radius
+  }
+
   addObstacle(bounds, ownerId = null) {
     if (!bounds || !Number.isFinite(bounds.minX) || !Number.isFinite(bounds.maxX) ||
       !Number.isFinite(bounds.minZ) || !Number.isFinite(bounds.maxZ) ||

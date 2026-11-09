@@ -3659,3 +3659,11 @@ export const environmentBindings = [
 - 最终核验时 main HEAD 仍为 `608a9f2c1f739cd581acb833b1e70410672e258b`，未修改 main。
 - 浏览器验收：本轮没有实际运行本地页面；用户此前的综合场景测试不能替代本轮键盘/门扇代码变更后的浏览器回归。
 - 当前水体深度仍未接入运行时。需要明确“深度”参数应驱动水面相对地面的高度（影响人物浸入高度），还是只改变固定水面下方的水体厚度；两者对应不同的空间模型，不能用一个参数混用。
+
+
+### CI 失败原因追踪与测试契约修正
+
+- Backend CI（run `42688364801`）在 NestJS Build 成功后，单测 `image-generation.procedural.spec.ts` 因 Prompt 文案断言仍期待旧描述 `shape:"mesh" blockers as static Rapier triangle meshes` 而失败；不是 TypeScript 编译错误或服务运行错误。
+- 已将该断言更新为当前实际执行契约，并增加门扇 Collider 开/关状态保持启用、跟随部件 Transform 的 Prompt 断言。测试修改提交：`b6169ac69bcdb19a95f0051b5d831d07ad102841`。
+- 最新代码提交之后 CI 需重新执行；不能沿用旧 run 的失败/成功结论。
+- 再次检查生成 Prompt，已确认不存在“开门时移除门扇 Collider”及“Rapier Box 一律使用 AABB”的旧指导语句。

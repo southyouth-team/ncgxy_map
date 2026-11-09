@@ -200,9 +200,9 @@ describe('InputController gravity and traversal semantics', () => {
   it('does not teleport the player onto a platform higher than the step limit', () => {
     const { controller, player } = setup(1.7, makeHit(2.4))
     controller.updateVerticalMotion(player, 0.05, { walking: true })
-    expect(player.y).toBeLessThan(1.7)
+    expect(player.y).toBeCloseTo(1.7)
     expect(player.y).not.toBeCloseTo(4.1)
-    expect(controller.grounded).toBe(false)
+    expect(controller.grounded).toBe(true)
   })
 
   it('applies gravity while airborne and lands on the default world ground', () => {

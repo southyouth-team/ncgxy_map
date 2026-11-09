@@ -147,6 +147,9 @@ describe('PhysicsRuntime', () => {
     expect(() => runtime.createStaticTrimesh({
       id: 'bad-mesh', vertices: [0, 0, 0], indices: [0, 1, 2],
     })).toThrow(/finite xyz vertices/)
+    expect(() => runtime.createStaticTrimesh({
+      id: 'fractional-index', vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], indices: [0, 1.5, 2],
+    })).toThrow(/finite xyz vertices/)
   })
 
   it('removes all bodies owned by a model instance', () => {

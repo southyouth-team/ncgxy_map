@@ -106,12 +106,61 @@ export function createBlankSandboxScene(THREE, dimensions = {}) {
     return true
   }
 
+  function removeWorldEdge(direction) {
+    const normalized = String(direction || '').toLowerCase()
+    if (!['north', 'south', 'east', 'west'].includes(normalized)) return false
+    const coordinates = Array.from(chunks.values(), item => item.userData.worldChunk)
+    if (!coordinates.length) return false
+    const xs = coordinates.map(item => item.x)
+    const zs = coordinates.map(item => item.z)
+    const minX = Math.min(...xs), maxX = Math.max(...xs)
+    const minZ = Math.min(...zs), maxZ = Math.max(...zs)
+    const width = maxX - minX + 1
+    const depth = maxZ - minZ + 1
+    if ((normalized === 'east' || normalized === 'west') && width <= 1) return false
+    if ((normalized === 'north' || normalized === 'south') && depth <= 1) return false
+    const edge = normalized === 'west' ? minX
+      : normalized === 'east' ? maxX
+        : normalized === 'north' ? minZ : maxZ
+    const candidates = coordinates.filter(item => (
+      normalized === 'west' || normalized === 'east' ? item.x === edge : item.z === edge
+    ))
+    if (candidates.length !== (normalized === 'west' || normalized === 'east' ? depth : width)) return false
+    // Keep the origin chunk as the stable world anchor and never create internal holes.
+    if (candidates.some(item => item.x === 0 && item.z === 0)) return false
+    for (const { x, z } of candidates) {
+      const key = x + ':' + z
+      const ground = chunks.get(key)
+      if (!ground) return false
+      chunkGroup.remove(ground)
+      ground.geometry?.dispose?.()
+      if (Array.isArray(ground.material)) ground.material.forEach(material => material?.dispose?.())
+      else ground.material?.dispose?.()
+      chunks.delete(key)
+    }
+    const remaining = Array.from(chunks.values(), item => item.userData.worldChunk)
+    const remainingXs = remaining.map(item => item.x)
+    const remainingZs = remaining.map(item => item.z)
+    bounds.minX = Math.min(...remainingXs) * chunkWidth - chunkWidth / 2
+    bounds.maxX = Math.max(...remainingXs) * chunkWidth + chunkWidth / 2
+    bounds.minZ = Math.min(...remainingZs) * chunkDepth - chunkDepth / 2
+    bounds.maxZ = Math.max(...remainingZs) * chunkDepth + chunkDepth / 2
+    root.userData.sampleBounds.width = bounds.maxX - bounds.minX
+    root.userData.sampleBounds.depth = bounds.maxZ - bounds.minZ
+    root.userData.sampleBounds.centerX = (bounds.minX + bounds.maxX) / 2
+    root.userData.sampleBounds.centerZ = (bounds.minZ + bounds.maxZ) / 2
+    root.userData.worldChunks = remaining.map(({ x, z }) => ({ x, z }))
+    rebuildBoundary()
+    return true
+  }
+
   root.userData.sampleBounds = { width: chunkWidth, depth: chunkDepth, centerX: 0, centerZ: 0 }
   root.userData.walkableBounds = bounds
   root.userData.playerSpawn = { x: 0, z: Math.min(chunkDepth / 2 - 3, 14) }
   root.userData.worldChunks = [{ x: 0, z: 0 }]
   root.userData.worldChunkSize = { width: chunkWidth, depth: chunkDepth }
   root.userData.expandWorld = expandWorld
+  root.userData.removeWorldEdge = removeWorldEdge
   root.userData.getWorldState = () => ({
     version: 1,
     chunkSize: { width: chunkWidth, depth: chunkDepth },

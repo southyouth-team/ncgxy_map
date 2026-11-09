@@ -127,9 +127,6 @@ export class InputController {
   createPhysicsCharacter() {
     if (!this.physicsRuntime || !this.physicsCharacterId || !this.cameraRig?.player) return false
     const player = this.cameraRig.player
-    const radius = this.playerColliderRadius
-    const totalHeight = Math.max(this.playerEyeHeight, radius * 2 + 0.02)
-    const halfHeight = Math.max(0.01, (totalHeight - radius * 2) / 2)
     this.physicsRuntime.removeBody?.(this.physicsCharacterId)
     this.physicsRuntime.createKinematicCharacter({
       id: this.physicsCharacterId,
@@ -186,12 +183,12 @@ export class InputController {
     const previousEyeHeight = this.playerEyeHeight
     const nextEyeHeight = Number(eyeHeight)
     const nextRadius = Number(colliderRadius)
-    if (Number.isFinite(nextEyeHeight) && nextEyeHeight > 0.5) {
-      this.playerEyeHeight = Math.max(0.8, Math.min(2.8, nextEyeHeight))
-    }
     if (Number.isFinite(nextRadius) && nextRadius > 0) {
       this.playerColliderRadius = Math.max(0.1, Math.min(1.5, nextRadius))
       this.collisionWorld?.setRadius?.(this.playerColliderRadius)
+    }
+    if (Number.isFinite(nextEyeHeight) && nextEyeHeight > 0.5) {
+      this.playerEyeHeight = Math.max(0.8, Math.min(2.8, nextEyeHeight))
     }
     const eyeHeightDelta = this.playerEyeHeight - previousEyeHeight
     if (Math.abs(eyeHeightDelta) > 0.0001 && this.grounded && this.cameraRig?.player) {

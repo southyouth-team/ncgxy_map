@@ -349,6 +349,22 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return isBlankSandbox ? campus?.userData?.getWorldState?.() || null : null
   }
 
+  function focusSandboxOverview() {
+    if (!isBlankSandbox || !cameraRig) return false
+    const bounds = campus?.userData?.sampleBounds
+    if (!bounds) return false
+    const width = Math.max(20, Number(bounds.width) || 54)
+    const depth = Math.max(20, Number(bounds.depth) || 42)
+    const centerX = Number.isFinite(bounds.centerX) ? bounds.centerX : 0
+    const centerZ = Number.isFinite(bounds.centerZ) ? bounds.centerZ : 0
+    cameraRig.focusBounds(width, depth, centerX, centerZ, { immediate: true })
+    if (cameraRig.orbit) {
+      cameraRig.orbit.minDistance = 4
+      cameraRig.orbit.maxDistance = Math.max(1200, Math.max(width, depth) * 4)
+    }
+    return true
+  }
+
   function setSandboxChunkManagement(enabled) {
     if (!isBlankSandbox) return false
     chunkManagementActive = Boolean(enabled)
@@ -357,6 +373,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (chunkManagementActive) {
       sandboxTransform?.detach()
       cameraRig?.setOrbitInteractionEnabled?.(true)
+      // 地块管理始终先展示当前全部地块；随后用户可自由平移、旋转和缩放。
+      focusSandboxOverview()
     }
     campus?.userData?.setChunkManagementState?.(chunkManagementActive, Array.from(selectedSandboxChunkKeys))
     callbacks.onSandboxChunkSelectionChange?.({
@@ -429,7 +447,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (input.collisionWorld) input.collisionWorld.bounds = campus.userData.walkableBounds
     }
     const world = getSandboxPlacementWorldBounds()
-    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(190, Math.max(world.width, world.depth) * 3)
+    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(1200, Math.max(world.width, world.depth) * 4)
+    if (cameraRig?.mode === 'overview') focusSandboxOverview()
     callbacks.onSandboxWorldChange?.(getSandboxWorldState())
     requestFrame()
     return true
@@ -506,7 +525,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (input.collisionWorld) input.collisionWorld.bounds = campus.userData.walkableBounds
     }
     const world = getSandboxPlacementWorldBounds()
-    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(190, Math.max(world.width, world.depth) * 3)
+    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(1200, Math.max(world.width, world.depth) * 4)
+    if (cameraRig?.mode === 'overview') focusSandboxOverview()
     callbacks.onSandboxWorldChange?.(getSandboxWorldState())
     requestFrame()
     return { ok: true, world: getSandboxWorldState() }
@@ -523,7 +543,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (input.collisionWorld) input.collisionWorld.bounds = campus.userData.walkableBounds
     }
     const world = getSandboxPlacementWorldBounds()
-    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(190, Math.max(world.width, world.depth) * 3)
+    if (cameraRig?.orbit) cameraRig.orbit.maxDistance = Math.max(1200, Math.max(world.width, world.depth) * 4)
+    if (cameraRig?.mode === 'overview') focusSandboxOverview()
     callbacks.onSandboxWorldChange?.(getSandboxWorldState())
     requestFrame()
     return true
@@ -1409,7 +1430,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     generatedAssetsGroup = new THREE.Group()
     generatedAssetsGroup.name = 'GeneratedAssets'
     campus.add(generatedAssetsGroup)
-    cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode })
+    cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode, freeOverview: isBlankSandbox })
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     playerSpriteObject = campus.getObjectByName('PixelExplorerSprite')
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
@@ -3192,6 +3213,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function setMode(mode) {
     cameraRig?.setMode(mode)
+    if (isBlankSandbox && mode === 'overview') focusSandboxOverview()
     if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
     input?.setMode(mode)
     syncRenderQuality()

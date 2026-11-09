@@ -389,6 +389,18 @@ describe('InputController Rapier character movement', () => {
     expect(cameraRig.player.z).toBeCloseTo(0)
   })
 
+
+
+  it('clears queued Rapier movement when player controls are disabled', () => {
+    const { controller, cameraRig } = createController()
+    const { calls } = attachPhysics(controller, cameraRig.player)
+    controller.setMovementEnabled(false)
+    expect(calls.velocities.at(-1)).toEqual({
+      id: 'sandbox:player',
+      velocity: { x: 0, y: 0, z: 0 },
+    })
+  })
+
   it('synchronizes teleports and dimension changes with the Rapier capsule', () => {
     const { controller, cameraRig } = createController()
     cameraRig.player.set = function (x, y, z) { Object.assign(this, { x, y, z }) }

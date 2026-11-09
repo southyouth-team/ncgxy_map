@@ -355,9 +355,8 @@ describe('InputController Rapier character movement', () => {
       id: 'sandbox:player',
       ownerId: 'sandbox:player',
       translation: { x: 0, y: 0, z: 0 },
-      radius: 0.55,
+      traversalProfile: expect.objectContaining({ radius: 0.55, height: 1.7 }),
     })
-    expect(calls.created[0].halfHeight).toBeCloseTo(0.3)
   })
 
   it('routes manual movement and gravity through the Rapier character controller', () => {

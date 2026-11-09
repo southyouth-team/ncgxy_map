@@ -41,7 +41,7 @@ const wind = ref(20)
 const windEnabled = ref(true)
 const artificialLightingEnabled = ref(true)
 const transformMode = ref('translate')
-const placement = ref({ active: false, stage: '', level: 0, hasTarget: false, instruction: '' })
+const placement = ref({ active: false, stage: '', level: 0, hasTarget: false, candidateLocked: false, instruction: '' })
 const objectTypes = [
   { id: 'box', label: '立方体' }, { id: 'sphere', label: '球体' },
   { id: 'cylinder', label: '圆柱体' }, { id: 'cone', label: '圆锥体' },
@@ -208,12 +208,15 @@ function beginMoveSelected() {
   precisionModeActive.value = false
   engine?.setSandboxTransformMode('browse')
   const started = engine?.beginSandboxModelPlacement(selected.userData.sandboxModelId)
-  if (started) message.value = '已进入分层选址：先选区域，再逐级放大到具体落点。'
+  if (started) message.value = '已进入全局选址。移动鼠标预览占地范围，点击地面锁定候选位置。'
 }
 function confirmPlacement() {
   if (!engine?.confirmSandboxModelPlacement?.()) {
-    message.value = '请先在精确落位阶段点击地面选定位置。'
+    message.value = '请先点击沙盒地面锁定一个候选位置，再确认落地。'
   }
+}
+function unlockPlacementCandidate() {
+  engine?.unlockSandboxPlacementCandidate?.()
 }
 function cancelPlacement() {
   engine?.cancelSandboxModelPlacement?.()
@@ -1022,104 +1025,120 @@ onBeforeUnmount(() => {
     <div ref="viewport" class="world-mvp__viewport"></div>
     <header class="world-mvp__header">
       <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>RPG 校园探索 · AI 独立建模组</span></div>
-      <div class="world-mvp__header-actions"><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
+      <div class="world-mvp__header-actions"><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
     </header>
 
     <aside class="world-mvp__panel">
-      <section>
-        <h2>AI 建模</h2>
-        <div class="world-mvp__command">
-          <input v-model="aiPrompt" placeholder="描述模型，例如：一栋带玻璃幕墙的现代图书馆" @keydown.enter="generateAiModel">
-          <button :disabled="aiBusy || (!aiPrompt.trim() && !referenceImageDataUrl)" @click="generateAiModel">{{ aiBusy ? '生成中' : '生成' }}</button>
-        </div>
-        <div class="world-mvp__command" style="margin-top:7px">
-          <input type="file" accept="image/png,image/jpeg,image/webp" @change="onReferenceImageChange">
-        </div>
-        <p v-if="referenceImageName" class="world-mvp__message">参考图：{{ referenceImageName }}</p>
-        <p class="world-mvp__message">AI 返回 Three.js 源码，在隔离环境构建后直接加入 RPG 场景；不经过 GLB。</p>
-      </section>
-      <section>
-        <h2>基础模型</h2>
-        <div class="world-mvp__model-grid">
-          <button v-for="item in objectTypes" :key="item.id" @click="addModel(item.id)">＋ {{ item.label }}</button>
-        </div>
-        <button class="world-mvp__demo-button" @click="addLightSwitchDemo">创建开关灯交互演示</button>
-        <div v-if="selectedName" class="world-mvp__selected-context">
-          <div class="world-mvp__selected-heading">
-            <span>当前选中对象</span>
-            <strong>{{ selectedName }}</strong>
+      <template v-if="placement.active">
+        <section class="world-mvp__operation-panel">
+          <h2>重新选址 · 全局视图</h2>
+          <strong class="world-mvp__operation-name">{{ placement.modelName || selectedName || '当前模型' }}</strong>
+          <p class="world-mvp__message">沙盒保持全景视野。移动鼠标查看半透明模型预览和绿色占地轮廓；点击地面只锁定候选位置，不会落地或保存。</p>
+          <div v-if="placement.footprint" class="world-mvp__footprint-info">
+            <span>最大水平占地范围</span>
+            <strong>{{ placement.footprint.width.toFixed(2) }} × {{ placement.footprint.depth.toFixed(2) }}</strong>
+            <small>世界单位 · 模型包围盒水平投影</small>
           </div>
-          <p class="world-mvp__message">单击模型只会选中对象。需要执行操作时，请使用下方明确入口。</p>
-          <div class="world-mvp__tools world-mvp__primary-actions">
-            <button :disabled="placement.active" @click="beginMoveSelected">重新选址</button>
-            <button :disabled="placement.active" @click="setMode('translate')">精细调整</button>
-            <button :disabled="placement.active || !selectedEditable" @click="openModelEditor()">编辑模型</button>
+          <div v-if="placement.target" class="world-mvp__footprint-info">
+            <span>候选位置</span>
+            <strong>X {{ placement.target.x.toFixed(2) }} / Z {{ placement.target.z.toFixed(2) }}</strong>
           </div>
-          <div v-if="precisionModeActive && !placement.active" class="world-mvp__tools world-mvp__transform-actions">
-            <button :class="{ active: transformMode === 'translate' }" @click="setMode('translate')">位置</button>
-            <button :class="{ active: transformMode === 'rotate' }" @click="setMode('rotate')">旋转</button>
-            <button :class="{ active: transformMode === 'scale' }" @click="setMode('scale')">缩放</button>
-            <button @click="setMode('browse')">完成调整</button>
-          </div>
-          <div class="world-mvp__tools world-mvp__secondary-actions">
-            <button :disabled="placement.active" @click="duplicateSelected">复制</button>
-            <button :disabled="placement.active" @click="deleteSelected">删除</button>
-          </div>
-        </div>
-        <p v-else class="world-mvp__empty-selection">尚未选中对象。单击场景中的模型，或从下方对象列表选择。</p>
-        <div v-if="placement.active" class="world-mvp__placement">
-          <strong>{{ placement.stage === 'area' ? '分层选址 · 区域选择' : '分层选址 · 精确落位' }}</strong>
-          <p>{{ placement.instruction }}</p>
-          <p v-if="placement.stage === 'area'">第 {{ placement.level }} 级区域定位 · 点击目标区域继续缩小范围，也可滚轮缩放、右键平移。</p>
-          <p v-else-if="placement.target">目标坐标：X {{ placement.target.x.toFixed(2) }} / Z {{ placement.target.z.toFixed(2) }}</p>
-          <div class="world-mvp__tools">
-            <button :disabled="placement.stage !== 'point' || !placement.hasTarget" @click="confirmPlacement">确认落位</button>
+          <p class="world-mvp__placement-status">{{ placement.candidateLocked ? '候选位置已锁定，模型尚未正式落地。' : '尚未锁定位置，请在沙盒地面点击目标位置。' }}</p>
+          <div class="world-mvp__tools world-mvp__placement-actions">
+            <button :disabled="!placement.candidateLocked" @click="confirmPlacement">确认落地</button>
+            <button :disabled="!placement.candidateLocked" @click="unlockPlacementCandidate">重新选择</button>
             <button @click="cancelPlacement">取消</button>
           </div>
-        </div>
-        <div class="world-mvp__list">
-          <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" :disabled="placement.active" @click="selectModel(item)">{{ item.name }}</button>
-        </div>
-      </section>
-
-      <section>
-        <h2>校园场景</h2>
-        <p class="world-mvp__message">已加载南昌工学院校园空间底图，校园建筑、道路、湖泊和公共区域作为场景环境。</p>
-      </section>
-      <section>
-        <h2>环境</h2>
-        <label class="world-mvp__toggle"><input v-model="timeEnabled" type="checkbox" @change="updateEnvironment"><span>时间系统</span><b>{{ timeEnabled ? '开启' : '关闭' }}</b></label>
-        <label class="world-mvp__field"><span>当前时间 <b>{{ String(Math.floor(time)).padStart(2, '0') }}:{{ String(Math.round((time % 1) * 60)).padStart(2, '0') }}</b></span>
-          <input v-model.number="time" type="range" min="0" max="24" step="0.25" :disabled="!timeEnabled" @input="updateEnvironment">
-        </label>
-        <label class="world-mvp__toggle"><input v-model="weatherEnabled" type="checkbox" @change="updateEnvironment"><span>天气总开关</span><b>{{ weatherEnabled ? '开启' : '关闭' }}</b></label>
-        <label class="world-mvp__field"><span>天气模式</span>
-          <select v-model="weather" :disabled="!weatherEnabled" @change="updateEnvironment">
-            <option value="clear">晴天</option><option value="rain">下雨</option>
-          </select>
-        </label>
-        <label class="world-mvp__toggle"><input v-model="rainEnabled" type="checkbox" :disabled="!weatherEnabled" @change="updateEnvironment"><span>降雨效果</span><b>{{ rainEnabled ? '开启' : '关闭' }}</b></label>
-        <label class="world-mvp__toggle"><input v-model="artificialLightingEnabled" type="checkbox" @change="updateEnvironment"><span>人工灯光总开关</span><b>{{ artificialLightingEnabled ? '开启' : '关闭' }}</b></label>
-        <label class="world-mvp__toggle"><input v-model="windEnabled" type="checkbox" @change="updateEnvironment"><span>风力系统</span><b>{{ windEnabled ? '开启' : '关闭' }}</b></label>
-        <label class="world-mvp__field"><span>风速 <b>{{ wind }}%</b></span>
-          <input v-model.number="wind" type="range" min="0" max="100" step="5" :disabled="!windEnabled" @input="updateEnvironment">
-        </label>
-      </section>
-
-      <section>
-        <h2>任务交互</h2>
-        <div class="world-mvp__command">
-          <input v-model="command" placeholder="输入任务，例如：创建球体" @keydown.enter="executeTask">
-          <button @click="executeTask">执行</button>
-        </div>
-        <p class="world-mvp__message">{{ message }}</p>
-        <div class="world-mvp__examples">
-          <button @click="command = '创建球体'; executeTask()">创建球体</button>
-          <button @click="command = '移动 2,0,3'; executeTask()">移动模型</button>
-          <button @click="command = '切换雨天'; executeTask()">切换雨天</button>
-          <button @click="command = '触发交互'; executeTask()">触发交互</button>
-        </div>
-      </section>
+        </section>
+      </template>
+      <template v-else-if="selectedName">
+        <section class="world-mvp__operation-panel">
+          <h2>{{ precisionModeActive ? '精细调整' : '模型操作' }}</h2>
+          <strong class="world-mvp__operation-name">{{ selectedName }}</strong>
+          <template v-if="precisionModeActive">
+            <p class="world-mvp__message">当前仅操作这个模型。拖动坐标轴调整对象，镜头输入已锁定。</p>
+            <div class="world-mvp__tools world-mvp__transform-actions">
+              <button :class="{ active: transformMode === 'translate' }" @click="setMode('translate')">位置</button>
+              <button :class="{ active: transformMode === 'rotate' }" @click="setMode('rotate')">旋转</button>
+              <button :class="{ active: transformMode === 'scale' }" @click="setMode('scale')">缩放</button>
+              <button @click="setMode('browse')">完成调整</button>
+            </div>
+          </template>
+          <template v-else>
+            <p class="world-mvp__message">当前面板只管理这个模型，不显示其他场景工具。</p>
+            <div class="world-mvp__tools world-mvp__primary-actions">
+              <button @click="beginMoveSelected">重新选址</button>
+              <button @click="setMode('translate')">精细调整</button>
+              <button :disabled="!selectedEditable" @click="openModelEditor()">编辑模型</button>
+            </div>
+            <div class="world-mvp__tools world-mvp__secondary-actions">
+              <button @click="duplicateSelected">复制</button>
+              <button @click="deleteSelected">删除</button>
+            </div>
+          </template>
+        </section>
+      </template>
+      <template v-else>
+        <section>
+          <h2>AI 建模</h2>
+          <div class="world-mvp__command">
+            <input v-model="aiPrompt" placeholder="描述模型，例如：一栋带玻璃幕墙的现代图书馆" @keydown.enter="generateAiModel">
+            <button :disabled="aiBusy || (!aiPrompt.trim() && !referenceImageDataUrl)" @click="generateAiModel">{{ aiBusy ? '生成中' : '生成' }}</button>
+          </div>
+          <div class="world-mvp__command" style="margin-top:7px">
+            <input type="file" accept="image/png,image/jpeg,image/webp" @change="onReferenceImageChange">
+          </div>
+          <p v-if="referenceImageName" class="world-mvp__message">参考图：{{ referenceImageName }}</p>
+          <p class="world-mvp__message">AI 返回 Three.js 源码，在隔离环境构建后直接加入 RPG 场景；不经过 GLB。</p>
+        </section>
+        <section>
+          <h2>基础模型</h2>
+          <div class="world-mvp__model-grid">
+            <button v-for="item in objectTypes" :key="item.id" @click="addModel(item.id)">＋ {{ item.label }}</button>
+          </div>
+          <button class="world-mvp__demo-button" @click="addLightSwitchDemo">创建开关灯交互演示</button>
+          <div class="world-mvp__list">
+            <button v-for="item in objects" :key="item.id" :class="{ active: selectedName === item.name }" @click="selectModel(item)">{{ item.name }}</button>
+          </div>
+        </section>
+        <section>
+          <h2>校园场景</h2>
+          <p class="world-mvp__message">已加载南昌工学院校园空间底图，校园建筑、道路、湖泊和公共区域作为场景环境。</p>
+        </section>
+        <section>
+          <h2>环境</h2>
+          <label class="world-mvp__toggle"><input v-model="timeEnabled" type="checkbox" @change="updateEnvironment"><span>时间系统</span><b>{{ timeEnabled ? '开启' : '关闭' }}</b></label>
+          <label class="world-mvp__field"><span>当前时间 <b>{{ String(Math.floor(time)).padStart(2, '0') }}:{{ String(Math.round((time % 1) * 60)).padStart(2, '0') }}</b></span>
+            <input v-model.number="time" type="range" min="0" max="24" step="0.25" :disabled="!timeEnabled" @input="updateEnvironment">
+          </label>
+          <label class="world-mvp__toggle"><input v-model="weatherEnabled" type="checkbox" @change="updateEnvironment"><span>天气总开关</span><b>{{ weatherEnabled ? '开启' : '关闭' }}</b></label>
+          <label class="world-mvp__field"><span>天气模式</span>
+            <select v-model="weather" :disabled="!weatherEnabled" @change="updateEnvironment">
+              <option value="clear">晴天</option><option value="rain">下雨</option>
+            </select>
+          </label>
+          <label class="world-mvp__toggle"><input v-model="rainEnabled" type="checkbox" :disabled="!weatherEnabled" @change="updateEnvironment"><span>降雨效果</span><b>{{ rainEnabled ? '开启' : '关闭' }}</b></label>
+          <label class="world-mvp__toggle"><input v-model="artificialLightingEnabled" type="checkbox" @change="updateEnvironment"><span>人工灯光总开关</span><b>{{ artificialLightingEnabled ? '开启' : '关闭' }}</b></label>
+          <label class="world-mvp__toggle"><input v-model="windEnabled" type="checkbox" @change="updateEnvironment"><span>风力系统</span><b>{{ windEnabled ? '开启' : '关闭' }}</b></label>
+          <label class="world-mvp__field"><span>风速 <b>{{ wind }}%</b></span>
+            <input v-model.number="wind" type="range" min="0" max="100" step="5" :disabled="!windEnabled" @input="updateEnvironment">
+          </label>
+        </section>
+        <section>
+          <h2>任务交互</h2>
+          <div class="world-mvp__command">
+            <input v-model="command" placeholder="输入任务，例如：创建球体" @keydown.enter="executeTask">
+            <button @click="executeTask">执行</button>
+          </div>
+          <p class="world-mvp__message">{{ message }}</p>
+          <div class="world-mvp__examples">
+            <button @click="command = '创建球体'; executeTask()">创建球体</button>
+            <button @click="command = '移动 2,0,3'; executeTask()">移动模型</button>
+            <button @click="command = '切换雨天'; executeTask()">切换雨天</button>
+            <button @click="command = '触发交互'; executeTask()">触发交互</button>
+          </div>
+        </section>
+      </template>
     </aside>
     <ProceduralModelEditor
       ref="proceduralModelEditorRef"

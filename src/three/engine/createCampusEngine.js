@@ -351,6 +351,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!isBlankSandbox || !campus?.userData?.expandWorld) return false
     const expanded = campus.userData.expandWorld(direction, count)
     if (!expanded) return false
+    syncSandboxWalkableChunks()
     // walkableBounds is mutated in place, so CollisionWorld and InputController retain
     // the same authoritative bounds object without replacing their references.
     if (collisionWorld) collisionWorld.bounds = campus.userData.walkableBounds
@@ -365,69 +366,70 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
-  function removeSandboxWorldEdge(direction) {
-    if (!isBlankSandbox || !campus?.userData?.removeWorldEdge) {
+  function syncSandboxWalkableChunks() {
+    if (!isBlankSandbox || !collisionWorld) return
+    const state = getSandboxWorldState()
+    const width = Number(state?.chunkSize?.width)
+    const depth = Number(state?.chunkSize?.depth)
+    if (!(width > 0) || !(depth > 0)) return
+    collisionWorld.setWalkableRegions((state.chunks || []).map(chunk => ({
+      minX: chunk.x * width - width / 2,
+      maxX: chunk.x * width + width / 2,
+      minZ: chunk.z * depth - depth / 2,
+      maxZ: chunk.z * depth + depth / 2,
+    })))
+  }
+
+  function removeSandboxWorldChunk(chunkX, chunkZ) {
+    if (!isBlankSandbox || !campus?.userData?.removeWorldChunk) {
       return { ok: false, reason: 'unsupported-world' }
     }
-    const normalized = String(direction || '').toLowerCase()
-    if (!['north', 'south', 'east', 'west'].includes(normalized)) {
-      return { ok: false, reason: 'invalid-direction' }
-    }
+    const x = Number(chunkX), z = Number(chunkZ)
+    if (!Number.isInteger(x) || !Number.isInteger(z)) return { ok: false, reason: 'invalid-chunk' }
+    if (x === 0 && z === 0) return { ok: false, reason: 'origin-anchor', blockers: ['初始中心区块'] }
     const worldState = getSandboxWorldState()
-    const chunks = worldState?.chunks || []
-    if (!chunks.length) return { ok: false, reason: 'empty-world' }
-    const minX = Math.min(...chunks.map(item => item.x))
-    const maxX = Math.max(...chunks.map(item => item.x))
-    const minZ = Math.min(...chunks.map(item => item.z))
-    const maxZ = Math.max(...chunks.map(item => item.z))
-    const edge = normalized === 'west' ? minX
-      : normalized === 'east' ? maxX
-        : normalized === 'north' ? minZ : maxZ
-    const strip = chunks.filter(item => (
-      normalized === 'west' || normalized === 'east' ? item.x === edge : item.z === edge
-    ))
-    if (strip.some(item => item.x === 0 && item.z === 0)) {
-      return { ok: false, reason: 'origin-anchor', blockers: ['初始中心区块'] }
-    }
+    const chunk = worldState?.chunks?.find(item => item.x === x && item.z === z)
+    if (!chunk) return { ok: false, reason: 'chunk-not-found' }
     const width = Number(worldState.chunkSize?.width)
     const depth = Number(worldState.chunkSize?.depth)
+    const minWorldX = x * width - width / 2
+    const maxWorldX = x * width + width / 2
+    const minWorldZ = z * depth - depth / 2
+    const maxWorldZ = z * depth + depth / 2
     const blockers = []
     const player = getPlayerPosition()
-    for (const chunk of strip) {
-      const minWorldX = chunk.x * width - width / 2
-      const maxWorldX = chunk.x * width + width / 2
-      const minWorldZ = chunk.z * depth - depth / 2
-      const maxWorldZ = chunk.z * depth + depth / 2
-      if (player && player.x >= minWorldX && player.x <= maxWorldX
-        && player.z >= minWorldZ && player.z <= maxWorldZ) {
-        blockers.push('玩家当前位置')
+    if (player && player.x >= minWorldX && player.x <= maxWorldX
+      && player.z >= minWorldZ && player.z <= maxWorldZ) blockers.push('玩家当前位置')
+    for (const [id, model] of sandboxModels) {
+      if (!model.visible) continue
+      model.updateWorldMatrix(true, true)
+      const modelBounds = new THREE.Box3().setFromObject(model)
+      if (!modelBounds.isEmpty() && modelBounds.min.x < maxWorldX && modelBounds.max.x > minWorldX
+        && modelBounds.min.z < maxWorldZ && modelBounds.max.z > minWorldZ) blockers.push(model.name || id)
+    }
+    for (const obstacle of collisionWorld?.obstacles || []) {
+      if (obstacle.maxX > minWorldX && obstacle.minX < maxWorldX
+        && obstacle.maxZ > minWorldZ && obstacle.minZ < maxWorldZ) {
+        const owner = obstacle.ownerId ? sandboxModels.get(String(obstacle.ownerId)) : null
+        blockers.push(owner?.name || '已登记的碰撞区域')
       }
-      for (const [id, model] of sandboxModels) {
-        if (!model.visible) continue
-        model.updateWorldMatrix(true, true)
-        const modelBounds = new THREE.Box3().setFromObject(model)
-        if (!modelBounds.isEmpty() && modelBounds.min.x < maxWorldX
-          && modelBounds.max.x > minWorldX
-          && modelBounds.min.z < maxWorldZ
-          && modelBounds.max.z > minWorldZ) {
-          blockers.push(model.name || id)
-        }
-      }
-      for (const obstacle of collisionWorld?.obstacles || []) {
-        if (obstacle.maxX > minWorldX && obstacle.minX < maxWorldX
-          && obstacle.maxZ > minWorldZ && obstacle.minZ < maxWorldZ) {
-          const owner = obstacle.ownerId ? sandboxModels.get(String(obstacle.ownerId)) : null
-          blockers.push(owner?.name || '已登记的碰撞区域')
+    }
+    for (const surface of collisionWorld?.supportSurfaces || []) {
+      for (const mesh of surface.meshes || []) {
+        mesh.updateWorldMatrix?.(true, true)
+        const surfaceBounds = new THREE.Box3().setFromObject(mesh)
+        if (!surfaceBounds.isEmpty() && surfaceBounds.min.x < maxWorldX && surfaceBounds.max.x > minWorldX
+          && surfaceBounds.min.z < maxWorldZ && surfaceBounds.max.z > minWorldZ) {
+          const owner = sandboxModels.get(String(surface.ownerId))
+          blockers.push(owner?.name || '已登记的可站立表面')
+          break
         }
       }
     }
     const uniqueBlockers = [...new Set(blockers)]
-    if (uniqueBlockers.length) {
-      return { ok: false, reason: 'occupied', blockers: uniqueBlockers }
-    }
-    if (!campus.userData.removeWorldEdge(normalized)) {
-      return { ok: false, reason: 'minimum-world-size' }
-    }
+    if (uniqueBlockers.length) return { ok: false, reason: 'occupied', blockers: uniqueBlockers }
+    if (!campus.userData.removeWorldChunk(x, z)) return { ok: false, reason: 'cannot-remove-chunk' }
+    syncSandboxWalkableChunks()
     if (collisionWorld) collisionWorld.bounds = campus.userData.walkableBounds
     if (input) {
       input.bounds = campus.userData.walkableBounds
@@ -444,6 +446,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!isBlankSandbox || !campus?.userData?.restoreWorldState || !state) return false
     const restored = campus.userData.restoreWorldState(state)
     if (!restored) return false
+    syncSandboxWalkableChunks()
     if (collisionWorld) collisionWorld.bounds = campus.userData.walkableBounds
     if (input) {
       input.bounds = campus.userData.walkableBounds
@@ -1421,6 +1424,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       circularObstacles.push({ x: position.x, z: position.z, radius })
     })
     collisionWorld = new CollisionWorld(campus.userData.walkableBounds, buildingObstacles, 0.62)
+    if (isBlankSandbox) syncSandboxWalkableChunks()
     for (const { object, polygons } of buildingWallSets) {
       object.userData.collisionObstacleStart = collisionWorld.obstacles.length
       polygons.forEach(polygon => collisionWorld.addPolygonObstacle({ outer: polygon }))

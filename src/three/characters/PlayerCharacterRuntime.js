@@ -75,7 +75,7 @@ export class PlayerCharacterRuntime {
       else if (/walk|move/.test(key)) this.actions.set('walk', this.mixer.clipAction(clip))
       else if (/run|sprint/.test(key)) this.actions.set('run', this.mixer.clipAction(clip))
     }
-    if (this.actions.size && !this.actions.has('idle')) {
+    if (this.mixer && Array.isArray(animations) && animations.length && !this.actions.has('idle')) {
       const firstClip = (animations || []).find(clip => clip?.name)
       if (firstClip) this.actions.set('idle', this.mixer.clipAction(firstClip))
     }
@@ -169,6 +169,7 @@ export class PlayerCharacterRuntime {
     }
     this.assetId = 'builtin-placeholder'
     this.animationState = 'idle'
+    this.animationOverride = null
     return true
   }
 

@@ -3229,8 +3229,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function setMode(mode) {
-    // 沙盒默认统一使用自由总览相机；人物移动由 InputController 独立驱动，不切回跟随镜头。
-    const nextMode = isBlankSandbox && mode === 'thirdPerson' ? 'overview' : mode
+    // 沙盒自由视角与首页近景跟随视角并存；thirdPerson 不再被强制归一化为 overview。
+    const nextMode = mode
     cameraRig?.setMode(nextMode)
     if (isBlankSandbox && nextMode === 'overview') focusSandboxOverview()
     if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
@@ -3246,6 +3246,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (isBlankSandbox && !['free', '2.5d', '3d'].includes(mode)) return false
     if (!isBlankSandbox && !['2.5d', '3d'].includes(mode)) return false
     cameraRig?.setViewMode(mode)
+    if (isBlankSandbox) {
+      // 自由视角保持独立观察；2.5D/3D 复用首页第三人称近景跟随镜头。
+      setMode(mode === 'free' ? 'overview' : 'thirdPerson')
+    }
     if (sandboxTransform && cameraRig?.camera) sandboxTransform.camera = cameraRig.camera
     syncRenderQuality()
     requestFrame()

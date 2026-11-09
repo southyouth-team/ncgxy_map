@@ -3290,3 +3290,28 @@ export const environmentBindings = [
 - 当前功能分支提交 `db523a485407c12485113004e2ebc15674ab82ea` 的 Frontend CI：`npm test` 为 500 passed / 6 failed（506 total）；本轮新增的 `CharacterTraversalProfile`、Rapier Profile 消费、模型 Traversability Manifest 测试均通过。6 项失败仍落在既有失败用例（InputController 既有坡面断言、模型 Manifest 既有空环境绑定断言、沙盒场景两项、PlayerCharacterRuntime 一项、太阳位置一项）；与此前基线的失败总数一致。前端 `npm run build` 通过。
 - 同一提交的 Backend CI：NestJS build 通过；单测 96 passed / 1 failed，仍为既有 `image-generation.procedural.spec.ts` 失败，与本轮新增 Prompt 声明无关。后端数据库集成验证因单测失败按现有工作流策略未继续。
 - 以上为 GitHub Actions 结果，不代表浏览器实测。尚未完成真实模型楼梯/坡面、门洞净空、人物起终点可达性验收。
+
+
+## 2026-11-10 — Traversability 几何绑定分析器（第二阶段）
+
+### 已落地
+
+1. 新增 `src/three/sandbox/modelTraversabilityAnalyzer.js`，在真实 Three.js 模型层级上分析 Manifest 中的楼梯、坡面、通道和连接声明。
+2. 对楼梯/坡面/通道执行稳定 `targetPartId` 绑定：目标不存在、目标 Mesh 缺失、`componentId` 重复时产生明确错误，不做猜测式匹配。
+3. 对绑定几何采集 Mesh 数量、世界包围范围、朝上三角面数量；坡面额外统计朝上三角面的中位坡度，并可与 AI 声明坡度做偏差诊断。
+4. 楼梯目前只证明声明绑定了几何并检测到朝上三角面；分析器明确输出“逐级踏步/级高连续性尚未验证”警告。
+5. 通道目前只证明目标几何存在；分析器明确输出“门洞净空尚未验证”警告，不以门框包围盒错误推断开口可通过。
+6. 空间连接暂时标记 deferred，尚未绑定楼层/房间节点图。
+7. Procedural Model Worker 生成模型后自动运行分析器，并将报告写入 `root.userData.proceduralModelTraversabilityAnalysis`，随模型序列化结果返回。
+8. 新增 `modelTraversabilityAnalyzer.test.js`，覆盖几何绑定、坡度证据、重复/缺失部件 ID、未认证状态和通道/楼梯未完成警告。
+
+### 本阶段边界
+
+- 当前分析器是几何证据采集与绑定校验，不创建 Rapier Collider，也不改变玩家碰撞行为。
+- 三角面坡度是基于世界坐标变换后实际 Mesh 三角形法线计算；它不等于对整条坡道连续性或可达性的证明。
+- 楼梯逐级识别、台阶宽高与连续性、坡面边缘/断裂检测、门洞净空体积检测、楼层连接拓扑仍待实现。
+- `certifiedWalkable` 仍固定为 false，任何模型都不能仅凭本阶段分析结果获得“可通行”认证。
+
+### 验证
+
+- 已新增单元测试，等待 GitHub Actions 对当前提交执行；本轮尚未本地运行 Vitest 或浏览器实测。

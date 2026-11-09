@@ -200,6 +200,12 @@ export function collectModelDeclaredMeshColliders(THREE, model, ownerId) {
       if (!mesh.isMesh || mesh.visible === false
         || mesh.userData?.physicsCollision === false
         || mesh.userData?.collisionMode === 'none') return
+      let ancestor = mesh.parent
+      while (ancestor && ancestor !== target) {
+        const ancestorComponentId = ancestor.userData?.componentId
+        if (typeof ancestorComponentId === 'string' && ancestorComponentId !== targetPartId) return
+        ancestor = ancestor.parent
+      }
       const position = mesh.geometry?.getAttribute?.('position')
       if (!position || position.itemSize < 3 || position.count < 3) return
       const index = mesh.geometry.index

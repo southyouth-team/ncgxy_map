@@ -416,3 +416,32 @@ describe('InputController Rapier character movement', () => {
     expect(cameraRig.player.y).toBeCloseTo(3.4)
   })
 })
+
+
+describe('InputController jump and stuck reset', () => {
+  it('starts a jump with the shared profile and rejects a second jump while airborne', () => {
+    const { controller, cameraRig } = createController()
+    expect(controller.jumpPlayer()).toBe(false)
+    controller.setMode('thirdPerson')
+    expect(controller.jumpPlayer()).toBe(true)
+    expect(controller.verticalVelocity).toBeCloseTo(Math.sqrt(2 * controller.gravity * controller.traversalProfile.jumpHeight))
+    expect(controller.jumpPlayer()).toBe(false)
+    controller.updateVerticalMotion(cameraRig.player, 0.05)
+    expect(cameraRig.player.y).toBeGreaterThan(controller.playerEyeHeight)
+  })
+
+  it('uses Space to jump and R to return to the recorded spawn point', () => {
+    const { controller, cameraRig } = createController()
+    cameraRig.player.set = function (x, y, z) { Object.assign(this, { x, y, z }) }
+    controller.setMode('thirdPerson')
+    controller.spawnPosition = { x: 3, y: 1.7, z: -4 }
+    controller.jumpPlayer()
+    const preventDefault = vi.fn()
+    controller.onKeyDown({ key: 'r', target: { tagName: 'CANVAS' }, preventDefault })
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(cameraRig.player).toMatchObject({ x: 3, y: 1.7, z: -4 })
+    expect(controller.jumpActive).toBe(false)
+    expect(controller.verticalVelocity).toBe(0)
+    expect(controller.navigationPath).toBeNull()
+  })
+})

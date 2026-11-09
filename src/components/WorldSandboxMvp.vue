@@ -40,6 +40,7 @@ const chunkMapViewport = ref(null)
 const chunkMapPointer = ref(null)
 const chunkMapDragging = ref(false)
 const chunkMapDragOrigin = ref(null)
+const chunkMapSelectionBox = ref(null)
 const chunkMap = computed(() => {
   const chunks = worldState.value?.chunks || []
   if (!chunks.length) return { chunks: [], width: 120, height: 80 }
@@ -902,17 +903,63 @@ function clearChunkSelection() {
   reclaimFeedback.value = null
 }
 
+function openChunkManager() {
+  managementMode.value = 'chunks'
+  nextTick(() => fitChunkMap())
+}
+
+function fitChunkMap() {
+  nextTick(() => {
+    const viewportEl = chunkMapViewport.value
+    const chunks = worldState.value?.chunks || []
+    if (!viewportEl || !chunks.length) return
+    const minX = Math.min(...chunks.map(item => item.x))
+    const maxX = Math.max(...chunks.map(item => item.x))
+    const minZ = Math.min(...chunks.map(item => item.z))
+    const maxZ = Math.max(...chunks.map(item => item.z))
+    const columns = maxX - minX + 1
+    const rows = maxZ - minZ + 1
+    const fitWidth = (viewportEl.clientWidth - 90) / columns
+    const fitHeight = (viewportEl.clientHeight - 90) / (rows * 0.72)
+    mapCellSize.value = Math.max(42, Math.min(150, Math.floor(Math.min(fitWidth, fitHeight))))
+    nextTick(() => {
+      viewportEl.scrollLeft = 0
+      viewportEl.scrollTop = 0
+    })
+  })
+}
+
 function handleChunkMapPointerDown(event) {
   if (event.button !== 0 || event.target.closest('.world-mvp__chunk-map-item')) return
   const viewportEl = chunkMapViewport.value
   if (!viewportEl) return
-  chunkMapPointer.value = { x: event.clientX, y: event.clientY, scrollLeft: viewportEl.scrollLeft, scrollTop: viewportEl.scrollTop }
+  if (event.shiftKey) {
+    const rect = viewportEl.getBoundingClientRect()
+    chunkMapDragOrigin.value = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    chunkMapSelectionBox.value = { left: chunkMapDragOrigin.value.x, top: chunkMapDragOrigin.value.y, width: 0, height: 0 }
+  } else {
+    chunkMapPointer.value = { x: event.clientX, y: event.clientY, scrollLeft: viewportEl.scrollLeft, scrollTop: viewportEl.scrollTop }
+  }
   chunkMapDragging.value = true
   viewportEl.setPointerCapture?.(event.pointerId)
 }
 
 function handleChunkMapPointerMove(event) {
-  if (!chunkMapDragging.value || !chunkMapPointer.value || !chunkMapViewport.value) return
+  if (!chunkMapDragging.value || !chunkMapViewport.value) return
+  if (chunkMapDragOrigin.value) {
+    const rect = chunkMapViewport.value.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+    const left = Math.min(chunkMapDragOrigin.value.x, x)
+    const top = Math.min(chunkMapDragOrigin.value.y, y)
+    chunkMapSelectionBox.value = {
+      left, top,
+      width: Math.abs(x - chunkMapDragOrigin.value.x),
+      height: Math.abs(y - chunkMapDragOrigin.value.y),
+    }
+    return
+  }
+  if (!chunkMapPointer.value) return
   const dx = event.clientX - chunkMapPointer.value.x
   const dy = event.clientY - chunkMapPointer.value.y
   chunkMapViewport.value.scrollLeft = chunkMapPointer.value.scrollLeft - dx
@@ -920,8 +967,32 @@ function handleChunkMapPointerMove(event) {
 }
 
 function handleChunkMapPointerUp() {
+  if (chunkMapDragOrigin.value && chunkMapSelectionBox.value && chunkMapViewport.value) {
+    const box = chunkMapSelectionBox.value
+    if (box.width > 5 || box.height > 5) {
+      const selectionRect = {
+        left: chunkMapViewport.value.getBoundingClientRect().left + box.left,
+        top: chunkMapViewport.value.getBoundingClientRect().top + box.top,
+        right: chunkMapViewport.value.getBoundingClientRect().left + box.left + box.width,
+        bottom: chunkMapViewport.value.getBoundingClientRect().top + box.top + box.height,
+      }
+      const keys = Array.from(chunkMapViewport.value.querySelectorAll('.world-mvp__chunk-map-item'))
+        .filter(element => {
+          const rect = element.getBoundingClientRect()
+          return rect.right >= selectionRect.left && rect.left <= selectionRect.right
+            && rect.bottom >= selectionRect.top && rect.top <= selectionRect.bottom
+        })
+        .map(element => element.getAttribute('data-chunk-key'))
+        .filter(Boolean)
+      selectedChunkKeys.value = [...new Set([...selectedChunkKeys.value, ...keys])]
+      selectedChunkKey.value = keys[keys.length - 1] || selectedChunkKey.value
+      reclaimFeedback.value = null
+    }
+  }
   chunkMapDragging.value = false
   chunkMapPointer.value = null
+  chunkMapDragOrigin.value = null
+  chunkMapSelectionBox.value = null
 }
 
 function zoomChunkMap(delta) {
@@ -1198,7 +1269,7 @@ onBeforeUnmount(() => {
         <div class="world-mvp__chunk-manager-actions">
           <button @click="zoomChunkMap(-10)" :disabled="mapCellSize <= 42">−</button>
           <button @click="zoomChunkMap(10)" :disabled="mapCellSize >= 150">＋</button>
-          <button @click="mapCellSize = 88">适应视图</button>
+          <button @click="fitChunkMap">适应视图</button>
           <button @click="selectAllChunks">全选</button>
           <button @click="clearChunkSelection">清空选择</button>
           <button class="danger" :disabled="!selectedChunks.length" @click="removeSelectedWorldChunks">回收选中（{{ selectedChunks.length }}）</button>
@@ -1216,12 +1287,13 @@ onBeforeUnmount(() => {
         @pointerdown="handleChunkMapPointerDown" @pointermove="handleChunkMapPointerMove" @pointerup="handleChunkMapPointerUp" @pointercancel="handleChunkMapPointerUp"
         @wheel.prevent="zoomChunkMap($event.deltaY < 0 ? 5 : -5)">
         <svg class="world-mvp__chunk-map world-mvp__chunk-map--overview" :width="chunkMap.width" :height="chunkMap.height" :viewBox="`0 0 ${chunkMap.width} ${chunkMap.height}`" role="group" aria-label="沙盒全景地块管理画布">
-          <g v-for="chunk in chunkMap.chunks" :key="chunk.key" class="world-mvp__chunk-map-item" :class="{ active: selectedChunkKeys.includes(chunk.key), anchor: chunk.isAnchor }" @click.stop="toggleChunkSelection(chunk, $event)">
+          <g v-for="chunk in chunkMap.chunks" :key="chunk.key" class="world-mvp__chunk-map-item" :class="{ active: selectedChunkKeys.includes(chunk.key), anchor: chunk.isAnchor }" :data-chunk-key="chunk.key" @click.stop="toggleChunkSelection(chunk, $event)">
             <rect :x="chunk.mapX" :y="chunk.mapY" :width="mapCellSize - 5" :height="mapCellSize * 0.72 - 5" rx="8" />
             <text :x="chunk.mapX + (mapCellSize - 5) / 2" :y="chunk.mapY + (mapCellSize * 0.72 - 5) / 2 + 4" text-anchor="middle">{{ chunk.isAnchor ? '世界锚点' : '地块' }}</text>
             <text class="coordinate" :x="chunk.mapX + (mapCellSize - 5) / 2" :y="chunk.mapY + (mapCellSize * 0.72 - 5) / 2 + 18" text-anchor="middle">{{ chunk.x }}, {{ chunk.z }}</text>
           </g>
         </svg>
+        <div v-if="chunkMapSelectionBox" class="world-mvp__chunk-selection-box" :style="{ left: chunkMapSelectionBox.left + 'px', top: chunkMapSelectionBox.top + 'px', width: chunkMapSelectionBox.width + 'px', height: chunkMapSelectionBox.height + 'px' }"></div>
         <div v-if="!chunkMap.chunks.length" class="world-mvp__chunk-map-empty">当前没有可管理的地块</div>
       </div>
       <div class="world-mvp__chunk-manager-footer">
@@ -1317,7 +1389,7 @@ onBeforeUnmount(() => {
             <button :disabled="placement.active" @click="expandWorld('east')">向东扩建</button>
             <span></span><button :disabled="placement.active" @click="expandWorld('south')">向南扩建</button><span></span>
           </div>
-          <button class="world-mvp__open-chunk-manager" @click="managementMode = 'chunks'">打开地块管理全景图 <span>{{ chunkMap.chunks.length }} 个地块 · 支持多选回收</span></button>
+          <button class="world-mvp__open-chunk-manager" @click="openChunkManager">打开地块管理全景图 <span>{{ chunkMap.chunks.length }} 个地块 · 支持多选回收</span></button>
         </section>
         <section v-if="managementMode === 'model'">
           <h2>AI 建模</h2>
@@ -1421,6 +1493,7 @@ onBeforeUnmount(() => {
 .world-mvp__chunk-manager-summary b { margin-left:5px; color:#dce8df; font-size:12px; }
 .world-mvp__chunk-map-viewport--fullscreen { position:relative; flex:1; width:100%; max-width:none; max-height:none; min-height:220px; overflow:auto; cursor:grab; border-color:rgba(255,255,255,.13); background-color:#142129; background-image:linear-gradient(rgba(177,205,188,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(177,205,188,.035) 1px,transparent 1px); background-size:24px 24px; }
 .world-mvp__chunk-map-viewport--fullscreen.dragging { cursor:grabbing; user-select:none; }
+.world-mvp__chunk-selection-box { position:absolute; z-index:3; pointer-events:none; border:1px solid #b8e8c3; background:rgba(134,195,150,.18); box-shadow:0 0 0 1px rgba(10,25,17,.5); }
 .world-mvp__chunk-map--overview { max-width:none; margin:auto; padding:34px; }
 .world-mvp__chunk-map-item rect { fill:#496858; fill-opacity:.9; stroke:rgba(204,226,210,.4); stroke-width:1.5; }
 .world-mvp__chunk-map-item:hover rect { fill:#6d9278; }

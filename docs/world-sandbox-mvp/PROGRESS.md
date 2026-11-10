@@ -4247,3 +4247,26 @@ export const environmentBindings = [
 - 代码已写入 mvp，尚未在本地执行 Vitest、Vite Build 或真实浏览器验收。
 - 需要用户刷新沙盒后检查默认人物：静止、持续行走、持续快跑、被障碍物阻挡四种状态；本轮不声称视觉问题已彻底解决。
 - 仅修改 mvp，未修改 main，未合并 PR。
+
+
+## 2026-11-11 — 角色模拟时钟统一与运行时诊断补强（待浏览器验收）
+
+### 本轮代码审计结论
+- PhysicsRuntime 使用 1/60s 固定步进、最多 5 个子步，并通过 accumulator 保留不足一个固定步的余量；超过 maxFrameDelta 或子步预算的时间会明确计入 droppedTime，避免无界追帧。
+- createCampusEngine 原先将物理/输入帧 delta 限制为 50ms，但角色动画回调使用 RAF 的绝对墙钟时间；内置角色步态又独立将两帧时间差限制为 100ms。发生长帧时，物理模拟最多推进 50ms，而动画可能推进更长时间，形成运动与动画时钟分叉。
+- 角色渲染位置由 Rapier 完成步的前后位置与 accumulator alpha 插值得到；该插值只用于表现，不回写物理状态，权责边界保持正确。
+- 动态阴影失效路径已确认：角色移动时每个活动渲染帧都会调用 ShadowSystem.invalidateDynamic()，使整张 ShadowMap 在后续渲染中更新。Three.js ShadowMap 不是局部更新；本轮先增加计数观测，不贸然限频或关闭角色投影。
+
+### 本轮修正
+- 新增 FrameTiming.advanceFrameTiming()，统一计算 RAF 原始帧间隔、受限模拟 delta、累计模拟时间及被帧 delta 上限截断的时间。
+- createCampusEngine 的输入、Rapier step、PlayerCharacterRuntime mixer 更新继续共用同一个受限 delta；角色动画回调改为消费累计模拟时间，不再消费未受限的 RAF 墙钟时间。
+- 保留 50ms 单帧模拟上限、Rapier 1/60s 固定步进和最多 5 个子步，不扩大物理追帧预算、不改变移动速度/碰撞/跳跃规则。
+- render-debug 诊断增加帧时间、模拟时间、Rapier accumulator/stepCount/droppedTime、最近一次物理 step 结果及 ShadowSystem invalidation 计数，便于区分模拟时间丢弃与阴影刷新负载。
+- 未调整动态阴影刷新频率；需要结合用户浏览器诊断中的 render cost 与动态失效计数再决定是否采用独立接触阴影或有界刷新策略。
+
+### 验证边界
+- 新增 FrameTiming 单测，覆盖正常帧、长帧截断、时间戳回退和首帧初始化。
+- 本轮只完成远端源码写入；未在本地执行 Vitest、Vite build 或真实浏览器验收。
+- 浏览器验收需观察连续 W、W+Shift、W+Shift+Space；同时检查 30/60/120/144Hz 下人物动画节奏与位移是否同步。
+- 如需评估阴影性能，使用 `?render-debug=1` 查看 `[CampusRenderDiagnostics]` 中的 render cost、physics timing 与 shadows.dynamicInvalidations；该 render cost 是 renderer.render() 调用总耗时，包含其触发的阴影渲染工作，但不是独立的 ShadowMap GPU 时间。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理任何沙盒数据。

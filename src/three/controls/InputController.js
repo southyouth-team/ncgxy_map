@@ -17,12 +17,13 @@ function normalizeControlKey(eventOrKey) {
 }
 
 export class InputController {
-  constructor(THREE, domElement, cameraRig, bounds, collisionWorld = null) {
+  constructor(THREE, domElement, cameraRig, bounds, collisionWorld = null, { movementBackend = 'auto' } = {}) {
     this.THREE = THREE
     this.domElement = domElement
     this.cameraRig = cameraRig
     this.bounds = bounds || { minX: -75, maxX: 75, minZ: -75, maxZ: 75 }
     this._collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
+    this.movementBackend = ['auto', 'rapier', 'collision-world'].includes(movementBackend) ? movementBackend : 'auto'
     this.physicsRuntime = null
     this.physicsCharacterId = null
     this.traversalProfile = Object.freeze(normalizeCharacterTraversalProfile())
@@ -155,6 +156,12 @@ export class InputController {
   set collisionWorld(world) {
     this._collisionWorld = world
     world?.setRadius?.(this.traversalProfile.radius)
+  }
+
+  setMovementBackend(backend) {
+    if (!['auto', 'rapier', 'collision-world'].includes(backend)) return false
+    this.movementBackend = backend
+    return true
   }
 
   setPhysicsRuntime(runtime, { id = 'sandbox:player' } = {}) {
@@ -461,6 +468,10 @@ export class InputController {
 
   update(delta) {
     if ((this.mode === 'overview' && !this.freeCameraMovementEnabled) || !this.movementEnabled) return
+    // Blank-sandbox MVP is Rapier-authoritative. Never silently fall back to the
+    // legacy CollisionWorld/raycast solver if its physics runtime is unavailable.
+    if (this.movementBackend === 'rapier' && !this.physicsRuntime) return
+    const useRapier = this.movementBackend === 'rapier' || (this.movementBackend === 'auto' && Boolean(this.physicsRuntime))
     const forward = (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0) - (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0)
     const strafe = (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0)
     if (forward || strafe) this.navigationPath = null
@@ -479,7 +490,7 @@ export class InputController {
         return
       }
       const travel = Math.min(distance, 5.5 * delta)
-      if (this.physicsRuntime) {
+      if (useRapier) {
         const previous = { x: player.x, y: player.y, z: player.z }
         const result = this.moveWithPhysics(player, dx / distance * travel, dz / distance * travel, delta)
         const moved = result ? Math.hypot(player.x - previous.x, player.z - previous.z) : 0
@@ -506,7 +517,7 @@ export class InputController {
     if (!forward && !strafe) {
       const player = this.cameraRig.player
       const previous = { x: player.x, y: player.y, z: player.z }
-      if (this.physicsRuntime) this.moveWithPhysics(player, 0, 0, delta)
+      if (useRapier) this.moveWithPhysics(player, 0, 0, delta)
       else this.updateVerticalMotion(player, delta)
       // 物理固定步长可能在当前渲染帧开始时完成移动；三个轴都必须同步到跟随相机。
       if (Math.hypot(player.x - previous.x, player.y - previous.y, player.z - previous.z) > 0.0001) {
@@ -532,7 +543,7 @@ export class InputController {
     const dx = Math.sin(yaw) * f - Math.cos(yaw) * s
     const dz = Math.cos(yaw) * f + Math.sin(yaw) * s
     const player = this.cameraRig.player
-    if (this.physicsRuntime) {
+    if (useRapier) {
       this.moveWithPhysics(player, dx * speed, dz * speed, delta)
     } else {
       const movement = this.collisionWorld.move(player, dx * speed, dz * speed)

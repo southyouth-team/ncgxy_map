@@ -57,3 +57,13 @@
 - Do not make animation root motion authoritative for the Rapier character.
 - Do not remove legacy code until all consumers and tests are identified.
 - Do not claim browser acceptance without actually running the browser scenarios.
+
+
+## Fixed-step lifecycle contract
+
+- `PhysicsRuntime.step(frameDelta, hooks)` accepts optional `beforeFixedStep` and `afterFixedStep` callbacks.
+- `beforeFixedStep` runs once immediately before each Rapier world step and receives the fixed delta, upcoming step count, and runtime reference. It is the intended place for Motor state transitions and command submission.
+- `afterFixedStep` runs once after Rapier has advanced and character contact/transform snapshots have been refreshed. It receives the completed step count and is intended for Motor contact-state reconciliation.
+- Hooks do not run on render frames that do not produce a fixed simulation step. A render frame that produces multiple catch-up steps invokes the hooks once per substep.
+- Existing `step(frameDelta)` callers remain compatible. The hooks are an infrastructure contract only; the Motor is not yet wired to them in this change.
+- Hook exceptions are not swallowed. A `beforeFixedStep` exception prevents that simulation step; an `afterFixedStep` exception occurs after the step has been committed.

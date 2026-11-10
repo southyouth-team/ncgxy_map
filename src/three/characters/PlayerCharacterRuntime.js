@@ -141,7 +141,7 @@ export class PlayerCharacterRuntime {
     const blend = animationDelta > 0 ? 1 - Math.exp(-animationDelta / 0.09) : 1
     this.smoothedGaitRate += (targetGaitRate - this.smoothedGaitRate) * blend
     if (this.activeVisual === this.fallbackVisual) {
-      this.fallbackUpdater?.call(this.anchor, Boolean(moving), seconds, dx, dz, this.smoothedGaitRate)
+      this.fallbackUpdater?.call(this.anchor, Boolean(moving), seconds, dx, dz, this.smoothedGaitRate, Boolean(running))
       return
     }
     const state = this.animationOverride || (moving ? (running ? 'run' : 'walk') : 'idle')

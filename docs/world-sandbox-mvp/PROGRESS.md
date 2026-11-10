@@ -4049,3 +4049,24 @@ export const environmentBindings = [
 - 保留 `physicsCharacterId` 在兼容调用方先赋值、后绑定 PhysicsRuntime 时的语义；runtime 解绑时才清空 ID。
 - 对应修正提交：`c6f2d12c`、`b7957e02`、`88c9a030`、`688f605b`。
 - GitHub 当前对最新代码提交未返回 commit status，PR workflow 查询也未返回运行记录；这不是 CI 通过。Vitest/Vite build 和浏览器验收仍未执行。
+
+
+## 2026-11-11 — PhysicsRuntime 固定步生命周期接口
+
+### 本轮实现
+- `PhysicsRuntime.step(frameDelta, hooks)` 新增可选 `beforeFixedStep` / `afterFixedStep` 生命周期回调。
+- `beforeFixedStep` 在每个 Rapier 固定子步开始、角色位移计算之前触发；可用于消费已缓存输入、推进 Motor 固定步状态并提交本步运动命令。
+- `afterFixedStep` 在 Rapier 完成求解且角色位置、grounded、actualVelocity 快照刷新后触发；可用于 Motor 落地/离地状态收敛。
+- 一帧产生多个物理子步时，回调按子步逐次执行；不足一个固定步的渲染帧不会触发回调。
+- 原有 `step(frameDelta)` 调用保持兼容。本轮只建立物理生命周期契约，尚未把 CharacterMotor 接入回调，避免在未完成时序迁移前改变当前运动行为。
+
+### 验证边界
+- 新增 PhysicsRuntime 单测覆盖双子步回调顺序、固定 delta/stepCount 参数，以及不足一个物理步时不触发回调。
+- 当前只完成远端代码写入和结构核对；未在本地执行 Vitest / Vite Build，也未取得该提交的 CI 结果。
+- 尚未完成 CharacterMotor 固定步迁移和真实浏览器连续输入验收。
+- 本轮仅修改 `mvp`，未修改 `main`，未合并 PR。
+
+### 本轮提交
+- `8e9952dd` — PhysicsRuntime 增加固定步生命周期回调
+- `f26fe88b` — 增加固定步回调时序单测
+- `5c5da12c` — 记录固定步接口契约与验证边界

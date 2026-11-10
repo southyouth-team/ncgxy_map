@@ -4020,3 +4020,26 @@ export const environmentBindings = [
 - 尚未取得该提交对应的 CI 执行结果；当前 GitHub commit status 查询未返回检查项。
 - 未执行本地 Vitest/Vite build，也未完成真实浏览器键盘连续性验收。
 - 不将输入采集层拆分等同于整个角色控制架构整改完成。
+
+## 2026-11-11 — Character Motor 第一阶段拆分
+
+### 本轮实现
+- 新增 `src/three/controls/CharacterMotor.js`，将 Rapier 角色的跳跃缓冲、Coyote Time、垂直速度、跳跃生命周期、grounded 状态，以及 Rapier 角色速度/加速度命令提交迁出 `InputController`。
+- `InputController` 改为组合 CharacterMotor；原有公开字段通过 getter/setter 兼容代理到 Motor，保留现有引擎、UI 和测试调用入口，避免出现第二份运动状态。
+- `InputController.moveWithPhysics()`、`jumpPlayer()`、跳跃窗口更新和物理位置同步改为委托 Motor。
+- 新增 `CharacterMotor.test.js`，覆盖跳跃状态归属、跑跳同时提交、overview 自由镜头显式移动、物理插值位置同步和 reset 状态清理。
+- 保留非 Rapier 的 CollisionWorld/raycast 路径；本轮未删除任何旧调用方。
+
+### 当前边界与下一步
+- 本轮完成的是 Character Motor 的第一阶段结构拆分，不代表固定步时序整改完成。
+- 当前跳跃缓冲与 Coyote Time 仍通过原有 render-frame 更新入口推进；下一步必须为 PhysicsRuntime 增加固定子步回调/命令消费契约，再将 Motor 状态迁入 fixed timestep。
+- 水平相机相对方向计算、导航路径和部分兼容逻辑仍留在 InputController；后续需在不破坏自动寻路、室内楼梯和 overview 自由镜头的前提下继续收敛职责。
+- 真实浏览器行为尚未验收；本轮没有本地项目运行环境执行 Vitest/Vite build，不能宣称测试通过。
+- 代码提交到 `mvp`；本轮未修改 `main`，未合并 PR。
+
+### 本轮提交
+- `823f5bb6` — 新增 CharacterMotor
+- `31f1e6b1` — InputController 委托 Motor 并保留兼容代理
+- `df4fdced` — 新增 Motor 单测
+- `c6f2d12c` — 保留 overview 自由镜头移动语义
+- `b7957e02` — 调整 overview 自由镜头 Motor 测试

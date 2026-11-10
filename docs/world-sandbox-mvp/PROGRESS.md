@@ -4070,3 +4070,34 @@ export const environmentBindings = [
 - `8e9952dd` — PhysicsRuntime 增加固定步生命周期回调
 - `f26fe88b` — 增加固定步回调时序单测
 - `5c5da12c` — 记录固定步接口契约与验证边界
+
+
+## 2026-11-11 — CharacterMotor 固定步驱动接入（待 CI / 浏览器验收）
+
+### 本轮实现
+- CharacterMotor 的 Rapier 路径不再在渲染帧 `moveWithPhysics()` 中推进 Jump Buffer / Coyote Time，也不再在该方法中提交 Rapier 速度和重力命令。
+- 渲染帧只更新水平移动意图（速度向量）并读取插值快照；短按跳跃写入 Motor 缓冲，不要求该按键必须跨越一个渲染帧或物理 tick。
+- 新增 Motor `beforeFixedStep()`：按固定 delta 更新跳跃缓冲和 Coyote Time，判断起跳，并提交水平/垂直速度及重力加速度。
+- 新增 Motor `afterFixedStep()`：消费 Rapier 求解后的 grounded / velocity 快照，识别离地与落地并收敛跳跃生命周期。
+- InputController 暴露窄委托接口；createCampusEngine 的两个 Rapier step 调用点（普通运行、楼梯过渡）均接入固定步前后回调。
+- 更新 CharacterMotor 与 InputController 单测断言，使 Rapier 路径明确在固定步回调中提交运动命令。
+
+### 架构结果
+- Rapier 角色的 Jump Buffer、Coyote Time、起跳决策、重力命令和落地状态现在由固定物理子步推进。
+- 渲染帧只提供最新水平意图；一个渲染帧产生多个 Rapier 子步时，每个子步都会独立更新 Motor 状态。
+- 非 Rapier 的旧版 CollisionWorld 路径仍保留其 render-delta 更新，不在本轮混合迁移。
+- 旧路径尚未删除；仍需完成调用方核查和独立隔离。
+
+### 验证边界
+- 代码已写入远端 `mvp`；尚未执行本地 Vitest / Vite Build。
+- 尚未取得该组提交的 GitHub Actions 结果；不能宣称单测通过。
+- 尚未完成 60/120/144Hz 浏览器输入 cadence、持续按键、W+Shift+Space、边缘跳跃、斜坡/台阶碰撞与重置验收。
+- 需要重点复核 Rapier 的 `computedGrounded()` 在起跳首步、空中、落地首步的状态语义，确认与 Motor 的落地状态机一致。
+- 本轮只修改 `mvp`，未修改 `main`，未合并 PR。
+
+### 本轮提交
+- `dbe8f55b` — Motor 固定步状态机
+- `a845c489` — InputController 固定步委托
+- `bc336913` — 引擎固定步回调接入
+- `621501db` — Motor 固定步测试更新
+- `c49dbf1f` — InputController 测试更新

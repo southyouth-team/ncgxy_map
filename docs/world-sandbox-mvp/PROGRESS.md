@@ -4167,3 +4167,18 @@ export const environmentBindings = [
 - `e269aef5` — PhysicsRuntime 明确 grounded 快照语义
 - `330dc9c8` — PhysicsRuntime 接触状态时序测试
 - `1688f54e` — 更新架构文档
+
+## 2026-11-11 — 沙盒黑屏诊断可观测性补强（待浏览器验收）
+
+### 本轮调整
+- 为引擎初始化增加阶段标记；初始化任意步骤抛错时统一输出 `[CampusRenderFailure]`，包含失败阶段、异常堆栈、Canvas 挂载/尺寸、WebGL context 状态、绘制缓冲区、场景对象/Mesh 数量和相机状态。
+- 为渲染帧增加异常边界；帧内更新或 renderer.render 抛错时输出同一份现场诊断，不静默吞掉异常，也不对确定性错误无限自动重试。
+- 首次成功执行 renderer.render 后立即输出 `[CampusRenderDiagnostics]`，之后每 120 帧输出一次，避免此前必须等待 120 帧才获得渲染数据的问题。
+- 监听 WebGL context lost/restored 事件；丢失时记录现场，恢复时请求重新绘制。
+- 不改动沙盒空间数据、模型实例、物理碰撞、角色控制和持久化数据。
+
+### 验证边界
+- 已完成远端源码结构修改与提交；尚未在用户本地执行 Vitest、Vite build 或浏览器验收。
+- 下一次打开 `/world-sandbox-mvp?render-debug=1` 后，优先查看 Console 中的 `[CampusRenderFailure]`、`[CampusRenderDiagnostics]`。
+- 若初始化失败，诊断会给出具体阶段和异常堆栈；若首帧成功，则会给出 draw calls、Mesh 数量、相机状态和绘制缓冲区信息。需据此定位实际黑屏根因，不能将增加日志等同于黑屏已修复。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR。

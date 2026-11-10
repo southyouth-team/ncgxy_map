@@ -43,6 +43,9 @@ export function collectModelWaterVolumes(THREE, model, ownerId) {
       || typeof declaration.targetPartId !== 'string' || seen.has(declaration.id)) continue
     const target = parts.get(declaration.targetPartId)
     if (!target) continue
+    const surfacePart = typeof declaration.surfacePartId === 'string'
+      ? parts.get(declaration.surfacePartId)
+      : null
     const center = declaration.center || {}
     const size = declaration.size || {}
     const values = [center.x ?? 0, center.z ?? 0, size.x, size.z, declaration.bottomY, size.x, size.z]
@@ -51,11 +54,23 @@ export function collectModelWaterVolumes(THREE, model, ownerId) {
     if (!values.every(Number.isFinite) || values[2] <= 0 || values[3] <= 0
       || !isFiniteNumber(declaration.bottomY) || depth === null) continue
     seen.add(declaration.id)
+    // The visible surface is a separate direct child of the volume frame.
+    // Move it by the depth delta from the authored default so the sensor and
+    // rendered water plane stay in the same coordinate contract.
+    if (surfacePart && surfacePart !== target && surfacePart.parent === target) {
+      if (!Number.isFinite(surfacePart.userData.waterSurfaceBaseY)) {
+        surfacePart.userData.waterSurfaceBaseY = surfacePart.position.y
+      }
+      surfacePart.position.y = surfacePart.userData.waterSurfaceBaseY
+        + depth - Number(declaration.depth)
+    }
     result.push({
       id: declaration.id,
       ownerId: String(ownerId),
       targetPartId: declaration.targetPartId,
+      surfacePartId: surfacePart?.parent === target ? declaration.surfacePartId : null,
       target,
+      surfacePart: surfacePart?.parent === target ? surfacePart : null,
       model,
       declaration,
       center: { x: values[0], z: values[1] },

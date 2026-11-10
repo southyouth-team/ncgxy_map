@@ -3959,3 +3959,19 @@ export const environmentBindings = [
 - 角色插值解决的是固定物理步与渲染频率不同步导致的视觉阶梯问题；若仍抖动，下一步需进一步检查角色模型挂载层级、动画根运动与 CameraRig 跟随是否重复施加位移。
 - 尚未完成真实浏览器中的 60/120/144Hz、持续 W、W+Space、W+Shift+Space 和碰撞边缘实测。
 - 仍只修改 fix/sandbox-character-physics-continuity；未修改 main，未合并 PR。
+
+
+## 2026-11-11 — 键盘输入捕获与事件唤醒修复（待 CI / 浏览器验收）
+
+### 本轮调整
+- 将 keydown / keyup 监听切换到 window capture 阶段，避免 UI 冒泡阶段的 stopPropagation / stopImmediatePropagation 抢先截断游戏输入。
+- InputController.attach() 增加幂等保护，dispose() 与捕获阶段监听器匹配移除，避免重复挂载或监听器生命周期不一致。
+- Space 首次按下后主动触发 onMovementInput，确保按需渲染场景也会立刻调度一帧；此前 Space 分支没有触发渲染唤醒回调。
+- keyup 只在确实删除了对应按键时触发输入状态变更，避免无关 keyup 事件扰动当前按键状态。
+- 窗口重新获得焦点时主动请求输入帧；新增 Space 首按唤醒与无关 keyup 隔离测试。
+
+### 当前判断
+- 之前“按住一段时间停止、松开再按仍可能无效”的反馈与事件被 UI 层截断、按需渲染没有被 Space 唤醒的风险相符；本轮先修复输入事件入口和帧调度入口。
+- 这还不是最终根因结论。若真实浏览器仍出现输入丢失，下一步需要在输入事件、每帧按键快照、期望速度、Rapier 步数之间加入时间戳诊断，确认是事件未到达、状态被清除，还是物理执行未消费。
+- CI 尚未结束，真实浏览器未验收；不得将本轮标记为已彻底解决。
+- 仅修改 fix/sandbox-character-physics-continuity，未修改 main，未合并 PR。

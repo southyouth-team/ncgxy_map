@@ -93,6 +93,21 @@ describe('PlayerCharacterRuntime', () => {
     runtime.dispose()
   })
 
+  it('switches an external character action immediately without a crossfade delay', () => {
+    const anchor = createAnchor()
+    const runtime = new PlayerCharacterRuntime(THREE, anchor)
+    const idle = { reset: vi.fn().mockReturnThis(), play: vi.fn().mockReturnThis(), stop: vi.fn() }
+    const walk = { reset: vi.fn().mockReturnThis(), play: vi.fn().mockReturnThis(), stop: vi.fn() }
+    runtime.activeVisual = new THREE.Group()
+    runtime.actions.set('idle', idle)
+    runtime.actions.set('walk', walk)
+    runtime.activeAction = idle
+    runtime.playState('walk')
+    expect(walk.play).toHaveBeenCalledOnce()
+    expect(idle.stop).toHaveBeenCalledOnce()
+    runtime.dispose()
+  })
+
   it('rejects invalid or already-mounted models', () => {
     const anchor = createAnchor()
     const runtime = new PlayerCharacterRuntime(THREE, anchor)

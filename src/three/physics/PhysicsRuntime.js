@@ -78,6 +78,8 @@ export class PhysicsRuntime {
           y: current.y + corrected.y,
           z: current.z + corrected.z,
         })
+        // Rapier computes this from the requested/corrected character movement before world.step().
+        // Publish it only after world.step() so readers observe a completed fixed-step snapshot.
         entry.pendingGrounded = entry.controller.computedGrounded()
       }
       this.world.step()
@@ -85,6 +87,7 @@ export class PhysicsRuntime {
       for (const entry of this.bodies.values()) {
         if (entry.kind !== 'kinematic-character') continue
         entry.grounded = entry.pendingGrounded === true
+        entry.groundedStepCount = this.stepCount
         const position = entry.body.translation()
         const previous = entry.previousStepPosition || position
         entry.position = { x: position.x, y: position.y, z: position.z }
@@ -286,6 +289,7 @@ export class PhysicsRuntime {
         actualVelocity: { x: 0, y: 0, z: 0 },
         lastStepMovement: { x: 0, y: 0, z: 0 },
         previousStepPosition: { x: position[0], y: position[1], z: position[2] },
+        // Grounded is the last completed character-controller movement result, not a raw contact-manifold query.
         grounded: true,
         pendingGrounded: true,
         position: { x: position[0], y: position[1], z: position[2] },

@@ -322,6 +322,17 @@ export class PhysicsRuntime {
     const translation = entry.position || entry.body.translation()
     return {
       translation: { x: translation.x, y: translation.y, z: translation.z },
+      // Render-only interpolation smooths fixed-step motion without changing collision state.
+      interpolatedTranslation: (() => {
+        const previous = entry.previousStepPosition || translation
+        const alpha = Math.max(0, Math.min(1, this.accumulator / this.fixedTimeStep))
+        return {
+          x: previous.x + (translation.x - previous.x) * alpha,
+          y: previous.y + (translation.y - previous.y) * alpha,
+          z: previous.z + (translation.z - previous.z) * alpha,
+        }
+      })(),
+      interpolationAlpha: Math.max(0, Math.min(1, this.accumulator / this.fixedTimeStep)),
       // velocity remains the commanded Rapier velocity for compatibility.
       velocity: { ...entry.desiredVelocity },
       commandedVelocity: { ...entry.desiredVelocity },

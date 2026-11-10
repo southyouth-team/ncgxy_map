@@ -51,6 +51,18 @@ describe('waterVolumeRuntime', () => {
     })
   })
 
+  it('caps character immersion at avatar height when the water is deeper than the character', () => {
+    const volumes = collectModelWaterVolumes(THREE, createWaterModel(3), 'sandbox_water')
+    const state = samplePlayerWaterState(THREE, volumes, { x: 0, y: 1.7, z: 0 }, 1.7)
+
+    expect(state).toMatchObject({
+      depth: 3,
+      immersionDepth: 1.7,
+      depthRatio: 1.7 / 3,
+      characterImmersionRatio: 1,
+    })
+  })
+
   it('returns no immersion outside the water footprint or above its surface', () => {
     const volumes = collectModelWaterVolumes(THREE, createWaterModel(0.8), 'sandbox_water')
     expect(samplePlayerWaterState(THREE, volumes, { x: 5, y: 1.7, z: 0 }, 1.7)).toBeNull()

@@ -6,6 +6,10 @@ function createWaterModel(depth = 0.6) {
   const root = new THREE.Group()
   const basin = new THREE.Group()
   basin.userData.componentId = 'basin'
+  const surface = new THREE.Group()
+  surface.userData.componentId = 'water-surface'
+  surface.position.y = depth
+  basin.add(surface)
   root.add(basin)
   root.userData.sandboxModelId = 'sandbox_water'
   root.userData.proceduralModelCapabilityManifest = {
@@ -20,6 +24,7 @@ function createWaterModel(depth = 0.6) {
         waterVolumes: [{
           id: 'main',
           targetPartId: 'basin',
+          surfacePartId: 'water-surface',
           shape: 'box',
           center: { x: 0, z: 0 },
           size: { x: 8, z: 6 },
@@ -38,7 +43,9 @@ describe('waterVolumeRuntime', () => {
     const model = createWaterModel(0.6)
     const volumes = collectModelWaterVolumes(THREE, model, 'sandbox_water')
     model.userData.proceduralModelParameterValues = { waterDepth: 1.2 }
-    const state = samplePlayerWaterState(THREE, volumes, { x: 0, y: 1.7, z: 0 }, 1.7)
+    const updatedVolumes = collectModelWaterVolumes(THREE, model, 'sandbox_water')
+    const state = samplePlayerWaterState(THREE, updatedVolumes, { x: 0, y: 1.7, z: 0 }, 1.7)
+    expect(model.getObjectByName('water-surface').position.y).toBeCloseTo(1.2)
 
     expect(state).toMatchObject({
       volumeId: 'main',

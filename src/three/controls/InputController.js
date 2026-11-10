@@ -211,16 +211,8 @@ export class InputController {
     }
     let horizontalX = (Number(dx) || 0) / dt
     let horizontalZ = (Number(dz) || 0) / dt
-    if (this.jumpActive) {
-      const flightTime = 2 * Math.sqrt((2 * this.traversalProfile.jumpHeight) / this.gravity)
-      const maxAirSpeed = this.traversalProfile.jumpMaxDistance / Math.max(flightTime, 0.001)
-      const horizontalSpeed = Math.hypot(horizontalX, horizontalZ)
-      if (horizontalSpeed > maxAirSpeed) {
-        const scale = maxAirSpeed / horizontalSpeed
-        horizontalX *= scale
-        horizontalZ *= scale
-      }
-    }
+    // 跳跃只叠加垂直速度，不压低当前水平移动速度。
+    // 保证 W/A/S/D + Shift + Space 可以同一帧生效，跑跳不会突然减速。
     const verticalSpeed = this.jumpActive ? this.verticalVelocity : (currentState.grounded ? -2 : this.verticalVelocity)
     this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, { x: horizontalX, y: verticalSpeed, z: horizontalZ })
     this.physicsRuntime.setKinematicCharacterAcceleration?.(this.physicsCharacterId, {
@@ -283,8 +275,10 @@ export class InputController {
 
   jumpPlayer() {
     if (!this.movementEnabled || this.mode === 'overview' || this.jumpActive) return false
+    // 直接读取 Rapier 最新落地状态，避免渲染帧缓存的 grounded 状态造成空格按下无响应。
+    const physicsState = this.physicsRuntime?.getKinematicCharacterState?.(this.physicsCharacterId)
+    if (physicsState) this.grounded = physicsState.grounded === true
     this.jumpBufferRemaining = this.jumpBufferDuration
-    // 立即响应地面/离地宽限期内的输入；其他情况保留短暂缓冲，等待可起跳状态。
     this.tryStartBufferedJump(this.grounded)
     return true
   }

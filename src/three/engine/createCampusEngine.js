@@ -17,7 +17,7 @@ import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateR
 import { applySandboxLightingState } from './sandboxLightingRuntime.js'
 import { refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
 import { collectModelWaterVolumes, samplePlayerWaterState } from './waterVolumeRuntime.js'
-import { findNearestSandboxInteraction } from './sandboxInteractionRuntime.js'
+import { createSandboxInteractionIndex } from './sandboxInteractionRuntime.js'
 import { executeSandboxInteractionAction } from './sandboxActionRuntime.js'
 import { resolveSandboxInteriorEntryPoint } from './sandboxInteriorRuntime.js'
 import { cloneSandboxMaterial, disposeSandboxMaterial } from './sandboxModelLifecycle.js'
@@ -90,6 +90,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let outdoorState = null
   let nearOutdoorEntrance = false
   let nearOutdoorBuildingId = null
+  let sampleTeachingBuilding = null
+  let sampleTeachingEntranceLocal = null
+  let sampleTeachingEntranceWorld = null
+  let sampleTeachingEntranceRadius = 0
   let nearSandboxModelId = null
   let nearSandboxInteractionTarget = null
   let nearSandboxInteractionKey = null
@@ -122,6 +126,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let generatedAssetsGroup = null
   const generatedAssets = new Map()
   const sandboxModels = new Map()
+  const sandboxInteractionIndex = createSandboxInteractionIndex(THREE)
   const sandboxWaterVolumes = new Map()
   let lastPlayerWaterStateKey = null
   let sandboxModelSequence = 0
@@ -1267,6 +1272,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     collisionWorld?.removeObstaclesByOwner(String(ownerId))
     collisionWorld?.removeSupportSurfacesByOwner(String(ownerId))
     physicsRuntime?.removeOwner(String(ownerId))
+    sandboxInteractionIndex.unregister(String(ownerId))
     sandboxWaterVolumes.delete(String(ownerId))
   }
 
@@ -1275,6 +1281,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (isBlankSandbox) refreshModelPhysicsRegistration(THREE, model, physicsRuntime)
     const ownerId = model?.userData?.sandboxModelId
     if (ownerId) {
+      sandboxInteractionIndex.register(String(ownerId), model)
       const volumes = collectModelWaterVolumes(THREE, model, String(ownerId))
       if (volumes.length) sandboxWaterVolumes.set(String(ownerId), volumes)
       else sandboxWaterVolumes.delete(String(ownerId))
@@ -1769,6 +1776,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       : isRpgSample
         ? createRpgSampleScene(THREE)
         : createCampusScene(THREE, options.featureCollection || null, { manifest: options.assetManifest || null, buildingTemplates: options.buildingTemplates || [], assetBaseUrl: options.assetBaseUrl || '' })
+    // Only the legacy RPG sample has this fixed teaching-building entrance.
+    // Resolve it once; the blank sandbox must not search its scene graph every frame.
+    if (options.sceneType === 'rpg-sample') {
+      sampleTeachingBuilding = campus.getObjectByName('sample-teaching-building') || null
+      const entrance = sampleTeachingBuilding?.userData?.indoorEntrance
+      if (entrance) {
+        sampleTeachingEntranceLocal = new THREE.Vector3(entrance.x, 0, entrance.z)
+        sampleTeachingEntranceWorld = new THREE.Vector3()
+        sampleTeachingEntranceRadius = Number(entrance.radius) || 0
+      }
+    }
     windSwayTargets = []
     campus.traverse(object => {
       if (object.name !== 'tree-canopy-occluder') return
@@ -3000,16 +3018,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       navigationWasActive = false
       clearNavigationVisuals()
     }
-    if (!indoorGroup && cameraRig?.player && isRpgSample) {
-      const entrance = campus?.getObjectByName('sample-teaching-building')?.userData?.indoorEntrance
-      if (entrance) {
-        const building = campus.getObjectByName('sample-teaching-building')
-        const worldEntrance = building.localToWorld(new THREE.Vector3(entrance.x, 0, entrance.z))
-        const near = Math.hypot(cameraRig.player.x - worldEntrance.x, cameraRig.player.z - worldEntrance.z) <= entrance.radius
-        if (near !== nearOutdoorEntrance) {
-          nearOutdoorEntrance = near
-          callbacks.onIndoorPromptChange?.(near ? { visible: true, text: '按 E 进入教学楼' } : { visible: false })
-        }
+    if (!indoorGroup && cameraRig?.player && sampleTeachingBuilding && sampleTeachingEntranceLocal) {
+      // Reuse cached scene/object references and vectors; no per-frame getObjectByName traversal.
+      sampleTeachingBuilding.localToWorld(sampleTeachingEntranceWorld.copy(sampleTeachingEntranceLocal))
+      const near = Math.hypot(cameraRig.player.x - sampleTeachingEntranceWorld.x, cameraRig.player.z - sampleTeachingEntranceWorld.z) <= sampleTeachingEntranceRadius
+      if (near !== nearOutdoorEntrance) {
+        nearOutdoorEntrance = near
+        callbacks.onIndoorPromptChange?.(near ? { visible: true, text: '按 E 进入教学楼' } : { visible: false })
       }
     }
     if (!indoorGroup && cameraRig?.player && !isRpgSample) {
@@ -3040,8 +3055,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
     }
 
-    if (!indoorGroup && cameraRig?.player && isRpgSample) {
-      const nearestSandboxModel = findNearestSandboxInteraction(THREE, sandboxModels, cameraRig.player)
+    if (!indoorGroup && cameraRig?.player && isRpgSample && (sandboxModels.size > 0 || nearSandboxInteractionKey)) {
+      const nearestSandboxModel = sandboxInteractionIndex.findNearest(cameraRig.player)
       const nextId = nearestSandboxModel?.id || null
       const nextKey = nearestSandboxModel
         ? nextId + ':' + (nearestSandboxModel.targetPartId || 'root')

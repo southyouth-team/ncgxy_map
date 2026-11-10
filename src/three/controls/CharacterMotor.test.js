@@ -25,15 +25,18 @@ describe('CharacterMotor', () => {
   it('owns jump state and queues a jump command without depending on DOM input', () => {
     const { motor } = createMotor()
     expect(motor.jumpPlayer()).toBe(true)
-    expect(motor.jumpActive).toBe(true)
+    expect(motor.jumpActive).toBe(false)
     expect(motor.jumpRequested).toBe(true)
-    expect(motor.jumpBufferRemaining).toBe(0)
+    expect(motor.jumpBufferRemaining).toBe(motor.jumpBufferDuration)
+    motor.beforeFixedStep({ delta: 1 / 60 })
+    expect(motor.jumpActive).toBe(true)
   })
 
   it('submits horizontal movement and vertical jump velocity together', () => {
     const { motor, physicsRuntime, state } = createMotor()
     motor.jumpPlayer()
     motor.moveWithPhysics({ x: 0, y: 1.7, z: 0 }, 0, 0.3, 1 / 60)
+    motor.beforeFixedStep({ delta: 1 / 60 })
 
     expect(physicsRuntime.setKinematicCharacterVelocity).toHaveBeenCalledWith(
       'sandbox:player',
@@ -68,4 +71,23 @@ describe('CharacterMotor', () => {
     expect(motor.jumpBufferRemaining).toBe(0)
     expect(motor.grounded).toBe(true)
   })
+  it('advances jump buffering only when fixed simulation ticks are consumed', () => {
+    const { motor } = createMotor()
+    motor.jumpPlayer()
+    const initial = motor.jumpBufferRemaining
+    // Render frames that do not produce a physics tick do not touch Motor timers.
+    expect(motor.jumpBufferRemaining).toBe(initial)
+    motor.beforeFixedStep({ delta: 1 / 60 })
+    expect(motor.jumpBufferRemaining).toBeCloseTo(initial - 1 / 60)
+  })
+
+  it('keeps a short jump press queued until the next fixed tick', () => {
+    const { motor, physicsRuntime } = createMotor()
+    motor.jumpPlayer()
+    expect(physicsRuntime.setKinematicCharacterVelocity).not.toHaveBeenCalled()
+    motor.beforeFixedStep({ delta: 1 / 60 })
+    expect(physicsRuntime.setKinematicCharacterVelocity).toHaveBeenCalledTimes(1)
+    expect(motor.jumpLaunched).toBe(true)
+  })
+
 })

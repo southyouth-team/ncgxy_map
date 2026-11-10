@@ -24,8 +24,8 @@ export class InputController {
     this.bounds = bounds || { minX: -75, maxX: 75, minZ: -75, maxZ: 75 }
     this._collisionWorld = collisionWorld || new CollisionWorld(this.bounds)
     this.movementBackend = ['auto', 'rapier', 'collision-world'].includes(movementBackend) ? movementBackend : 'auto'
-    this.physicsRuntime = null
-    this.physicsCharacterId = null
+    // physicsRuntime / physicsCharacterId are accessor-backed by CharacterMotor.
+    // Do not assign through those setters before motor exists.
     this.traversalProfile = Object.freeze(normalizeCharacterTraversalProfile())
     this._collisionWorld?.setRadius?.(this.traversalProfile.radius)
     this.groundRaycaster = THREE?.Raycaster ? new THREE.Raycaster() : null

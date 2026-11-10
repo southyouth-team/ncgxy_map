@@ -242,7 +242,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!query) return
     try {
       gl.beginQuery(gpuTimerExtension.TIME_ELAPSED_EXT, query)
-      activeGpuTimeQuery = { query, frame: frameSequence, startedAtMs: performance.now() }
+      activeGpuTimeQuery = { query, frame: frameSequence + 1, startedAtMs: performance.now() }
     } catch (error) {
       gl.deleteQuery(query)
       gpuTimerUnavailableReason = 'gpu-timer-query-begin-failed: ' + String(error?.message || error)

@@ -155,6 +155,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let rainParticleCount = 360
   let windSwayTargets = []
   let environmentConfig = { time: 14, timeOfDay: 'day', weather: 'clear', wind: 0, artificialLightingEnabled: true }
+  let initializationStage = 'created'
 
   /**
    * Generated asset definitions stay independent from the sandbox. This group stores
@@ -1504,8 +1505,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   async function init() {
+    initializationStage = 'validate-container'
+    try {
     if (!container) throw new Error('未找到三维场景容器')
 
+    initializationStage = 'create-scene'
     scene = new THREE.Scene()
     scene.background = new THREE.Color('#b9d0c2')
     // 暂不启用线性雾效：低角度视线会让远处地面在固定深度区间内
@@ -1513,6 +1517,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     scene.fog = null
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    initializationStage = 'renderer-created'
     // 像素纹理仍使用 NearestFilter；MSAA 只平滑几何轮廓，不会把像素贴图模糊化。
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     renderer.setSize(container.clientWidth, container.clientHeight)
@@ -1525,7 +1530,16 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 保留像素美术标准色板，避免电影色调映射改变颜色。
     renderer.toneMapping = THREE.NoToneMapping
     container.appendChild(renderer.domElement)
+    renderer.domElement.addEventListener('webglcontextlost', event => {
+      event.preventDefault()
+      logRenderFailure('webglcontextlost', new Error('WebGL context lost'))
+    })
+    renderer.domElement.addEventListener('webglcontextrestored', () => {
+      console.info('[CampusRenderDiagnostics] WebGL context restored')
+      requestFrame()
+    })
 
+    initializationStage = 'create-world'
     // MVP 使用独立空白地面；正式校园与旧 RPG 样板仅在明确选择对应 sceneType 时加载。
     campus = isBlankSandbox
       ? createBlankSandboxScene(THREE, options.worldBounds || { width: 54, depth: 42 })
@@ -1559,6 +1573,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     generatedAssetsGroup.name = 'GeneratedAssets'
     campus.add(generatedAssetsGroup)
     cameraRig = new CameraRig(THREE, renderer.domElement, { isometricRpg: Boolean(options.isometricRpg ?? isRpgSample), viewMode: options.viewMode, freeOverview: isBlankSandbox })
+    initializationStage = 'camera-created'
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     playerSpriteObject = campus.getObjectByName('PixelExplorerSprite')
     if (isBlankSandbox && playerSpriteObject) playerCharacterRuntime = new PlayerCharacterRuntime(THREE, playerSpriteObject)
@@ -1762,13 +1777,27 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     scene.add(directionalLight)
     syncRenderQuality()
 
+    initializationStage = 'install-resize-observer'
     resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(container)
     resize()
     window.addEventListener('keydown', onKeyDown)
     initialized = true
+    initializationStage = 'ready'
+    if (renderDebugEnabled) {
+      console.info('[CampusRenderDiagnostics] 引擎初始化完成', {
+        canvasConnected: renderer.domElement.isConnected,
+        sceneChildren: scene.children.length,
+        cameraType: cameraRig.camera.type,
+        cameraPosition: cameraRig.camera.position.toArray(),
+      })
+    }
     callbacks.onReady?.()
     requestFrame()
+    } catch (error) {
+      logRenderFailure('init', error)
+      throw error
+    }
   }
 
 
@@ -2609,6 +2638,48 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
   }
 
+  function logRenderFailure(stage, error) {
+    const canvas = renderer?.domElement
+    const gl = renderer?.getContext?.()
+    let sceneSummary = null
+    if (scene) {
+      let objects = 0
+      let meshes = 0
+      let visibleMeshes = 0
+      scene.traverse(object => {
+        objects += 1
+        if (object.isMesh) {
+          meshes += 1
+          if (object.visible) visibleMeshes += 1
+        }
+      })
+      sceneSummary = { objects, meshes, visibleMeshes, children: scene.children.length }
+    }
+    const camera = cameraRig?.camera
+    console.error('[CampusRenderFailure]', {
+      stage,
+      initializationStage,
+      error: error?.message || String(error),
+      stack: error?.stack || null,
+      initialized,
+      disposed,
+      canvasConnected: Boolean(canvas?.isConnected),
+      canvasSize: canvas ? { width: canvas.width, height: canvas.height } : null,
+      contextLost: gl?.isContextLost?.() ?? null,
+      drawingBuffer: gl ? { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight } : null,
+      scene: sceneSummary,
+      camera: camera ? {
+        type: camera.type,
+        near: camera.near,
+        far: camera.far,
+        position: camera.position.toArray(),
+        quaternion: camera.quaternion.toArray(),
+        aspect: camera.aspect,
+      } : null,
+      renderInfo: renderer?.info ? { ...renderer.info.render } : null,
+    })
+  }
+
   function resize() {
     if (!renderer || !cameraRig) return
     const width = Math.max(container.clientWidth, 1)
@@ -2630,6 +2701,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function animate(time) {
     frameId = 0
+    try {
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     if (stairTransition) {
@@ -2861,12 +2933,17 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.render(scene, cameraRig.camera)
     if (renderDebugEnabled) {
       lastRenderCostMs = performance.now() - renderStartedAt
-      if (++renderDebugFrame % 120 === 0) logRenderDiagnostics('render')
+      renderDebugFrame += 1
+      if (renderDebugFrame === 1 || renderDebugFrame % 120 === 0) logRenderDiagnostics(renderDebugFrame === 1 ? 'first-render' : 'render')
     }
     // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
     const freePlayerIsMoving = isBlankSandbox && input?.freeCameraMovementEnabled && input?.movementEnabled
       && (input.keys.size > 0 || Boolean(input.navigationPath) || !input.grounded)
     if (cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0 || freePlayerIsMoving) requestFrame()
+    } catch (error) {
+      // 不吞掉帧内异常，也不在确定性错误后无限重试；记录完整现场，等待修复。
+      logRenderFailure('animate', error)
+    }
   }
 
   function updateSceneObject(sceneObject) {

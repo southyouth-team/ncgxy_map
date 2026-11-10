@@ -4182,3 +4182,17 @@ export const environmentBindings = [
 - 下一次打开 `/world-sandbox-mvp?render-debug=1` 后，优先查看 Console 中的 `[CampusRenderFailure]`、`[CampusRenderDiagnostics]`。
 - 若初始化失败，诊断会给出具体阶段和异常堆栈；若首帧成功，则会给出 draw calls、Mesh 数量、相机状态和绘制缓冲区信息。需据此定位实际黑屏根因，不能将增加日志等同于黑屏已修复。
 - 仅修改 `mvp`，未修改 `main`，未合并 PR。
+
+## 2026-11-11 — 修复 InputController 构造顺序导致的场景初始化中断
+
+### 根因
+- 浏览器诊断确认初始化停在 `camera-created`，异常为 `Cannot read properties of undefined (reading 'setPhysicsRuntime')`。
+- `InputController` 构造函数在创建 `CharacterMotor` 之前，对访问器属性 `physicsRuntime` / `physicsCharacterId` 赋初值；赋值触发 setter，访问尚未初始化的 `this.motor`，导致引擎初始化失败、首帧渲染从未执行。
+
+### 修复
+- 移除构造函数中对两个访问器属性的冗余初始赋值。它们由 `CharacterMotor` 提供默认状态，后续通过现有 setter 正常更新。
+- 保留 `CharacterMotor`、`PhysicsRuntime` 的职责边界与现有物理初始化流程；不增加兼容补丁，不修改场景或沙盒数据。
+
+### 验证边界
+- 已通过源码路径确认构造顺序缺陷；修复已提交到 `mvp`。
+- 尚未在用户本地运行测试或浏览器验收。下一步需确认引擎初始化完成并出现 `first-render` 日志。

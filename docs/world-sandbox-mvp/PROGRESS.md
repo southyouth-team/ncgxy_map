@@ -4336,3 +4336,24 @@ export const environmentBindings = [
 - 代码已写入远端 `mvp`；未执行本地 Vitest、Vite build 或真实浏览器测试。
 - Long Tasks API 只能捕获超过 50ms 的主线程任务，不能代表所有卡顿；如果没有长任务，也不能据此排除 GPU 或短时任务调度问题。
 - 本轮仅修改 `mvp`，未修改 `main`，未合并 PR，未更改沙盒数据。
+
+
+## 2026-11-11 — WebGL GPU 帧时间异步诊断
+
+### 本轮处理
+- 用户确认在 RAF 间隔稳定（P99 8.7ms、最大 8.8ms）、CPU 更新与渲染提交耗时较低的采样窗口内，仍能明显感知移动卡顿。
+- 因此将下一阶段排查重点转向 GPU 命令执行时间，不再优先调整角色、物理或阴影逻辑。
+- 在 `render-debug=1` 下探测 WebGL2 原生 `EXT_disjoint_timer_query_webgl2`，使用 GPU elapsed-time query 包围单次 Three.js render 调用。
+- 查询结果仅在后续帧检查 AVAILABLE 后读取；不调用同步等待、不阻塞 GPU、不调用 gl.finish。检测到 GPU disjoint 时丢弃对应待处理样本。
+- GPU 查询最多保留 16 个待完成 query，已完成样本保留最近 120 个；dispose 时删除查询对象。若浏览器或驱动不支持扩展，会明确输出不支持原因。
+- 正式渲染路径、像素比、阴影、角色移动、Rapier 物理及沙盒数据均不改变；GPU 查询仅在诊断模式启用。
+
+### 下一步判定
+- GPU 时间明显接近或超过 8.33ms：GPU 渲染负载是主要嫌疑，再按分辨率、MSAA、材质/阴影与 draw-call 分层定位。
+- GPU 时间低且 RAF/CPU 仍稳定，但肉眼卡顿：转向浏览器合成、显示呈现与输入到显示链路，不能继续盲目削减场景几何。
+- 扩展不支持时，不用同步 readback 替代；改用浏览器 DevTools Performance / GPU 轨迹进行外部验证。
+
+### 验证边界
+- 本轮只增加诊断采样，不代表已定位或修复卡顿。
+- 尚未执行本地 Vitest、Vite Build 或真实浏览器验收；需用户刷新后提供新的 `framePerformance.gpuTimeMs`。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。

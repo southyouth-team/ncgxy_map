@@ -151,6 +151,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const hashParams = new URLSearchParams(hashQuery)
     return searchParams.has('render-debug') || hashParams.has('render-debug')
   })()
+  // A/B 诊断模式：保留静态世界阴影，暂时排除动态 ShadowMap 刷新及角色投影成本。
+  const staticShadowTestEnabled = (() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const hashQueryIndex = window.location.hash.indexOf('?')
+    const hashQuery = hashQueryIndex >= 0 ? window.location.hash.slice(hashQueryIndex + 1) : ''
+    const hashParams = new URLSearchParams(hashQuery)
+    return searchParams.get('shadow-static-test') === '1' || hashParams.get('shadow-static-test') === '1'
+  })()
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
   let directionalLight = null
@@ -1398,6 +1406,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
 
   function invalidateDynamicShadowMap() {
+    // A/B 测试只跳过动态阴影失效；正式模式完全沿用 Three.js 原生更新语义。
+    if (staticShadowTestEnabled) return false
     if (shadowSystem) return shadowSystem.invalidateDynamic()
     if (!renderer || !renderer.shadowMap.enabled) return false
     renderer.shadowMap.needsUpdate = true
@@ -1580,6 +1590,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initializationStage = 'camera-created'
     // 默认示意场景的人物出生点与可见 Sprite 保持一致，避免相机从地图中心凭空出现。
     playerSpriteObject = campus.getObjectByName('PixelExplorerSprite')
+    if (staticShadowTestEnabled && playerSpriteObject) {
+      // 排除角色作为 ShadowMap caster 的成本，但保留角色正常可见性、动画和物理。
+      playerSpriteObject.traverse(object => {
+        if (object.isMesh) object.castShadow = false
+      })
+    }
     if (isBlankSandbox && playerSpriteObject) playerCharacterRuntime = new PlayerCharacterRuntime(THREE, playerSpriteObject)
     const fallbackSpawn = mapPixelToWorld(...CAMPUS_PLAYER_SPAWN_PIXEL)
     const spawn = campus.userData.playerSpawn || fallbackSpawn
@@ -2642,7 +2658,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         totalDroppedTime: physicsRuntime.droppedTime,
         lastStep: lastPhysicsStepResult,
       } : null,
-      shadows: shadowSystem?.getDiagnostics?.() || null,
+      shadows: {
+        ...(shadowSystem?.getDiagnostics?.() || {}),
+        staticShadowTestEnabled,
+      },
       sceneObjects: (() => { let objects = 0, meshes = 0; scene.traverse(object => { objects += 1; if (object.isMesh) meshes += 1 }); return { objects, meshes } })(),
       camera: {
         type: camera.type,

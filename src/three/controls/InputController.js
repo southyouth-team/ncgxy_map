@@ -209,6 +209,14 @@ export class InputController {
     return this.motor.syncPlayerFromPhysicsState(this.cameraRig?.player)
   }
 
+  beforeFixedStep(context) {
+    return this.motor.beforeFixedStep(context)
+  }
+
+  afterFixedStep(context) {
+    return this.motor.afterFixedStep(context)
+  }
+
   tryStartBufferedJump(grounded = this.grounded) {
     return this.motor.tryStartBufferedJump(grounded, { movementEnabled: this.movementEnabled, mode: this.mode })
   }

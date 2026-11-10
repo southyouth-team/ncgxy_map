@@ -247,6 +247,17 @@ export class InputController {
     return { ...state, physicsStepped: state.stepCount > previousStepCount }
   }
 
+  syncPlayerFromPhysicsState() {
+    if (!this.physicsRuntime || !this.physicsCharacterId || !this.cameraRig?.player) return false
+    const state = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
+    if (!state?.translation) return false
+    this.cameraRig.player.x = state.translation.x
+    this.cameraRig.player.y = state.translation.y + this.playerEyeHeight
+    this.cameraRig.player.z = state.translation.z
+    this.grounded = state.grounded === true
+    // Preserve lastPhysicsStepCount so the next input update can detect a landing.
+    return true
+  }
   tryStartBufferedJump(grounded = this.grounded) {
     if (this.jumpBufferRemaining <= 0 || this.jumpActive || !this.movementEnabled || this.mode === 'overview') return false
     if (!grounded && this.coyoteTimeRemaining <= 0) return false

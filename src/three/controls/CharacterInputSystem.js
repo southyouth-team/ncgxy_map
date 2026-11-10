@@ -49,10 +49,9 @@ export class CharacterInputSystem {
       if (this.keys.delete(key)) this.onInputChange?.()
     }
     this.clearHeldInput = () => {
-      const hadInput = this.keys.size > 0
       this.keys.clear()
       this.onClearInput?.()
-      if (hadInput) this.onInputChange?.()
+      this.onInputChange?.()
     }
     this.handleWindowBlur = this.clearHeldInput
     this.handleWindowFocus = () => this.onInputChange?.()

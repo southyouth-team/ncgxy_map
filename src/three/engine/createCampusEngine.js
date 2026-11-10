@@ -2630,9 +2630,16 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     frameId = 0
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
-    physicsRuntime?.step(delta)
-    if (stairTransition) updateStairTransition(delta)
-    else input?.update(delta)
+    if (stairTransition) {
+      physicsRuntime?.step(delta)
+      updateStairTransition(delta)
+    } else {
+      // Submit movement intent before advancing Rapier, avoiding a one-step input delay.
+      input?.update(delta)
+      physicsRuntime?.step(delta)
+      // Render and animate from the completed physical position.
+      input?.syncPlayerFromPhysicsState?.()
+    }
     if (pendingRoomTransition) {
       const completed = input?.consumeNavigationPathCompletion?.() || false
       if (completed) {
@@ -2795,17 +2802,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
       const dy = playerSprite.position.y - lastPlayerY
-      // Animation must not infer intent from a single render-frame displacement:
-      // Rapier advances on a fixed clock, so some render frames legitimately have zero delta.
-      const moving = dx * dx + dz * dz > 0.000001 || input?.hasMovementInput?.() === true
+      const physicsMovement = physicsRuntime?.getKinematicCharacterState?.(input?.physicsCharacterId)?.actualVelocity
+      const hasPhysicsVelocity = Number.isFinite(physicsMovement?.x) && Number.isFinite(physicsMovement?.z)
+      const movementSpeed = hasPhysicsVelocity
+        ? Math.hypot(physicsMovement.x, physicsMovement.z)
+        : Math.hypot(dx, dz) / Math.max(delta, 0.001)
+      // Gait follows resolved movement, not key intent: blocked characters return to idle.
+      const moving = movementSpeed > 0.08
+      const animationDx = hasPhysicsVelocity ? physicsMovement.x * delta : dx
+      const animationDz = hasPhysicsVelocity ? physicsMovement.z * delta : dz
       const verticalChanged = Math.abs(dy) > 0.0001
       const visibilityChanged = lastPlayerVisibility !== playerSprite.visible
       lastPlayerVisibility = playerSprite.visible
       lastPlayerY = playerSprite.position.y
       if (typeof playerSprite.userData.updateAnimation === 'function') {
-        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, dx, dz, input?.keys?.has('shift') === true)
+        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, animationDx, animationDz, input?.keys?.has('shift') === true)
       } else {
-        campus?.userData.updatePlayerAnimation?.(moving, time / 1000, dx, dz)
+        campus?.userData.updatePlayerAnimation?.(moving, time / 1000, animationDx, animationDz)
       }
       // 动画姿态也可能改变投影；在动画更新后失效，确保本帧 ShadowMap 使用最新姿态。
       if (((moving || verticalChanged) && playerSprite.visible) || visibilityChanged) invalidateDynamicShadowMap()

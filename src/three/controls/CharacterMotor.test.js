@@ -91,4 +91,24 @@ describe('CharacterMotor', () => {
     expect(motor.jumpLaunched).toBe(true)
   })
 
+  it.each([60, 120, 144])('keeps Coyote Time independent of %i Hz render cadence', renderHz => {
+    const { motor, state } = createMotor()
+    state.grounded = false
+    motor.grounded = false
+    const fixedDelta = 1 / 60
+    const renderDelta = 1 / renderHz
+    let accumulator = 0
+    let elapsed = 0
+    while (elapsed < 1 - 1e-9) {
+      accumulator += renderDelta
+      while (accumulator + Number.EPSILON >= fixedDelta) {
+        motor.beforeFixedStep({ delta: fixedDelta })
+        accumulator -= fixedDelta
+      }
+      elapsed += renderDelta
+    }
+    expect(motor.coyoteTimeRemaining).toBe(0)
+    expect(motor.lastPhysicsStepCount).toBe(0)
+  })
+
 })

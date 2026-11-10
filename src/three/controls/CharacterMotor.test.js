@@ -42,12 +42,12 @@ describe('CharacterMotor', () => {
     expect(state.translation).toEqual({ x: 0, y: 0, z: 0 })
   })
 
-  it('keeps vertical movement disabled by neither overview mode nor a disabled motor', () => {
+  it('accepts explicit overview free-camera movement intent', () => {
     const { motor, physicsRuntime } = createMotor()
     motor.moveWithPhysics({ x: 0, y: 1.7, z: 0 }, 0, 0.3, 1 / 60, { mode: 'overview' })
     expect(physicsRuntime.setKinematicCharacterVelocity).toHaveBeenCalledWith(
       'sandbox:player',
-      expect.objectContaining({ x: 0, z: 0 }),
+      expect.objectContaining({ x: 0, z: 18 }),
     )
   })
 

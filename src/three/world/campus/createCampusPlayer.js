@@ -108,7 +108,7 @@ export function createCampusPlayer(THREE, options = {}) {
     object.castShadow = true
     object.receiveShadow = true
   })
-  root.userData.updateAnimation = function updateAnimation(moving, seconds, dx = 0, dz = 0, gaitRate = 1) {
+  root.userData.updateAnimation = function updateAnimation(moving, seconds, dx = 0, dz = 0, gaitRate = 1, running = false) {
     const target = this
     const find = name => target.getObjectByName(name)
     const targetBody = find('player-body')
@@ -128,7 +128,15 @@ export function createCampusPlayer(THREE, options = {}) {
     const wasMoving = target.userData.gaitMoving === true
     if (moving && !wasMoving) target.userData.gaitPhase = 0.85
     if (moving) {
-      target.userData.gaitPhase = (Number(target.userData.gaitPhase) || 0) + frameDelta * 9.5 * Math.max(0.35, Math.min(1.7, Number(gaitRate) || 1))
+      // Drive the gait cycle from rendered world displacement, not wall-clock speed estimates.
+      // This keeps foot cadence coupled to the character's actual visible travel at any render rate.
+      const traveledDistance = Math.hypot(dx, dz)
+      const strideLength = running ? 5.5 : 3.2
+      const phaseAdvance = traveledDistance > 0.0005
+        ? traveledDistance * Math.PI * 2 / strideLength
+        // Preserve restrained in-place feedback when movement is requested but physics blocks the character.
+        : frameDelta * 3.2 * Math.max(0.35, Math.min(0.6, Number(gaitRate) || 0.42))
+      target.userData.gaitPhase = (Number(target.userData.gaitPhase) || 0) + phaseAdvance
     }
     target.userData.gaitMoving = Boolean(moving)
     const gait = Number(target.userData.gaitPhase) || 0

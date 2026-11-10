@@ -556,6 +556,7 @@ describe('refreshModelPhysicsRegistration', () => {
     root.add(upperWall)
     const door = new THREE.Group()
     door.userData.componentId = 'door-panel'
+    door.userData.stateBinding = { key: 'doorOpen', property: 'rotationY' }
     root.add(door)
     root.userData.worldState = { doorOpen: false }
     root.userData.proceduralModelCapabilityManifest = {

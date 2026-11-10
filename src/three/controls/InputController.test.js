@@ -205,6 +205,35 @@ describe('InputController first-person controls', () => {
     expect(controller.keys.size).toBe(0)
   })
 
+  it('wakes the render loop for the first Space press and starts jump immediately', () => {
+    const { controller } = createController()
+    const wakeRenderLoop = vi.fn()
+    const preventDefault = vi.fn()
+    controller.onMovementInput = wakeRenderLoop
+
+    controller.onKeyDown({
+      key: ' ',
+      code: 'Space',
+      repeat: false,
+      target: { tagName: 'CANVAS' },
+      preventDefault,
+    })
+
+    expect(controller.jumpActive).toBe(true)
+    expect(wakeRenderLoop).toHaveBeenCalledTimes(1)
+    expect(preventDefault).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not lose a held movement key when unrelated keyup events arrive', () => {
+    const { controller } = createController()
+    controller.onKeyDown({
+      key: 'w', code: 'KeyW', target: { tagName: 'CANVAS' }, preventDefault: vi.fn(),
+    })
+    controller.onKeyUp({ key: ' ', code: 'Space' })
+
+    expect(controller.keys.has('w')).toBe(true)
+  })
+
   it('normalizes physical key codes so keydown and keyup cannot disagree on letter casing', () => {
     const { controller } = createController()
     const preventDefault = vi.fn()

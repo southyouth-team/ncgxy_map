@@ -128,14 +128,14 @@ export function createCampusPlayer(THREE, options = {}) {
     const wasMoving = target.userData.gaitMoving === true
     if (moving && !wasMoving) target.userData.gaitPhase = 0.85
     if (moving) {
-      // Drive the gait cycle from rendered world displacement, not wall-clock speed estimates.
-      // This keeps foot cadence coupled to the character's actual visible travel at any render rate.
-      const traveledDistance = Math.hypot(dx, dz)
+      // Keep one presentation clock for both moving and blocked states.
+      // Render-frame displacement is intentionally not accumulated here: tiny interpolated
+      // position deltas can quantize between frames and make the limbs appear to pause/jump.
       const strideLength = running ? 5.5 : 3.2
-      const phaseAdvance = traveledDistance > 0.0005
-        ? traveledDistance * Math.PI * 2 / strideLength
-        // Preserve restrained in-place feedback when movement is requested but physics blocks the character.
-        : frameDelta * 3.2 * Math.max(0.35, Math.min(0.6, Number(gaitRate) || 0.42))
+      const nominalSpeed = running ? 18 : 9
+      const normalizedRate = Math.max(0.35, Math.min(1.5, Number(gaitRate) || 0.42))
+      const cycleRadiansPerSecond = (nominalSpeed / strideLength) * Math.PI * 2
+      const phaseAdvance = frameDelta * cycleRadiansPerSecond * normalizedRate
       target.userData.gaitPhase = (Number(target.userData.gaitPhase) || 0) + phaseAdvance
     }
     target.userData.gaitMoving = Boolean(moving)

@@ -3935,3 +3935,27 @@ export const environmentBindings = [
 - 新增外部角色动画即时切换测试。
 - 跑跳距离现在由当前水平速度与实际空中时间共同决定，不再强制限制为旧的 3 米跳跃水平距离；需在浏览器重新验收落地距离和碰撞表现。
 - CI 与浏览器实机体验分开记录；本轮提交后以 CI 结果为准，不提前宣称真实操作已验收。
+
+
+## 2026-11-11 — 角色渲染插值与首按跳跃容错（待 CI / 浏览器验收）
+
+### 本轮根因处理
+
+1. **角色抖动：固定步长与渲染帧不同步**
+   - 原实现每次渲染直接读取 Rapier 最近一次固定步的最终位置；当渲染频率与 60Hz 物理步频不一致时，会出现位置重复若干渲染帧后再跳变的视觉节奏。
+   - PhysicsRuntime.getKinematicCharacterState() 现在额外提供 interpolatedTranslation 和 interpolationAlpha，使用上一物理步位置、当前物理位置及 accumulator alpha 计算渲染位置。
+   - InputController.syncPlayerFromPhysicsState() 只将插值位置写入角色/相机跟随逻辑；Rapier 碰撞、刚体位置和移动命令仍使用权威物理状态，不用插值结果反向驱动物理。
+   - 新增固定步长插值测试，验证 60Hz 物理与 120Hz 渲染之间的半步位置。
+
+2. **W + Space 首按偶发无响应**
+   - 原实现收到 Space 时会用最新 grounded 快照覆盖控制器缓存；如果快照正好处于接触状态切换边界，瞬时 false 会同时清掉最近的落地状态线索。
+   - 现在只有 Rapier 明确报告 grounded=true 时才刷新落地状态与 coyote time；瞬时 false 不再抹掉仍有效的离地宽限窗口。
+   - 跳跃输入缓冲由 0.14s 调整为 0.22s，coyote time 由 0.10s 调整为 0.18s；这是输入容错窗口，不是人为延迟起跳。
+   - 新增测试覆盖缓存 grounded=false、Rapier 快照 grounded=false 但仍在 coyote window 时，Space 首按立即进入跳跃状态。
+
+### 验证边界
+
+- 本轮新增测试尚未取得 CI 结果，不能提前标记通过。
+- 角色插值解决的是固定物理步与渲染频率不同步导致的视觉阶梯问题；若仍抖动，下一步需进一步检查角色模型挂载层级、动画根运动与 CameraRig 跟随是否重复施加位移。
+- 尚未完成真实浏览器中的 60/120/144Hz、持续 W、W+Space、W+Shift+Space 和碰撞边缘实测。
+- 仍只修改 fix/sandbox-character-physics-continuity；未修改 main，未合并 PR。

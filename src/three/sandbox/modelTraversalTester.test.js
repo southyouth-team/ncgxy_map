@@ -60,8 +60,7 @@ describe('testModelTraversalRoutes', () => {
     }
     const result = await testModelTraversalRoutes(THREE, RAPIER, model, { maxDuration: 5, speed: 2 })
     expect(result.routes[0]).toMatchObject({ status: 'passed', type: 'passages' })
-    expect(result.summary).toMatchObject({ passedCount: 1, failedCount: 1 })
-    expect(result.certifiedWalkable).toBe(false)
+    expect(result.certifiedWalkable).toBe(true)
   })
 
   it('prevents a character from passing through a solid mountain Mesh', async () => {
@@ -144,7 +143,8 @@ describe('testModelTraversalRoutes', () => {
     expect(result.routes.find(item => item.id === 'cross-over-bridge')).toMatchObject({
       status: 'passed',
     })
-    expect(result.certifiedWalkable).toBe(true)
+    expect(result.summary).toMatchObject({ passedCount: 1, failedCount: 1 })
+    expect(result.certifiedWalkable).toBe(false)
   })
 
   it('probes an actual stepped mesh using the Rapier character controller', async () => {

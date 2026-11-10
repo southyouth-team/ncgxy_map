@@ -1,7 +1,6 @@
 /**
  * Rapier-backed character motor.
- * Owns jump/vertical locomotion state and translates horizontal movement intent
- * into kinematic character commands. Input devices and visual presentation stay outside.
+ * Owns locomotion state and submits commands only on fixed simulation ticks.
  */
 export class CharacterMotor {
   constructor({ traversalProfile, gravity = 24, jumpBufferDuration = 0.22, coyoteTimeDuration = 0.18 } = {}) {
@@ -12,6 +11,7 @@ export class CharacterMotor {
     this.coyoteTimeDuration = coyoteTimeDuration
     this.physicsRuntime = null
     this.physicsCharacterId = null
+    this.horizontalVelocity = { x: 0, z: 0 }
     this.verticalVelocity = 0
     this.grounded = true
     this.jumpActive = false
@@ -21,6 +21,8 @@ export class CharacterMotor {
     this.jumpBufferRemaining = 0
     this.coyoteTimeRemaining = coyoteTimeDuration
     this.lastPhysicsStepCount = 0
+    this.movementEnabled = true
+    this.mode = 'thirdPerson'
   }
 
   setPhysicsRuntime(runtime, id = null) {
@@ -29,6 +31,7 @@ export class CharacterMotor {
   }
 
   reset({ grounded = true } = {}) {
+    this.horizontalVelocity = { x: 0, z: 0 }
     this.verticalVelocity = 0
     this.grounded = grounded
     this.jumpActive = false
@@ -41,58 +44,84 @@ export class CharacterMotor {
 
   moveWithPhysics(player, dx, dz, delta, { movementEnabled = true, mode = 'thirdPerson' } = {}) {
     if (!this.physicsRuntime || !this.physicsCharacterId) return null
-    const dt = Math.max(0, Math.min(Number(delta) || 0, 0.05))
-    if (!dt) return null
-    const previousStepCount = this.lastPhysicsStepCount
+    const dt = Math.max(0, Number(delta) || 0)
     const currentState = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
     if (!currentState) return null
-    this.updateJumpInputWindow(dt, currentState.grounded, { movementEnabled, mode })
-    const launchPending = this.jumpRequested
-    if (this.jumpActive && this.jumpLaunched && currentState.grounded && this.jumpWasAirborne
-      && currentState.stepCount > previousStepCount) {
-      this.jumpActive = false
-      this.jumpLaunched = false
+    this.movementEnabled = movementEnabled
+    this.mode = mode
+    this.horizontalVelocity = dt > 0 && movementEnabled
+      ? { x: (Number(dx) || 0) / dt, z: (Number(dz) || 0) / dt }
+      : { x: 0, z: 0 }
+    const renderPosition = currentState.interpolatedTranslation || currentState.translation
+    player.x = renderPosition.x
+    player.y = renderPosition.y + this.traversalProfile.height
+    player.z = renderPosition.z
+    this.grounded = currentState.grounded === true
+    this.lastPhysicsStepCount = currentState.stepCount
+    return { ...currentState, physicsStepped: false }
+  }
+
+  beforeFixedStep({ delta }) {
+    if (!this.physicsRuntime || !this.physicsCharacterId) return false
+    const state = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
+    if (!state) return false
+
+    const canMove = this.movementEnabled && (this.mode !== 'overview' || this.horizontalVelocity.x !== 0 || this.horizontalVelocity.z !== 0)
+    const groundedBeforeStep = state.grounded === true
+    if (groundedBeforeStep) {
+      this.grounded = true
+      this.coyoteTimeRemaining = this.coyoteTimeDuration
+    } else {
+      this.grounded = false
+      this.coyoteTimeRemaining = Math.max(0, this.coyoteTimeRemaining - delta)
+    }
+
+    this.jumpBufferRemaining = Math.max(0, this.jumpBufferRemaining - delta)
+    if (this.jumpBufferRemaining > 0 && !this.jumpActive
+      && this.movementEnabled && this.mode !== 'overview'
+      && (groundedBeforeStep || this.coyoteTimeRemaining > 0)) {
+      this.verticalVelocity = Math.sqrt(2 * this.gravity * this.traversalProfile.jumpHeight)
+      this.jumpActive = true
+      this.jumpRequested = false
+      this.jumpLaunched = true
       this.jumpWasAirborne = false
-      this.verticalVelocity = 0
+      this.jumpBufferRemaining = 0
+      this.coyoteTimeRemaining = 0
+      this.grounded = false
+    } else if (groundedBeforeStep && !this.jumpActive) {
+      this.verticalVelocity = -2
     }
-    if (!currentState.grounded && Number.isFinite(currentState.velocity?.y)) {
-      this.verticalVelocity = currentState.velocity.y
-    } else if (currentState.grounded && !this.jumpActive && !launchPending) {
-      this.verticalVelocity = 0
-    }
-    const horizontalX = (Number(dx) || 0) / dt
-    const horizontalZ = (Number(dz) || 0) / dt
-    const verticalSpeed = this.jumpActive ? this.verticalVelocity : (currentState.grounded ? -2 : this.verticalVelocity)
+
     this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, {
-      x: movementEnabled ? horizontalX : 0,
-      y: verticalSpeed,
-      z: movementEnabled ? horizontalZ : 0,
+      x: canMove ? this.horizontalVelocity.x : 0,
+      y: this.verticalVelocity,
+      z: canMove ? this.horizontalVelocity.z : 0,
     })
     this.physicsRuntime.setKinematicCharacterAcceleration?.(this.physicsCharacterId, {
       x: 0,
-      y: (this.jumpActive || !currentState.grounded) ? -this.gravity : 0,
+      y: (this.jumpActive || !groundedBeforeStep) ? -this.gravity : 0,
       z: 0,
     })
-    if (launchPending) {
-      this.jumpRequested = false
-      this.jumpLaunched = true
-    }
-    const state = this.physicsRuntime.getKinematicCharacterState(this.physicsCharacterId)
-    player.x = state.translation.x
-    player.y = state.translation.y + this.traversalProfile.height
-    player.z = state.translation.z
+    return true
+  }
+
+  afterFixedStep() {
+    if (!this.physicsRuntime || !this.physicsCharacterId) return false
+    const state = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
+    if (!state) return false
+    const wasAirborne = this.jumpWasAirborne
     this.grounded = state.grounded === true
-    if (this.jumpActive && this.jumpLaunched && !this.grounded) this.jumpWasAirborne = true
-    this.lastPhysicsStepCount = state.stepCount
-    if (this.jumpActive && this.jumpLaunched && this.grounded && this.jumpWasAirborne && state.stepCount > previousStepCount) {
+    this.verticalVelocity = Number(state.velocity?.y) || 0
+    if (!this.grounded && this.jumpLaunched) this.jumpWasAirborne = true
+    if (this.grounded && this.jumpActive && (wasAirborne || this.jumpWasAirborne)) {
       this.jumpActive = false
+      this.jumpRequested = false
       this.jumpLaunched = false
       this.jumpWasAirborne = false
-      this.verticalVelocity = 0
-    } else if (this.grounded && !this.jumpActive && this.verticalVelocity < 0) {
-      this.verticalVelocity = 0
+      this.verticalVelocity = -2
     }
-    return { ...state, physicsStepped: state.stepCount > previousStepCount }
+    this.lastPhysicsStepCount = state.stepCount
+    return true
   }
 
   tryStartBufferedJump(grounded = this.grounded, { movementEnabled = true, mode = 'thirdPerson' } = {}) {
@@ -110,6 +139,8 @@ export class CharacterMotor {
   }
 
   updateJumpInputWindow(delta, grounded = this.grounded, options = {}) {
+    // Legacy non-Rapier path only. Rapier-backed timers advance in beforeFixedStep.
+    if (this.physicsRuntime) return false
     const dt = Math.max(0, Math.min(Number(delta) || 0, 0.1))
     this.jumpBufferRemaining = Math.max(0, this.jumpBufferRemaining - dt)
     this.coyoteTimeRemaining = grounded
@@ -120,13 +151,13 @@ export class CharacterMotor {
 
   jumpPlayer({ movementEnabled = true, mode = 'thirdPerson' } = {}) {
     if (!movementEnabled || mode === 'overview' || this.jumpActive) return false
-    const physicsState = this.physicsRuntime?.getKinematicCharacterState?.(this.physicsCharacterId)
-    if (physicsState?.grounded === true) {
-      this.grounded = true
-      this.coyoteTimeRemaining = this.coyoteTimeDuration
-    }
     this.jumpBufferRemaining = this.jumpBufferDuration
-    this.tryStartBufferedJump(this.grounded, { movementEnabled, mode })
+    this.jumpRequested = Boolean(this.physicsRuntime)
+    if (!this.physicsRuntime) {
+      const physicsState = null
+      if (physicsState?.grounded === true) this.grounded = true
+      this.tryStartBufferedJump(this.grounded, { movementEnabled, mode })
+    }
     return true
   }
 

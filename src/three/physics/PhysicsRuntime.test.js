@@ -318,4 +318,35 @@ describe('PhysicsRuntime', () => {
     expect(calls.freed).toBe(1)
     expect(() => runtime.step(1 / 60)).toThrow('disposed')
   })
+  it('runs lifecycle hooks once around every fixed substep', () => {
+    const { RAPIER, calls } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    const phases = []
+
+    const result = runtime.step(1 / 30, {
+      beforeFixedStep: ({ delta, stepCount }) => phases.push(['before', delta, stepCount, calls.steps]),
+      afterFixedStep: ({ delta, stepCount }) => phases.push(['after', delta, stepCount, calls.steps]),
+    })
+
+    expect(result.steps).toBe(2)
+    expect(phases).toEqual([
+      ['before', 1 / 60, 1, 0],
+      ['after', 1 / 60, 1, 1],
+      ['before', 1 / 60, 2, 1],
+      ['after', 1 / 60, 2, 2],
+    ])
+  })
+
+  it('does not run fixed-step hooks when the accumulator has not reached a tick', () => {
+    const { RAPIER } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    const beforeFixedStep = vi.fn()
+    const afterFixedStep = vi.fn()
+
+    runtime.step(1 / 120, { beforeFixedStep, afterFixedStep })
+
+    expect(beforeFixedStep).not.toHaveBeenCalled()
+    expect(afterFixedStep).not.toHaveBeenCalled()
+  })
+
 })

@@ -4376,3 +4376,18 @@ export const environmentBindings = [
 - 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。
 
 - 复核修正：GPU query 在当前帧 render 前启动时，关联当前即将提交的帧序号（`frameSequence + 1`），避免 GPU 样本比 RAF 帧序号落后一帧。
+
+
+## 2026-11-11 — 诊断窗口一致性与 GPU query 生命周期修正
+
+### 本轮处理
+- 根据用户提供的最新数据，确认此前 `frameStalls` 输出的是独立保留的历史异常记录，可能早于当前 120 帧统计窗口；Long Tasks 的 buffered 历史记录也可能全部发生在当前帧窗口之前，导致输出容易被误读。
+- 异常帧现在直接从当前 `framePerformanceSamples` 窗口派生，不再混入旧窗口记录；输出当前帧窗口起止时间。
+- Long Tasks 的 `recent` 仅显示与当前帧窗口有时间重叠的任务，并单独给出当前保留记录中位于窗口外的任务数量。
+- GPU 慢样本现在按 GPU query 开始时间限制在当前帧窗口内，避免将历史 GPU 峰值误认为当前窗口异常。
+- 修正 GPU timer query 生命周期管理：pending 队列保存的是带元数据对象，dispose 时必须删除其 `query` 字段；结束 query 失败时同样删除底层 WebGLQuery 对象。此前这两个异常/释放路径仍按裸 query 处理，本轮一并纠正。
+
+### 验证边界
+- 本轮仅修改诊断数据窗口和 GPU query 资源释放，不改正式渲染、角色移动、物理或沙盒数据。
+- 尚未执行本地 Vitest、Vite Build 或真实浏览器测试；需要重新刷新并采集当前窗口数据。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR。

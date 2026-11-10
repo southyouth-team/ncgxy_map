@@ -408,7 +408,7 @@ export class InputController {
     if (!this.freeCameraMovementEnabled) this.stopPhysicsCharacterMovement()
   }
 
-  getPlayerSupportHit(player, { walking = false } = {}) {
+  getPlayerSupportHit(player, { walking = false, includeSteepSurfaces = false } = {}) {
     if (!this.groundRaycaster || !this.groundRayOrigin || !this.groundRayDirection) return null
     const surfaces = this.collisionWorld?.supportSurfaces || []
     const meshes = surfaces
@@ -434,7 +434,7 @@ export class InputController {
       if (hit.point.y > highestReachableY) continue
       const normalMatrix = new this.THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)
       const normal = hit.face.normal.clone().applyMatrix3(normalMatrix).normalize()
-      if (normal.y < maxSlopeCos) continue
+      if (!includeSteepSurfaces && normal.y < maxSlopeCos) continue
       return hit
     }
     return null
@@ -495,7 +495,18 @@ export class InputController {
 
   resolvePlayerGroundHeight(player) {
     const hit = this.getPlayerSupportHit(player, { walking: false })
-    return hit ? hit.point.y + this.playerEyeHeight : this.playerEyeHeight
+    if (hit) return hit.point.y + this.playerEyeHeight
+
+    // If the player's feet are already resting on a declared but non-walkable
+    // steep surface, do not snap the avatar down to the global ground plane.
+    // The surface remains non-walkable; this only preserves the current height.
+    const steepSupport = this.getPlayerSupportHit(player, {
+      walking: false,
+      includeSteepSurfaces: true,
+    })
+    const feetY = player.y - this.playerEyeHeight
+    if (steepSupport && Math.abs(steepSupport.point.y - feetY) <= 0.08) return player.y
+    return this.playerEyeHeight
   }
 
   update(delta) {

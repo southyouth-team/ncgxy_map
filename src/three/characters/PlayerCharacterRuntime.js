@@ -26,7 +26,7 @@ export class PlayerCharacterRuntime {
     this.animationState = 'idle'
     this.animationOverride = null
     this.disposed = false
-    anchor.userData.updateAnimation = (moving, seconds, dx, dz, running) => this.updateAnimation(moving, seconds, dx, dz, running)
+    anchor.userData.updateAnimation = (moving, seconds, dx, dz, running, gaitRate) => this.updateAnimation(moving, seconds, dx, dz, running, gaitRate)
   }
 
   setModel(model, animations = [], metadata = {}) {
@@ -125,16 +125,21 @@ export class PlayerCharacterRuntime {
     return true
   }
 
-  updateAnimation(moving, seconds, dx = 0, dz = 0, running = false) {
+  updateAnimation(moving, seconds, dx = 0, dz = 0, running = false, gaitRate = 1) {
     if (this.disposed) return
     if (Math.hypot(dx, dz) > 0.0005) this.anchor.rotation.y = Math.atan2(dx, dz)
     if (this.activeVisual === this.fallbackVisual) {
-      this.fallbackUpdater?.call(this.anchor, Boolean(moving), seconds, dx, dz)
+      this.fallbackUpdater?.call(this.anchor, Boolean(moving), seconds, dx, dz, Math.max(0.35, Math.min(1.5, Number(gaitRate) || 1)))
       return
     }
     const state = this.animationOverride || (moving ? (running ? 'run' : 'walk') : 'idle')
     if (state !== this.animationState || !this.activeAction) this.animationState = state
     this.playState(state)
+    if (this.activeAction && moving && !this.animationOverride) {
+      this.activeAction.timeScale = Math.max(0.35, Math.min(1.5, Number(gaitRate) || 1))
+    } else if (this.activeAction && state === 'idle') {
+      this.activeAction.timeScale = 1
+    }
   }
 
   update(deltaSeconds) {

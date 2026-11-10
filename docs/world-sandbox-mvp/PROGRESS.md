@@ -4138,3 +4138,32 @@ export const environmentBindings = [
 - `afdfd6e7` — 后端隔离回归测试
 - `6ef16f6b` — 60/120/144Hz 固定步 cadence 测试
 - `7f49409e` — 更新角色控制架构文档
+
+
+## 2026-11-11 — Rapier 接触快照与 Motor 垂直速度反馈修正
+
+### 本轮发现
+- PhysicsRuntime 的 `getKinematicCharacterState().velocity` 实际是兼容字段，来源为 `desiredVelocity`，不是碰撞修正后的实际位移速度。
+- CharacterMotor 在 `afterFixedStep()` 中原先读取该字段作为下一固定步的垂直速度，会忽略天花板/地面等碰撞对角色实际位移的修正。
+- PhysicsRuntime 的 grounded 来源是 CharacterController `computedGrounded()`：在 `computeColliderMovement()` 后、`world.step()` 前计算；Runtime 在完成 `world.step()` 后才将 pending 结果发布到状态快照。
+
+### 本轮修正
+- CharacterMotor 改为优先读取 `actualVelocity.y`，使用碰撞修正后的位移速度作为下一固定步垂直运动状态；保留旧字段 fallback 仅用于兼容旧测试替身/适配器。
+- PhysicsRuntime 明确 grounded 快照语义，并新增 `groundedStepCount`，标识该接触结果对应的已完成固定步。
+- PhysicsRuntime mock 支持可控的 computedGrounded 结果。
+- 新增 Motor 测试：碰撞修正后的垂直速度优先级、落地状态收敛。
+- 新增 PhysicsRuntime 测试：beforeFixedStep 读取上一完成步状态，afterFixedStep 读取本次已完成步状态；验证离地和重新接地状态发布顺序。
+- 更新架构文档，明确 commanded velocity、actual velocity、computed grounded 的职责边界。
+
+### 验证边界
+- 仅完成远端代码写入与文件内容核对；未在本地运行 Vitest / Vite Build。
+- 尚未用真实 Rapier 场景验收天花板碰撞、斜坡边缘、台阶自动跨越、起跳首步和落地首步。
+- `computedGrounded()` 代表 Rapier CharacterController 对本次计算位移的 grounded 结果，不应描述成独立的物理接触流/接触流形查询。
+- 本轮仅修改 `mvp`，未修改 `main`，未合并 PR。
+
+### 本轮提交
+- `b359f655` — Motor 使用碰撞修正后的垂直速度
+- `43b3cf98` — Motor 速度反馈与落地状态测试
+- `e269aef5` — PhysicsRuntime 明确 grounded 快照语义
+- `330dc9c8` — PhysicsRuntime 接触状态时序测试
+- `1688f54e` — 更新架构文档

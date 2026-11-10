@@ -235,6 +235,21 @@ describe('PhysicsRuntime', () => {
 
 
 
+  it('interpolates the render position between fixed physics steps', () => {
+    const { RAPIER } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    runtime.createKinematicCharacter({ id: 'interpolated-player' })
+    runtime.setKinematicCharacterVelocity('interpolated-player', { x: 6, y: 0, z: 0 })
+
+    runtime.step(1 / 60)
+    runtime.step(1 / 120)
+
+    const state = runtime.getKinematicCharacterState('interpolated-player')
+    expect(state.translation.x).toBeCloseTo(0.1)
+    expect(state.interpolationAlpha).toBeCloseTo(0.5)
+    expect(state.interpolatedTranslation.x).toBeCloseTo(0.05)
+  })
+
   it('reports actual fixed-step displacement separately from commanded velocity', () => {
     const { RAPIER } = createRapierMock()
     const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })

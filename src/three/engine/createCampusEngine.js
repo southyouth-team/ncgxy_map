@@ -2882,21 +2882,19 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const dx = cameraRig.player.x - lastPlayerX
       const dz = cameraRig.player.z - lastPlayerZ
       const dy = playerSprite.position.y - lastPlayerY
-      const physicsMovement = physicsRuntime?.getKinematicCharacterState?.(input?.physicsCharacterId)?.actualVelocity
-      const hasPhysicsVelocity = Number.isFinite(physicsMovement?.x) && Number.isFinite(physicsMovement?.z)
-      const movementSpeed = hasPhysicsVelocity
-        ? Math.hypot(physicsMovement.x, physicsMovement.z)
-        : Math.hypot(dx, dz) / Math.max(delta, 0.001)
-      // 移动意图负责给用户持续反馈；Rapier 实际速度只调节步态强度。
-      // 被墙体阻挡时仍保持低频迈步，避免按键有效但角色视觉完全静止。
+      // Use the rendered character-anchor displacement as the presentation signal.
+      // It is already interpolated by PhysicsRuntime and therefore matches what the user sees.
+      const movementSpeed = Math.hypot(dx, dz) / Math.max(delta, 0.001)
+      // Movement intent preserves restrained feedback while blocked; actual rendered travel drives gait cadence.
       const movementIntent = input?.hasMovementInput?.() === true
       const moving = movementIntent || movementSpeed > 0.08
       const running = input?.keys?.has('shift') === true
+      // These reference speeds match InputController's authoritative 9 / 18 world-units-per-second motor commands.
       const gaitRate = movementSpeed > 0.08
-        ? Math.max(0.65, Math.min(1.45, movementSpeed / (running ? 5.5 : 3.2)))
+        ? Math.max(0.65, Math.min(1.45, movementSpeed / (running ? 18 : 9)))
         : 0.42
-      const animationDx = hasPhysicsVelocity ? physicsMovement.x * delta : dx
-      const animationDz = hasPhysicsVelocity ? physicsMovement.z * delta : dz
+      const animationDx = dx
+      const animationDz = dz
       const verticalChanged = Math.abs(dy) > 0.0001
       const visibilityChanged = lastPlayerVisibility !== playerSprite.visible
       lastPlayerVisibility = playerSprite.visible

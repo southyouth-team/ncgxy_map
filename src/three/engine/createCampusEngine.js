@@ -162,7 +162,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
   const framePerformanceSamples = []
-  const frameStallSamples = []
   const longTaskSamples = []
   const gpuTimeSamples = []
   const pendingGpuTimeQueries = []
@@ -258,7 +257,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       pendingGpuTimeQueries.push(activeGpuTimeQuery)
       activeGpuTimeQuery = null
     } catch (error) {
-      gl.deleteQuery(activeGpuTimeQuery)
+      gl.deleteQuery(activeGpuTimeQuery.query)
       activeGpuTimeQuery = null
       gpuTimerUnavailableReason = 'gpu-timer-query-end-failed: ' + String(error?.message || error)
       gpuTimerExtension = null
@@ -273,7 +272,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       gl.deleteQuery(activeGpuTimeQuery.query)
       activeGpuTimeQuery = null
     }
-    for (const query of pendingGpuTimeQueries.splice(0)) gl.deleteQuery(query)
+    for (const pending of pendingGpuTimeQueries.splice(0)) gl.deleteQuery(pending.query)
     gpuTimeSamples.length = 0
     gpuTimerExtension = null
   }
@@ -315,7 +314,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           p90: percentile(0.9),
           p95: percentile(0.95),
           max: Number(values[values.length - 1].toFixed(2)),
-          recentSlowSamples: gpuTimeSamples.filter(sample => sample.durationMs >= 8.33).slice(-10).map(sample => ({
+          recentSlowSamples: gpuTimeSamples.filter(sample =>
+            sample.durationMs >= 8.33
+            && sample.startedAtMs >= framePerformanceSamples[0].startedAtMs
+            && sample.startedAtMs <= framePerformanceSamples[framePerformanceSamples.length - 1].endedAtMs
+          ).slice(-10).map(sample => ({
             frame: sample.frame,
             startedAtMs: Number(sample.startedAtMs.toFixed(2)),
             completedAtMs: Number(sample.completedAtMs.toFixed(2)),
@@ -329,19 +332,40 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         sampleCount: 0,
         pendingQueries: pendingGpuTimeQueries.length + (activeGpuTimeQuery ? 1 : 0),
       },
-      frameStalls: frameStallSamples.slice(-12),
+      frameWindow: {
+        startedAtMs: Number(framePerformanceSamples[0].startedAtMs.toFixed(2)),
+        endedAtMs: Number(framePerformanceSamples[framePerformanceSamples.length - 1].endedAtMs.toFixed(2)),
+      },
+      frameStalls: framePerformanceSamples.filter(sample =>
+        sample.rafIntervalMs > 10 || sample.totalFrameCpuMs > 10 || sample.renderSubmitCpuMs > 8.33
+      ).slice(-12).map(sample => ({
+        frame: sample.frame,
+        startedAtMs: Number(sample.startedAtMs.toFixed(2)),
+        endedAtMs: Number(sample.endedAtMs.toFixed(2)),
+        rafIntervalMs: Number(sample.rafIntervalMs.toFixed(2)),
+        updateCpuMs: Number(sample.updateCpuMs.toFixed(2)),
+        renderSubmitCpuMs: Number(sample.renderSubmitCpuMs.toFixed(2)),
+        totalFrameCpuMs: Number(sample.totalFrameCpuMs.toFixed(2)),
+      })),
       longTasks: {
         supported: Boolean(longTaskObserver),
         countSinceInitialization: longTaskCount,
         totalDurationMs: Number(longTaskTotalDurationMs.toFixed(2)),
         maxDurationMs: Number(longTaskMaxDurationMs.toFixed(2)),
         thresholdMs: 50,
-        recent: longTaskSamples.slice(-12).map(task => ({
+        recent: longTaskSamples.filter(task =>
+          task.startTimeMs < framePerformanceSamples[framePerformanceSamples.length - 1].endedAtMs
+          && task.endTimeMs > framePerformanceSamples[0].startedAtMs
+        ).slice(-12).map(task => ({
           ...task,
           overlappingFrames: framePerformanceSamples.filter(frame =>
             task.startTimeMs < frame.endedAtMs && task.endTimeMs > frame.startedAtMs
           ).map(frame => frame.frame),
         })),
+        outsideCurrentFrameWindowCount: longTaskSamples.filter(task =>
+          task.endTimeMs <= framePerformanceSamples[0].startedAtMs
+          || task.startTimeMs >= framePerformanceSamples[framePerformanceSamples.length - 1].endedAtMs
+        ).length,
       },
     }
   }
@@ -3181,18 +3205,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
       framePerformanceSamples.push(frameSample)
       if (frameSample.rafIntervalMs > 10 || frameSample.totalFrameCpuMs > 10 || lastRenderCostMs > 8.33) {
-        frameStallSamples.push({
-          frame: frameSample.frame,
-          startedAtMs: Number(frameSample.startedAtMs.toFixed(2)),
-          endedAtMs: Number(frameSample.endedAtMs.toFixed(2)),
-          rafIntervalMs: Number(frameSample.rafIntervalMs.toFixed(2)),
-          updateCpuMs: Number(frameSample.updateCpuMs.toFixed(2)),
-          renderSubmitCpuMs: Number(frameSample.renderSubmitCpuMs.toFixed(2)),
-          totalFrameCpuMs: Number(frameSample.totalFrameCpuMs.toFixed(2)),
-          gpuSamplePending: true,
-        })
-        if (frameStallSamples.length > 30) frameStallSamples.shift()
-      }
+        }
       if (framePerformanceSamples.length > 120) framePerformanceSamples.shift()
       renderDebugFrame += 1
       if (renderDebugFrame === 1 || renderDebugFrame % 120 === 0) logRenderDiagnostics(renderDebugFrame === 1 ? 'first-render' : 'render')

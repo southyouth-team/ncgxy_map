@@ -20,9 +20,10 @@ function createRapierMock() {
       const controller = {
         offset,
         computed: { x: 0, y: 0, z: 0 },
+        grounded: true,
         computeColliderMovement: vi.fn((collider, desired) => { controller.computed = desired }),
         computedMovement: () => controller.computed,
-        computedGrounded: () => true,
+        computedGrounded: () => controller.grounded,
         numComputedCollisions: () => 0,
         setUp: vi.fn(),
         setSlideEnabled: vi.fn(),
@@ -347,6 +348,36 @@ describe('PhysicsRuntime', () => {
 
     expect(beforeFixedStep).not.toHaveBeenCalled()
     expect(afterFixedStep).not.toHaveBeenCalled()
+  })
+
+
+  it('publishes grounded only after the character-controller result is completed by a fixed step', () => {
+    const { RAPIER, calls } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    runtime.createKinematicCharacter({ id: 'ground-state-player' })
+    const controller = calls.controllers[0]
+    const phases = []
+
+    controller.grounded = false
+    runtime.step(1 / 60, {
+      beforeFixedStep: () => phases.push(['before', runtime.getKinematicCharacterState('ground-state-player').grounded]),
+      afterFixedStep: () => phases.push(['after', runtime.getKinematicCharacterState('ground-state-player').grounded]),
+    })
+
+    expect(phases).toEqual([['before', true], ['after', false]])
+    expect(runtime.getKinematicCharacterState('ground-state-player')).toMatchObject({
+      grounded: false,
+      groundedStepCount: 1,
+      stepCount: 1,
+    })
+
+    controller.grounded = true
+    runtime.step(1 / 60)
+    expect(runtime.getKinematicCharacterState('ground-state-player')).toMatchObject({
+      grounded: true,
+      groundedStepCount: 2,
+      stepCount: 2,
+    })
   })
 
 })

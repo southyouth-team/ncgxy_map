@@ -162,6 +162,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
   const framePerformanceSamples = []
+  const gpuTimeSamples = []
+  const pendingGpuTimeQueries = []
+  let gpuTimerExtension = null
+  let gpuTimerUnavailableReason = 'not-initialized'
+  let activeGpuTimeQuery = null
   let longTaskObserver = null
   let longTaskCount = 0
   let longTaskTotalDurationMs = 0
@@ -177,6 +182,82 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
     longTaskObserver.observe({ type: 'longtask', buffered: true })
   }
+  function initializeGpuTimerDiagnostics() {
+    if (!renderDebugEnabled || !renderer) return
+    const gl = renderer.getContext()
+    if (typeof gl.createQuery !== 'function' || typeof gl.beginQuery !== 'function') {
+      gpuTimerUnavailableReason = 'webgl2-query-api-unavailable'
+      return
+    }
+    gpuTimerExtension = gl.getExtension('EXT_disjoint_timer_query_webgl2')
+    gpuTimerUnavailableReason = gpuTimerExtension ? null : 'EXT_disjoint_timer_query_webgl2-unavailable'
+  }
+
+  function collectGpuTimerResults() {
+    if (!gpuTimerExtension || !renderer) return
+    const gl = renderer.getContext()
+    const disjoint = gl.getParameter(gpuTimerExtension.GPU_DISJOINT_EXT)
+    if (disjoint) {
+      for (const query of pendingGpuTimeQueries.splice(0)) gl.deleteQuery(query)
+      gpuTimeSamples.length = 0
+      return
+    }
+    for (let index = pendingGpuTimeQueries.length - 1; index >= 0; index -= 1) {
+      const query = pendingGpuTimeQueries[index]
+      if (!gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) continue
+      const elapsedNanoseconds = gl.getQueryParameter(query, gl.QUERY_RESULT)
+      gl.deleteQuery(query)
+      pendingGpuTimeQueries.splice(index, 1)
+      if (Number.isFinite(elapsedNanoseconds) && elapsedNanoseconds >= 0) {
+        gpuTimeSamples.push(elapsedNanoseconds / 1e6)
+        if (gpuTimeSamples.length > 120) gpuTimeSamples.shift()
+      }
+    }
+  }
+
+  function beginGpuTimeQuery() {
+    if (!gpuTimerExtension || !renderer || activeGpuTimeQuery || pendingGpuTimeQueries.length >= 16) return
+    const gl = renderer.getContext()
+    const query = gl.createQuery()
+    if (!query) return
+    try {
+      gl.beginQuery(gpuTimerExtension.TIME_ELAPSED_EXT, query)
+      activeGpuTimeQuery = query
+    } catch (error) {
+      gl.deleteQuery(query)
+      gpuTimerUnavailableReason = 'gpu-timer-query-begin-failed: ' + String(error?.message || error)
+      gpuTimerExtension = null
+    }
+  }
+
+  function endGpuTimeQuery() {
+    if (!activeGpuTimeQuery || !renderer || !gpuTimerExtension) return
+    const gl = renderer.getContext()
+    try {
+      gl.endQuery(gpuTimerExtension.TIME_ELAPSED_EXT)
+      pendingGpuTimeQueries.push(activeGpuTimeQuery)
+      activeGpuTimeQuery = null
+    } catch (error) {
+      gl.deleteQuery(activeGpuTimeQuery)
+      activeGpuTimeQuery = null
+      gpuTimerUnavailableReason = 'gpu-timer-query-end-failed: ' + String(error?.message || error)
+      gpuTimerExtension = null
+    }
+  }
+
+  function disposeGpuTimerDiagnostics() {
+    if (!renderer) return
+    const gl = renderer.getContext()
+    if (activeGpuTimeQuery) {
+      try { gl.endQuery(gpuTimerExtension?.TIME_ELAPSED_EXT) } catch {}
+      gl.deleteQuery(activeGpuTimeQuery)
+      activeGpuTimeQuery = null
+    }
+    for (const query of pendingGpuTimeQueries.splice(0)) gl.deleteQuery(query)
+    gpuTimeSamples.length = 0
+    gpuTimerExtension = null
+  }
+
   function getFramePerformanceDiagnostics() {
     if (!framePerformanceSamples.length) return null
     const summarize = key => {
@@ -203,6 +284,25 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       updateCpuMs: summarize('updateCpuMs'),
       renderSubmitCpuMs: summarize('renderSubmitCpuMs'),
       totalFrameCpuMs: summarize('totalFrameCpuMs'),
+      gpuTimeMs: gpuTimeSamples.length ? (() => {
+        const values = gpuTimeSamples.slice().sort((a, b) => a - b)
+        const percentile = ratio => Number(values[Math.min(values.length - 1, Math.ceil(values.length * ratio) - 1)].toFixed(2))
+        return {
+          sampleCount: values.length,
+          window: 'last up to 120 completed GPU timer queries',
+          avg: Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)),
+          p50: percentile(0.5),
+          p90: percentile(0.9),
+          p95: percentile(0.95),
+          max: Number(values[values.length - 1].toFixed(2)),
+          pendingQueries: pendingGpuTimeQueries.length + (activeGpuTimeQuery ? 1 : 0),
+        }
+      })() : {
+        supported: Boolean(gpuTimerExtension),
+        unavailableReason: gpuTimerUnavailableReason,
+        sampleCount: 0,
+        pendingQueries: pendingGpuTimeQueries.length + (activeGpuTimeQuery ? 1 : 0),
+      },
       longTasks: {
         supported: Boolean(longTaskObserver),
         countSinceInitialization: longTaskCount,
@@ -1582,6 +1682,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     scene.fog = null
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    initializeGpuTimerDiagnostics()
     initializationStage = 'renderer-created'
     // 像素纹理仍使用 NearestFilter；MSAA 只平滑几何轮廓，不会把像素贴图模糊化。
     renderer.setPixelRatio(getRendererPixelRatio(container.clientWidth, container.clientHeight))
@@ -3026,8 +3127,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       activeHorizonGround.position.z = cameraRig.camera.position.z
     }
     const renderStartedAt = renderDebugEnabled ? performance.now() : 0
+    if (renderDebugEnabled) {
+      collectGpuTimerResults()
+      beginGpuTimeQuery()
+    }
     renderer.render(scene, cameraRig.camera)
     if (renderDebugEnabled) {
+      endGpuTimeQuery()
       const frameFinishedAt = performance.now()
       lastRenderCostMs = frameFinishedAt - renderStartedAt
       framePerformanceSamples.push({
@@ -3045,6 +3151,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       && (input.keys.size > 0 || Boolean(input.navigationPath) || !input.grounded)
     if (cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0 || freePlayerIsMoving) requestFrame()
     } catch (error) {
+      endGpuTimeQuery()
       // 不吞掉帧内异常，也不在确定性错误后无限重试；记录完整现场，等待修复。
       logRenderFailure('animate', error)
     }
@@ -3693,6 +3800,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cancelAnimationFrame(frameId)
     longTaskObserver?.disconnect()
     longTaskObserver = null
+    disposeGpuTimerDiagnostics()
     resizeObserver?.disconnect()
     window.removeEventListener('keydown', onKeyDown)
     renderer?.domElement?.removeEventListener('pointerdown', onScenePointerDown)

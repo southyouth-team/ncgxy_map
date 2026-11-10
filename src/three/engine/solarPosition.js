@@ -21,7 +21,7 @@ export function getVirtualSunState(hour = 12) {
   const daylight = smoothstep(-0.08, 0.28, elevation)
   const isNight = daylight < 0.025
   const lightDirection = isNight
-    ? sunDirection.map(value => -value)
+    ? [-sunDirection[0], sunDirection[1], -sunDirection[2]]
     : sunDirection
 
   return {

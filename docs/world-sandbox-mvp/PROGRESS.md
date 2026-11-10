@@ -3868,3 +3868,20 @@ export const environmentBindings = [
 - `waterVolumeRuntime.test.js`：4/4 通过，包含水面参数联动和深水浸入上限。
 - 失败项仍是前文记录的 6 项；移动陡坡与铰链门 Collider 两项已通过。
 - CI 仍未全绿；水面联动尚未通过真实 AI 生成模型的浏览器实测。旧模型若没有 `surfacePartId`，仍只参与浸入采样，不会自动移动可视水面；需要重新生成或补齐该字段。
+
+
+## 2026-11-10 — Frontend CI 全量恢复通过
+
+最新验证：GitHub Actions Frontend CI run `42742327694`，commit `3bf248a5a50ec03b3bebee76187fd19d243959cb`。
+
+- Vite production build：通过。
+- Vitest：48/48 个测试文件通过。
+- 测试用例：550/550 通过。
+- 本轮修复/校准的测试契约包括：
+  - 角色站在不可行走陡坡时保持当前高度，不被错误吸附到默认地面。
+  - 铰链门测试夹具明确绑定门扇旋转状态，验证门扇 Collider 随旋转保留。
+  - 水体深度参数与可视水面部件位置联动；深水浸入深度不超过角色身高。
+  - Traversal 测试区分“被预期阻挡的路线”与“成功通过的路线”；若声明路线包含被阻挡项，整体 `certifiedWalkable` 应为 false。
+  - 角色 fallback visual 在外部模型加载后保留但隐藏，场景角色使用当前共享 3D 模型层级。
+  - 环境能力 Manifest 的默认 `environmentBindings`、夜间月光方向和沙盒扩展边界测试与当前实现契约一致。
+- 该 CI 结果只证明当前自动化测试与生产构建通过；尚未替代真实浏览器中的持续键盘输入、动态碰撞、水面可视高度和角色水线验收。

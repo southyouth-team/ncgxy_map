@@ -162,8 +162,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
   const framePerformanceSamples = []
+  const frameStallSamples = []
+  const longTaskSamples = []
   const gpuTimeSamples = []
   const pendingGpuTimeQueries = []
+  let frameSequence = 0
   let gpuTimerExtension = null
   let gpuTimerUnavailableReason = 'not-initialized'
   let activeGpuTimeQuery = null
@@ -178,6 +181,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         longTaskCount += 1
         longTaskTotalDurationMs += entry.duration
         longTaskMaxDurationMs = Math.max(longTaskMaxDurationMs, entry.duration)
+        longTaskSamples.push({
+          startTimeMs: Number(entry.startTime.toFixed(2)),
+          endTimeMs: Number((entry.startTime + entry.duration).toFixed(2)),
+          durationMs: Number(entry.duration.toFixed(2)),
+          attribution: Array.from(entry.attribution || []).slice(0, 4).map(item => ({
+            name: item.name || null,
+            containerType: item.containerType || null,
+            containerName: item.containerName || null,
+            containerId: item.containerId || null,
+          })),
+        })
+        if (longTaskSamples.length > 30) longTaskSamples.shift()
       }
     })
     longTaskObserver.observe({ type: 'longtask', buffered: true })
@@ -198,18 +213,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const gl = renderer.getContext()
     const disjoint = gl.getParameter(gpuTimerExtension.GPU_DISJOINT_EXT)
     if (disjoint) {
-      for (const query of pendingGpuTimeQueries.splice(0)) gl.deleteQuery(query)
+      for (const pending of pendingGpuTimeQueries.splice(0)) gl.deleteQuery(pending.query)
       gpuTimeSamples.length = 0
       return
     }
     for (let index = pendingGpuTimeQueries.length - 1; index >= 0; index -= 1) {
-      const query = pendingGpuTimeQueries[index]
-      if (!gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) continue
-      const elapsedNanoseconds = gl.getQueryParameter(query, gl.QUERY_RESULT)
-      gl.deleteQuery(query)
+      const pending = pendingGpuTimeQueries[index]
+      if (!gl.getQueryParameter(pending.query, gl.QUERY_RESULT_AVAILABLE)) continue
+      const elapsedNanoseconds = gl.getQueryParameter(pending.query, gl.QUERY_RESULT)
+      gl.deleteQuery(pending.query)
       pendingGpuTimeQueries.splice(index, 1)
       if (Number.isFinite(elapsedNanoseconds) && elapsedNanoseconds >= 0) {
-        gpuTimeSamples.push(elapsedNanoseconds / 1e6)
+        gpuTimeSamples.push({
+          frame: pending.frame,
+          startedAtMs: pending.startedAtMs,
+          completedAtMs: performance.now(),
+          durationMs: elapsedNanoseconds / 1e6,
+        })
         if (gpuTimeSamples.length > 120) gpuTimeSamples.shift()
       }
     }
@@ -222,7 +242,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (!query) return
     try {
       gl.beginQuery(gpuTimerExtension.TIME_ELAPSED_EXT, query)
-      activeGpuTimeQuery = query
+      activeGpuTimeQuery = { query, frame: frameSequence, startedAtMs: performance.now() }
     } catch (error) {
       gl.deleteQuery(query)
       gpuTimerUnavailableReason = 'gpu-timer-query-begin-failed: ' + String(error?.message || error)
@@ -250,7 +270,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const gl = renderer.getContext()
     if (activeGpuTimeQuery) {
       try { gl.endQuery(gpuTimerExtension?.TIME_ELAPSED_EXT) } catch {}
-      gl.deleteQuery(activeGpuTimeQuery)
+      gl.deleteQuery(activeGpuTimeQuery.query)
       activeGpuTimeQuery = null
     }
     for (const query of pendingGpuTimeQueries.splice(0)) gl.deleteQuery(query)
@@ -285,7 +305,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       renderSubmitCpuMs: summarize('renderSubmitCpuMs'),
       totalFrameCpuMs: summarize('totalFrameCpuMs'),
       gpuTimeMs: gpuTimeSamples.length ? (() => {
-        const values = gpuTimeSamples.slice().sort((a, b) => a - b)
+        const values = gpuTimeSamples.map(sample => sample.durationMs).sort((a, b) => a - b)
         const percentile = ratio => Number(values[Math.min(values.length - 1, Math.ceil(values.length * ratio) - 1)].toFixed(2))
         return {
           sampleCount: values.length,
@@ -295,6 +315,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
           p90: percentile(0.9),
           p95: percentile(0.95),
           max: Number(values[values.length - 1].toFixed(2)),
+          recentSlowSamples: gpuTimeSamples.filter(sample => sample.durationMs >= 8.33).slice(-10).map(sample => ({
+            frame: sample.frame,
+            startedAtMs: Number(sample.startedAtMs.toFixed(2)),
+            completedAtMs: Number(sample.completedAtMs.toFixed(2)),
+            durationMs: Number(sample.durationMs.toFixed(2)),
+          })),
           pendingQueries: pendingGpuTimeQueries.length + (activeGpuTimeQuery ? 1 : 0),
         }
       })() : {
@@ -303,12 +329,19 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         sampleCount: 0,
         pendingQueries: pendingGpuTimeQueries.length + (activeGpuTimeQuery ? 1 : 0),
       },
+      frameStalls: frameStallSamples.slice(-12),
       longTasks: {
         supported: Boolean(longTaskObserver),
         countSinceInitialization: longTaskCount,
         totalDurationMs: Number(longTaskTotalDurationMs.toFixed(2)),
         maxDurationMs: Number(longTaskMaxDurationMs.toFixed(2)),
         thresholdMs: 50,
+        recent: longTaskSamples.slice(-12).map(task => ({
+          ...task,
+          overlappingFrames: framePerformanceSamples.filter(frame =>
+            task.startTimeMs < frame.endedAtMs && task.endTimeMs > frame.startedAtMs
+          ).map(frame => frame.frame),
+        })),
       },
     }
   }
@@ -3136,12 +3169,30 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       endGpuTimeQuery()
       const frameFinishedAt = performance.now()
       lastRenderCostMs = frameFinishedAt - renderStartedAt
-      framePerformanceSamples.push({
+      frameSequence += 1
+      const frameSample = {
+        frame: frameSequence,
+        startedAtMs: frameStartedAt,
+        endedAtMs: frameFinishedAt,
         rafIntervalMs: Math.max(0, lastFrameTiming.rawDeltaSeconds * 1000),
         updateCpuMs: Math.max(0, renderStartedAt - frameStartedAt),
         renderSubmitCpuMs: lastRenderCostMs,
         totalFrameCpuMs: Math.max(0, frameFinishedAt - frameStartedAt),
-      })
+      }
+      framePerformanceSamples.push(frameSample)
+      if (frameSample.rafIntervalMs > 10 || frameSample.totalFrameCpuMs > 10 || lastRenderCostMs > 8.33) {
+        frameStallSamples.push({
+          frame: frameSample.frame,
+          startedAtMs: Number(frameSample.startedAtMs.toFixed(2)),
+          endedAtMs: Number(frameSample.endedAtMs.toFixed(2)),
+          rafIntervalMs: Number(frameSample.rafIntervalMs.toFixed(2)),
+          updateCpuMs: Number(frameSample.updateCpuMs.toFixed(2)),
+          renderSubmitCpuMs: Number(frameSample.renderSubmitCpuMs.toFixed(2)),
+          totalFrameCpuMs: Number(frameSample.totalFrameCpuMs.toFixed(2)),
+          gpuSamplePending: true,
+        })
+        if (frameStallSamples.length > 30) frameStallSamples.shift()
+      }
       if (framePerformanceSamples.length > 120) framePerformanceSamples.shift()
       renderDebugFrame += 1
       if (renderDebugFrame === 1 || renderDebugFrame % 120 === 0) logRenderDiagnostics(renderDebugFrame === 1 ? 'first-render' : 'render')

@@ -84,6 +84,15 @@ describe('PlayerCharacterRuntime', () => {
     expect(runtime.getInfo()).toMatchObject({ assetId: 'builtin-placeholder', hasExternalModel: false })
   })
 
+  it('keeps walk intent active while blocked and forwards a low gait rate', () => {
+    const anchor = createAnchor()
+    const updater = anchor.userData.updateAnimation
+    const runtime = new PlayerCharacterRuntime(THREE, anchor)
+    anchor.userData.updateAnimation.call(anchor, true, 1, 0, 0, false, 0.42)
+    expect(updater).toHaveBeenCalledWith(true, 1, 0, 0, 0.42)
+    runtime.dispose()
+  })
+
   it('rejects invalid or already-mounted models', () => {
     const anchor = createAnchor()
     const runtime = new PlayerCharacterRuntime(THREE, anchor)

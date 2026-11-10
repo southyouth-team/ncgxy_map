@@ -58,9 +58,9 @@ describe('InputController combined movement and jump input', () => {
     controller.physicsCharacterId = 'sandbox:player'
 
     expect(controller.jumpPlayer()).toBe(true)
-    expect(controller.jumpActive).toBe(true)
+    expect(controller.jumpActive).toBe(false)
     expect(controller.jumpRequested).toBe(true)
-    expect(controller.jumpBufferRemaining).toBe(0)
+    expect(controller.jumpBufferRemaining).toBeGreaterThan(0)
   })
 
   it('applies sprint movement and jump in the same update without reducing horizontal speed', () => {
@@ -83,6 +83,8 @@ describe('InputController combined movement and jump input', () => {
 
     expect(controller.jumpPlayer()).toBe(true)
     controller.update(1 / 60)
+    expect(setVelocity).not.toHaveBeenCalled()
+    controller.beforeFixedStep({ delta: 1 / 60 })
 
     expect(setVelocity).toHaveBeenCalledWith('sandbox:player', expect.objectContaining({
       x: 0,
@@ -543,22 +545,27 @@ describe('InputController Rapier character movement', () => {
     const { setState } = attachPhysics(controller, cameraRig.player)
 
     expect(controller.jumpPlayer()).toBe(true)
-    expect(controller.jumpActive).toBe(true)
+    expect(controller.jumpActive).toBe(false)
+    controller.beforeFixedStep({ delta: 1 / 60 })
+    controller.afterFixedStep({ delta: 1 / 60 })
 
     // The first physics step can still report grounded while the launch velocity
     // has only just been queued. This must not be mistaken for a completed jump.
     setState({ grounded: true, verticalVelocity: 6, stepCount: 1 })
     controller.moveWithPhysics(cameraRig.player, 0, 0, 1 / 60)
+    controller.afterFixedStep({ delta: 1 / 60 })
     expect(controller.jumpActive).toBe(true)
     expect(controller.jumpWasAirborne).toBe(false)
 
     setState({ grounded: false, verticalVelocity: 5.5, stepCount: 2 })
     controller.moveWithPhysics(cameraRig.player, 0, 0, 1 / 60)
+    controller.afterFixedStep({ delta: 1 / 60 })
     expect(controller.jumpActive).toBe(true)
     expect(controller.jumpWasAirborne).toBe(true)
 
     setState({ grounded: true, verticalVelocity: -1, stepCount: 3 })
     controller.moveWithPhysics(cameraRig.player, 0, 0, 1 / 60)
+    controller.afterFixedStep({ delta: 1 / 60 })
     expect(controller.jumpActive).toBe(false)
     expect(controller.jumpWasAirborne).toBe(false)
   })
@@ -569,6 +576,8 @@ describe('InputController Rapier character movement', () => {
     setState({ grounded: false, verticalVelocity: -1 })
 
     controller.update(0.05)
+    expect(calls.velocities).toHaveLength(0)
+    controller.beforeFixedStep({ delta: 1 / 60 })
 
     expect(controller.verticalVelocity).toBe(-1)
     expect(calls.accelerations.at(-1).acceleration).toEqual({ x: 0, y: -24, z: 0 })

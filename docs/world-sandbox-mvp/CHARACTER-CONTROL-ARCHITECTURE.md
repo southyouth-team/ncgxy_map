@@ -65,5 +65,16 @@
 - `beforeFixedStep` runs once immediately before each Rapier world step and receives the fixed delta, upcoming step count, and runtime reference. It is the intended place for Motor state transitions and command submission.
 - `afterFixedStep` runs once after Rapier has advanced and character contact/transform snapshots have been refreshed. It receives the completed step count and is intended for Motor contact-state reconciliation.
 - Hooks do not run on render frames that do not produce a fixed simulation step. A render frame that produces multiple catch-up steps invokes the hooks once per substep.
-- Existing `step(frameDelta)` callers remain compatible. The hooks are an infrastructure contract only; the Motor is not yet wired to them in this change.
+- Existing `step(frameDelta)` callers remain compatible. The sandbox engine now wires both hooks to `InputController`/`CharacterMotor` for normal simulation and stair-transition simulation.
 - Hook exceptions are not swallowed. A `beforeFixedStep` exception prevents that simulation step; an `afterFixedStep` exception occurs after the step has been committed.
+
+
+## CharacterMotor fixed-step ownership (implemented; validation pending)
+
+- For the Rapier-backed sandbox character, render-frame `moveWithPhysics()` now only publishes the latest horizontal velocity intent and reads the interpolated presentation snapshot.
+- Jump input is buffered immediately by the Motor. The buffer is consumed and decremented only in `beforeFixedStep`; Coyote Time is also advanced only there.
+- `beforeFixedStep` is the only Rapier character command submission point for the Motor: it resolves jump launch, horizontal velocity, vertical velocity, and gravity acceleration.
+- `afterFixedStep` reads the completed Rapier state and reconciles grounded, airborne, and landing transitions.
+- `createCampusEngine` supplies these hooks to every sandbox physics step, including stair-transition frames.
+- The legacy non-Rapier CollisionWorld path remains render-delta based and is intentionally outside this migration slice.
+- Unit and browser verification is still required. In particular, confirm Rapier's computed-grounded semantics at launch and landing before considering the landing state machine complete.

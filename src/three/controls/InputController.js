@@ -213,7 +213,14 @@ export class InputController {
   }
 
   syncPlayerFromPhysicsState() {
-    return this.motor.syncPlayerFromPhysicsState(this.cameraRig?.player)
+    const synced = this.motor.syncPlayerFromPhysicsState(this.cameraRig?.player)
+    if (!synced) return false
+
+    // Rapier 的插值位置才是本帧最终呈现位置；在它同步完成后再更新跟随相机目标，
+    // 避免相机继续消费 input.update() 中物理步进前的旧角色坐标。
+    if (this.mode === 'thirdPerson') this.cameraRig?.updateThirdPersonDesired?.()
+    else if (this.mode === 'firstPerson') this.cameraRig?.updateFirstPersonDesired?.()
+    return true
   }
 
   beforeFixedStep(context) {

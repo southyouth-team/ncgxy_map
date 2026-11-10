@@ -49,8 +49,8 @@ export class InputController {
     this.jumpRequested = false
     this.jumpLaunched = false
     this.jumpWasAirborne = false
-    this.jumpBufferDuration = 0.14
-    this.coyoteTimeDuration = 0.1
+    this.jumpBufferDuration = 0.22
+    this.coyoteTimeDuration = 0.18
     this.jumpBufferRemaining = 0
     this.coyoteTimeRemaining = this.coyoteTimeDuration
     this.spawnPosition = null
@@ -243,9 +243,10 @@ export class InputController {
     if (!this.physicsRuntime || !this.physicsCharacterId || !this.cameraRig?.player) return false
     const state = this.physicsRuntime.getKinematicCharacterState?.(this.physicsCharacterId)
     if (!state?.translation) return false
-    this.cameraRig.player.x = state.translation.x
-    this.cameraRig.player.y = state.translation.y + this.playerEyeHeight
-    this.cameraRig.player.z = state.translation.z
+    const renderPosition = state.interpolatedTranslation || state.translation
+    this.cameraRig.player.x = renderPosition.x
+    this.cameraRig.player.y = renderPosition.y + this.playerEyeHeight
+    this.cameraRig.player.z = renderPosition.z
     this.grounded = state.grounded === true
     // Preserve lastPhysicsStepCount so the next input update can detect a landing.
     return true
@@ -275,9 +276,14 @@ export class InputController {
 
   jumpPlayer() {
     if (!this.movementEnabled || this.mode === 'overview' || this.jumpActive) return false
-    // 直接读取 Rapier 最新落地状态，避免渲染帧缓存的 grounded 状态造成空格按下无响应。
+    // A fixed-step grounded flag can be one render frame behind contact resolution.
+    // Refresh coyote time only on a positive grounded result; never erase the
+    // last valid grace window merely because the latest snapshot is transiently airborne.
     const physicsState = this.physicsRuntime?.getKinematicCharacterState?.(this.physicsCharacterId)
-    if (physicsState) this.grounded = physicsState.grounded === true
+    if (physicsState?.grounded === true) {
+      this.grounded = true
+      this.coyoteTimeRemaining = this.coyoteTimeDuration
+    }
     this.jumpBufferRemaining = this.jumpBufferDuration
     this.tryStartBufferedJump(this.grounded)
     return true

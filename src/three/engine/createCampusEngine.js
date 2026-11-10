@@ -2631,12 +2631,18 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
     previousTime = time
     if (stairTransition) {
-      physicsRuntime?.step(delta)
+      physicsRuntime?.step(delta, {
+        beforeFixedStep: context => input?.beforeFixedStep?.(context),
+        afterFixedStep: context => input?.afterFixedStep?.(context),
+      })
       updateStairTransition(delta)
     } else {
       // Submit movement intent before advancing Rapier, avoiding a one-step input delay.
       input?.update(delta)
-      physicsRuntime?.step(delta)
+      physicsRuntime?.step(delta, {
+        beforeFixedStep: context => input?.beforeFixedStep?.(context),
+        afterFixedStep: context => input?.afterFixedStep?.(context),
+      })
       // Render and animate from the completed physical position.
       input?.syncPlayerFromPhysicsState?.()
     }

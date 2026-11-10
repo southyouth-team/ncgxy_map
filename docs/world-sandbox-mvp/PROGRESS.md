@@ -4270,3 +4270,18 @@ export const environmentBindings = [
 - 浏览器验收需观察连续 W、W+Shift、W+Shift+Space；同时检查 30/60/120/144Hz 下人物动画节奏与位移是否同步。
 - 如需评估阴影性能，使用 `?render-debug=1` 查看 `[CampusRenderDiagnostics]` 中的 render cost、physics timing 与 shadows.dynamicInvalidations；该 render cost 是 renderer.render() 调用总耗时，包含其触发的阴影渲染工作，但不是独立的 ShadowMap GPU 时间。
 - 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理任何沙盒数据。
+
+## 2026-11-11 — Three.js Renderer 像素比策略统一
+
+### 本轮处理
+- 依据浏览器诊断，当前 CSS 视口约为 989×731，resize 后 DPR 达到 1.822；而 Renderer 初始化阶段曾限制 DPR 不超过 1.5，两个入口的质量策略不一致。
+- 新增统一的 `getRendererPixelRatio(width, height)`，初始化与 Resize 共用 Three.js `WebGLRenderer.setPixelRatio()` / `setSize()` 标准接口。
+- 统一约束为设备 DPR、1.5 上限及 2,400,000 绘制缓冲区像素预算三者中的最小值。按本次诊断尺寸，DPR 将从约 1.822 降至 1.5，减少高分辨率绘制负载。
+- 不修改相机投影比例、物理步进、角色动画、阴影投射或沙盒数据。
+
+### 验证边界与下一步
+- 已将代码提交到 `mvp`；尚未在本地执行 Vitest、Vite build 或真实浏览器测试。
+- 刷新后应检查 `[CampusRenderDiagnostics]`：在相同 989×731 CSS 尺寸下，pixelRatio 应不高于 1.5，drawingBuffer 应约为 1484×1097（浏览器取整可能有 1px 差异）。
+- 此项只修正已确认的 Renderer 配置不一致，不代表已证明人物卡顿根因或已解决卡顿。
+- 动态阴影仍按 Three.js ShadowMap 原生 `needsUpdate` 语义更新；下一阶段继续核对动态投影的必要性和实际 GPU 成本，不自行实现局部 ShadowMap。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR，未清理或改写沙盒数据。

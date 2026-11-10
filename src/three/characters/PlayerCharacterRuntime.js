@@ -25,6 +25,8 @@ export class PlayerCharacterRuntime {
     this.dimensions = { width: 0.5, height: 1.7, depth: 0.3, eyeHeight: 1.7, colliderRadius: 0.35 }
     this.animationState = 'idle'
     this.animationOverride = null
+    this.smoothedGaitRate = 1
+    this.lastAnimationSeconds = null
     this.disposed = false
     anchor.userData.updateAnimation = (moving, seconds, dx, dz, running, gaitRate) => this.updateAnimation(moving, seconds, dx, dz, running, gaitRate)
   }
@@ -129,15 +131,24 @@ export class PlayerCharacterRuntime {
   updateAnimation(moving, seconds, dx = 0, dz = 0, running = false, gaitRate = 1) {
     if (this.disposed) return
     if (Math.hypot(dx, dz) > 0.0005) this.anchor.rotation.y = Math.atan2(dx, dz)
+    const targetGaitRate = Math.max(0.35, Math.min(1.5, Number(gaitRate) || 1))
+    const animationDelta = this.lastAnimationSeconds === null
+      ? 0
+      : Math.max(0, Math.min(0.1, Number(seconds) - this.lastAnimationSeconds))
+    this.lastAnimationSeconds = Number.isFinite(Number(seconds)) ? Number(seconds) : this.lastAnimationSeconds
+    // Rapier publishes actualVelocity once per fixed step, while animation is evaluated per render frame.
+    // Filter that sampled signal in the presentation layer so fixed-step quantization does not become visible gait-speed jitter.
+    const blend = animationDelta > 0 ? 1 - Math.exp(-animationDelta / 0.09) : 1
+    this.smoothedGaitRate += (targetGaitRate - this.smoothedGaitRate) * blend
     if (this.activeVisual === this.fallbackVisual) {
-      this.fallbackUpdater?.call(this.anchor, Boolean(moving), seconds, dx, dz, Math.max(0.35, Math.min(1.5, Number(gaitRate) || 1)))
+      this.fallbackUpdater?.call(this.anchor, Boolean(moving), seconds, dx, dz, this.smoothedGaitRate)
       return
     }
     const state = this.animationOverride || (moving ? (running ? 'run' : 'walk') : 'idle')
     if (state !== this.animationState || !this.activeAction) this.animationState = state
     this.playState(state)
     if (this.activeAction && moving && !this.animationOverride) {
-      this.activeAction.timeScale = Math.max(0.35, Math.min(1.5, Number(gaitRate) || 1))
+      this.activeAction.timeScale = this.smoothedGaitRate
     } else if (this.activeAction && state === 'idle') {
       this.activeAction.timeScale = 1
     }

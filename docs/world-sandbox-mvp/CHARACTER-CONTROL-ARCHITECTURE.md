@@ -74,10 +74,10 @@
 - For the Rapier-backed sandbox character, render-frame `moveWithPhysics()` now only publishes the latest horizontal velocity intent and reads the interpolated presentation snapshot.
 - Jump input is buffered immediately by the Motor. The buffer is consumed and decremented only in `beforeFixedStep`; Coyote Time is also advanced only there.
 - `beforeFixedStep` is the only Rapier character command submission point for the Motor: it resolves jump launch, horizontal velocity, vertical velocity, and gravity acceleration.
-- `afterFixedStep` reads the completed Rapier state and reconciles grounded, airborne, and landing transitions.
+- `afterFixedStep` reads the completed Rapier state and reconciles grounded, airborne, and landing transitions. `PhysicsRuntime.grounded` is the `computedGrounded()` result for the most recently completed character-controller movement step; it is not a direct contact-manifold query. The controller computes the result before `world.step()`, and the runtime publishes it only after the world step completes.
 - `createCampusEngine` supplies these hooks to every sandbox physics step, including stair-transition frames.
 - The legacy non-Rapier CollisionWorld path remains render-delta based and is intentionally outside this migration slice.
-- Unit and browser verification is still required. In particular, confirm Rapier's computed-grounded semantics at launch and landing before considering the landing state machine complete.
+- Motor vertical velocity reconciliation consumes `actualVelocity.y` (collision-corrected displacement per fixed step), not the legacy `velocity` alias, which represents commanded velocity. `commandedVelocity` remains available for diagnostics and intent inspection.\n- Unit and browser verification is still required. The code-level snapshot ordering is now covered by tests; real Rapier behavior on launch, ceiling contact, slopes, and landing still requires runtime acceptance.
 
 
 ## Backend isolation and current verification scope
@@ -87,3 +87,12 @@
 - Rapier-required mode fails closed: if the physics runtime is unavailable, the controller does not execute the legacy movement solver.
 - CollisionWorld is retained for campus movement and spatial/placement compatibility. This migration isolates character movement ownership; it does not claim the entire CollisionWorld module is obsolete.
 - Tests were added for fail-closed backend behavior, explicit legacy backend selection, and Coyote Time across 60/120/144 Hz render cadence. These tests have not yet been executed in a local checkout or verified by CI.
+
+
+## Grounded and velocity snapshot semantics
+
+- `PhysicsRuntime` calls `computeColliderMovement()` before `world.step()`; `computedGrounded()` therefore describes the controller's computed movement result for that upcoming step.
+- The runtime stores that pending result and publishes it to `getKinematicCharacterState().grounded` only after `world.step()` completes. The returned `groundedStepCount` identifies the completed step associated with the snapshot.
+- `grounded` is not a raw contact-manifold query and should not be interpreted as a persistent physical contact event independent of the character controller's requested movement.
+- `commandedVelocity` is the controller intent after acceleration integration for the most recent completed step. `actualVelocity` is the character displacement divided by the fixed timestep after collision correction.
+- CharacterMotor uses `actualVelocity.y` as its next vertical velocity state, falling back to older fields only for compatibility with external test doubles/legacy adapters. This allows ceiling/floor collision correction to feed back into the next Motor tick.

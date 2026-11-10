@@ -3901,3 +3901,19 @@ export const environmentBindings = [
 - 新增 InputController 物理位置同步单测；需等待分支 CI 验证。
 - 本轮尚未进行真实浏览器持续移动/碰撞验收。若仍然卡住，下一步依据 ?debug=physics 的 commandedVelocity、actualVelocity、stepCount、grounded 和物理位置判断碰撞阻挡或物理步进停滞。
 - 本轮未修改 main，未合并 PR。
+
+## 2026-11-10 — 移动意图与实际步态解耦
+
+### 本轮实现
+
+- 角色动画的 moving 状态改为“移动意图 OR 实际位移”：按住方向键或自动寻路时，即使 Rapier 当前速度为 0（例如顶住墙体），仍保留迈步反馈，不会直接切回 Idle。
+- Rapier 实际速度只用于计算步态频率：正常移动随实际速度变化；持续受阻时使用低频轻量迈步，避免高速原地跑。
+- 内置角色步态增加渐入/渐出，松开移动输入后平滑回到 Idle。
+- 外部 GLB 动画将步态倍率传递给当前动作的 timeScale；动画覆盖状态仍优先，不被自动移动状态覆盖。
+- 动画方向仍使用实际物理速度方向，避免角色被墙挡住时朝向抖动。
+
+### 验证边界
+
+- 新增 PlayerCharacterRuntime fallback 动画参数透传测试；仍需 CI 验证。
+- 需要在浏览器验证持续按键、顶墙、松键、加速与跳跃组合；CI 不能替代真实键盘连续性验收。
+- 本轮仍只修改 `fix/sandbox-character-physics-continuity`，不修改 main、不合并 PR。

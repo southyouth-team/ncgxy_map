@@ -118,3 +118,27 @@ describe('PlayerCharacterRuntime', () => {
     expect(() => runtime.setModel(child)).toThrow('未挂载')
   })
 })
+
+
+describe('PlayerCharacterRuntime gait presentation', () => {
+  it('smooths fixed-step gait-rate changes across render updates', () => {
+    const anchor = createAnchor()
+    const updater = anchor.userData.updateAnimation
+    const runtime = new PlayerCharacterRuntime(THREE, anchor)
+
+    updater.call(anchor, true, 1, 0, 0, false, 1)
+    expect(updater).toHaveBeenCalledWith(true, 1, 0, 0, 1)
+
+    updater.mockClear()
+    updater.call(anchor, true, 1 + 1 / 60, 0, 0, false, 0.42)
+    const filtered = updater.mock.calls[0][5]
+    expect(filtered).toBeGreaterThan(0.42)
+    expect(filtered).toBeLessThan(1)
+
+    updater.mockClear()
+    updater.call(anchor, true, 1 + 2 / 60, 0, 0, false, 0.42)
+    expect(updater.mock.calls[0][5]).toBeLessThan(filtered)
+    expect(updater.mock.calls[0][5]).toBeGreaterThan(0.42)
+    runtime.dispose()
+  })
+})

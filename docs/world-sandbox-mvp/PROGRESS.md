@@ -4303,3 +4303,18 @@ export const environmentBindings = [
 - 如果实验模式明显流畅，动态阴影链路是主要嫌疑；若无明显改善，则继续排查主渲染循环、场景更新和浏览器/GPU 帧时间尖峰。
 - 本轮已写入远端 `mvp`；未执行本地 Vitest、Vite build 或真实浏览器测试，不能据此宣称卡顿已解决。
 - 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。
+
+## 2026-11-11 — 渲染帧时间分段诊断
+
+### 本轮处理
+- 用户实测动态阴影 A/B 模式无明显改善，因此不把阴影作为已确认根因，也不继续基于阴影假设改动正式渲染行为。
+- 在 `render-debug=1` 下增加最近最多 120 个已渲染帧的滚动统计，分别记录 RAF 帧间隔、渲染前主线程更新耗时、`renderer.render()` CPU 提交耗时及本帧总 CPU 耗时。
+- 每 120 帧输出一次均值、P95、最大值；仅在诊断模式采样，不影响默认运行路径。
+- 指标边界：`renderSubmitCpuMs` 是 CPU 侧 Three.js 渲染调用耗时，不等同 GPU 执行耗时；`updateCpuMs` 包含渲染前的输入、物理、角色、相机、环境等同步更新工作。
+
+### 下一步判定
+- 若 RAF interval P95/最大值异常而 update/render CPU 指标较低，优先检查主线程阻塞、浏览器调度或页面其他任务。
+- 若 updateCpuMs 异常，继续按阶段拆分输入/物理/角色/场景更新。
+- 若 renderSubmitCpuMs 异常，再结合 WebGL/GPU profiling 检查 draw call、材质、阴影及 GPU 瓶颈；不把 renderer.info 当作 GPU 计时器。
+- 本轮已写入远端 `mvp`；未执行本地 Vitest、Vite build 或真实浏览器测试。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。

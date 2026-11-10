@@ -4318,3 +4318,21 @@ export const environmentBindings = [
 - 若 renderSubmitCpuMs 异常，再结合 WebGL/GPU profiling 检查 draw call、材质、阴影及 GPU 瓶颈；不把 renderer.info 当作 GPU 计时器。
 - 本轮已写入远端 `mvp`；未执行本地 Vitest、Vite build 或真实浏览器测试。
 - 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。
+
+## 2026-11-11 — 帧节奏与主线程长任务诊断补强
+
+### 本轮数据判断
+- 用户提供的 120 帧样本：RAF 平均 8.75ms、最大 16.8ms；更新 CPU 平均 1.37ms；渲染提交 CPU 平均 3.4ms；总 CPU 平均 4.76ms。
+- 物理丢弃时间为 0，当前样本不足以支持物理追帧或阴影为主要卡顿根因。
+- CPU 指标不等于 GPU 执行时间；当前尚不能排除 GPU 帧时间或浏览器帧调度问题。
+
+### 本轮修改
+- 帧时间分布增加 P50/P90/P95/P99，避免仅凭平均值和最大值判断。
+- 增加 RAF 间隔超过 10ms、12ms、16.7ms 的帧数，直接观察刷新节奏丢帧比例。
+- 在浏览器支持 Long Tasks API 时，诊断模式记录初始化以来超过 50ms 的主线程长任务次数、累计时长和最大时长；引擎 dispose 时断开 PerformanceObserver。
+- 所有新增采样仅在 `render-debug=1` 下启用，不改变正常渲染、物理或阴影行为。
+
+### 验证边界
+- 代码已写入远端 `mvp`；未执行本地 Vitest、Vite build 或真实浏览器测试。
+- Long Tasks API 只能捕获超过 50ms 的主线程任务，不能代表所有卡顿；如果没有长任务，也不能据此排除 GPU 或短时任务调度问题。
+- 本轮仅修改 `mvp`，未修改 `main`，未合并 PR，未更改沙盒数据。

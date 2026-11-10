@@ -682,3 +682,29 @@ describe('InputController jump and stuck reset', () => {
     expect(controller.navigationPath).toBeNull()
   })
 })
+
+describe('InputController movement backend isolation', () => {
+  it('does not fall back to CollisionWorld when Rapier is required but unavailable', () => {
+    const { controller, cameraRig, collisionWorld } = createController()
+    controller.setMovementBackend('rapier')
+    controller.setMode('thirdPerson')
+    controller.keys.add('w')
+
+    controller.update(1 / 60)
+
+    expect(collisionWorld.move).not.toHaveBeenCalled()
+    expect(cameraRig.player).toMatchObject({ x: 0, z: 0 })
+  })
+
+  it('uses CollisionWorld only when the legacy backend is explicitly selected', () => {
+    const { controller, cameraRig, collisionWorld } = createController()
+    controller.setMovementBackend('collision-world')
+    controller.setMode('thirdPerson')
+    controller.keys.add('w')
+
+    controller.update(1 / 60)
+
+    expect(collisionWorld.move).toHaveBeenCalledOnce()
+    expect(cameraRig.player.z).not.toBe(0)
+  })
+})

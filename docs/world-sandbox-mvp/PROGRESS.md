@@ -4285,3 +4285,21 @@ export const environmentBindings = [
 - 此项只修正已确认的 Renderer 配置不一致，不代表已证明人物卡顿根因或已解决卡顿。
 - 动态阴影仍按 Three.js ShadowMap 原生 `needsUpdate` 语义更新；下一阶段继续核对动态投影的必要性和实际 GPU 成本，不自行实现局部 ShadowMap。
 - 仅修改 `mvp`，未修改 `main`，未合并 PR，未清理或改写沙盒数据。
+
+## 2026-11-11 — 动态阴影 A/B 诊断模式
+
+### 本轮处理
+- 新增 URL 参数 `shadow-static-test=1` 的临时 A/B 诊断模式。
+- 该模式保留 Three.js 静态世界阴影缓存，但跳过角色移动/风摆触发的动态 ShadowMap 失效请求。
+- 诊断模式下将角色各 Mesh 的 `castShadow` 设为 false，排除角色自身作为 ShadowMap caster 的成本；角色可见性、动画、Rapier 物理和移动逻辑不变。
+- 正式模式不受影响：不带该参数时，仍按原有 Three.js `shadowMap.needsUpdate` 路径更新动态阴影。
+- 诊断输出增加 `shadows.staticShadowTestEnabled`，用于确认 A/B 模式是否启用。
+- 这是用于定位卡顿来源的实验开关，不是最终阴影架构，也没有把 Three.js 全局阴影关闭。
+
+### 浏览器验收
+- 基线：`?render-debug=1`，记录持续移动时的主观卡顿与 `shadows.dynamicInvalidations`。
+- 实验：`?render-debug=1&shadow-static-test=1`，同一场景、相同路线和移动方式进行对比。
+- 实验日志应显示 `shadows.staticShadowTestEnabled: true`，移动时 `dynamicInvalidations` 不再增长；角色自身不投射阴影，世界静态阴影仍保留。
+- 如果实验模式明显流畅，动态阴影链路是主要嫌疑；若无明显改善，则继续排查主渲染循环、场景更新和浏览器/GPU 帧时间尖峰。
+- 本轮已写入远端 `mvp`；未执行本地 Vitest、Vite build 或真实浏览器测试，不能据此宣称卡顿已解决。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。

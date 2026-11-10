@@ -3885,3 +3885,19 @@ export const environmentBindings = [
   - 角色 fallback visual 在外部模型加载后保留但隐藏，场景角色使用当前共享 3D 模型层级。
   - 环境能力 Manifest 的默认 `environmentBindings`、夜间月光方向和沙盒扩展边界测试与当前实现契约一致。
 - 该 CI 结果只证明当前自动化测试与生产构建通过；尚未替代真实浏览器中的持续键盘输入、动态碰撞、水面可视高度和角色水线验收。
+
+## 2026-11-10 — Rapier 输入时序与步态驱动修正（待 CI）
+
+### 本轮代码调整
+
+- createCampusEngine.animate() 将普通移动帧顺序调整为：先提交 InputController.update(delta) 的移动意图，再执行 PhysicsRuntime.step(delta)，最后从 Rapier 同步角色锚点。
+- 楼梯过渡期间仍保持独立过渡更新顺序，不把键盘移动输入混入过渡过程。
+- InputController.syncPlayerFromPhysicsState() 在物理步完成后同步玩家逻辑位置和 grounded 状态；不更新 lastPhysicsStepCount，避免吞掉下一帧跳跃落地状态检测。
+- 角色步态改为读取 Rapier 最后一个固定步的 actualVelocity，不再把持续按键视为角色确实移动。被碰撞体阻挡时实际速度归零，动画应回到 idle；无 Rapier 状态时使用实际帧间位移回退。
+- 动画方向增量由实际物理速度乘当前渲染帧 delta 得出，降低固定物理步之间的方向信息闪断。
+
+### 验证边界
+
+- 新增 InputController 物理位置同步单测；需等待分支 CI 验证。
+- 本轮尚未进行真实浏览器持续移动/碰撞验收。若仍然卡住，下一步依据 ?debug=physics 的 commandedVelocity、actualVelocity、stepCount、grounded 和物理位置判断碰撞阻挡或物理步进停滞。
+- 本轮未修改 main，未合并 PR。

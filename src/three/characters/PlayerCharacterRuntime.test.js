@@ -33,7 +33,8 @@ describe('PlayerCharacterRuntime', () => {
     expect(assetMeshes[0].receiveShadow).toBe(true)
     expect(anchor.getObjectByName('avatar-ground-marker')).toBeTruthy()
     expect(anchor.getObjectByName('player-character-asset')).toBeTruthy()
-    expect(anchor.getObjectByName('avatar-body')).toBeFalsy()
+    expect(anchor.getObjectByName('avatar-body')).toBeTruthy()
+    expect(runtime.fallbackVisual.visible).toBe(false)
   })
 
   it('reports normalized visual dimensions and derives a stable movement footprint', () => {

@@ -48,6 +48,7 @@ describe('CharacterMotor', () => {
   it('accepts explicit overview free-camera movement intent', () => {
     const { motor, physicsRuntime } = createMotor()
     motor.moveWithPhysics({ x: 0, y: 1.7, z: 0 }, 0, 0.3, 1 / 60, { mode: 'overview' })
+    motor.beforeFixedStep({ delta: 1 / 60 })
     expect(physicsRuntime.setKinematicCharacterVelocity).toHaveBeenCalledWith(
       'sandbox:player',
       expect.objectContaining({ x: 0, z: 18 }),

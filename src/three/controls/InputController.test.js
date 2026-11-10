@@ -44,6 +44,24 @@ describe('InputController movement intent', () => {
 })
 
 describe('InputController combined movement and jump input', () => {
+  it('accepts the first jump press during a transient airborne grounded snapshot', () => {
+    const { controller } = createController()
+    controller.coyoteTimeRemaining = 0.12
+    controller.physicsRuntime = {
+      getKinematicCharacterState: vi.fn(() => ({
+        translation: { x: 0, y: 0, z: 0 },
+        grounded: false,
+        stepCount: 10,
+      })),
+    }
+    controller.physicsCharacterId = 'sandbox:player'
+
+    expect(controller.jumpPlayer()).toBe(true)
+    expect(controller.jumpActive).toBe(true)
+    expect(controller.jumpRequested).toBe(true)
+    expect(controller.jumpBufferRemaining).toBe(0)
+  })
+
   it('applies sprint movement and jump in the same update without reducing horizontal speed', () => {
     const { controller, cameraRig } = createController()
     const state = {

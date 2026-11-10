@@ -3,7 +3,7 @@
 ## Status
 
 - Target branch: `mvp`
-- Status: Input System extracted; first Rapier Character Motor extraction is implemented behind the InputController compatibility facade. Fixed-step motor scheduling remains pending.
+- Status: Input System extracted; Rapier Character Motor is wired to fixed-step lifecycle hooks; blank-sandbox movement explicitly requires Rapier. Unit and browser acceptance remains pending.
 - Scope: the world sandbox player controller only. Do not rewrite the campus scene, model runtime, camera rig, or Rapier world ownership.
 
 ## Current implementation findings
@@ -44,12 +44,12 @@
 1. Establish this ownership contract and preserve a working baseline.
 2. Extract browser/device state into an Input System with focused unit tests.
 3. Extract Rapier locomotion and jump policy from InputController into Character Motor. Keep a narrow compatibility facade while callers migrate. (Initial extraction complete; see current limitations below.)
-4. Move jump/coyote timers and motor state transitions onto fixed simulation substeps. Input edges must be buffered across render frames so a short press is not lost between physics ticks.
-5. Make the sandbox's Rapier path authoritative; isolate or remove legacy CollisionWorld movement only after repository-wide call-site verification.
+4. Move jump/coyote timers and motor state transitions onto fixed simulation substeps. (Implemented for the Rapier-backed sandbox path; cadence and contact-state verification remains pending.)
+5. Make the sandbox's Rapier path authoritative; isolate or remove legacy CollisionWorld movement only after repository-wide call-site verification. (Explicit backend selection is implemented; legacy movement remains for campus compatibility.)
 6. Add regression coverage for held input, repeated press/release, W+Shift+Space, blur/focus, 60/120/144Hz render cadence, wall blocking, slopes, autostep, landing, and reset/teleport.
 7. Verify CI and real-browser behavior separately. A green unit suite is not a substitute for browser input and collision acceptance.
 
-## Current extraction boundary\n\n- `CharacterMotor` is now the single owner of the Rapier character's jump buffer, coyote timer, jump lifecycle flags, vertical velocity, grounded snapshot, and Rapier velocity/acceleration command submission. `InputController` exposes temporary getter/setter compatibility aliases so existing UI, engine, and tests do not gain a second copy of those values.\n- `CharacterMotor` does not own DOM events, camera-relative axis calculation, pointer/touch look, or route planning. `InputController` continues to calculate the horizontal intent and passes the resulting displacement to the motor.\n- This is a structural extraction, not yet the final timing architecture: jump/coyote windows are still advanced from the render-frame update path. The next required change is a fixed-substep callback/command contract between `PhysicsRuntime` and the motor so timers and state transitions advance only when Rapier advances.\n- The non-Rapier `CollisionWorld` / raycast movement path remains in `InputController` for compatibility; no consumers have been removed.\n\n## Non-goals and safeguards
+## Current extraction boundary\n\n- `CharacterMotor` is now the single owner of the Rapier character's jump buffer, coyote timer, jump lifecycle flags, vertical velocity, grounded snapshot, and Rapier velocity/acceleration command submission. `InputController` exposes temporary getter/setter compatibility aliases so existing UI, engine, and tests do not gain a second copy of those values.\n- `CharacterMotor` does not own DOM events, camera-relative axis calculation, pointer/touch look, or route planning. `InputController` continues to calculate the horizontal intent and passes the resulting displacement to the motor.\n- Rapier-backed sandbox Jump Buffer, Coyote Time, jump launch, gravity command submission, and landing reconciliation advance through fixed-step callbacks.\n- `InputController` now selects `rapier`, `collision-world`, or compatibility `auto` movement backend explicitly. The blank sandbox is configured as `rapier`; if its PhysicsRuntime is absent, movement returns without falling back to CollisionWorld/raycast.\n- The campus compatibility path explicitly selects `collision-world`; its existing support-surface/raycast behavior remains intact.\n- The CollisionWorld implementation is not deleted: it remains used by campus movement and by non-movement world systems such as legacy placement/obstacle queries.\n\n## Non-goals and safeguards
 
 - Do not add arbitrary delays to make input appear responsive.
 - Do not change movement speed, jump height, gravity, collider dimensions, or traversal limits merely to hide symptoms.
@@ -78,3 +78,12 @@
 - `createCampusEngine` supplies these hooks to every sandbox physics step, including stair-transition frames.
 - The legacy non-Rapier CollisionWorld path remains render-delta based and is intentionally outside this migration slice.
 - Unit and browser verification is still required. In particular, confirm Rapier's computed-grounded semantics at launch and landing before considering the landing state machine complete.
+
+
+## Backend isolation and current verification scope
+
+- `createCampusEngine` configures `movementBackend: 'rapier'` for `blank-sandbox` and `movementBackend: 'collision-world'` for campus scenes.
+- The controller's compatibility default remains `auto` for existing direct callers/tests; new engine construction must select a backend explicitly.
+- Rapier-required mode fails closed: if the physics runtime is unavailable, the controller does not execute the legacy movement solver.
+- CollisionWorld is retained for campus movement and spatial/placement compatibility. This migration isolates character movement ownership; it does not claim the entire CollisionWorld module is obsolete.
+- Tests were added for fail-closed backend behavior, explicit legacy backend selection, and Coyote Time across 60/120/144 Hz render cadence. These tests have not yet been executed in a local checkout or verified by CI.

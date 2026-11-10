@@ -108,7 +108,7 @@ export class InputController {
   }
 
   get physicsRuntime() { return this.motor.physicsRuntime }
-  set physicsRuntime(value) { this.motor.setPhysicsRuntime(value, this.physicsCharacterId) }
+  set physicsRuntime(value) { this.motor.setPhysicsRuntime(value, value ? (this.physicsCharacterId || 'sandbox:player') : null) }
   get physicsCharacterId() { return this.motor.physicsCharacterId }
   set physicsCharacterId(value) { this.motor.setPhysicsRuntime(this.physicsRuntime, value) }
   get gravity() { return this.motor.gravity }
@@ -161,7 +161,7 @@ export class InputController {
     if (this.physicsRuntime && this.physicsCharacterId) {
       this.physicsRuntime.removeBody?.(this.physicsCharacterId)
     }
-    this.motor.setPhysicsRuntime(runtime, id)
+    this.motor.setPhysicsRuntime(runtime, runtime ? id : null)
     if (runtime && this.cameraRig?.player && !this.spawnPosition) {
       const player = this.cameraRig.player
       this.spawnPosition = { x: player.x, y: player.y, z: player.z }

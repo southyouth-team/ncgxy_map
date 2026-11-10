@@ -55,25 +55,35 @@ export class InputController {
     this.coyoteTimeRemaining = this.coyoteTimeDuration
     this.spawnPosition = null
     this.lastTouchLook = { x: 0, y: 0 }
+    this.attached = false
     this.onKeyDown = (event) => {
       const key = normalizeControlKey(event)
       const target = event.target
       if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return
       if (key === 'r') { this.resetPosition(); event.preventDefault(); return }
-      if (key === 'space') { if (!event.repeat) this.jumpPlayer(); event.preventDefault(); return }
+      if (key === 'space') {
+        if (!event.repeat) this.jumpPlayer()
+        this.onMovementInput?.()
+        event.preventDefault()
+        return
+      }
       if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) return
       this.keys.add(key)
       this.onMovementInput?.()
       // 第一人称 WASD 也必须阻止浏览器默认滚动，否则按键会同时滚动页面。
       event.preventDefault()
     }
-    this.onKeyUp = (event) => { this.keys.delete(normalizeControlKey(event)); this.onMovementInput?.() }
+    this.onKeyUp = (event) => {
+      const key = normalizeControlKey(event)
+      if (this.keys.delete(key)) this.onMovementInput?.()
+    }
     this.clearHeldInput = () => {
       this.keys.clear()
       this.jumpBufferRemaining = 0
       this.onMovementInput?.()
     }
     this.onWindowBlur = this.clearHeldInput
+    this.onWindowFocus = () => this.onMovementInput?.()
     this.onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') this.clearHeldInput()
     }
@@ -296,10 +306,14 @@ export class InputController {
   }
 
   attach() {
-    window.addEventListener('keydown', this.onKeyDown)
-    window.addEventListener('keyup', this.onKeyUp)
+    if (this.attached) return false
+    this.attached = true
+    // Capture keyboard input before UI bubbling handlers can stop propagation.
+    window.addEventListener('keydown', this.onKeyDown, true)
+    window.addEventListener('keyup', this.onKeyUp, true)
     window.addEventListener('blur', this.onWindowBlur)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
+    window.addEventListener('focus', this.onWindowFocus)
     this.domElement.addEventListener('mousedown', this.onMouseDown)
     window.addEventListener('mousemove', this.onMouseMove)
     window.addEventListener('mouseup', this.onMouseUp)
@@ -607,10 +621,13 @@ export class InputController {
   }
 
   dispose() {
-    window.removeEventListener('keydown', this.onKeyDown)
-    window.removeEventListener('keyup', this.onKeyUp)
+    if (!this.attached) return
+    this.attached = false
+    window.removeEventListener('keydown', this.onKeyDown, true)
+    window.removeEventListener('keyup', this.onKeyUp, true)
     window.removeEventListener('blur', this.onWindowBlur)
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
+    window.removeEventListener('focus', this.onWindowFocus)
     this.domElement.removeEventListener('mousedown', this.onMouseDown)
     window.removeEventListener('mousemove', this.onMouseMove)
     window.removeEventListener('mouseup', this.onMouseUp)

@@ -33,6 +33,7 @@ const editBusy = ref(false)
 const editError = ref('')
 const editHistory = ref([])
 const message = ref('正在初始化空白沙盒…')
+const playerWaterState = ref(null)
 const saveStatus = ref('尚未保存')
 const worldState = ref(null)
 const selectedChunkKey = ref('')
@@ -1274,6 +1275,7 @@ onMounted(async () => {
         else if (message.value.startsWith('靠近 ')) message.value = '使用 WASD 或方向键移动人物，靠近模型按 E 交互。'
       },
       onSandboxModelInteract: handleSandboxModelInteract,
+      onPlayerWaterStateChange: state => { playerWaterState.value = state ? { ...state } : null },
     }, {
       // MVP 使用独立空白沙盒：只创建地面与世界边界，不加载任何写死的校园内容。
       sceneType: 'blank-sandbox',
@@ -1307,6 +1309,13 @@ onBeforeUnmount(() => {
 <template>
   <main class="world-mvp">
     <div ref="viewport" class="world-mvp__viewport"></div>
+    <div v-if="playerWaterState" class="world-mvp__water-status">
+      <strong>涉水状态</strong>
+      <span>水深 {{ playerWaterState.depth.toFixed(2) }} m</span>
+      <span>水面高度 {{ playerWaterState.surfaceHeight.toFixed(2) }} m</span>
+      <span>角色浸入 {{ playerWaterState.immersionDepth.toFixed(2) }} m</span>
+      <span>浸入比例 {{ Math.round(playerWaterState.characterImmersionRatio * 100) }}%</span>
+    </div>
     <header class="world-mvp__header">
       <div class="world-mvp__brand"><strong>WORLD SANDBOX</strong><span>空白世界 · AI 模型构建与交互</span></div>
       <div class="world-mvp__header-actions"><div class="world-mvp__view-switch" role="group" aria-label="沙盒视角"><button :class="{ active: sandboxViewMode === 'free' }" @click="selectSandboxViewMode('free')">自由视角</button><button :class="{ active: sandboxViewMode === '2.5d' }" @click="selectSandboxViewMode('2.5d')">2.5D</button><button :class="{ active: sandboxViewMode === '3d' }" @click="selectSandboxViewMode('3d')">3D</button></div><button :class="{ active: managementMode === 'sandbox' }" @click="setManagementMode('sandbox')">沙盒管理</button><button :class="{ active: managementMode === 'chunks' }" @click="toggleChunkManagement">{{ managementMode === 'chunks' ? '退出地块管理' : '地块管理' }}</button><button :class="{ active: managementMode === 'model' }" @click="setManagementMode('model')">模型管理</button><span class="world-mvp__save-status">{{ saveStatus }}</span><button class="world-mvp__save-button" :disabled="placement.active" @click="saveSandbox">保存沙盒</button><a href="/">返回地图</a></div>
@@ -1517,6 +1526,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .world-mvp { position:relative; width:100%; height:100vh; min-height:600px; overflow:hidden; color:#e8efed; background:#111a20; font-family:Inter,"Microsoft YaHei",sans-serif; }
 .world-mvp__viewport { position:absolute; inset:0; }
+.world-mvp__water-status { position:absolute; z-index:3; left:18px; bottom:22px; display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid rgba(117,190,210,.4); border-radius:8px; color:#d8f4fa; background:rgba(9,32,42,.84); box-shadow:0 8px 24px rgba(0,0,0,.2); font-size:11px; pointer-events:none; }
+.world-mvp__water-status strong { color:#8ed7e8; }
 .world-mvp__viewport :deep(canvas) { display:block; width:100%; height:100%; }
 .world-mvp__header { position:absolute; z-index:2; top:0; left:0; right:0; height:62px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid rgba(255,255,255,.1); background:rgba(13,22,28,.78); backdrop-filter:blur(14px); }
 .world-mvp__brand strong,.world-mvp__brand span { display:block; }

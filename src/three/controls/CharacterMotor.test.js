@@ -8,6 +8,8 @@ function createMotor() {
     translation: { x: 0, y: 0, z: 0 },
     interpolatedTranslation: { x: 0, y: 0, z: 0 },
     velocity: { x: 0, y: 0, z: 0 },
+    commandedVelocity: { x: 0, y: 0, z: 0 },
+    actualVelocity: { x: 0, y: 0, z: 0 },
     grounded: true,
     stepCount: 0,
   }
@@ -109,6 +111,40 @@ describe('CharacterMotor', () => {
     }
     expect(motor.coyoteTimeRemaining).toBe(0)
     expect(motor.lastPhysicsStepCount).toBe(0)
+  })
+
+
+  it('uses collision-corrected vertical velocity instead of commanded velocity', () => {
+    const { motor, state } = createMotor()
+    motor.jumpActive = true
+    motor.jumpLaunched = true
+    motor.jumpWasAirborne = true
+    state.grounded = false
+    state.commandedVelocity.y = 8
+    state.velocity.y = 8
+    state.actualVelocity.y = 0
+
+    motor.afterFixedStep()
+
+    expect(motor.verticalVelocity).toBe(0)
+    expect(motor.jumpActive).toBe(true)
+  })
+
+  it('reconciles landing only after the completed physics step reports grounded', () => {
+    const { motor, state } = createMotor()
+    motor.jumpActive = true
+    motor.jumpLaunched = true
+    motor.jumpWasAirborne = true
+    state.grounded = true
+    state.commandedVelocity.y = -4
+    state.actualVelocity.y = 0
+
+    motor.afterFixedStep()
+
+    expect(motor.grounded).toBe(true)
+    expect(motor.jumpActive).toBe(false)
+    expect(motor.jumpLaunched).toBe(false)
+    expect(motor.verticalVelocity).toBe(-2)
   })
 
 })

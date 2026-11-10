@@ -43,7 +43,7 @@ export class PhysicsRuntime {
     if (this.disposed || !this.world) throw new Error('PhysicsRuntime has been disposed')
   }
 
-  step(frameDeltaSeconds) {
+  step(frameDeltaSeconds, { beforeFixedStep, afterFixedStep } = {}) {
     this.#assertActive()
     const delta = Number(frameDeltaSeconds)
     if (!Number.isFinite(delta) || delta <= 0) {
@@ -56,6 +56,8 @@ export class PhysicsRuntime {
     let steps = 0
 
     while (this.accumulator + Number.EPSILON >= this.fixedTimeStep && steps < this.maxSubSteps) {
+      const nextStep = this.stepCount + 1
+      beforeFixedStep?.({ delta: this.fixedTimeStep, stepCount: nextStep, runtime: this })
       for (const entry of this.bodies.values()) {
         if (entry.kind !== 'kinematic-character') continue
         const current = entry.body.translation()
@@ -99,6 +101,7 @@ export class PhysicsRuntime {
       }
       this.accumulator -= this.fixedTimeStep
       steps += 1
+      afterFixedStep?.({ delta: this.fixedTimeStep, stepCount: this.stepCount, runtime: this })
     }
 
     // Avoid an unbounded catch-up spiral after a stalled or backgrounded tab.

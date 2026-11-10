@@ -3849,3 +3849,22 @@ export const environmentBindings = [
 
 - 所有改动仍在 `fix/sandbox-character-physics-continuity`。
 - 未修改 `main`，未合并 PR。
+
+
+## 2026-11-10 — 可见水面与深度参数联动
+
+### 实现
+
+- 水体声明新增可选但新生成模型应提供的 `surfacePartId`，指向水体容器 `targetPartId` 的直接子级水平水面 Group。
+- 水面 Group 在模型默认状态下按 `bottomY + depth` 放置；Runtime 记录其初始局部 Y，并按当前深度参数相对声明默认深度的变化量移动水面 Group。
+- 这样，参数编辑重新执行模型并刷新空间注册时，水面几何位置与 Water Volume 采样使用的深度同步，不再只改变传感数据。
+- AI 生成提示已更新：要求显式创建水体容器和独立水面部件，并声明 `surfacePartId`；水体传感器仍不创建实体 Collider、不提供浮力或通行规则。
+- `waterVolumeRuntime.test.js` 验证默认深度 0.6m 调整到 1.2m 后，水面 Group 的局部 Y 同步移动到 1.2m；深水浸入上限测试也保留。
+
+### CI 复核（run `42741923423`，commit `d379b90b7291dfc69455a46eae1e972b4eb9ccfa`）
+
+- Vite production build：通过。
+- Vitest：48 个文件中 43 个通过、5 个失败；550 项中 544 项通过、6 项失败。
+- `waterVolumeRuntime.test.js`：4/4 通过，包含水面参数联动和深水浸入上限。
+- 失败项仍是前文记录的 6 项；移动陡坡与铰链门 Collider 两项已通过。
+- CI 仍未全绿；水面联动尚未通过真实 AI 生成模型的浏览器实测。旧模型若没有 `surfacePartId`，仍只参与浸入采样，不会自动移动可视水面；需要重新生成或补齐该字段。

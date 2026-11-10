@@ -376,7 +376,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
         keys: input ? Array.from(input.keys) : [],
         requested: input?.hasMovementInput?.() === true,
         grounded: characterState?.grounded ?? input?.grounded ?? null,
-        desiredVelocity: characterState?.velocity || null,
+        commandedVelocity: characterState?.commandedVelocity || characterState?.velocity || null,
+        actualVelocity: characterState?.actualVelocity || null,
+        lastStepMovement: characterState?.lastStepMovement || null,
+        physicsPosition: characterState?.translation || null,
+        physicsStepCount: characterState?.stepCount ?? null,
         position: cameraRig?.player ? {
           x: cameraRig.player.x, y: cameraRig.player.y, z: cameraRig.player.z,
         } : null,

@@ -4043,3 +4043,9 @@ export const environmentBindings = [
 - `df4fdced` — 新增 Motor 单测
 - `c6f2d12c` — 保留 overview 自由镜头移动语义
 - `b7957e02` — 调整 overview 自由镜头 Motor 测试
+
+### 兼容性复核补充
+- 保留 overview 自由镜头模式下由用户显式启用的角色移动；Motor 不再把 overview 一概视为禁止水平移动，跳跃仍按控制模式限制。
+- 保留 `physicsCharacterId` 在兼容调用方先赋值、后绑定 PhysicsRuntime 时的语义；runtime 解绑时才清空 ID。
+- 对应修正提交：`c6f2d12c`、`b7957e02`、`88c9a030`、`688f605b`。
+- GitHub 当前对最新代码提交未返回 commit status，PR workflow 查询也未返回运行记录；这不是 CI 通过。Vitest/Vite build 和浏览器验收仍未执行。

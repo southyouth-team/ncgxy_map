@@ -106,8 +106,9 @@ export class PlayerCharacterRuntime {
       || (state !== 'idle' ? this.actions.get('idle') : null)
       || this.actions.values().next().value
     if (!next || next === this.activeAction) return Boolean(next)
-    next.reset().fadeIn(0.16).play()
-    this.activeAction?.fadeOut(0.16)
+    // 输入驱动的移动/跳跃动画即时切换，不做淡入延迟。
+    next.reset().play()
+    if (this.activeAction && this.activeAction !== next) this.activeAction.stop()
     this.activeAction = next
     return true
   }

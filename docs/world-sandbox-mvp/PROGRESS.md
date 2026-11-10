@@ -4226,6 +4226,7 @@ export const environmentBindings = [
 - 保留 InputController、CharacterMotor、PhysicsRuntime 的职责与现有固定步结构；不修改物理速度、碰撞、跳跃和沙盒数据。
 
 ### 验证边界
+- 新增 `createCampusPlayer.test.js`，覆盖不同渲染间隔下相同实际位移产生相同步态相位、行走/快跑步幅差异，以及碰撞阻挡时保留低频原地反馈。
 - 已完成远端源码修改；尚未执行本地 Vitest、Vite Build 或真实浏览器测试。
 - 需要浏览器验收连续 W、W+Shift、斜向移动、碰撞阻挡，以及 60/120/144Hz 下步态与位移的一致性。
 - 本轮仅修改 `mvp`，未修改 `main`，未合并 PR。

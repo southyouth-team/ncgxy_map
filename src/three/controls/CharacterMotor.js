@@ -111,7 +111,8 @@ export class CharacterMotor {
     if (!state) return false
     const wasAirborne = this.jumpWasAirborne
     this.grounded = state.grounded === true
-    this.verticalVelocity = Number(state.velocity?.y) || 0
+    // The commanded velocity is an intent; use the collision-corrected displacement velocity for the next motor tick.
+    this.verticalVelocity = Number(state.actualVelocity?.y ?? state.commandedVelocity?.y ?? state.velocity?.y) || 0
     if (!this.grounded && this.jumpLaunched) this.jumpWasAirborne = true
     if (this.grounded && this.jumpActive && (wasAirborne || this.jumpWasAirborne)) {
       this.jumpActive = false

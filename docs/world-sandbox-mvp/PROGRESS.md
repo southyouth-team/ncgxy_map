@@ -4107,3 +4107,34 @@ export const environmentBindings = [
 - Motor 的 overview 自由镜头移动测试改为在固定步回调中验证命令提交，不再假设 render-frame 方法直接写入 Rapier。
 - 架构文档已更新为当前实际状态：Motor 已接入引擎固定步回调，不再把它描述为“仅建立接口、尚未接入”。
 - 当前仍未取得 Vitest / Vite Build / 浏览器验收结果。
+
+
+## 2026-11-11 — 固定步专项覆盖与移动后端隔离
+
+### 本轮实现
+- `InputController` 增加显式 `movementBackend`：`rapier`、`collision-world`、兼容默认 `auto`。
+- `createCampusEngine` 对 blank-sandbox 显式选择 `rapier`；校园场景显式选择 `collision-world`。
+- Rapier 必选模式在 PhysicsRuntime 缺失时 fail-closed：不允许静默回退到 CollisionWorld/raycast 移动解算器。
+- 校园兼容模式仍保留旧 CollisionWorld、支撑面射线检测和垂直移动路径；没有删除仍被校园场景及空间/放置系统使用的碰撞模块。
+- 新增 InputController 测试：Rapier 不可用时禁止旧路径接管；只有显式选择 collision-world 才执行旧移动路径。
+- 新增 CharacterMotor cadence 测试：以 60/120/144Hz render cadence 消费相同 60Hz fixed timestep，验证 Coyote Time 的模拟时间一致性。
+- 更新架构文档，纠正历史状态描述，明确固定步接入已实现、验证仍待执行。
+
+### 代码核对
+- `createCampusEngine` 在 blank-sandbox 初始化阶段先创建 `PhysicsRuntime`，同步沙盒物理世界，再创建 InputController 并绑定 runtime。
+- 普通运行与楼梯过渡的 physics step 均传入 Motor 前后回调。
+- `CollisionWorld` 不仅承载旧角色移动，也被部分校园/资产放置及空间查询逻辑使用；本轮只隔离角色移动后端，不删除整个模块。
+
+### 验证边界
+- 新增单测尚未在本地执行；本轮无本地 checkout 可运行 Vitest / Vite Build。
+- 尚未完成真实浏览器验收：持续 W、W+Shift、W+Shift+Space、短按跳跃、离地边缘 Coyote Time、斜坡/台阶、碰撞阻挡、重置/传送。
+- 仍需验证 Rapier `computedGrounded()` 在起跳首步和落地首步的语义，以及不同 render cadence 下真实按键事件到 fixed tick 的输入连续性。
+- GitHub Actions / CI 尚未确认；不能宣称测试通过。
+- 本轮仅修改 `mvp`，未修改 `main`，未合并 PR。
+
+### 本轮提交
+- `54bbebdc` — InputController 显式移动后端隔离
+- `681d06cf` — blank-sandbox 强制 Rapier 后端
+- `afdfd6e7` — 后端隔离回归测试
+- `6ef16f6b` — 60/120/144Hz 固定步 cadence 测试
+- `7f49409e` — 更新角色控制架构文档

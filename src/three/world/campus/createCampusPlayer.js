@@ -108,7 +108,7 @@ export function createCampusPlayer(THREE, options = {}) {
     object.castShadow = true
     object.receiveShadow = true
   })
-  root.userData.updateAnimation = function updateAnimation(moving, seconds, dx = 0, dz = 0) {
+  root.userData.updateAnimation = function updateAnimation(moving, seconds, dx = 0, dz = 0, gaitRate = 1) {
     const target = this
     const find = name => target.getObjectByName(name)
     const targetBody = find('player-body')
@@ -122,11 +122,18 @@ export function createCampusPlayer(THREE, options = {}) {
       target.rotation.y = Math.atan2(dx, dz)
     }
 
-    const gait = moving ? seconds * 9.5 : 0
-    const stride = moving ? Math.sin(gait) : 0
-    const bob = moving ? Math.abs(Math.sin(gait * 2)) * 0.045 : Math.sin(seconds * 2.2) * 0.008
+    const previousSeconds = Number.isFinite(target.userData.gaitLastSeconds) ? target.userData.gaitLastSeconds : seconds
+    const frameDelta = Math.max(0, Math.min(0.1, seconds - previousSeconds))
+    target.userData.gaitLastSeconds = seconds
+    const blend = Number.isFinite(target.userData.gaitBlend) ? target.userData.gaitBlend : 0
+    const targetBlend = moving ? 1 : 0
+    target.userData.gaitBlend = blend + (targetBlend - blend) * (1 - Math.exp(-frameDelta * 12))
+    const gaitBlend = target.userData.gaitBlend
+    const gait = seconds * 9.5 * Math.max(0.35, Math.min(1.5, Number(gaitRate) || 1))
+    const stride = Math.sin(gait) * gaitBlend
+    const bob = Math.abs(Math.sin(gait * 2)) * 0.045 * gaitBlend + Math.sin(seconds * 2.2) * 0.008 * (1 - gaitBlend)
     if (targetBody) targetBody.position.y = bob
-    if (targetHead) targetHead.rotation.z = moving ? Math.sin(gait) * 0.025 : Math.sin(seconds * 1.6) * 0.012
+    if (targetHead) targetHead.rotation.z = Math.sin(gait) * 0.025 * gaitBlend + Math.sin(seconds * 1.6) * 0.012 * (1 - gaitBlend)
     if (targetLeftLeg) targetLeftLeg.rotation.x = stride * 0.48
     if (targetRightLeg) targetRightLeg.rotation.x = -stride * 0.48
     if (targetLeftArm) targetLeftArm.rotation.x = -stride * 0.38

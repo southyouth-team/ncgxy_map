@@ -18,7 +18,10 @@ describe('normalizeModelCapabilityManifest', () => {
       parameters: [{ id: 'floors', type: 'number' }],
       capabilities: { customPhysics: { shape: 'capsule' }, interior: { floors: [] } },
     }
-    expect(normalizeModelCapabilityManifest(manifest)).toEqual(manifest)
+    expect(normalizeModelCapabilityManifest(manifest)).toEqual({
+      ...manifest,
+      capabilities: { ...manifest.capabilities, environmentBindings: [] },
+    })
   })
 
   it('keeps an explicitly empty environment binding list', () => {

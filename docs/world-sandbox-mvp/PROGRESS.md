@@ -4101,3 +4101,9 @@ export const environmentBindings = [
 - `bc336913` — 引擎固定步回调接入
 - `621501db` — Motor 固定步测试更新
 - `c49dbf1f` — InputController 测试更新
+
+
+### 固定步接入后的补充修订
+- Motor 的 overview 自由镜头移动测试改为在固定步回调中验证命令提交，不再假设 render-frame 方法直接写入 Rapier。
+- 架构文档已更新为当前实际状态：Motor 已接入引擎固定步回调，不再把它描述为“仅建立接口、尚未接入”。
+- 当前仍未取得 Vitest / Vite Build / 浏览器验收结果。

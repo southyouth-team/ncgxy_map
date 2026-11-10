@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { ShadowSystem } from './ShadowSystem.js'
+import { advanceFrameTiming } from './FrameTiming.js'
 import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
 import { createBlankSandboxScene } from '../world/campus/createBlankSandboxScene.js'
@@ -99,7 +100,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let playerSpriteObject = null
   let playerCharacterRuntime = null
   let resizeObserver
-  let previousTime = 0
+  let previousTime = null
+  let simulationTimeSeconds = 0
+  let lastFrameTiming = null
+  let lastPhysicsStepResult = null
   let initialized = false
   let selectedFeatureObject = null
   let selectedIndoorObject = null
@@ -2625,6 +2629,20 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       render: { ...renderer.info.render },
       memory: { ...renderer.info.memory },
       lastRenderCostMs,
+      timing: lastFrameTiming ? {
+        rawFrameDeltaSeconds: lastFrameTiming.rawDeltaSeconds,
+        simulationDeltaSeconds: lastFrameTiming.deltaSeconds,
+        droppedFrameTimeSeconds: lastFrameTiming.droppedFrameTimeSeconds,
+        simulationTimeSeconds,
+      } : null,
+      physics: physicsRuntime ? {
+        fixedTimeStep: physicsRuntime.fixedTimeStep,
+        accumulator: physicsRuntime.accumulator,
+        stepCount: physicsRuntime.stepCount,
+        totalDroppedTime: physicsRuntime.droppedTime,
+        lastStep: lastPhysicsStepResult,
+      } : null,
+      shadows: shadowSystem?.getDiagnostics?.() || null,
       sceneObjects: (() => { let objects = 0, meshes = 0; scene.traverse(object => { objects += 1; if (object.isMesh) meshes += 1 }); return { objects, meshes } })(),
       camera: {
         type: camera.type,
@@ -2702,21 +2720,23 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function animate(time) {
     frameId = 0
     try {
-    const delta = Math.min((time - (previousTime || time)) / 1000, 0.05)
-    previousTime = time
+    lastFrameTiming = advanceFrameTiming(time, previousTime, simulationTimeSeconds, 0.05)
+    previousTime = lastFrameTiming.previousTimestampMs
+    simulationTimeSeconds = lastFrameTiming.simulationTimeSeconds
+    const delta = lastFrameTiming.deltaSeconds
     if (stairTransition) {
-      physicsRuntime?.step(delta, {
+      lastPhysicsStepResult = physicsRuntime?.step(delta, {
         beforeFixedStep: context => input?.beforeFixedStep?.(context),
         afterFixedStep: context => input?.afterFixedStep?.(context),
-      })
+      }) || null
       updateStairTransition(delta)
     } else {
       // Submit movement intent before advancing Rapier, avoiding a one-step input delay.
       input?.update(delta)
-      physicsRuntime?.step(delta, {
+      lastPhysicsStepResult = physicsRuntime?.step(delta, {
         beforeFixedStep: context => input?.beforeFixedStep?.(context),
         afterFixedStep: context => input?.afterFixedStep?.(context),
-      })
+      }) || null
       // Render and animate from the completed physical position.
       input?.syncPlayerFromPhysicsState?.()
     }
@@ -2900,7 +2920,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       lastPlayerVisibility = playerSprite.visible
       lastPlayerY = playerSprite.position.y
       if (typeof playerSprite.userData.updateAnimation === 'function') {
-        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, animationDx, animationDz, running, gaitRate)
+        playerSprite.userData.updateAnimation.call(playerSprite, moving, simulationTimeSeconds, animationDx, animationDz, running, gaitRate)
       } else {
         campus?.userData.updatePlayerAnimation?.(moving, time / 1000, animationDx, animationDz, gaitRate)
       }

@@ -99,7 +99,10 @@ export function samplePlayerWaterState(THREE, volumes, playerPosition, eyeHeight
       .applyMatrix4(target.matrixWorld)
     const worldDepth = surface.y - bottom.y
     if (!Number.isFinite(worldDepth) || worldDepth <= 0) continue
-    const immersionDepth = Math.max(0, Math.min(worldDepth, surface.y - feetY))
+    // Water-column depth and character immersion are different quantities.
+    // A deep pool may be deeper than the avatar is tall; immersion must never
+    // exceed the feet-to-head character segment.
+    const immersionDepth = Math.max(0, Math.min(worldDepth, eye, surface.y - feetY))
     if (immersionDepth <= 0) continue
     const candidate = {
       volumeId: volume.id,

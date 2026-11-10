@@ -34,6 +34,10 @@ const editError = ref('')
 const editHistory = ref([])
 const message = ref('正在初始化空白沙盒…')
 const playerWaterState = ref(null)
+const showPhysicsDiagnostics = import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get('debug') === 'physics'
+const physicsDiagnostics = ref(null)
+let physicsDiagnosticsTimer = null
 const saveStatus = ref('尚未保存')
 const worldState = ref(null)
 const selectedChunkKey = ref('')
@@ -1285,6 +1289,13 @@ onMounted(async () => {
     })
     await engine.init()
     if (disposed) return
+    if (showPhysicsDiagnostics) {
+      const refreshDiagnostics = () => {
+        physicsDiagnostics.value = engine?.getPhysicsDiagnostics?.() || null
+      }
+      refreshDiagnostics()
+      physicsDiagnosticsTimer = window.setInterval(refreshDiagnostics, 150)
+    }
     engine.setMode('overview')
     engine.setViewMode('free')
     engine.setSandboxTransformMode(transformMode.value)
@@ -1299,6 +1310,8 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   disposed = true
+  if (physicsDiagnosticsTimer !== null) window.clearInterval(physicsDiagnosticsTimer)
+  physicsDiagnosticsTimer = null
   engine?.dispose()
   engine = null
   objectsById.clear()
@@ -1309,6 +1322,15 @@ onBeforeUnmount(() => {
 <template>
   <main class="world-mvp">
     <div ref="viewport" class="world-mvp__viewport"></div>
+    <aside v-if="showPhysicsDiagnostics && physicsDiagnostics" class="world-mvp__physics-debug">
+      <strong>物理诊断（debug=physics）</strong>
+      <span>输入：{{ physicsDiagnostics.movement.requested ? '持续按下' : '无' }} · 按键 {{ physicsDiagnostics.movement.keys.join(', ') || '—' }}</span>
+      <span>期望速度：{{ JSON.stringify(physicsDiagnostics.movement.commandedVelocity) }}</span>
+      <span>实际速度：{{ JSON.stringify(physicsDiagnostics.movement.actualVelocity) }}</span>
+      <span>物理步数：{{ physicsDiagnostics.movement.physicsStepCount }} · 累积器 {{ Number(physicsDiagnostics.accumulator).toFixed(4) }}s</span>
+      <span>刚体位置：{{ JSON.stringify(physicsDiagnostics.movement.physicsPosition) }}</span>
+      <span>相机角色位置：{{ JSON.stringify(physicsDiagnostics.movement.position) }}</span>
+    </aside>
     <div v-if="playerWaterState" class="world-mvp__water-status">
       <strong>涉水状态</strong>
       <span>水深 {{ playerWaterState.depth.toFixed(2) }} m</span>
@@ -1526,6 +1548,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .world-mvp { position:relative; width:100%; height:100vh; min-height:600px; overflow:hidden; color:#e8efed; background:#111a20; font-family:Inter,"Microsoft YaHei",sans-serif; }
 .world-mvp__viewport { position:absolute; inset:0; }
+.world-mvp__physics-debug { position:absolute; z-index:4; left:18px; top:82px; display:flex; flex-direction:column; gap:4px; max-width:min(520px,calc(100vw - 36px)); padding:10px 12px; border:1px solid rgba(255,190,110,.5); border-radius:8px; color:#f6ead9; background:rgba(35,25,16,.9); font:11px/1.45 ui-monospace,monospace; overflow-wrap:anywhere; pointer-events:none; }
+.world-mvp__physics-debug strong { color:#ffc27d; }
 .world-mvp__water-status { position:absolute; z-index:3; left:18px; bottom:22px; display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid rgba(117,190,210,.4); border-radius:8px; color:#d8f4fa; background:rgba(9,32,42,.84); box-shadow:0 8px 24px rgba(0,0,0,.2); font-size:11px; pointer-events:none; }
 .world-mvp__water-status strong { color:#8ed7e8; }
 .world-mvp__viewport :deep(canvas) { display:block; width:100%; height:100%; }

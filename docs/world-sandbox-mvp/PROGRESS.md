@@ -4000,3 +4000,23 @@ export const environmentBindings = [
 - 本轮仅新增架构契约文档；尚未进行控制器代码拆分。
 - 当前 mvp 分支起点包含此前 fix 分支完整提交历史；本轮提交没有修改 main 或合并 PR。
 - 下一阶段从输入状态采集层拆分开始，保持兼容接口并增加针对性测试。
+
+
+## 2026-11-11 — 输入采集层第一阶段拆分
+
+### 本轮实现
+- 新增 `src/three/controls/CharacterInputSystem.js`，将物理键盘事件归一化、按键 Set、keydown/keyup、Space 首次按下边沿、R 重置、blur/visibility 清理、focus 唤醒和事件监听生命周期集中到独立输入系统。
+- `InputController` 改为组合 `CharacterInputSystem`，继续通过兼容别名暴露 `onKeyDown`、`onKeyUp`、`onWindowBlur` 等旧调用入口，避免一次性破坏既有测试与调用方。
+- 键盘事件仍在 window capture 阶段采集；输入系统不负责计算速度、重力、碰撞或角色位置。
+- 新增 `CharacterInputSystem.test.js`，覆盖捕获阶段监听、attach/dispose 幂等、持续按键、Space 只触发一次跳跃边沿、表单输入隔离和失焦清理。
+
+### 当前架构状态
+- Input System 已从 InputController 中独立出来，第一阶段边界已落地。
+- Character Motor 尚未从 InputController 拆出；Rapier 移动命令、跳跃状态和旧版 CollisionWorld 路径仍待后续阶段迁移。
+- 本轮未改变移动速度、跳跃高度、重力、碰撞体尺寸或地形通行参数。
+
+### 验证边界
+- 代码已提交到 `mvp`；最新提交为 `89887642`。
+- 尚未取得该提交对应的 CI 执行结果；当前 GitHub commit status 查询未返回检查项。
+- 未执行本地 Vitest/Vite build，也未完成真实浏览器键盘连续性验收。
+- 不将输入采集层拆分等同于整个角色控制架构整改完成。

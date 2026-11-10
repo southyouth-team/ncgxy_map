@@ -2,7 +2,7 @@
 
 > 本文档记录实际发生的开发与架构调整。每次项目工作完成后追加记录；开始新一轮工作前必须先读取本文件和 `PROJECT_PLAN.md`。
 >
-> 当前跟踪分支：`feat/world-sandbox-conversational-model-editor`
+> 当前跟踪分支：`fix/sandbox-character-physics-continuity`
 
 ## 状态口径
 
@@ -3757,3 +3757,49 @@ export const environmentBindings = [
 - 该结果不是全量 CI 通过；浏览器/Rapier 实际移动、水体浸入效果仍未验收。
 - 最新分支头 `ca0c03c9` 的 Frontend CI（run 42693619611）：Vite build 通过；548 个测试中 540 通过、8 失败，仍是相同 7 个失败文件/8 个失败断言。新增 waterVolumeRuntime 测试通过；失败总数未增加。
 - 当前分支头 CI 仍为 failure，不能视为验收通过；失败详情见 https://github.com/southyouth-team/ncgxy_map/actions/runs/42693619611。
+
+## 2026-11-10 — Rapier 实际位移诊断与水体浸入状态可视化（增量）
+
+### 本轮实现
+
+1. `src/three/physics/PhysicsRuntime.js`
+   - 每个固定物理子步记录角色刚体前后位置。
+   - 计算实际位移 `lastStepMovement` 与实际速度 `actualVelocity`。
+   - `getKinematicCharacterState()` 保留原 `velocity` 兼容语义，同时新增 `commandedVelocity`、`actualVelocity`、`lastStepMovement`。
+   - 角色传送时清零实际速度/位移诊断，避免把传送距离误判成运动速度。
+2. `src/three/physics/PhysicsRuntime.test.js`
+   - 新增固定步长实际位移与命令速度分离的测试。
+3. `src/three/engine/createCampusEngine.js`
+   - `getPhysicsDiagnostics()` 增加 Rapier 刚体真实位置、真实速度、最后一个物理子步位移和物理步计数。
+   - 诊断不再只暴露 CameraRig 逻辑坐标与期望速度，后续可以区分“有输入但物理没推进”“物理推进但被阻挡”“刚体已移动但相机/角色视觉未同步”。
+4. `src/components/WorldSandboxMvp.vue`
+   - 接收引擎已有的 `onPlayerWaterStateChange` 回调。
+   - 玩家处于声明式水域且有浸入时，页面显示水深、水面高度、浸入深度和角色浸入比例，便于验证参数变化是否真正进入 Runtime。
+
+### 参数链路审查结果
+
+- `ProceduralModelEditor.vue` 的参数控件会发出 `parameter-change`，包含参数 ID、当前值和值集合。
+- `WorldSandboxMvp.vue` 的 `handleParameterChange()` 将参数值写入 `proceduralModelParameterValues`，并通过 Worker 重新执行模型源码；已放入沙盒的模型会通过 `replaceSandboxModel()` 触发空间注册刷新。
+- `waterVolumeRuntime.js` 按 Manifest 的 `spatial.waterVolume.<id>.depth` 绑定读取同一个参数值。因此参数更新链路在源码层是连通的；但可见水面是否随参数改变，仍取决于 AI 生成源码是否确实用该参数更新水面几何/位置，尚未做真实模型浏览器验收。
+- 本轮新增的是浸入数据 HUD，不是角色材质裁切或真实水线渲染；不能把 HUD 等同于完整水下视觉效果。
+
+### 上一轮 CI 失败详情（run `42693619611`）
+
+- Frontend Build 成功；Vitest 540/548 通过，8 项失败。
+- `InputController.test.js`：陡坡测试期望地面高度 4.1，实际回退到人物默认眼高 1.7；这是地面探测测试契约/实现语义问题，不是本轮移动意图测试断言。
+- `modelSpatialRuntime.test.js`：铰链门测试期望两个 Collider，实际找到一个；需检查测试场景的 Collider 声明和 OBB 注册条件。
+- `PlayerCharacterRuntime.test.js`：旧测试仍期待 fallback 角色的旧 Mesh 层级/对象存在，与当前角色挂载结构不一致。
+- `solarPosition.test.js`：夜间方向断言期望太阳方向 Y 大于 0，实际为负值；需确认夜间/月光方向测试约定。
+- `modelCapabilityManifest.test.js`：测试未将规范化新增的空 `environmentBindings` 字段纳入期望对象。
+- `modelTraversalTester.test.js`：水域/桥梁路线测试期望 `certifiedWalkable=true`，但分析器按当前认证边界返回 false；需核对该测试是否遗漏路线/碰撞声明或期望过度外推。
+- `createBlankSandboxScene.test.js`：仍期待旧角色接触阴影对象以及旧世界扩建边界，和当前实现输出不一致。
+- 上述失败涉及既有测试/契约漂移，不应为了让 CI 变绿而盲目放宽运行时校验；逐项核实测试意图后再修正。
+
+### 验证状态与边界
+
+- 本轮代码写入目标分支；尚未取得本轮新提交对应的 CI 结果。
+- 新增 PhysicsRuntime 测试尚未由本轮 CI 执行。
+- Vite Build、Vitest 和浏览器测试均不能提前标记通过。
+- 移动根因仍待浏览器采集新诊断数据；当前增加的是观测能力，不是移动行为修复。
+- 水体 HUD 只能显示 Runtime 计算结果；实际水面几何联动和角色水线视觉仍待验收。
+- 未修改 `main`，未合并 PR。

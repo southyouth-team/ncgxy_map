@@ -1,5 +1,6 @@
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { normalizeCharacterTraversalProfile } from '../physics/CharacterTraversalProfile.js'
+import { CharacterInputSystem } from './CharacterInputSystem.js'
 
 function normalizeControlKey(eventOrKey) {
   const event = typeof eventOrKey === 'object' && eventOrKey !== null ? eventOrKey : null
@@ -35,7 +36,13 @@ export class InputController {
     this.mode = 'overview'
     this.movementEnabled = true
     this.freeCameraMovementEnabled = false
-    this.keys = new Set()
+    this.inputSystem = new CharacterInputSystem({
+      onJump: () => this.jumpPlayer(),
+      onReset: () => this.resetPosition(),
+      onInputChange: () => this.onMovementInput?.(),
+      onClearInput: () => { this.jumpBufferRemaining = 0 },
+    })
+    this.keys = this.inputSystem.keys
     this.pointerDown = false
     this.lastPointer = { x: 0, y: 0 }
     this.pointerLocked = false
@@ -56,37 +63,14 @@ export class InputController {
     this.spawnPosition = null
     this.lastTouchLook = { x: 0, y: 0 }
     this.attached = false
-    this.onKeyDown = (event) => {
-      const key = normalizeControlKey(event)
-      const target = event.target
-      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return
-      if (key === 'r') { this.resetPosition(); event.preventDefault(); return }
-      if (key === 'space') {
-        if (!event.repeat) this.jumpPlayer()
-        this.onMovementInput?.()
-        event.preventDefault()
-        return
-      }
-      if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(key)) return
-      this.keys.add(key)
-      this.onMovementInput?.()
-      // 第一人称 WASD 也必须阻止浏览器默认滚动，否则按键会同时滚动页面。
-      event.preventDefault()
-    }
-    this.onKeyUp = (event) => {
-      const key = normalizeControlKey(event)
-      if (this.keys.delete(key)) this.onMovementInput?.()
-    }
-    this.clearHeldInput = () => {
-      this.keys.clear()
-      this.jumpBufferRemaining = 0
-      this.onMovementInput?.()
-    }
-    this.onWindowBlur = this.clearHeldInput
-    this.onWindowFocus = () => this.onMovementInput?.()
-    this.onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') this.clearHeldInput()
-    }
+    // Compatibility aliases keep existing callers/tests stable while the input
+    // system owns keyboard normalization, held state, and browser lifecycle.
+    this.onKeyDown = event => this.inputSystem.handleKeyDown(event)
+    this.onKeyUp = event => this.inputSystem.handleKeyUp(event)
+    this.clearHeldInput = () => this.inputSystem.clearHeldInput()
+    this.onWindowBlur = this.inputSystem.handleWindowBlur
+    this.onWindowFocus = this.inputSystem.handleWindowFocus
+    this.onVisibilityChange = this.inputSystem.handleVisibilityChange
     this.onMouseDown = (event) => {
       if (event.button !== 0) return
       this.pointerDown = true
@@ -308,12 +292,7 @@ export class InputController {
   attach() {
     if (this.attached) return false
     this.attached = true
-    // Capture keyboard input before UI bubbling handlers can stop propagation.
-    window.addEventListener('keydown', this.onKeyDown, true)
-    window.addEventListener('keyup', this.onKeyUp, true)
-    window.addEventListener('blur', this.onWindowBlur)
-    document.addEventListener('visibilitychange', this.onVisibilityChange)
-    window.addEventListener('focus', this.onWindowFocus)
+    this.inputSystem.attach()
     this.domElement.addEventListener('mousedown', this.onMouseDown)
     window.addEventListener('mousemove', this.onMouseMove)
     window.addEventListener('mouseup', this.onMouseUp)
@@ -623,11 +602,7 @@ export class InputController {
   dispose() {
     if (!this.attached) return
     this.attached = false
-    window.removeEventListener('keydown', this.onKeyDown, true)
-    window.removeEventListener('keyup', this.onKeyUp, true)
-    window.removeEventListener('blur', this.onWindowBlur)
-    document.removeEventListener('visibilitychange', this.onVisibilityChange)
-    window.removeEventListener('focus', this.onWindowFocus)
+    this.inputSystem.dispose()
     this.domElement.removeEventListener('mousedown', this.onMouseDown)
     window.removeEventListener('mousemove', this.onMouseMove)
     window.removeEventListener('mouseup', this.onMouseUp)

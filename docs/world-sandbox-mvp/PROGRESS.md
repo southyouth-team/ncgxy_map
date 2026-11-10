@@ -4357,3 +4357,20 @@ export const environmentBindings = [
 - 本轮只增加诊断采样，不代表已定位或修复卡顿。
 - 尚未执行本地 Vitest、Vite Build 或真实浏览器验收；需用户刷新后提供新的 `framePerformance.gpuTimeMs`。
 - 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。
+
+
+## 2026-11-11 — 帧异常与长任务时间关联诊断
+
+### 本轮处理
+- 在现有 `render-debug=1` 诊断模式中，为每个渲染帧增加递增帧序号及 Performance Timeline 时间戳（帧开始/结束）。
+- 对 RAF 间隔超过 10ms、CPU 总帧耗时超过 10ms、或 Render 提交耗时超过 8.33ms 的帧，保留最近 30 条明细，包含更新 CPU、Render CPU 和 RAF 间隔。
+- Long Tasks API 记录最近 30 个长任务的开始/结束时间、持续时间及浏览器提供的有限 attribution 字段；诊断输出最近 12 个，并计算其时间区间覆盖了哪些已采样帧。
+- GPU timer query 从只保存耗时数值调整为保留帧序号、查询开始时间、结果完成时间及 GPU 耗时；对达到 8.33ms 的 GPU 样本输出最近明细，便于与帧异常按时间窗口核对。
+- 保留 Three.js WebGLRenderer、WebGL2 EXT_disjoint_timer_query_webgl2 和 PerformanceObserver 原生机制；所有新采样仍仅在 `render-debug=1` 启用，不改变正式渲染、角色控制、Rapier 或沙盒数据。
+
+### 诊断边界
+- Long Tasks API 只能提供主线程 50ms 以上任务及浏览器允许披露的 attribution，不保证能识别具体业务函数；时间重叠只代表相关性，不等于因果证明。
+- GPU query 结果异步返回，按查询所属帧编号和 Performance 时间戳关联；查询完成时间不是 GPU 执行开始时间。
+- GPU 样本、RAF 帧和 Long Task 时间戳用于定位同一时间窗口的异常，不将不同采样窗口的最大值直接认定为同一帧。
+- 本轮仅完成远端源码写入；未执行本地 Vitest、Vite Build 或真实浏览器验收。
+- 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。

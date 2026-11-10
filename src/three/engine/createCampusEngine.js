@@ -1700,7 +1700,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     outdoorCollisionWorld = collisionWorld
     cameraRig.setObstructionObjects(cameraObstacleRoots)
     // 3D 建筑模型延迟到用户切换 3D/跟随视角时加载，2.5D 总览不承担 GLB 下载与解析成本。
-    input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld)
+    input = new InputController(THREE, renderer.domElement, cameraRig, campus.userData.walkableBounds, collisionWorld, {
+      movementBackend: isBlankSandbox ? 'rapier' : 'collision-world',
+    })
     if (playerCharacterRuntime) input.setPlayerDimensions(playerCharacterRuntime.getInfo().dimensions)
     if (isBlankSandbox && physicsRuntime) input.setPhysicsRuntime(physicsRuntime)
     input.setFreeCameraMovementEnabled(isBlankSandbox)

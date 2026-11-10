@@ -4374,3 +4374,5 @@ export const environmentBindings = [
 - GPU 样本、RAF 帧和 Long Task 时间戳用于定位同一时间窗口的异常，不将不同采样窗口的最大值直接认定为同一帧。
 - 本轮仅完成远端源码写入；未执行本地 Vitest、Vite Build 或真实浏览器验收。
 - 仅修改 `mvp`，未修改 `main`，未合并 PR，未更改或清理沙盒数据。
+
+- 复核修正：GPU query 在当前帧 render 前启动时，关联当前即将提交的帧序号（`frameSequence + 1`），避免 GPU 样本比 RAF 帧序号落后一帧。

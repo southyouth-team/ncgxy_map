@@ -2807,8 +2807,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       const movementSpeed = hasPhysicsVelocity
         ? Math.hypot(physicsMovement.x, physicsMovement.z)
         : Math.hypot(dx, dz) / Math.max(delta, 0.001)
-      // Gait follows resolved movement, not key intent: blocked characters return to idle.
-      const moving = movementSpeed > 0.08
+      // 移动意图负责给用户持续反馈；Rapier 实际速度只调节步态强度。
+      // 被墙体阻挡时仍保持低频迈步，避免按键有效但角色视觉完全静止。
+      const movementIntent = input?.hasMovementInput?.() === true
+      const moving = movementIntent || movementSpeed > 0.08
+      const running = input?.keys?.has('shift') === true
+      const gaitRate = movementSpeed > 0.08
+        ? Math.max(0.65, Math.min(1.45, movementSpeed / (running ? 5.5 : 3.2)))
+        : 0.42
       const animationDx = hasPhysicsVelocity ? physicsMovement.x * delta : dx
       const animationDz = hasPhysicsVelocity ? physicsMovement.z * delta : dz
       const verticalChanged = Math.abs(dy) > 0.0001
@@ -2816,9 +2822,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       lastPlayerVisibility = playerSprite.visible
       lastPlayerY = playerSprite.position.y
       if (typeof playerSprite.userData.updateAnimation === 'function') {
-        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, animationDx, animationDz, input?.keys?.has('shift') === true)
+        playerSprite.userData.updateAnimation.call(playerSprite, moving, time / 1000, animationDx, animationDz, running, gaitRate)
       } else {
-        campus?.userData.updatePlayerAnimation?.(moving, time / 1000, animationDx, animationDz)
+        campus?.userData.updatePlayerAnimation?.(moving, time / 1000, animationDx, animationDz, gaitRate)
       }
       // 动画姿态也可能改变投影；在动画更新后失效，确保本帧 ShadowMap 使用最新姿态。
       if (((moving || verticalChanged) && playerSprite.visible) || visibilityChanged) invalidateDynamicShadowMap()

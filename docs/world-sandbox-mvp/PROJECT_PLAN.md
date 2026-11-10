@@ -3,7 +3,7 @@
 > 本文档是 `/world-sandbox-mvp` 的项目级计划与架构决策依据。每次讨论、设计、开发或调整前必须先读取本文及同目录的 `PROGRESS.md`。代码事实以目标分支当前源码为准；本文记录决策和计划，不替代代码核查。
 >
 > 最后更新：2026-11-10
-> 当前跟踪分支：`feat/world-sandbox-conversational-model-editor`
+> 当前跟踪分支：`fix/sandbox-character-physics-continuity`
 > 最近一次代码审查基线：`7ac7cec975690e71c4a779e5093fd936a59cecca`（详见 `PROGRESS.md`；文档提交会继续推进分支 HEAD）
 
 ## 1. 产品定位

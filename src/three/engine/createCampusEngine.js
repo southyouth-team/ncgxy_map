@@ -1523,7 +1523,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     initializationStage = 'renderer-created'
     // 像素纹理仍使用 NearestFilter；MSAA 只平滑几何轮廓，不会把像素贴图模糊化。
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
+    renderer.setPixelRatio(getRendererPixelRatio(container.clientWidth, container.clientHeight))
     renderer.setSize(container.clientWidth, container.clientHeight)
     // 静态阴影贴图按需更新，避免每帧重复生成。
     renderer.shadowMap.enabled = true
@@ -2698,14 +2698,20 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     })
   }
 
+  function getRendererPixelRatio(width, height) {
+    const safeWidth = Math.max(Number(width) || 0, 1)
+    const safeHeight = Math.max(Number(height) || 0, 1)
+    const devicePixelRatio = window.devicePixelRatio || 1
+    const maxPixelRatioByBufferArea = Math.sqrt(2_400_000 / (safeWidth * safeHeight))
+    // 统一初始化与 resize 的质量上限，避免 resize 覆盖初始化阶段的 1.5 DPR 限制。
+    return Math.min(devicePixelRatio, 1.5, maxPixelRatioByBufferArea)
+  }
+
   function resize() {
     if (!renderer || !cameraRig) return
     const width = Math.max(container.clientWidth, 1)
     const height = Math.max(container.clientHeight, 1)
-    // 限制绘制缓冲区像素总量；高分辨率/4K 屏幕自动降采样，降低 GPU fill-rate 压力。
-    // 普通视口恢复更高细节；4K/高分屏仍限制绘制缓冲区面积，控制 GPU fill-rate。
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, Math.sqrt(2_400_000 / (width * height)))
-    renderer.setPixelRatio(pixelRatio)
+    renderer.setPixelRatio(getRendererPixelRatio(width, height))
     renderer.setSize(width, height)
     cameraRig.resize(width / height)
     logRenderDiagnostics('resize')

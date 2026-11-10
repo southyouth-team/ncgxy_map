@@ -25,7 +25,7 @@ export class CharacterMotor {
 
   setPhysicsRuntime(runtime, id = null) {
     this.physicsRuntime = runtime || null
-    this.physicsCharacterId = runtime ? String(id || 'sandbox:player') : null
+    this.physicsCharacterId = id == null ? null : String(id)
   }
 
   reset({ grounded = true } = {}) {

@@ -7,6 +7,7 @@ function createWaterModel(depth = 0.6) {
   const basin = new THREE.Group()
   basin.userData.componentId = 'basin'
   const surface = new THREE.Group()
+  surface.name = 'water-surface'
   surface.userData.componentId = 'water-surface'
   surface.position.y = depth
   basin.add(surface)

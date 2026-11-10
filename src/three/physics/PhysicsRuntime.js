@@ -59,6 +59,7 @@ export class PhysicsRuntime {
       for (const entry of this.bodies.values()) {
         if (entry.kind !== 'kinematic-character') continue
         const current = entry.body.translation()
+        entry.previousStepPosition = { x: current.x, y: current.y, z: current.z }
         const desired = entry.desiredVelocity
         const acceleration = entry.desiredAcceleration
         desired.x += acceleration.x * this.fixedTimeStep
@@ -82,7 +83,19 @@ export class PhysicsRuntime {
       for (const entry of this.bodies.values()) {
         if (entry.kind !== 'kinematic-character') continue
         entry.grounded = entry.pendingGrounded === true
-        entry.position = entry.body.translation()
+        const position = entry.body.translation()
+        const previous = entry.previousStepPosition || position
+        entry.position = { x: position.x, y: position.y, z: position.z }
+        entry.lastStepMovement = {
+          x: position.x - previous.x,
+          y: position.y - previous.y,
+          z: position.z - previous.z,
+        }
+        entry.actualVelocity = {
+          x: entry.lastStepMovement.x / this.fixedTimeStep,
+          y: entry.lastStepMovement.y / this.fixedTimeStep,
+          z: entry.lastStepMovement.z / this.fixedTimeStep,
+        }
       }
       this.accumulator -= this.fixedTimeStep
       steps += 1
@@ -267,6 +280,9 @@ export class PhysicsRuntime {
         traversalProfile,
         desiredVelocity: { x: 0, y: 0, z: 0 },
         desiredAcceleration: { x: 0, y: 0, z: 0 },
+        actualVelocity: { x: 0, y: 0, z: 0 },
+        lastStepMovement: { x: 0, y: 0, z: 0 },
+        previousStepPosition: { x: position[0], y: position[1], z: position[2] },
         grounded: true,
         pendingGrounded: true,
         position: { x: position[0], y: position[1], z: position[2] },
@@ -306,7 +322,11 @@ export class PhysicsRuntime {
     const translation = entry.position || entry.body.translation()
     return {
       translation: { x: translation.x, y: translation.y, z: translation.z },
+      // velocity remains the commanded Rapier velocity for compatibility.
       velocity: { ...entry.desiredVelocity },
+      commandedVelocity: { ...entry.desiredVelocity },
+      actualVelocity: { ...entry.actualVelocity },
+      lastStepMovement: { ...entry.lastStepMovement },
       grounded: entry.grounded === true,
       stepCount: this.stepCount,
     }
@@ -321,6 +341,9 @@ export class PhysicsRuntime {
     entry.body.setTranslation({ x: values[0], y: values[1], z: values[2] }, true)
     entry.body.setNextKinematicTranslation?.({ x: values[0], y: values[1], z: values[2] })
     entry.position = { x: values[0], y: values[1], z: values[2] }
+    entry.previousStepPosition = { ...entry.position }
+    entry.lastStepMovement = { x: 0, y: 0, z: 0 }
+    entry.actualVelocity = { x: 0, y: 0, z: 0 }
     entry.desiredVelocity = { x: 0, y: 0, z: 0 }
     entry.desiredAcceleration = { x: 0, y: 0, z: 0 }
     entry.grounded = true

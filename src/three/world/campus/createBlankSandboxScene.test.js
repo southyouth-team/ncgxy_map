@@ -11,9 +11,9 @@ describe('createBlankSandboxScene expandable world', () => {
     expect(player.visible).toBe(true)
     expect(player.position.x).toBe(world.userData.playerSpawn.x)
     expect(player.position.z).toBe(world.userData.playerSpawn.z)
-    expect(player.getObjectByName('player-torso')).toBeTruthy()
+    expect(player.getObjectByName('player-body')).toBeTruthy()
     expect(player.getObjectByName('player-face')).toBeTruthy()
-    expect(player.getObjectByName('player-contact-shadow')).toBeTruthy()
+    expect(player.getObjectByName('player-contact-shadow')).toBeFalsy()
     expect(typeof player.userData.updateAnimation).toBe('function')
   })
 
@@ -73,7 +73,7 @@ describe('createBlankSandboxScene expandable world', () => {
 
     const state = world.userData.getWorldState()
     expect(state.chunks).toHaveLength(12)
-    expect(state.bounds).toEqual({ minX: -27, maxX: 189, minZ: -105, maxZ: 63 })
+    expect(state.bounds).toEqual({ minX: -27, maxX: 189, minZ: -105, maxZ: 21 })
   })
 
   it('persists and restores the same chunk grid and world bounds', () => {

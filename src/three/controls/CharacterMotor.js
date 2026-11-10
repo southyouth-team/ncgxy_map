@@ -64,9 +64,9 @@ export class CharacterMotor {
     const horizontalZ = (Number(dz) || 0) / dt
     const verticalSpeed = this.jumpActive ? this.verticalVelocity : (currentState.grounded ? -2 : this.verticalVelocity)
     this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, {
-      x: movementEnabled && mode !== 'overview' ? horizontalX : 0,
+      x: movementEnabled ? horizontalX : 0,
       y: verticalSpeed,
-      z: movementEnabled && mode !== 'overview' ? horizontalZ : 0,
+      z: movementEnabled ? horizontalZ : 0,
     })
     this.physicsRuntime.setKinematicCharacterAcceleration?.(this.physicsCharacterId, {
       x: 0,

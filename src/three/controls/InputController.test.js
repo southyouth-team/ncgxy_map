@@ -43,6 +43,25 @@ describe('InputController movement intent', () => {
   })
 })
 
+describe('InputController physics synchronization', () => {
+  it('syncs the visual player after a physics step without consuming jump step tracking', () => {
+    const { controller, cameraRig } = createController()
+    controller.physicsRuntime = {
+      getKinematicCharacterState: vi.fn(() => ({
+        translation: { x: 2.5, y: 0.4, z: -3 },
+        grounded: false,
+        stepCount: 12,
+      })),
+    }
+    controller.physicsCharacterId = 'sandbox:player'
+    controller.lastPhysicsStepCount = 11
+
+    expect(controller.syncPlayerFromPhysicsState()).toBe(true)
+    expect(cameraRig.player).toEqual({ x: 2.5, y: 2.1, z: -3 })
+    expect(controller.grounded).toBe(false)
+    expect(controller.lastPhysicsStepCount).toBe(11)
+  })
+})
 describe('InputController navigation path', () => {
   it('moves along a supplied path using the collision world', () => {
     const { controller, cameraRig, collisionWorld } = createController()

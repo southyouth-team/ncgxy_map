@@ -3803,3 +3803,49 @@ export const environmentBindings = [
 - 移动根因仍待浏览器采集新诊断数据；当前增加的是观测能力，不是移动行为修复。
 - 水体 HUD 只能显示 Runtime 计算结果；实际水面几何联动和角色水线视觉仍待验收。
 - 未修改 `main`，未合并 PR。
+
+
+## 2026-11-10 — 水体浸入语义修正、移动诊断入口与 CI 复核
+
+### 本轮新增/修正
+
+1. **水体浸入计算**
+   - `waterVolumeRuntime.js` 将水体总深度与角色浸入深度分开。
+   - `depth` 仍表示水底至水面的真实水深；`immersionDepth` 现在限制在角色脚底至头部高度范围内，不能超过角色身高。
+   - `characterImmersionRatio` 以角色身高为分母；深水区不再出现浸入深度大于角色身高的错误结果。
+   - `waterVolumeRuntime.test.js` 新增 3m 深水、1.7m 角色身高的回归用例；4 项测试均在 CI 通过。
+   - 该修正改善浸入数据的物理语义，但不等于完成角色模型上的真实水线裁切/水下材质效果。
+2. **移动/物理诊断入口**
+   - `WorldSandboxMvp.vue` 新增仅开发环境启用的诊断面板。
+   - 访问沙盒页面时附加查询参数 `?debug=physics`，即可查看持续输入、按键集合、期望速度、Rapier 实际速度、刚体位置、角色逻辑位置、固定物理步数和 accumulator。
+   - 面板每 150ms 采样一次，离开页面会清理定时器；正常页面不启用轮询。
+   - 该面板用于定位移动停顿：期望速度非零但实际速度为零，表示物理未推进或碰撞阻挡；刚体位置变化而逻辑位置不变，表示同步链路异常。
+3. **回归修正**
+   - `InputController.js`：角色当前脚底正落在已声明但坡度不可行走的表面上时，解析地面高度不再把角色瞬间吸附到全局地面高度；该表面仍然不可行走，只保留当前高度。
+   - `modelSpatialRuntime.test.js`：铰链门测试夹具补充门扇自身的 `rotationY` 状态绑定，匹配“门扇 Collider 随门扇旋转并持续存在”的运行时契约。
+
+### 最新 CI（run `42741449280`，commit `23d8b685bdc1b3f3c1a10298c98fa4e83d2ecd71`）
+
+- Vite production build：通过。
+- Vitest：48 个测试文件中 43 个通过、5 个失败；550 项测试中 544 项通过、6 项失败。
+- `waterVolumeRuntime.test.js`：4/4 通过。
+- 上一轮 `InputController` 陡坡测试与铰链门 Collider 测试已从失败列表消失。
+- 当前剩余 6 项失败：
+  - `modelTraversalTester.test.js`：测试把“预期被水体阻挡的路线失败”和“所有声明路线都必须通过”的整体认证条件同时要求成立，测试语义互相矛盾；需要明确区分预期阻挡路线与可通行认证路线。
+  - `createBlankSandboxScene.test.js`：2 项旧断言仍依赖场景内置角色模型和旧世界边界；需要核对现有独立角色运行时/扩展边界契约后更新测试。
+  - `modelCapabilityManifest.test.js`：1 项旧断言未纳入归一化新增的默认 `environmentBindings` 字段。
+  - `PlayerCharacterRuntime.test.js`：1 项旧断言仍期待旧 fallback mesh 层级，需按“稳定 anchor + 独立 visual wrapper”现行结构核对。
+  - `solarPosition.test.js`：1 项夜间月光方向断言与当前方向向量约定不一致，需先确认灯光方向定义再改。
+- CI 仍为 failure；不能将本轮标记为全量通过。
+
+### 当前用户侧验证方式
+
+- 在开发环境打开沙盒页面并添加 `?debug=physics`。
+- 按住 W/A/S/D 连续移动；若出现停顿，观察输入是否仍保持、期望速度是否仍非零、实际速度是否归零、物理步数是否增长。
+- 进入水域时查看水深、水面高度、浸入深度和浸入比例；调节水深参数后检查这些值是否同步变化。
+- 仍需真实浏览器验收；CI 单测不能替代实际键盘连续输入、碰撞场景和可视水线测试。
+
+### 安全边界
+
+- 所有改动仍在 `fix/sandbox-character-physics-continuity`。
+- 未修改 `main`，未合并 PR。

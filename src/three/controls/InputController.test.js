@@ -43,6 +43,38 @@ describe('InputController movement intent', () => {
   })
 })
 
+describe('InputController combined movement and jump input', () => {
+  it('applies sprint movement and jump in the same update without reducing horizontal speed', () => {
+    const { controller, cameraRig } = createController()
+    const state = {
+      translation: { x: 0, y: 0, z: 0 },
+      velocity: { x: 0, y: 0, z: 0 },
+      grounded: true,
+      stepCount: 0,
+    }
+    const setVelocity = vi.fn()
+    controller.physicsRuntime = {
+      getKinematicCharacterState: vi.fn(() => state),
+      setKinematicCharacterVelocity: setVelocity,
+      setKinematicCharacterAcceleration: vi.fn(),
+    }
+    controller.physicsCharacterId = 'sandbox:player'
+    controller.keys.add('w')
+    controller.keys.add('shift')
+
+    expect(controller.jumpPlayer()).toBe(true)
+    controller.update(1 / 60)
+
+    expect(setVelocity).toHaveBeenCalledWith('sandbox:player', expect.objectContaining({
+      x: 0,
+      z: 18,
+      y: expect.any(Number),
+    }))
+    expect(controller.jumpActive).toBe(true)
+    expect(cameraRig.player.z).toBe(0)
+  })
+})
+
 describe('InputController physics synchronization', () => {
   it('syncs the visual player after a physics step without consuming jump step tracking', () => {
     const { controller, cameraRig } = createController()

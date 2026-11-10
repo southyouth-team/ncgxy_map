@@ -235,6 +235,22 @@ describe('PhysicsRuntime', () => {
 
 
 
+  it('reports actual fixed-step displacement separately from commanded velocity', () => {
+    const { RAPIER } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    runtime.createKinematicCharacter({ id: 'diagnostic-player' })
+    runtime.setKinematicCharacterVelocity('diagnostic-player', { x: 3, y: 0, z: -2 })
+
+    runtime.step(1 / 60)
+
+    expect(runtime.getKinematicCharacterState('diagnostic-player')).toMatchObject({
+      commandedVelocity: { x: 3, y: 0, z: -2 },
+      actualVelocity: { x: 3, y: 0, z: -2 },
+      lastStepMovement: { x: 0.05, y: 0, z: -2 / 60 },
+      stepCount: 1,
+    })
+  })
+
   it('integrates character acceleration identically at different render frame rates', () => {
     const simulate = renderHz => {
       const { RAPIER } = createRapierMock()

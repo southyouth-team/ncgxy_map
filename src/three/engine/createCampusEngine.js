@@ -161,6 +161,27 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   })()
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
+  const framePerformanceSamples = []
+  function getFramePerformanceDiagnostics() {
+    if (!framePerformanceSamples.length) return null
+    const summarize = key => {
+      const values = framePerformanceSamples.map(sample => sample[key]).sort((a, b) => a - b)
+      const total = values.reduce((sum, value) => sum + value, 0)
+      return {
+        avg: Number((total / values.length).toFixed(2)),
+        p95: Number(values[Math.min(values.length - 1, Math.ceil(values.length * 0.95) - 1)].toFixed(2)),
+        max: Number(values[values.length - 1].toFixed(2)),
+      }
+    }
+    return {
+      sampleCount: framePerformanceSamples.length,
+      window: 'last up to 120 rendered frames',
+      rafIntervalMs: summarize('rafIntervalMs'),
+      updateCpuMs: summarize('updateCpuMs'),
+      renderSubmitCpuMs: summarize('renderSubmitCpuMs'),
+      totalFrameCpuMs: summarize('totalFrameCpuMs'),
+    }
+  }
   let directionalLight = null
   let hemisphereLight = null
   let rainEffect = null
@@ -2645,6 +2666,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       render: { ...renderer.info.render },
       memory: { ...renderer.info.memory },
       lastRenderCostMs,
+      framePerformance: getFramePerformanceDiagnostics(),
       timing: lastFrameTiming ? {
         rawFrameDeltaSeconds: lastFrameTiming.rawDeltaSeconds,
         simulationDeltaSeconds: lastFrameTiming.deltaSeconds,
@@ -2744,6 +2766,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function animate(time) {
     frameId = 0
+    const frameStartedAt = renderDebugEnabled ? performance.now() : 0
     try {
     lastFrameTiming = advanceFrameTiming(time, previousTime, simulationTimeSeconds, 0.05)
     previousTime = lastFrameTiming.previousTimestampMs
@@ -2975,7 +2998,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const renderStartedAt = renderDebugEnabled ? performance.now() : 0
     renderer.render(scene, cameraRig.camera)
     if (renderDebugEnabled) {
-      lastRenderCostMs = performance.now() - renderStartedAt
+      const frameFinishedAt = performance.now()
+      lastRenderCostMs = frameFinishedAt - renderStartedAt
+      framePerformanceSamples.push({
+        rafIntervalMs: Math.max(0, lastFrameTiming.rawDeltaSeconds * 1000),
+        updateCpuMs: Math.max(0, renderStartedAt - frameStartedAt),
+        renderSubmitCpuMs: lastRenderCostMs,
+        totalFrameCpuMs: Math.max(0, frameFinishedAt - frameStartedAt),
+      })
+      if (framePerformanceSamples.length > 120) framePerformanceSamples.shift()
       renderDebugFrame += 1
       if (renderDebugFrame === 1 || renderDebugFrame % 120 === 0) logRenderDiagnostics(renderDebugFrame === 1 ? 'first-render' : 'render')
     }

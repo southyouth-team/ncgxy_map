@@ -3975,3 +3975,28 @@ export const environmentBindings = [
 - 这还不是最终根因结论。若真实浏览器仍出现输入丢失，下一步需要在输入事件、每帧按键快照、期望速度、Rapier 步数之间加入时间戳诊断，确认是事件未到达、状态被清除，还是物理执行未消费。
 - CI 尚未结束，真实浏览器未验收；不得将本轮标记为已彻底解决。
 - 仅修改 fix/sandbox-character-physics-continuity，未修改 main，未合并 PR。
+
+
+## 2026-11-11 — 角色控制架构审计与整改基线
+
+### 审计结论
+- InputController 当前同时承担 DOM 输入、按键状态、相机相对移动计算、导航、跳跃缓冲/Coyote Time、垂直速度、Rapier 命令提交、渲染位置同步，以及旧版 CollisionWorld/raycast 移动。
+- PhysicsRuntime 已拥有 Rapier 固定步进与角色物理快照，但跳跃缓冲和部分角色控制状态仍由 InputController 按渲染帧 delta 更新，尚未形成完整的固定物理步状态机。
+- PlayerCharacterRuntime 主要负责模型挂载与动画表现，边界相对清晰，应保留。
+- 沙盒角色的 Rapier 移动与旧版 CollisionWorld/raycast 路径并存于 InputController；需要核查所有调用方后，将 MVP 沙盒统一到 Rapier 权威路径，旧路径只保留给明确的兼容场景。
+
+### 已建立的架构契约
+新增 `docs/world-sandbox-mvp/CHARACTER-CONTROL-ARCHITECTURE.md`，明确 Input System、Character Motor、Physics Runtime、Character Presentation 四层职责和分阶段迁移顺序。
+
+### 整改原则
+- 不通过增加人为延迟、调整速度/跳跃参数掩盖输入丢失。
+- 不让动画根运动反向修改 Rapier 权威位置。
+- 输入边沿事件必须跨渲染帧可靠缓冲，避免短按在物理 tick 之间丢失。
+- 跳跃缓冲、Coyote Time 和角色状态迁移最终统一到固定物理步时钟。
+- 未完成调用方核查前，不删除旧版碰撞移动代码。
+- CI 与真实浏览器验收分开记录，不以单测通过代替真实输入和碰撞验收。
+
+### 本轮验证边界
+- 本轮仅新增架构契约文档；尚未进行控制器代码拆分。
+- 当前 mvp 分支起点包含此前 fix 分支完整提交历史；本轮提交没有修改 main 或合并 PR。
+- 下一阶段从输入状态采集层拆分开始，保持兼容接口并增加针对性测试。

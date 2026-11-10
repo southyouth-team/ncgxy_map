@@ -2922,7 +2922,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       if (typeof playerSprite.userData.updateAnimation === 'function') {
         playerSprite.userData.updateAnimation.call(playerSprite, moving, simulationTimeSeconds, animationDx, animationDz, running, gaitRate)
       } else {
-        campus?.userData.updatePlayerAnimation?.(moving, time / 1000, animationDx, animationDz, gaitRate)
+        campus?.userData.updatePlayerAnimation?.(moving, simulationTimeSeconds, animationDx, animationDz, gaitRate)
       }
       // 动画姿态也可能改变投影；在动画更新后失效，确保本帧 ShadowMap 使用最新姿态。
       if (((moving || verticalChanged) && playerSprite.visible) || visibilityChanged) invalidateDynamicShadowMap()

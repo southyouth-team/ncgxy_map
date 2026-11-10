@@ -162,24 +162,54 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
   const framePerformanceSamples = []
+  let longTaskObserver = null
+  let longTaskCount = 0
+  let longTaskTotalDurationMs = 0
+  let longTaskMaxDurationMs = 0
+  if (renderDebugEnabled && typeof PerformanceObserver !== 'undefined'
+    && PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+    longTaskObserver = new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) {
+        longTaskCount += 1
+        longTaskTotalDurationMs += entry.duration
+        longTaskMaxDurationMs = Math.max(longTaskMaxDurationMs, entry.duration)
+      }
+    })
+    longTaskObserver.observe({ type: 'longtask', buffered: true })
+  }
   function getFramePerformanceDiagnostics() {
     if (!framePerformanceSamples.length) return null
     const summarize = key => {
       const values = framePerformanceSamples.map(sample => sample[key]).sort((a, b) => a - b)
+      const percentile = ratio => Number(values[Math.min(values.length - 1, Math.ceil(values.length * ratio) - 1)].toFixed(2))
       const total = values.reduce((sum, value) => sum + value, 0)
       return {
         avg: Number((total / values.length).toFixed(2)),
-        p95: Number(values[Math.min(values.length - 1, Math.ceil(values.length * 0.95) - 1)].toFixed(2)),
+        p50: percentile(0.5),
+        p90: percentile(0.9),
+        p95: percentile(0.95),
+        p99: percentile(0.99),
         max: Number(values[values.length - 1].toFixed(2)),
       }
     }
+    const rafIntervals = framePerformanceSamples.map(sample => sample.rafIntervalMs)
     return {
       sampleCount: framePerformanceSamples.length,
       window: 'last up to 120 rendered frames',
       rafIntervalMs: summarize('rafIntervalMs'),
+      rafFramesOver10ms: rafIntervals.filter(value => value > 10).length,
+      rafFramesOver12ms: rafIntervals.filter(value => value > 12).length,
+      rafFramesOver16_7ms: rafIntervals.filter(value => value > 16.7).length,
       updateCpuMs: summarize('updateCpuMs'),
       renderSubmitCpuMs: summarize('renderSubmitCpuMs'),
       totalFrameCpuMs: summarize('totalFrameCpuMs'),
+      longTasks: {
+        supported: Boolean(longTaskObserver),
+        countSinceInitialization: longTaskCount,
+        totalDurationMs: Number(longTaskTotalDurationMs.toFixed(2)),
+        maxDurationMs: Number(longTaskMaxDurationMs.toFixed(2)),
+        thresholdMs: 50,
+      },
     }
   }
   let directionalLight = null
@@ -3661,6 +3691,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function dispose() {
     disposed = true
     cancelAnimationFrame(frameId)
+    longTaskObserver?.disconnect()
+    longTaskObserver = null
     resizeObserver?.disconnect()
     window.removeEventListener('keydown', onKeyDown)
     renderer?.domElement?.removeEventListener('pointerdown', onScenePointerDown)

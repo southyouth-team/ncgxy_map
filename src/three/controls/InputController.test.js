@@ -46,6 +46,7 @@ describe('InputController movement intent', () => {
 describe('InputController combined movement and jump input', () => {
   it('accepts the first jump press during a transient airborne grounded snapshot', () => {
     const { controller } = createController()
+    controller.grounded = false
     controller.coyoteTimeRemaining = 0.12
     controller.physicsRuntime = {
       getKinematicCharacterState: vi.fn(() => ({

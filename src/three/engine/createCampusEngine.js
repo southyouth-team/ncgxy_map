@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { createCampusScene } from '../world/campus/createCampusScene.js'
 import { ShadowSystem } from './ShadowSystem.js'
+import { MotionProbe, extractMotionStalls } from '../diagnostics/MotionProbe.js'
 import { advanceFrameTiming } from './FrameTiming.js'
 import { createCampusSceneRenderData, auditCampusSceneFeatureCoverage, validateCampusBuildingModels, auditCampusBuildingModelGeometry, createCampusBuildingAssetInventory } from '../world/campus/campusSceneData.js'
 import { createRpgSampleScene } from '../world/campus/createRpgSampleScene.js'
@@ -21,6 +22,7 @@ import { createSandboxInteractionIndex } from './sandboxInteractionRuntime.js'
 import { executeSandboxInteractionAction } from './sandboxActionRuntime.js'
 import { resolveSandboxInteriorEntryPoint } from './sandboxInteriorRuntime.js'
 import { cloneSandboxMaterial, disposeSandboxMaterial } from './sandboxModelLifecycle.js'
+import { batchStaticModel, explainBatching, resolveStaticBatchPartId } from '../sandbox/staticModelBatcher.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
 import { CAMPUS_PLAYER_SPAWN_PIXEL, mapPixelToWorld } from '../../data/campus/campusLayout.js'
@@ -164,8 +166,19 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const hashParams = new URLSearchParams(hashQuery)
     return searchParams.get('shadow-static-test') === '1' || hashParams.get('shadow-static-test') === '1'
   })()
+  // 走动平滑度探针：记录每帧渲染锚点位移/物理步数/帧调度，定位 trace 帧时序无法反映的体感卡顿。
+  const motionProbeEnabled = (() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const hashQueryIndex = window.location.hash.indexOf('?')
+    const hashQuery = hashQueryIndex >= 0 ? window.location.hash.slice(hashQueryIndex + 1) : ''
+    const hashParams = new URLSearchParams(hashQuery)
+    return searchParams.get('motion-probe') === '1' || hashParams.get('motion-probe') === '1'
+  })()
   let renderDebugFrame = 0
   let lastRenderCostMs = 0
+  const motionProbe = motionProbeEnabled ? new MotionProbe() : null
+  let motionProbeLastPlayer = null
+  let motionProbeFrameCount = 0
   const framePerformanceSamples = []
   const longTaskSamples = []
   const gpuTimeSamples = []
@@ -1253,6 +1266,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const modelId = root?.userData?.sandboxModelId || null
     selectSandboxModel(modelId)
     let part = hit.object
+    // 合批 mesh 不再带 componentId，先按命中面还原源部件，再退回祖先回溯。
+    const batchPartId = resolveStaticBatchPartId(hit.object, hit.faceIndex)
+    if (batchPartId) {
+      let match = null
+      root?.traverse(object => {
+        if (!match && String(object.userData?.componentId ?? '') === batchPartId) match = object
+      })
+      if (match) part = match
+    }
     while (part && part !== root && !part.userData?.componentId) part = part.parent
     callbacks.onSandboxPartSelected?.(part && part !== root ? {
       modelId,
@@ -1307,6 +1329,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     applyWorldStateBindings(model, model.userData.worldState || {})
     applySandboxLightingState(model, model.userData.worldState || {})
     applySandboxEnvironmentBindings(model)
+    // 静态装饰 mesh 按材质合批，把数百个 draw call 降到材质数量级；部件子树受保护不参与。
+    batchStaticModel(model)
     selectSandboxModel(id)
     invalidateShadowMap()
     requestFrame()
@@ -1355,6 +1379,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     applyWorldStateBindings(replacement, replacement.userData.worldState || {})
     applySandboxLightingState(replacement, replacement.userData.worldState || {})
     applySandboxEnvironmentBindings(replacement)
+    batchStaticModel(replacement)
     const wasSelected = sandboxSelectedModel === current
     if (wasSelected) sandboxSelectedModel = replacement
     current.parent?.remove(current)
@@ -1756,6 +1781,103 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     renderer.shadowMap.autoUpdate = false
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     shadowSystem = new ShadowSystem(renderer)
+    if (motionProbe) {
+      const probeGl = renderer.getContext()
+      motionProbe.setEnvironment({
+        pixelRatio: renderer.getPixelRatio(),
+        drawingBufferWidth: probeGl.drawingBufferWidth,
+        drawingBufferHeight: probeGl.drawingBufferHeight,
+        shadowMapEnabled: renderer.shadowMap.enabled,
+        shadowMapType: renderer.shadowMap.type,
+        userAgent: navigator.userAgent,
+      })
+      window.__motionProbe = motionProbe
+      // 场景/渲染器入口仅供 motion-probe 诊断会话使用，便于盘点 draw call 来源与 GPU 信息。
+      window.__campusRenderer = renderer
+      window.__campusScene = scene
+      // 短命令场景盘点：控制台执行 copy(__campusAudit()) 即可，避免长脚本粘贴损坏。
+      window.__campusAudit = () => {
+        const gl = renderer.getContext()
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
+        const gpu = debugInfo
+          ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+          : gl.getParameter(gl.RENDERER)
+        let meshes = 0
+        let lines = 0
+        let visibleObjects = 0
+        let shadowCasters = 0
+        scene.traverse((object) => {
+          if (object.isMesh) {
+            meshes += 1
+            if (object.visible) {
+              visibleObjects += 1
+              if (object.castShadow) shadowCasters += 1
+            }
+          } else if (object.isLine || object.isLineSegments) {
+            lines += 1
+            if (object.visible) visibleObjects += 1
+          }
+        })
+        const topLevel = scene.children.map((child) => {
+          let childMeshes = 0
+          let childLines = 0
+          let childVisible = 0
+          child.traverse((object) => {
+            if (object.isMesh) {
+              childMeshes += 1
+              if (object.visible) childVisible += 1
+            }
+            if ((object.isLine || object.isLineSegments) && object.visible) {
+              childLines += 1
+              childVisible += 1
+            }
+          })
+          return {
+            name: child.name || child.type,
+            meshes: childMeshes,
+            lines: childLines,
+            visibleDraws: childVisible,
+          }
+        }).sort((a, b) => b.visibleDraws - a.visibleDraws).slice(0, 15)
+        return JSON.stringify({
+          gpu,
+          pixelRatio: renderer.getPixelRatio(),
+          canvas: { width: renderer.domElement.width, height: renderer.domElement.height },
+          totals: { meshes, lines, visibleObjects, shadowCasters },
+          rendererInfo: renderer.info.render,
+          memory: renderer.info.memory,
+          topLevel,
+        }, null, 1)
+      }
+      // 合批干跑诊断：解释每个沙盒模型为什么能/不能合批，不修改场景。
+      window.__batchAudit = () => JSON.stringify(
+        Array.from(sandboxModels.values()).map(model => explainBatching(model)),
+        null, 1,
+      )
+      // 走路复测摘要：走路后执行 copy(__motionSummary())。
+      window.__motionSummary = () => {
+        const report = motionProbe.analyze()
+        if (!report.frameCount) return JSON.stringify({ frameCount: 0 })
+        return JSON.stringify({
+          frameCount: report.frameCount,
+          windowMs: report.windowMs,
+          effectiveHz: +(report.frameCount / (report.windowMs / 1000)).toFixed(1),
+          longFrameRate: +(report.longFrameCount / report.frameCount).toFixed(3),
+          mode: report.mode,
+          intervalMs: report.intervalMs,
+          renderCostMs: report.renderCostMs,
+          heldFrameCount: report.heldFrameCount,
+          stallFrames: report.stallFrames,
+          quantizedFrames: report.quantizedFrames,
+          doubleStepFrames: report.doubleStepFrames,
+          shadowRate: report.shadowInvalidationRate,
+          drawCalls: report.drawCalls,
+          anomalies: report.anomalies,
+        }, null, 1)
+      }
+      // 停顿段逐帧明细：走路复现卡顿后执行 copy(__motionStalls())。
+      window.__motionStalls = () => JSON.stringify(extractMotionStalls(motionProbe.samples), null, 1)
+    }
     renderer.outputColorSpace = THREE.SRGBColorSpace
     // 保留像素美术标准色板，避免电影色调映射改变颜色。
     renderer.toneMapping = THREE.NoToneMapping
@@ -2970,9 +3092,55 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     frameId = requestAnimationFrame(animate)
   }
 
+  function recordMotionProbe(gateContinues, renderCostMs, shadowWasInvalidated) {
+    if (!motionProbe || !cameraRig?.player) return
+    const player = cameraRig.player
+    const previous = motionProbeLastPlayer
+    const characterState = physicsRuntime?.getKinematicCharacterState?.(input?.physicsCharacterId) || null
+    motionProbe.setEnvironment({
+      ...motionProbe.environment,
+      mode: cameraRig.mode,
+      viewMode: cameraRig.viewMode,
+      wind: environmentConfig.wind,
+    })
+    motionProbe.record({
+      intervalMs: Math.max(0, (lastFrameTiming?.rawDeltaSeconds || 0) * 1000),
+      px: player.x,
+      py: player.y,
+      pz: player.z,
+      dx: previous ? player.x - previous.x : 0,
+      dy: previous ? player.y - previous.y : 0,
+      dz: previous ? player.z - previous.z : 0,
+      keysHeld: input?.keys?.size || 0,
+      movementIntent: input?.hasMovementInput?.() === true,
+      physicsSteps: lastPhysicsStepResult?.steps || 0,
+      physicsAlpha: Number.isFinite(lastPhysicsStepResult?.alpha)
+        ? lastPhysicsStepResult.alpha
+        : (physicsRuntime?.accumulator || 0) / (physicsRuntime?.fixedTimeStep || 1),
+      grounded: input?.grounded === true,
+      desiredSpeed: characterState ? Math.hypot(characterState.commandedVelocity?.x || 0, characterState.commandedVelocity?.z || 0) : 0,
+      actualSpeed: characterState ? Math.hypot(characterState.actualVelocity?.x || 0, characterState.actualVelocity?.z || 0) : 0,
+      wallContacts: characterState?.wallContactCount || 0,
+      contacts: characterState?.contactCount || 0,
+      renderCostMs,
+      drawCalls: renderer?.info?.render?.calls || 0,
+      triangles: renderer?.info?.render?.triangles || 0,
+      shadowInvalidated: shadowWasInvalidated === true,
+      gateContinues: gateContinues === true,
+      mode: cameraRig.mode,
+    })
+    motionProbeLastPlayer = { x: player.x, y: player.y, z: player.z }
+    motionProbeFrameCount += 1
+    if (motionProbeFrameCount % 240 === 0) {
+      console.info('[MotionProbe] 滚动报告（240 帧；完整报告：__motionProbe.analyze()）', motionProbe.analyze())
+    }
+  }
+
   function animate(time) {
     frameId = 0
     const frameStartedAt = renderDebugEnabled ? performance.now() : 0
+    const motionProbeShadowBefore = motionProbe ? (shadowSystem?.dynamicInvalidations ?? 0) : 0
+    let motionProbeRenderCostMs = 0
     try {
     lastFrameTiming = advanceFrameTiming(time, previousTime, simulationTimeSeconds, 0.05)
     previousTime = lastFrameTiming.previousTimestampMs
@@ -3203,7 +3371,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       collectGpuTimerResults()
       beginGpuTimeQuery()
     }
+    const motionProbeRenderStart = motionProbe ? performance.now() : 0
     renderer.render(scene, cameraRig.camera)
+    if (motionProbe) motionProbeRenderCostMs = performance.now() - motionProbeRenderStart
     if (renderDebugEnabled) {
       endGpuTimeQuery()
       const frameFinishedAt = performance.now()
@@ -3228,7 +3398,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
     const freePlayerIsMoving = isBlankSandbox && input?.freeCameraMovementEnabled && input?.movementEnabled
       && (input.keys.size > 0 || Boolean(input.navigationPath) || !input.grounded)
-    if (cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0 || freePlayerIsMoving) requestFrame()
+    const gateContinues = cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0 || freePlayerIsMoving
+    if (gateContinues) requestFrame()
+    if (motionProbe) {
+      const shadowWasInvalidated = (shadowSystem?.dynamicInvalidations ?? 0) !== motionProbeShadowBefore
+      recordMotionProbe(gateContinues, motionProbeRenderCostMs, shadowWasInvalidated)
+    }
     } catch (error) {
       endGpuTimeQuery()
       // 不吞掉帧内异常，也不在确定性错误后无限重试；记录完整现场，等待修复。
@@ -3926,5 +4101,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, getPhysicsDiagnostics, getPlayerWaterState, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, getPhysicsDiagnostics, getMotionProbeReport: () => motionProbe?.analyze() ?? null, getPlayerWaterState, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

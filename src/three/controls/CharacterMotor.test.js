@@ -130,6 +130,36 @@ describe('CharacterMotor', () => {
     expect(motor.jumpActive).toBe(true)
   })
 
+  it('keeps grounded vertical velocity at zero so Rapier does not jam on flat ground', () => {
+    const { motor, physicsRuntime } = createMotor()
+    // 实测（tools/repro-fix-sweep.mjs）：着地时持续 vy=-2 会让 Rapier 角色控制器
+    // 在平坦静态盒/ trimesh 地面上周期性把水平修正清零（每 0.3~0.7s 停顿一步）；
+    // vy=0 时四种地面形态全部零停顿，贴地由 snap-to-ground 负责。
+    motor.beforeFixedStep({ delta: 1 / 60 })
+
+    expect(physicsRuntime.setKinematicCharacterVelocity).toHaveBeenCalledWith(
+      'sandbox:player',
+      expect.objectContaining({ y: 0 }),
+    )
+    expect(physicsRuntime.setKinematicCharacterAcceleration).toHaveBeenCalledWith(
+      'sandbox:player',
+      expect.objectContaining({ y: 0 }),
+    )
+  })
+
+  it('keeps gravity active while airborne', () => {
+    const { motor, physicsRuntime, state } = createMotor()
+    state.grounded = false
+    motor.grounded = false
+
+    motor.beforeFixedStep({ delta: 1 / 60 })
+
+    expect(physicsRuntime.setKinematicCharacterAcceleration).toHaveBeenCalledWith(
+      'sandbox:player',
+      expect.objectContaining({ y: -motor.gravity }),
+    )
+  })
+
   it('reconciles landing only after the completed physics step reports grounded', () => {
     const { motor, state } = createMotor()
     motor.jumpActive = true
@@ -144,7 +174,7 @@ describe('CharacterMotor', () => {
     expect(motor.grounded).toBe(true)
     expect(motor.jumpActive).toBe(false)
     expect(motor.jumpLaunched).toBe(false)
-    expect(motor.verticalVelocity).toBe(-2)
+    expect(motor.verticalVelocity).toBe(0)
   })
 
 })

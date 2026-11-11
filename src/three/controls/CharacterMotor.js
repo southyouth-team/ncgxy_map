@@ -89,7 +89,9 @@ export class CharacterMotor {
       this.coyoteTimeRemaining = 0
       this.grounded = false
     } else if (groundedBeforeStep && !this.jumpActive) {
-      this.verticalVelocity = -2
+      // Snap-to-ground keeps contact; a constant downward command makes Rapier
+      // intermittently cancel the horizontal correction on flat ground.
+      this.verticalVelocity = 0
     }
 
     this.physicsRuntime.setKinematicCharacterVelocity(this.physicsCharacterId, {
@@ -119,7 +121,7 @@ export class CharacterMotor {
       this.jumpRequested = false
       this.jumpLaunched = false
       this.jumpWasAirborne = false
-      this.verticalVelocity = -2
+      this.verticalVelocity = 0
     }
     this.lastPhysicsStepCount = state.stepCount
     return true

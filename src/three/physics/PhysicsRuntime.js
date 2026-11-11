@@ -73,6 +73,20 @@ export class PhysicsRuntime {
           z: desired.z * this.fixedTimeStep,
         })
         const corrected = entry.controller.computedMovement()
+        // 记录本步碰撞接触：地面接触（|ny|≈1）与墙面接触分离，供卡顿诊断区分
+        // "被墙挡住"与"输入/电机没有给出位移"。
+        let contactCount = 0
+        let wallContactCount = 0
+        if (typeof entry.controller.numComputedCollisions === 'function') {
+          contactCount = entry.controller.numComputedCollisions() || 0
+          for (let collisionIndex = 0; collisionIndex < contactCount; collisionIndex += 1) {
+            const collision = entry.controller.computedCollision?.(collisionIndex)
+            const normalY = Math.abs(Number(collision?.normal1?.y ?? collision?.normal2?.y ?? 1))
+            if (Number.isFinite(normalY) && normalY < 0.5) wallContactCount += 1
+          }
+        }
+        entry.contactCount = contactCount
+        entry.wallContactCount = wallContactCount
         entry.body.setNextKinematicTranslation({
           x: current.x + corrected.x,
           y: current.y + corrected.y,
@@ -292,6 +306,8 @@ export class PhysicsRuntime {
         // Grounded is the last completed character-controller movement result, not a raw contact-manifold query.
         grounded: true,
         pendingGrounded: true,
+        contactCount: 0,
+        wallContactCount: 0,
         position: { x: position[0], y: position[1], z: position[2] },
       }
       this.bodies.set(id, entry)
@@ -346,6 +362,8 @@ export class PhysicsRuntime {
       actualVelocity: { ...entry.actualVelocity },
       lastStepMovement: { ...entry.lastStepMovement },
       grounded: entry.grounded === true,
+      contactCount: entry.contactCount || 0,
+      wallContactCount: entry.wallContactCount || 0,
       stepCount: this.stepCount,
     }
   }
@@ -366,6 +384,8 @@ export class PhysicsRuntime {
     entry.desiredAcceleration = { x: 0, y: 0, z: 0 }
     entry.grounded = true
     entry.pendingGrounded = true
+    entry.contactCount = 0
+    entry.wallContactCount = 0
     return true
   }
 

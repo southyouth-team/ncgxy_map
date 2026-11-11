@@ -24,7 +24,9 @@ function createRapierMock() {
         computeColliderMovement: vi.fn((collider, desired) => { controller.computed = desired }),
         computedMovement: () => controller.computed,
         computedGrounded: () => controller.grounded,
-        numComputedCollisions: () => 0,
+        collisions: [],
+        numComputedCollisions: () => controller.collisions.length,
+        computedCollision: index => controller.collisions[index] || null,
         setUp: vi.fn(),
         setSlideEnabled: vi.fn(),
         setMaxSlopeClimbAngle: vi.fn(),
@@ -264,6 +266,38 @@ describe('PhysicsRuntime', () => {
       actualVelocity: { x: 3, y: 0, z: -2 },
       lastStepMovement: { x: 0.05, y: 0, z: -2 / 60 },
       stepCount: 1,
+    })
+  })
+
+  it('reports wall contacts separately from ground contacts after a fixed step', () => {
+    const { RAPIER, calls } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    runtime.createKinematicCharacter({ id: 'contact-player' })
+    runtime.setKinematicCharacterVelocity('contact-player', { x: 3, y: 0, z: 0 })
+    calls.controllers[0].collisions = [
+      { normal1: { x: 1, y: 0, z: 0 } },
+      { normal1: { x: 0, y: 1, z: 0 } },
+    ]
+
+    runtime.step(1 / 60)
+
+    expect(runtime.getKinematicCharacterState('contact-player')).toMatchObject({
+      contactCount: 2,
+      wallContactCount: 1,
+    })
+  })
+
+  it('reports zero contacts when the controller has no collisions', () => {
+    const { RAPIER } = createRapierMock()
+    const runtime = new PhysicsRuntime(RAPIER, { fixedTimeStep: 1 / 60 })
+    runtime.createKinematicCharacter({ id: 'free-player' })
+    runtime.setKinematicCharacterVelocity('free-player', { x: 3, y: 0, z: 0 })
+
+    runtime.step(1 / 60)
+
+    expect(runtime.getKinematicCharacterState('free-player')).toMatchObject({
+      contactCount: 0,
+      wallContactCount: 0,
     })
   })
 

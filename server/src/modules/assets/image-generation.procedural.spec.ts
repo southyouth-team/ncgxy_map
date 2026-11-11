@@ -56,6 +56,17 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('For water bodies,');
     expect(request.messages[0].content).toContain('static Rapier triangle meshes');
     expect(request.messages[0].content).toContain('Do not use dynamic/deforming geometry as a static mesh collider');
+    expect(request.messages[0].content).toContain('export function createModelAnimation(THREE, model, context)');
+    expect(request.messages[0].content).toContain('update(frame)');
+    expect(request.messages[0].content).toContain('frame.environment');
+    expect(request.messages[0].content).toContain('environment.wind.speed');
+    expect(request.messages[0].content).toContain('frame.worldState');
+    expect(request.messages[0].content).toContain('capabilities.visual.animations');
+    expect(request.messages[0].content).toContain('requestAnimationFrame');
+    expect(request.messages[0].content).toContain('ShaderMaterial');
+    expect(request.messages[0].content).toContain('onBeforeCompile');
+    expect(request.messages[0].content).not.toContain('visual.waterSurfaces');
+    expect(request.messages[0].content).not.toContain('geometry.rotateX(-Math.PI / 2)');
     expect(result).toMatchObject({
       model: 'vision-test',
       objectType: '教学楼',
@@ -188,6 +199,17 @@ describe('ImageGenerationService procedural generation', () => {
     const context = JSON.parse(request.messages[1].content);
     expect(context.currentGeometryDiagnostics).toMatchObject({ ...geometryDiagnostics, truncated: false });
     expect(request.messages[0].content).toContain('Bounds overlap is only a spatial clue');
+    expect(request.messages[0].content).toContain('export function createModelAnimation(THREE, model, context)');
+    expect(request.messages[0].content).toContain('update(frame)');
+    expect(request.messages[0].content).toContain('frame.environment');
+    expect(request.messages[0].content).toContain('environment.wind.speed');
+    expect(request.messages[0].content).toContain('frame.worldState');
+    expect(request.messages[0].content).toContain('capabilities.visual.animations');
+    expect(request.messages[0].content).toContain('requestAnimationFrame');
+    expect(request.messages[0].content).toContain('ShaderMaterial');
+    expect(request.messages[0].content).toContain('onBeforeCompile');
+    expect(request.messages[0].content).not.toContain('visual.waterSurfaces');
+    expect(request.messages[0].content).not.toContain('geometry.rotateX(-Math.PI / 2)');
   });
 
   it('streams one complete model response without planning or component requests', async () => {

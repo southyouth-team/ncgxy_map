@@ -59,6 +59,7 @@ const weatherEnabled = ref(true)
 const rainEnabled = ref(true)
 const wind = ref(20)
 const windEnabled = ref(true)
+let sandboxWindDirection = { x: 1, z: 0 }
 const artificialLightingEnabled = ref(true)
 const transformMode = ref('translate')
 const placement = ref({ active: false, stage: '', level: 0, hasTarget: false, candidateLocked: false, instruction: '' })
@@ -1104,7 +1105,8 @@ function saveSandbox() {
   try {
     const models = engine.getSandboxModels().flatMap(({ id, name }) => {
       const model = engine.getSandboxModel(id)
-      return model ? [{ id, name: model.name || name, object: model.toJSON() }] : []
+      const object = engine.serializeSandboxModel?.(id) ?? model?.toJSON?.()
+      return model && object ? [{ id, name: model.name || name, object }] : []
     })
     const snapshot = {
       version: 4,
@@ -1118,6 +1120,7 @@ function saveSandbox() {
         rainEnabled: rainEnabled.value,
         wind: Number(wind.value),
         windEnabled: windEnabled.value,
+        windDirection: { ...sandboxWindDirection },
         artificialLightingEnabled: artificialLightingEnabled.value,
       },
       selectedModelId: selected?.userData?.sandboxModelId || null,
@@ -1190,6 +1193,10 @@ async function restoreSandbox() {
       rainEnabled.value = snapshot.environment.rainEnabled !== false
       wind.value = Number.isFinite(Number(snapshot.environment.wind)) ? Number(snapshot.environment.wind) : 20
       windEnabled.value = snapshot.environment.windEnabled !== false
+      sandboxWindDirection = {
+        x: Number(snapshot.environment.windDirection?.x),
+        z: Number(snapshot.environment.windDirection?.z),
+      }
       artificialLightingEnabled.value = snapshot.environment.artificialLightingEnabled !== false
       updateEnvironment()
     }
@@ -1208,17 +1215,24 @@ async function restoreSandbox() {
   }
 }
 
-function updateEnvironment() {
-  if (!engine) return
-  engine.setEnvironment({
-    // MVP 环境开关由世界配置持有；这里仅把有效值适配到现有 Three.js Runtime。
-    // 关闭时间系统时保留当前小时，关闭天气/降雨时不创建雨效，关闭风力时风速归零。
+function buildRawEnvironment() {
+  // MVP 环境开关由世界配置持有；这里仅把有效值适配到现有 Three.js Runtime。
+  // 关闭时间系统时保留当前小时，关闭天气/降雨时不创建雨效，关闭风力时风速归零。
+  // 主场景与编辑器预览共用这一份 raw 配置，由各自 Runtime 归一化，避免两套天气状态。
+  return {
     time: Number(time.value),
     weather: weatherEnabled.value && rainEnabled.value && weather.value === 'rain' ? 'rain' : 'clear',
     wind: windEnabled.value ? Number(wind.value) / 100 : 0,
+    windDirection: { ...sandboxWindDirection },
     artificialLightingEnabled: artificialLightingEnabled.value,
-  })
+  }
 }
+function updateEnvironment() {
+  if (!engine) return
+  const nextEnvironment = engine.setEnvironment(buildRawEnvironment())
+  if (nextEnvironment?.windDirection) sandboxWindDirection = { ...nextEnvironment.windDirection }
+}
+const previewEnvironment = computed(() => buildRawEnvironment())
 function executeTask() {
   const text = command.value.trim()
   if (!text) return
@@ -1529,6 +1543,7 @@ onBeforeUnmount(() => {
       ref="proceduralModelEditorRef"
       v-if="editorOpen"
       :model="editingModel"
+      :environment="previewEnvironment"
       :mode="editorMode"
       :progress="generationProgress"
       :busy="aiBusy || editBusy"

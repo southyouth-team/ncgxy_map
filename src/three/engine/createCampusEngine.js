@@ -17,11 +17,18 @@ import { getVirtualSunState } from './solarPosition.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { applySandboxLightingState } from './sandboxLightingRuntime.js'
 import { refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
-import { collectModelWaterVolumes, samplePlayerWaterState } from './waterVolumeRuntime.js'
+import {
+  collectModelWaterVolumes,
+  samplePlayerWaterState,
+} from './waterVolumeRuntime.js'
+import {
+  createModelAnimationRuntime,
+  createSandboxEnvironmentSnapshot,
+} from './modelAnimationRuntime.js'
 import { createSandboxInteractionIndex } from './sandboxInteractionRuntime.js'
 import { executeSandboxInteractionAction } from './sandboxActionRuntime.js'
 import { resolveSandboxInteriorEntryPoint } from './sandboxInteriorRuntime.js'
-import { cloneSandboxMaterial, disposeSandboxMaterial } from './sandboxModelLifecycle.js'
+import { clonePlacedSandboxModel, disposeSandboxMaterial } from './sandboxModelLifecycle.js'
 import { batchStaticModel, explainBatching, resolveStaticBatchPartId } from '../sandbox/staticModelBatcher.js'
 import { createIndoorFloor, getStairTraversalPoints, getStairStepHeight, isAtStairLanding, getIndoorInteractionPrompt, planIndoorFloorRoute } from '../indoor/indoorScene.js'
 import { indoorBuildingDefinitions, validateIndoorBuilding, createIndoorBuildingFromFootprint, transformIndoorFootprint } from '../indoor/indoorBuildingDefinitions.js'
@@ -130,6 +137,15 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   const sandboxModels = new Map()
   const sandboxInteractionIndex = createSandboxInteractionIndex(THREE)
   const sandboxWaterVolumes = new Map()
+  const modelAnimationRuntime = createModelAnimationRuntime({
+    onError(error, detail) {
+      console.warn('[SandboxModelAnimation] ' + detail.phase + ': ' + detail.modelId, error)
+      callbacks.onSandboxModelAnimationError?.(error, detail)
+    },
+    onActiveChange(active) {
+      if (active) requestFrame()
+    },
+  })
   let lastPlayerWaterStateKey = null
   let sandboxModelSequence = 0
   let activeSandboxInterior = null
@@ -392,7 +408,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   let rainEffect = null
   let rainParticleCount = 360
   let windSwayTargets = []
-  let environmentConfig = { time: 14, timeOfDay: 'day', weather: 'clear', wind: 0, artificialLightingEnabled: true }
+  let environmentConfig = {
+    time: 14,
+    timeOfDay: 'day',
+    weather: 'clear',
+    wind: 0,
+    windDirection: { x: 1, z: 0 },
+    artificialLightingEnabled: true,
+  }
   let initializationStage = 'created'
 
   /**
@@ -1291,11 +1314,22 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function removeSandboxModelSpatialRegistration(ownerId) {
     if (!ownerId) return
+    modelAnimationRuntime.remove(String(ownerId))
     collisionWorld?.removeObstaclesByOwner(String(ownerId))
     collisionWorld?.removeSupportSurfacesByOwner(String(ownerId))
     physicsRuntime?.removeOwner(String(ownerId))
     sandboxInteractionIndex.unregister(String(ownerId))
     sandboxWaterVolumes.delete(String(ownerId))
+  }
+
+  function getCurrentEnvironmentSnapshot() {
+    return createSandboxEnvironmentSnapshot(environmentConfig)
+  }
+
+  function registerSandboxModelAnimation(model) {
+    const id = model?.userData?.sandboxModelId
+    if (!id) return Promise.resolve(null)
+    return modelAnimationRuntime.register(String(id), model, getCurrentEnvironmentSnapshot())
   }
 
   function refreshSandboxModelSpatial(model) {
@@ -1331,6 +1365,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     applySandboxEnvironmentBindings(model)
     // 静态装饰 mesh 按材质合批，把数百个 draw call 降到材质数量级；部件子树受保护不参与。
     batchStaticModel(model)
+    registerSandboxModelAnimation(model)
     selectSandboxModel(id)
     invalidateShadowMap()
     requestFrame()
@@ -1344,6 +1379,13 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
 
   function getSandboxModel(id) {
     return sandboxModels.get(String(id)) || null
+  }
+
+  function serializeSandboxModel(id) {
+    const key = String(id)
+    const model = sandboxModels.get(key)
+    if (!model) return null
+    return modelAnimationRuntime.serializeModel(key) || model.toJSON()
   }
 
   function getPlayerPosition() {
@@ -1380,6 +1422,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     applySandboxLightingState(replacement, replacement.userData.worldState || {})
     applySandboxEnvironmentBindings(replacement)
     batchStaticModel(replacement)
+    registerSandboxModelAnimation(replacement)
     const wasSelected = sandboxSelectedModel === current
     if (wasSelected) sandboxSelectedModel = replacement
     current.parent?.remove(current)
@@ -1624,15 +1667,12 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   function duplicateSandboxModel(id) {
     const source = sandboxModels.get(String(id))
     if (!source || sandboxPlacementState) return null
-    const copy = source.clone(true)
-    copy.traverse(object => {
-      if (object.geometry) object.geometry = object.geometry.clone()
-      if (Array.isArray(object.material)) object.material = object.material.map(cloneSandboxMaterial)
-      else if (object.material) object.material = cloneSandboxMaterial(object.material)
-    })
+    // 动画模型从动画前静态基准重建副本，避免把当前动画姿态或控制器运行时节点烘焙进新模型。
+    const baseline = modelAnimationRuntime.serializeModel(String(id))
+    const copy = clonePlacedSandboxModel(source, baseline)
+    if (!baseline) copy.userData = { ...source.userData }
     copy.position.x += 3
     copy.name = source.name + ' 副本'
-    copy.userData = { ...source.userData }
     delete copy.userData.sandboxModelId
     return addSandboxModel(copy, { name: copy.name, position: copy.position })
   }
@@ -1715,7 +1755,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const artificialLightingEnabled = config.artificialLightingEnabled === undefined
       ? environmentConfig.artificialLightingEnabled
       : Boolean(config.artificialLightingEnabled)
-    environmentConfig = { time, timeOfDay, weather, wind, artificialLightingEnabled }
+    const requestedWindDirection = config.windDirection
+      ?? (typeof config.wind === 'object' ? config.wind?.direction : undefined)
+      ?? environmentConfig.windDirection
+    const windDirection = createSandboxEnvironmentSnapshot(
+      { windDirection: requestedWindDirection },
+      { windDirection: environmentConfig.windDirection },
+    ).wind.direction
+    environmentConfig = { time, timeOfDay, weather, wind, windDirection, artificialLightingEnabled }
     for (const model of sandboxModels.values()) applySandboxEnvironmentBindings(model)
     if (!scene) return { ...environmentConfig }
 
@@ -3361,6 +3408,9 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       }
       if (wind > 0) invalidateDynamicShadowMap()
     }
+    const animationSnapshot = getCurrentEnvironmentSnapshot()
+    modelAnimationRuntime.update(simulationTimeSeconds, delta, animationSnapshot)
+    if (modelAnimationRuntime.hasActiveAnimations()) invalidateDynamicShadowMap()
     // 远景地面跟随相机的 X/Z 坐标，避免相机平移或低角度观察时看到有限平面的边缘。
     if (activeHorizonGround && cameraRig?.camera) {
       activeHorizonGround.position.x = cameraRig.camera.position.x
@@ -3398,7 +3448,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
     const freePlayerIsMoving = isBlankSandbox && input?.freeCameraMovementEnabled && input?.movementEnabled
       && (input.keys.size > 0 || Boolean(input.navigationPath) || !input.grounded)
-    const gateContinues = cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible || environmentConfig.wind > 0 || freePlayerIsMoving
+    const gateContinues = cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible
+      || environmentConfig.wind > 0 || freePlayerIsMoving || modelAnimationRuntime.hasActiveAnimations()
     if (gateContinues) requestFrame()
     if (motionProbe) {
       const shadowWasInvalidated = (shadowSystem?.dynamicInvalidations ?? 0) !== motionProbeShadowBefore
@@ -4072,6 +4123,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     sandboxTransform = null
     clearSandboxSelectionHelper()
     for (const id of sandboxModels.keys()) removeSandboxModelSpatialRegistration(id)
+    modelAnimationRuntime.dispose()
     sandboxModels.clear()
     sandboxSelectedModel = null
     clearSelection()
@@ -4101,5 +4153,5 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     initialized = false
   }
 
-  return { init, getPhysicsDiagnostics, getMotionProbeReport: () => motionProbe?.analyze() ?? null, getPlayerWaterState, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
+  return { init, getPhysicsDiagnostics, getMotionProbeReport: () => motionProbe?.analyze() ?? null, getPlayerWaterState, setMode, setViewMode, setVirtualKey, loadPlayerCharacter, setPlayerCharacterModel, setPlayerCharacterAnimation, restorePlayerCharacterFallback, getPlayerCharacterInfo, refreshSandboxModelSpatial, setSandboxModelTransform, setEnvironment, setSandboxModelEnvironmentOverride, clearSandboxModelEnvironmentOverride, resetView, getSandboxWorldState, setSandboxChunkManagement, setSandboxChunkSelection, expandSandboxWorld, removeSandboxWorldChunk, restoreSandboxWorld, addSandboxModel, replaceSandboxModel, getSandboxModels, getSandboxModel, serializeSandboxModel, getPlayerPosition, getSandboxModelState, setSandboxModelState, applySandboxModelInteraction, selectSandboxModel, setSandboxTransformMode, beginSandboxModelPlacement, confirmSandboxModelPlacement, cancelSandboxModelPlacement, unlockSandboxPlacementCandidate, removeSandboxModel, duplicateSandboxModel, enterIndoorPrototype, enterIndoorBuilding, beginGeneratedAssetPlacement, confirmGeneratedAssetPlacement, cancelGeneratedAssetPlacement, moveGeneratedAsset, rotateGeneratedAsset, removeGeneratedAsset, getGeneratedAssets, getIndoorBuildingDefinition, updateIndoorBuildingDefinition, switchIndoorFloor, navigateToIndoorFloor, exitIndoorPrototype, selectObject, clearSelection, updateSceneObject, previewRpgMap, setBuildingTemplates, previewCampusPlan, clearRpgPreview, dispose, get initialized() { return initialized } }
 }

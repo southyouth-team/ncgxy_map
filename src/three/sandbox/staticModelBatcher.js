@@ -73,6 +73,7 @@ export function collectProtectedPartIds(root) {
     addRecordsPartIds(ids, traversability[key])
   }
   addRecordsPartIds(ids, capabilities.interior?.entryPoints)
+  addRecordsPartIds(ids, capabilities.visual?.animations)
   addRecordsPartIds(ids, capabilities.environmentBindings)
   addRecordsPartIds(ids, userData.proceduralModelEnvironmentBindings)
   const control = userData.proceduralModelCapabilityControlDocument || {}
@@ -103,10 +104,11 @@ function hasRuntimeMarkedAncestor(mesh, root) {
 }
 
 function hasProtectedAncestor(mesh, root, protectedIds) {
-  let node = mesh.parent
-  while (node && node !== root) {
+  let node = mesh
+  while (node) {
     const componentId = node.userData?.componentId
     if (componentId != null && protectedIds.has(String(componentId))) return true
+    if (node === root) break
     node = node.parent
   }
   return false

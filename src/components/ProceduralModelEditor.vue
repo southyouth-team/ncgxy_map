@@ -2,9 +2,20 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import {
+  createModelAnimationRuntime,
+  createSandboxEnvironmentSnapshot,
+} from '../three/engine/modelAnimationRuntime.js'
+import {
+  cloneSandboxObjectResources,
+  disposeSandboxObjectResources,
+} from '../three/engine/sandboxModelLifecycle.js'
+
+const PREVIEW_MODEL_ID = 'preview'
 
 const props = defineProps({
   model: { type: Object, default: null },
+  environment: { type: Object, default: () => ({}) },
   busy: { type: Boolean, default: false },
   error: { type: String, default: '' },
   canUndo: { type: Boolean, default: false },
@@ -24,11 +35,36 @@ const activeProgress = computed(() => [...props.progress].reverse().find(item =>
 const capabilityManifest = computed(() => props.model?.userData?.proceduralModelCapabilityManifest || {})
 const visualQualityReport = computed(() => props.model?.userData?.proceduralModelVisualQuality || null)
 const capabilityControl = computed(() => props.model?.userData?.proceduralModelCapabilityControlDocument || {})
+const previewAnimationError = ref('')
+const visualAnimationTargets = computed(() => {
+  const animations = capabilityManifest.value.capabilities?.visual?.animations
+  return Array.isArray(animations) ? animations.filter(item => item?.targetPartId) : []
+})
+const hasAnimationExport = computed(() => {
+  const source = props.model?.userData?.proceduralModelSource
+  return typeof source === 'string' && source.includes('createModelAnimation')
+})
+const visualRuntimeLabel = computed(() => {
+  if (!visualAnimationTargets.value.length) return '尚未声明动画目标'
+  return hasAnimationExport.value
+    ? '自定义动画 Runtime 驱动：预览与主场景共用同一契约'
+    : '已声明动画目标，但源码未导出 createModelAnimation，模型保持静态'
+})
+function capabilityRuntimeState(id) {
+  if (id === 'spatial') return '部分支持'
+  if (id === 'visual') {
+    if (!visualAnimationTargets.value.length) return '未接入'
+    return hasAnimationExport.value ? 'Runtime 驱动' : '待补充'
+  }
+  return '未接入'
+}
 const capabilityNamespaces = computed(() => {
   const capabilities = capabilityManifest.value.capabilities || {}
-  return Object.entries(capabilities).map(([id, value]) => ({
-    id, runtime: id === 'spatial' ? '部分接入：box collider 阻挡' : '尚未接入 Runtime', value,
-  }))
+  return Object.entries(capabilities).map(([id, value]) => {
+    if (id === 'spatial') return { id, runtime: '部分接入：box collider 阻挡', value }
+    if (id === 'visual') return { id, runtime: visualRuntimeLabel.value, value }
+    return { id, runtime: '尚未接入 Runtime', value }
+  })
 })
 const spatialColliders = computed(() => {
   const colliders = capabilityManifest.value.capabilities?.spatial?.colliders
@@ -67,22 +103,36 @@ let scene = null
 let camera = null
 let controls = null
 let previewRoot = null
+let previewAnimationRuntime = null
 let resizeObserver = null
 let raycaster = null
 let pointer = new THREE.Vector2()
 let frame = 0
+let clockStartMs = 0
+let lastFrameMs = 0
+
+function reportPreviewAnimationError(error, detail) {
+  const phase = detail?.phase || 'animation'
+  previewAnimationError.value = `预览动画错误（${phase}）：${error?.message || error || '未知错误'}`
+  console.warn('[ProceduralModelPreviewAnimation]', detail, error)
+}
 
 function syncPreview() {
   if (!scene) return
+  previewAnimationRuntime?.remove(PREVIEW_MODEL_ID)
   if (previewRoot) {
     scene.remove(previewRoot)
+    disposeSandboxObjectResources(previewRoot)
     previewRoot = null
   }
+  previewAnimationError.value = ''
   if (!props.model) {
     render()
     return
   }
-  previewRoot = props.model.clone(true)
+  // 资源隔离克隆：动画对 geometry/material/texture 的修改与释放都不能回写主场景模型。
+  previewRoot = cloneSandboxObjectResources(props.model)
+  previewRoot.userData.sandboxModelId = PREVIEW_MODEL_ID
   previewRoot.position.set(0, 0, 0)
   previewRoot.rotation.set(0, 0, 0)
   previewRoot.scale.set(1, 1, 1)
@@ -101,6 +151,11 @@ function syncPreview() {
   syncModelMetadata(props.model)
   selectedPartId.value = ''
   selectedPartName.value = '整体模型'
+  previewAnimationRuntime?.register(
+    PREVIEW_MODEL_ID,
+    previewRoot,
+    createSandboxEnvironmentSnapshot(props.environment),
+  )
   render()
 }
 function resize() {
@@ -117,7 +172,20 @@ function render() {
   controls?.update()
   renderer.render(scene, camera)
 }
-function animate() {
+function animate(now) {
+  const timestamp = Number.isFinite(now) ? now : performance.now()
+  if (!clockStartMs) {
+    clockStartMs = timestamp
+    lastFrameMs = timestamp
+  }
+  const elapsed = (timestamp - clockStartMs) / 1000
+  const delta = (timestamp - lastFrameMs) / 1000
+  lastFrameMs = timestamp
+  previewAnimationRuntime?.update(
+    elapsed,
+    delta,
+    createSandboxEnvironmentSnapshot(props.environment),
+  )
   render()
   frame = requestAnimationFrame(animate)
 }
@@ -243,6 +311,7 @@ onMounted(() => {
   renderer.domElement.addEventListener('click', selectPart)
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(canvasHost.value)
+  previewAnimationRuntime = createModelAnimationRuntime({ onError: reportPreviewAnimationError })
   syncPreview()
   resize()
   frame = requestAnimationFrame(animate)
@@ -252,7 +321,14 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   renderer?.domElement?.removeEventListener('click', selectPart)
   controls?.dispose()
-  if (previewRoot) scene?.remove(previewRoot)
+  previewAnimationRuntime?.remove(PREVIEW_MODEL_ID)
+  previewAnimationRuntime?.dispose()
+  previewAnimationRuntime = null
+  if (previewRoot) {
+    scene?.remove(previewRoot)
+    disposeSandboxObjectResources(previewRoot)
+    previewRoot = null
+  }
   renderer?.dispose()
   renderer?.domElement?.remove()
 })
@@ -291,6 +367,7 @@ onBeforeUnmount(() => {
           <textarea v-model="instruction" rows="4" placeholder="例如：新增一个屋顶颜色控制参数，默认深蓝色；或者把选中的屋顶向外延伸 0.5 米。" @keydown.ctrl.enter="submitEdit"></textarea>
           <button class="primary" :disabled="busy || !instruction.trim()" @click="submitEdit">{{ busy ? 'AI 正在修改模型…' : '发送调整指令' }}</button>
           <p v-if="error" class="model-editor__error">{{ error }}</p>
+          <p v-if="previewAnimationError" class="model-editor__error">{{ previewAnimationError }}</p>
         </div>
         <div v-if="visualQualityReport" class="model-editor__visual-quality">
           <div class="model-editor__section-title"><h3>AI 视觉质检</h3><strong :class="visualQualityReport.passed ? 'is-passed' : 'is-warning'">{{ visualQualityReport.passed ? '检测通过' : '需要关注' }} · {{ visualQualityReport.score }}/100</strong></div>
@@ -307,7 +384,7 @@ onBeforeUnmount(() => {
           <p v-if="!capabilityNamespaces.length" class="model-editor__empty">模型尚未声明能力。AI 可在后续建模或对话编辑中补充。</p>
           <div v-for="item in capabilityNamespaces" :key="item.id" class="model-editor__capability-row">
             <div><strong>{{ item.id }}</strong><small>{{ item.runtime }}</small></div>
-            <span class="model-editor__runtime-state">{{ item.id === 'spatial' ? '部分支持' : '未接入' }}</span>
+            <span class="model-editor__runtime-state">{{ capabilityRuntimeState(item.id) }}</span>
           </div>
           <div class="model-editor__capability-controls">
             <h4>{{ selectedPartId ? '当前部件的空间控制' : '模型空间控制' }}</h4>

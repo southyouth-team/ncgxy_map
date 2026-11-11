@@ -36,6 +36,7 @@ describe('collectProtectedPartIds', () => {
       parameters: [{ id: 'p1', bindings: [{ capabilityId: 'x', scope: { partId: 'parameter-part' } }] }],
       capabilities: {
         environmentBindings: [{ variable: 'wind', targetPartId: 'manifest-env', property: 'visible' }],
+        visual: { animations: [{ id: 'motion-target', targetPartId: 'animated-part' }] },
         interior: { entryPoints: [{ id: 'in', targetPartId: 'interior-spawn' }] },
         spatial: {
           colliders: [{ id: 'c1', targetPartId: 'wall', shape: 'box' }],
@@ -55,7 +56,7 @@ describe('collectProtectedPartIds', () => {
     const ids = collectProtectedPartIds(root)
 
     expect([...ids].sort()).toEqual([
-      'basin', 'env-lamp', 'floor', 'gate', 'interior-spawn', 'jump-pad',
+      'animated-part', 'basin', 'env-lamp', 'floor', 'gate', 'interior-spawn', 'jump-pad',
       'manifest-env', 'override-part', 'parameter-part', 'proposal-part',
       'ramp-main', 'stairs-main', 'wall', 'water-surface',
     ])
@@ -224,6 +225,50 @@ describe('batchStaticModel', () => {
     expect(result.consumedMeshCount).toBe(2)
     const batchRoot = root.getObjectByName(STATIC_BATCH_ROOT_NAME)
     expect(batchRoot.children[0].userData.staticBatchSourceCount).toBe(2)
+  })
+
+  it('preserves a direct animated mesh while merging unrelated decorative meshes', () => {
+    const root = new THREE.Group()
+    root.userData.proceduralModelCapabilityManifest = {
+      capabilities: {
+        visual: { animations: [{ id: 'motion-target', targetPartId: 'animated-part' }] },
+      },
+    }
+    const material = new THREE.MeshStandardMaterial()
+    const animated = makeMesh('animated-mesh', material)
+    animated.userData.componentId = 'animated-part'
+    root.add(
+      animated,
+      makeMesh('decor-a', material, { position: [2, 0, 0] }),
+      makeMesh('decor-b', material, { position: [4, 0, 0] }),
+    )
+
+    const result = batchStaticModel(root)
+
+    expect(animated.parent).toBe(root)
+    expect(result.consumedMeshCount).toBe(2)
+    expect(explainBatching(root).skipReasons.protectedPart).toBe(1)
+  })
+
+  it('preserves every descendant when the model root is an animation target', () => {
+    const root = new THREE.Group()
+    root.userData.componentId = 'animated-root'
+    root.userData.proceduralModelCapabilityManifest = {
+      capabilities: {
+        visual: { animations: [{ id: 'root-motion', targetPartId: 'animated-root' }] },
+      },
+    }
+    const material = new THREE.MeshStandardMaterial()
+    const first = makeMesh('animated-a', material)
+    const second = makeMesh('animated-b', material, { position: [2, 0, 0] })
+    root.add(first, second)
+
+    const result = batchStaticModel(root)
+
+    expect(first.parent).toBe(root)
+    expect(second.parent).toBe(root)
+    expect(result.consumedMeshCount).toBe(0)
+    expect(result.mergedMeshCount).toBe(0)
   })
 
   it('batches meshes that only carry componentId when no runtime manifest references them (734-mesh regression)', () => {

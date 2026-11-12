@@ -3,6 +3,7 @@ import { hasExplicitModelCapabilityManifest, normalizeModelCapabilityManifest, v
 import { createCapabilityControlDocument } from './capabilityControl.js'
 import { collectProceduralModelGeometryDiagnostics } from './geometryDiagnostics.js'
 import { analyzeModelTraversability } from './modelTraversabilityAnalyzer.js'
+import { assertSandboxModelSubtreeAssetOnly } from './modelSubtreePolicy.js'
 
 /**
  * Dedicated module worker for generated model code.
@@ -82,6 +83,9 @@ self.addEventListener('message', async (event) => {
     if (root.parent) {
       throw new Error('模型根节点不能预先挂载到其他对象')
     }
+    // The sandbox host owns sky, sun, time-of-day lighting, cameras and helpers;
+    // reject generated models that smuggle their own environment into the scene.
+    assertSandboxModelSubtreeAssetOnly(root)
 
     await reportProgress(port, 'metadata', '整理模型参数与能力声明')
     const hasModuleManifest = hasExplicitModelCapabilityManifest(modelModule.modelCapabilityManifest)

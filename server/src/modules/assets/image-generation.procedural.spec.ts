@@ -65,6 +65,16 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('requestAnimationFrame');
     expect(request.messages[0].content).toContain('ShaderMaterial');
     expect(request.messages[0].content).toContain('onBeforeCompile');
+    expect(request.messages[0].content).toContain('skybox');
+    expect(request.messages[0].content).toContain('scene.background');
+    expect(request.messages[0].content).toContain('AmbientLight');
+    expect(request.messages[0].content).toContain('HemisphereLight');
+    expect(request.messages[0].content).toContain('DirectionalLight');
+    expect(request.messages[0].content).toContain('PointLight or SpotLight');
+    expect(request.messages[0].content).toContain('leave it out rather than duplicating it');
+    expect(request.messages[0].content).toContain('rain/snow/precipitation');
+    expect(request.messages[0].content).toContain('Choose the environment response mechanism');
+    expect(request.messages[0].content).toContain('continuous or dynamic response');
     expect(request.messages[0].content).not.toContain('visual.waterSurfaces');
     expect(request.messages[0].content).not.toContain('geometry.rotateX(-Math.PI / 2)');
     expect(result).toMatchObject({
@@ -208,6 +218,16 @@ describe('ImageGenerationService procedural generation', () => {
     expect(request.messages[0].content).toContain('requestAnimationFrame');
     expect(request.messages[0].content).toContain('ShaderMaterial');
     expect(request.messages[0].content).toContain('onBeforeCompile');
+    expect(request.messages[0].content).toContain('skybox');
+    expect(request.messages[0].content).toContain('scene.background');
+    expect(request.messages[0].content).toContain('AmbientLight');
+    expect(request.messages[0].content).toContain('HemisphereLight');
+    expect(request.messages[0].content).toContain('DirectionalLight');
+    expect(request.messages[0].content).toContain('PointLight or SpotLight');
+    expect(request.messages[0].content).toContain('leave it out rather than duplicating it');
+    expect(request.messages[0].content).toContain('rain/snow/precipitation');
+    expect(request.messages[0].content).toContain('Choose the environment response mechanism');
+    expect(request.messages[0].content).toContain('continuous or dynamic response');
     expect(request.messages[0].content).not.toContain('visual.waterSurfaces');
     expect(request.messages[0].content).not.toContain('geometry.rotateX(-Math.PI / 2)');
   });

@@ -326,13 +326,16 @@ export class CameraRig {
     // 2.5D 跟随严格锁定地图方位与俯角；仅 3D 跟随允许自由调整观察角度。
     if (this.viewMode === '2.5d') return
     this.thirdYaw -= dx * 0.004
+    // 仰视下限 -0.05 rad：第三人称仰视会让相机绕玩家下沉，遮挡射线不含地面，
+    // 放宽会在拉远相机时沉入地面以下（distance=32 时 y≈-2.66）。看天顶请用第一人称。
     this.thirdPitch = Math.max(-0.05, Math.min(0.85, this.thirdPitch + dy * 0.003))
     this.updateThirdPersonDesired()
   }
 
   rotateFirst(dx, dy) {
     this.firstYaw -= dx * 0.0022
-    this.firstPitch = Math.max(-1.25, Math.min(1.25, this.firstPitch - dy * 0.0022))
+    // 仰视上限 1.5 rad（约 86°）：保留 4° 余量避免接近正上方时朝向退化，玩家可以看到天顶天体。
+    this.firstPitch = Math.max(-1.25, Math.min(1.5, this.firstPitch - dy * 0.0022))
     this.updateFirstPersonDesired()
   }
 

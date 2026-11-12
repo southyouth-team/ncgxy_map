@@ -14,6 +14,9 @@ import { PlayerCharacterRuntime } from '../characters/PlayerCharacterRuntime.js'
 import { CollisionWorld } from '../physics/CollisionWorld.js'
 import { PhysicsRuntime } from '../physics/PhysicsRuntime.js'
 import { getVirtualSunState } from './solarPosition.js'
+import { getSkyVisualState } from './skyVisualState.js'
+import { createSkyRuntime } from './skyRuntime.js'
+import { createRainFieldRuntime } from './rainFieldRuntime.js'
 import { applyEnvironmentBindings, applyWorldStateBindings } from './worldStateRuntime.js'
 import { applySandboxLightingState } from './sandboxLightingRuntime.js'
 import { refreshModelPhysicsRegistration, refreshModelSpatialRegistration } from './modelSpatialRuntime.js'
@@ -405,8 +408,8 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
   }
   let directionalLight = null
   let hemisphereLight = null
-  let rainEffect = null
-  let rainParticleCount = 360
+  let skyRuntime = null
+  let rainField = null
   let windSwayTargets = []
   let environmentConfig = {
     time: 14,
@@ -1694,54 +1697,6 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     return true
   }
 
-  function ensureRainEffect() {
-    if (rainEffect || !scene) return
-    const positions = new Float32Array(rainParticleCount * 6)
-    for (let index = 0; index < rainParticleCount; index += 1) {
-      const offset = index * 6
-      const x = ((index * 17) % 61) - 30
-      const y = (index * 13) % 24
-      const z = ((index * 29) % 61) - 30
-      positions[offset] = x
-      positions[offset + 1] = y
-      positions[offset + 2] = z
-      positions[offset + 3] = x + 0.02
-      positions[offset + 4] = y - 0.48
-      positions[offset + 5] = z + 0.01
-    }
-    const geometry = new THREE.BufferGeometry()
-    const attribute = new THREE.BufferAttribute(positions, 3)
-    attribute.setUsage(THREE.DynamicDrawUsage)
-    geometry.setAttribute('position', attribute)
-    const material = new THREE.LineBasicMaterial({ color: '#d8e8f5', transparent: true, opacity: 0.58 })
-    rainEffect = new THREE.LineSegments(geometry, material)
-    rainEffect.name = 'world-rain-effect'
-    rainEffect.frustumCulled = false
-    rainEffect.visible = false
-    scene.add(rainEffect)
-  }
-
-  function updateRainEffect(delta) {
-    if (!rainEffect?.visible) return
-    const positions = rainEffect.geometry.attributes.position.array
-    const wind = environmentConfig.wind
-    for (let index = 0; index < rainParticleCount; index += 1) {
-      const offset = index * 6
-      positions[offset] += wind * 3.2 * delta
-      positions[offset + 1] -= 18 * delta
-      positions[offset + 2] += wind * 0.9 * delta
-      if (positions[offset + 1] < 0) {
-        positions[offset] = ((index * 17) % 61) - 30
-        positions[offset + 1] = 18 + ((index * 11) % 12)
-        positions[offset + 2] = ((index * 29) % 61) - 30
-      }
-      positions[offset + 3] = positions[offset] + 0.025 + wind * 0.035
-      positions[offset + 4] = positions[offset + 1] - 0.48
-      positions[offset + 5] = positions[offset + 2] + 0.01 + wind * 0.015
-    }
-    rainEffect.geometry.attributes.position.needsUpdate = true
-  }
-
   function setEnvironment(config = {}) {
     const requestedTime = config.time === undefined
       ? (config.timeOfDay === 'night' ? 22 : config.timeOfDay === 'day' ? 14 : environmentConfig.time)
@@ -1774,6 +1729,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     const sky = night ? nightSky : dawnSky.lerp(daySky, solar.daylight)
     if (rainy) sky.lerp(new THREE.Color('#788894'), 0.55)
     scene.background = sky
+    if (skyRuntime) {
+      const skyState = getSkyVisualState(solar, weather, { r: sky.r, g: sky.g, b: sky.b })
+      skyRuntime.update(skyState)
+    }
     scene.fog = rainy
       ? new THREE.Fog(night ? '#303e51' : '#87939b', 24, 125)
       : night ? new THREE.Fog('#17243a', 48, 180) : null
@@ -1788,8 +1747,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
       directionalLight.intensity = night ? 0.38 : 0.25 + solar.daylight * 2.45
       directionalLight.position.set(solar.direction[0] * 90, solar.direction[1] * 90, solar.direction[2] * 90)
     }
-    ensureRainEffect()
-    rainEffect.visible = !indoorGroup && rainy
+    rainField?.setVisible(!indoorGroup && rainy)
     invalidateShadowMap()
     requestFrame()
     return { ...environmentConfig }
@@ -2191,6 +2149,14 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     directionalLight.shadow.normalBias = 0.025
     directionalLight.shadow.radius = 3
     scene.add(directionalLight)
+    skyRuntime = createSkyRuntime(THREE)
+    skyRuntime.group.name = 'world-sky-layer'
+    scene.add(skyRuntime.group)
+    skyRuntime.update(getSkyVisualState(getVirtualSunState(environmentConfig.time), environmentConfig.weather))
+    skyRuntime.setIndoor(Boolean(indoorGroup))
+    rainField = createRainFieldRuntime(THREE)
+    scene.add(rainField.object)
+    if (cameraRig?.camera) rainField.followCamera(cameraRig.camera.position)
     syncRenderQuality()
 
     initializationStage = 'install-resize-observer'
@@ -3397,7 +3363,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     playerCharacterRuntime?.update(delta)
     const cameraChanged = cameraRig?.update(delta) || false
-    updateRainEffect(delta)
+    if (rainField) {
+      rainField.update(delta, environmentConfig.wind)
+      if (cameraRig?.camera) rainField.followCamera(cameraRig.camera.position)
+    }
     if (windSwayTargets.length) {
       const wind = environmentConfig.wind
       const seconds = time / 1000
@@ -3415,6 +3384,11 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     if (activeHorizonGround && cameraRig?.camera) {
       activeHorizonGround.position.x = cameraRig.camera.position.x
       activeHorizonGround.position.z = cameraRig.camera.position.z
+    }
+    // 天空层 XYZ 全跟随相机，相机恒在穹顶球心；室内状态每帧同步避免进出事件漏接。
+    if (skyRuntime && cameraRig?.camera) {
+      skyRuntime.followCamera(cameraRig.camera.position)
+      skyRuntime.setIndoor(Boolean(indoorGroup))
     }
     const renderStartedAt = renderDebugEnabled ? performance.now() : 0
     if (renderDebugEnabled) {
@@ -3448,7 +3422,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     // 角色模式持续更新输入/动画；静止总览只在 OrbitControls 阻尼或交互引发变化时继续绘制。
     const freePlayerIsMoving = isBlankSandbox && input?.freeCameraMovementEnabled && input?.movementEnabled
       && (input.keys.size > 0 || Boolean(input.navigationPath) || !input.grounded)
-    const gateContinues = cameraRig?.mode !== 'overview' || cameraChanged || rainEffect?.visible
+    const gateContinues = cameraRig?.mode !== 'overview' || cameraChanged || rainField?.visible
       || environmentConfig.wind > 0 || freePlayerIsMoving || modelAnimationRuntime.hasActiveAnimations()
     if (gateContinues) requestFrame()
     if (motionProbe) {
@@ -3543,7 +3517,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     }
     // 室内是独立空间：校园地面、树木及独立加载的建筑模型全部隐藏，不能从室内看到室外。
     campus.visible = false
-    if (rainEffect) rainEffect.visible = false
+    rainField?.setVisible(false)
     loadedBuildingModels.forEach(model => { model.visible = false })
     scene.background = new THREE.Color('#d9d4c5')
     scene.fog = new THREE.Fog('#d9d4c5', 38, 95)
@@ -3970,7 +3944,7 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     indoorOutdoorBase = null
     currentIndoorFloor = null
     campus.visible = outdoorState.visible
-    if (rainEffect) rainEffect.visible = environmentConfig.weather === 'rain'
+    rainField?.setVisible(environmentConfig.weather === 'rain')
     for (const item of outdoorState.loadedModelVisibility || []) item.model.visible = item.visible
     scene.background = outdoorState.background
     scene.fog = outdoorState.fog
@@ -4143,6 +4117,10 @@ export function createCampusEngine(container, callbacks = {}, options = {}) {
     cameraRig?.dispose()
     shadowSystem?.dispose()
     shadowSystem = null
+    skyRuntime?.dispose()
+    skyRuntime = null
+    rainField?.dispose()
+    rainField = null
     scene?.traverse((object) => {
       object.geometry?.dispose?.()
       if (Array.isArray(object.material)) object.material.forEach(disposeMaterial)

@@ -89,14 +89,15 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
     vec2 p = vUv * 2.0 - 1.0;
     float d = length(p);
     float disk = 1.0 - smoothstep(0.46, 0.5, d);
-    if (disk <= 0.001) discard;
     float maria = smoothstep(0.52, 0.72, fbm(p * 3.0 + 5.0));
     vec3 surface = mix(vec3(0.91, 0.94, 1.0), vec3(0.6, 0.66, 0.79), maria * 0.85);
     float limbShading = 1.0 - smoothstep(0.25, 0.5, d) * 0.25;
+    // 辉光覆盖 d∈(0.5,0.9) 的环带，discard 必须在 alpha 算出之后，否则辉光是死代码。
     float halo = (1.0 - smoothstep(0.5, 0.9, d)) * 0.18;
     vec3 haloColor = vec3(0.78, 0.85, 1.0);
     vec3 color = mix(haloColor, surface * limbShading, disk);
     float alpha = clamp(disk + halo * (1.0 - disk), 0.0, 1.0) * uOpacity;
+    if (alpha <= 0.001) discard;
     gl_FragColor = vec4(color, alpha);
     #include <colorspace_fragment>
   }
@@ -187,14 +188,19 @@ export function createSkyRuntime(THREE) {
   const stars = createStars(THREE)
   group.add(dome, sun, moon, stars)
 
-  const origin = new THREE.Vector3(0, 0, 0)
+  const localOrigin = new THREE.Vector3(0, 0, 0)
+  const localUp = new THREE.Vector3(0, 1, 0)
+  const lookMatrix = new THREE.Matrix4()
 
   function placeBody(body, direction) {
     body.position
       .set(direction[0], direction[1], direction[2])
       .multiplyScalar(CELESTIAL_ORBIT_RADIUS)
-    // 圆盘正面始终朝向球心（相机所在），group 位移不影响局部朝向。
-    body.lookAt(origin)
+    // 圆盘正面恒朝局部球心（group 每帧跟随相机，相机恒在球心）。
+    // 不能用 Object3D.lookAt：它的入参是世界坐标，group 平移后圆盘会朝世界原点，
+    // 远离原点时正面背对相机被背面剔除。Matrix4.lookAt 只吃局部坐标。
+    lookMatrix.lookAt(localOrigin, body.position, localUp)
+    body.quaternion.setFromRotationMatrix(lookMatrix)
   }
 
   function update(state) {

@@ -54,6 +54,26 @@ describe('createSkyRuntime 工厂结构与生命周期', () => {
     expect(sun.castShadow).toBe(false)
   })
 
+  it('group 任意位移后，日月广告牌正面恒朝局部球心（不指向世界原点）', () => {
+    const runtime = createSkyRuntime(THREE)
+    runtime.group.position.set(600, 350, 600)
+    const state = getSkyVisualState(getVirtualSunState(12))
+    runtime.update(state)
+    for (const name of ['sky-sun', 'sky-moon']) {
+      const body = findByName(runtime.group, name)
+      const frontAxis = new THREE.Vector3(0, 0, 1).applyQuaternion(body.quaternion)
+      const expected = body.position.clone().normalize().negate()
+      expect(frontAxis.dot(expected)).toBeCloseTo(1, 6)
+    }
+  })
+
+  it('月亮 shader 按最终 alpha 丢弃片元，discard 不得先于辉光计算', () => {
+    const runtime = createSkyRuntime(THREE)
+    const fragment = findByName(runtime.group, 'sky-moon').material.fragmentShader
+    expect(fragment).toContain('if (alpha <= 0.001) discard')
+    expect(fragment).not.toContain('if (disk <= 0.001) discard')
+  })
+
   it('followCamera 三轴复制相机位置；setIndoor 切换 visible', () => {
     const runtime = createSkyRuntime(THREE)
     runtime.followCamera(new THREE.Vector3(12, 88, -5))
